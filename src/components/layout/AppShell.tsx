@@ -42,8 +42,8 @@ export function AppShell({ title, subtitle, actions, children }: AppShellProps) 
       )}
     >
       <AppSidebar />
-      <div className="flex min-h-screen flex-1 flex-col pl-[220px]">
-        <div className="mx-auto w-full max-w-[1440px] flex-1 px-8 pb-10 pt-6">
+      <div className="flex min-h-screen flex-1 flex-col pb-16 md:pb-0 md:pl-[220px]">
+        <div className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-10 pt-4 md:px-8 md:pt-6">
           <PageHeader title={title} subtitle={subtitle} actions={actions} />
           {children}
         </div>
