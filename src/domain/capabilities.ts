@@ -32,7 +32,7 @@ export function getThingCapabilities(thing: Thing, myActorId: string | null) {
     canCatch: Boolean(isAssignee && waiting && !terminal),
     canSetPace: Boolean(isAssignee && caught && !terminal),
     canSetImportance: Boolean(isOwner && !terminal),
-    canSetDue: Boolean((isOwner || (isAssignee && caught)) && !terminal),
+    canSetDue: Boolean(isOwner && !terminal),
     canSetStatus: Boolean(isAssignee && caught && !terminal),
     canAssign: Boolean(isOwner && !terminal),
     canReassign: Boolean((isOwner || (isAssignee && caught)) && !terminal),
