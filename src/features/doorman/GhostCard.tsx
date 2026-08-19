@@ -1,12 +1,11 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useAppContext } from "@/features/context/use-app-context";
-import { dismissGhost, getGhostCandidate, useLocalVersion } from "@/features/things/local-state";
+import { useDoorman } from "./use-doorman";
 
 export function GhostCard() {
-  useLocalVersion();
-  const { context, setContext } = useAppContext();
+  const { setContext } = useAppContext();
   const navigate = useNavigate();
-  const ghost = getGhostCandidate(context);
+  const { ghost, snooze } = useDoorman();
   if (!ghost) return null;
 
   const from = ghost.context === "work" ? "WORK BREAKTHROUGH" : "HOME BREAKTHROUGH";
@@ -24,7 +23,7 @@ export function GhostCard() {
           className="rounded-md bg-primary px-2.5 py-1 text-[12px] text-primary-foreground"
           onClick={() => {
             void setContext(ghost.context);
-            navigate({ to: "/" });
+            void navigate({ to: "/" });
           }}
         >
           Switch context
@@ -32,7 +31,7 @@ export function GhostCard() {
         <button
           type="button"
           className="rounded-md border border-border px-2.5 py-1 text-[12px]"
-          onClick={() => dismissGhost(ghost.id)}
+          onClick={() => void snooze.mutate(ghost.thingId)}
         >
           Later
         </button>

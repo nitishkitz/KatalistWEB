@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { domainErrorMessage } from "@/lib/domain-error";
 import type { Importance, Pace, Thing, WorkStatus } from "@/domain/thing";
 import { ImportanceBadge, PaceBadge } from "@/components/katalist/ImportanceBadge";
 import { AcknowledgementBadge } from "@/components/katalist/AcknowledgementBadge";
@@ -72,7 +73,16 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
   const [due, setDue] = useState("");
 
   const invalidate = async () => {
-    await qc.invalidateQueries({ queryKey: ["court"] });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["court"] }),
+      qc.invalidateQueries({ queryKey: ["thing"] }),
+      qc.invalidateQueries({ queryKey: ["lists"] }),
+      qc.invalidateQueries({ queryKey: ["list"] }),
+      qc.invalidateQueries({ queryKey: ["buckets"] }),
+      qc.invalidateQueries({ queryKey: ["nudges"] }),
+      qc.invalidateQueries({ queryKey: ["trophy"] }),
+      qc.invalidateQueries({ queryKey: ["notifications"] }),
+    ]);
   };
 
   const run = useMutation({
@@ -81,7 +91,7 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
       await invalidate();
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : "Action failed");
+      toast.error(domainErrorMessage(err));
     },
   });
 

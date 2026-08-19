@@ -3,6 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/hooks/useSession";
 import { NotificationBell } from "@/features/notifications/NotificationPanel";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { useProfile } from "@/features/me/use-profile";
+import { useAvatarUrl } from "@/features/people/directory";
 
 interface PageHeaderProps {
   title: string;
@@ -13,6 +16,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, subtitle, actions, className }: PageHeaderProps) {
   const { user } = useSession();
+  const { data: profile } = useProfile();
 
   const name =
     user?.user_metadata?.display_name ||
@@ -28,6 +32,7 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
       .slice(0, 2)
       .join("")
       .toUpperCase();
+  const avatarUrl = useAvatarUrl(name, user?.email, profile?.avatar_url);
 
   return (
     <header className={cn("flex items-start justify-between gap-4 pb-4", className)}>
@@ -40,9 +45,7 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
         <NotificationBell />
         <Link to="/me" className="flex items-center gap-1 rounded-full pl-0.5 pr-1 hover:bg-muted">
           <span className="relative">
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-[11px] font-semibold text-white">
-              {initials}
-            </span>
+            <PersonAvatar name={name} initials={initials} src={avatarUrl} size={32} />
             <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-background" />
           </span>
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />

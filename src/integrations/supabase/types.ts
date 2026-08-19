@@ -1132,6 +1132,15 @@ export type Database = {
       }
     }
     Views: {
+      public_profiles: {
+        Row: {
+          id: string | null
+          email: string | null
+          display_name: string | null
+          avatar_url: string | null
+        }
+        Relationships: []
+      }
       thing_list_label: {
         Row: {
           list_context: Database["public"]["Enums"]["context_kind"] | null

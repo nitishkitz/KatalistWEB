@@ -25,7 +25,7 @@ export function AppShell({ title, subtitle, actions, children }: AppShellProps) 
 
   useEffect(() => {
     if (!loading && !session) {
-      navigate({ to: "/welcome", replace: true });
+      navigate({ to: "/auth", replace: true });
     }
   }, [loading, session, navigate]);
 

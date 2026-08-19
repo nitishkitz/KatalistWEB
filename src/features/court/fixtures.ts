@@ -7,6 +7,7 @@ const person = (id: string, name: string) => ({
     .split(" ")
     .map((n) => n[0])
     .join(""),
+  avatarUrl: null as string | null,
 });
 
 const rahul = person("p-rahul", "Rahul");

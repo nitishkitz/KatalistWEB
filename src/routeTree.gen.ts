@@ -15,11 +15,13 @@ import { Route as BucketsRouteImport } from './routes/buckets'
 import { Route as ListsRouteImport } from './routes/lists'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as NudgesRouteImport } from './routes/nudges'
-import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
-import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as BridgeTokenRouteImport } from './routes/bridge.$token'
+import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
+import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
+import { Route as ListsIndexRouteImport } from './routes/lists.index'
+import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
 import { Route as ApiPublicBridgeCommentRouteImport } from './routes/api/public/bridge/comment'
 import { Route as ApiPublicBridgeRedeemRouteImport } from './routes/api/public/bridge/redeem'
@@ -55,30 +57,40 @@ const NudgesRoute = NudgesRouteImport.update({
   path: '/nudges',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WelcomeRoute = WelcomeRouteImport.update({
-  id: '/welcome',
-  path: '/welcome',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ListsListIdRoute = ListsListIdRouteImport.update({
-  id: '/lists/$listId',
-  path: '/lists/$listId',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const BucketsBucketIdRoute = BucketsBucketIdRouteImport.update({
-  id: '/buckets/$bucketId',
-  path: '/buckets/$bucketId',
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BridgeTokenRoute = BridgeTokenRouteImport.update({
   id: '/bridge/$token',
   path: '/bridge/$token',
   getParentRoute: () => rootRouteImport,
+} as any)
+const BucketsIndexRoute = BucketsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => BucketsRoute,
+} as any)
+const BucketsBucketIdRoute = BucketsBucketIdRouteImport.update({
+  id: '/$bucketId',
+  path: '/$bucketId',
+  getParentRoute: () => BucketsRoute,
+} as any)
+const ListsIndexRoute = ListsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ListsRoute,
+} as any)
+const ListsListIdRoute = ListsListIdRouteImport.update({
+  id: '/$listId',
+  path: '/$listId',
+  getParentRoute: () => ListsRoute,
 } as any)
 const ApiPublicBridgeActRoute = ApiPublicBridgeActRouteImport.update({
   id: '/api/public/bridge/act',
@@ -104,15 +116,17 @@ const ApiPublicBridgeThingRoute = ApiPublicBridgeThingRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/buckets': typeof BucketsRoute
-  '/lists': typeof ListsRoute
+  '/buckets': typeof BucketsRouteWithChildren
+  '/lists': typeof ListsRouteWithChildren
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
-  '/welcome': typeof WelcomeRoute
   '/onboarding': typeof OnboardingRoute
-  '/lists/$listId': typeof ListsListIdRoute
-  '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
+  '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/lists/$listId': typeof ListsListIdRoute
+  '/buckets/': typeof BucketsIndexRoute
+  '/lists/': typeof ListsIndexRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -121,15 +135,15 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/buckets': typeof BucketsRoute
-  '/lists': typeof ListsRoute
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
-  '/welcome': typeof WelcomeRoute
   '/onboarding': typeof OnboardingRoute
-  '/lists/$listId': typeof ListsListIdRoute
-  '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
+  '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/lists/$listId': typeof ListsListIdRoute
+  '/buckets': typeof BucketsIndexRoute
+  '/lists': typeof ListsIndexRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -139,15 +153,17 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/buckets': typeof BucketsRoute
-  '/lists': typeof ListsRoute
+  '/buckets': typeof BucketsRouteWithChildren
+  '/lists': typeof ListsRouteWithChildren
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
-  '/welcome': typeof WelcomeRoute
   '/onboarding': typeof OnboardingRoute
-  '/lists/$listId': typeof ListsListIdRoute
-  '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
+  '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/lists/$listId': typeof ListsListIdRoute
+  '/buckets/': typeof BucketsIndexRoute
+  '/lists/': typeof ListsIndexRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -162,11 +178,13 @@ export interface FileRouteTypes {
     | '/lists'
     | '/me'
     | '/nudges'
-    | '/welcome'
     | '/onboarding'
-    | '/lists/$listId'
-    | '/buckets/$bucketId'
+    | '/welcome'
     | '/bridge/$token'
+    | '/buckets/$bucketId'
+    | '/lists/$listId'
+    | '/buckets/'
+    | '/lists/'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -175,15 +193,15 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
-    | '/buckets'
-    | '/lists'
     | '/me'
     | '/nudges'
-    | '/welcome'
     | '/onboarding'
-    | '/lists/$listId'
-    | '/buckets/$bucketId'
+    | '/welcome'
     | '/bridge/$token'
+    | '/buckets/$bucketId'
+    | '/lists/$listId'
+    | '/buckets'
+    | '/lists'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -196,11 +214,13 @@ export interface FileRouteTypes {
     | '/lists'
     | '/me'
     | '/nudges'
-    | '/welcome'
     | '/onboarding'
-    | '/lists/$listId'
-    | '/buckets/$bucketId'
+    | '/welcome'
     | '/bridge/$token'
+    | '/buckets/$bucketId'
+    | '/lists/$listId'
+    | '/buckets/'
+    | '/lists/'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -210,14 +230,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
-  BucketsRoute: typeof BucketsRoute
-  ListsRoute: typeof ListsRoute
+  BucketsRoute: typeof BucketsRouteWithChildren
+  ListsRoute: typeof ListsRouteWithChildren
   MeRoute: typeof MeRoute
   NudgesRoute: typeof NudgesRoute
-  WelcomeRoute: typeof WelcomeRoute
   OnboardingRoute: typeof OnboardingRoute
-  ListsListIdRoute: typeof ListsListIdRoute
-  BucketsBucketIdRoute: typeof BucketsBucketIdRoute
+  WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
   ApiPublicBridgeCommentRoute: typeof ApiPublicBridgeCommentRoute
@@ -269,13 +287,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NudgesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/welcome': {
-      id: '/welcome'
-      path: '/welcome'
-      fullPath: '/welcome'
-      preLoaderRoute: typeof WelcomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/onboarding': {
       id: '/onboarding'
       path: '/onboarding'
@@ -283,18 +294,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/lists/$listId': {
-      id: '/lists/$listId'
-      path: '/lists/$listId'
-      fullPath: '/lists/$listId'
-      preLoaderRoute: typeof ListsListIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/buckets/$bucketId': {
-      id: '/buckets/$bucketId'
-      path: '/buckets/$bucketId'
-      fullPath: '/buckets/$bucketId'
-      preLoaderRoute: typeof BucketsBucketIdRouteImport
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/bridge/$token': {
@@ -303,6 +307,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/bridge/$token'
       preLoaderRoute: typeof BridgeTokenRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/buckets/': {
+      id: '/buckets/'
+      path: '/'
+      fullPath: '/buckets/'
+      preLoaderRoute: typeof BucketsIndexRouteImport
+      parentRoute: typeof BucketsRoute
+    }
+    '/buckets/$bucketId': {
+      id: '/buckets/$bucketId'
+      path: '/$bucketId'
+      fullPath: '/buckets/$bucketId'
+      preLoaderRoute: typeof BucketsBucketIdRouteImport
+      parentRoute: typeof BucketsRoute
+    }
+    '/lists/': {
+      id: '/lists/'
+      path: '/'
+      fullPath: '/lists/'
+      preLoaderRoute: typeof ListsIndexRouteImport
+      parentRoute: typeof ListsRoute
+    }
+    '/lists/$listId': {
+      id: '/lists/$listId'
+      path: '/$listId'
+      fullPath: '/lists/$listId'
+      preLoaderRoute: typeof ListsListIdRouteImport
+      parentRoute: typeof ListsRoute
     }
     '/api/public/bridge/act': {
       id: '/api/public/bridge/act'
@@ -335,17 +367,40 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface BucketsRouteChildren {
+  BucketsBucketIdRoute: typeof BucketsBucketIdRoute
+  BucketsIndexRoute: typeof BucketsIndexRoute
+}
+
+const BucketsRouteChildren: BucketsRouteChildren = {
+  BucketsBucketIdRoute: BucketsBucketIdRoute,
+  BucketsIndexRoute: BucketsIndexRoute,
+}
+
+const BucketsRouteWithChildren =
+  BucketsRoute._addFileChildren(BucketsRouteChildren)
+
+interface ListsRouteChildren {
+  ListsListIdRoute: typeof ListsListIdRoute
+  ListsIndexRoute: typeof ListsIndexRoute
+}
+
+const ListsRouteChildren: ListsRouteChildren = {
+  ListsListIdRoute: ListsListIdRoute,
+  ListsIndexRoute: ListsIndexRoute,
+}
+
+const ListsRouteWithChildren = ListsRoute._addFileChildren(ListsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
-  BucketsRoute: BucketsRoute,
-  ListsRoute: ListsRoute,
+  BucketsRoute: BucketsRouteWithChildren,
+  ListsRoute: ListsRouteWithChildren,
   MeRoute: MeRoute,
   NudgesRoute: NudgesRoute,
-  WelcomeRoute: WelcomeRoute,
   OnboardingRoute: OnboardingRoute,
-  ListsListIdRoute: ListsListIdRoute,
-  BucketsBucketIdRoute: BucketsBucketIdRoute,
+  WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,
   ApiPublicBridgeCommentRoute: ApiPublicBridgeCommentRoute,

@@ -2,13 +2,26 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, Clock, Hand, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { nudgeFixtures, nudgeGroups, recentNudgeFixtures, type NudgeGroup } from "@/features/nudges/fixtures";
+import { nudgeGroups, type NudgeGroup } from "@/features/nudges/fixtures";
+import { useNudges } from "@/features/nudges/use-nudges";
 import { cn } from "@/lib/utils";
 import { rpcNudgeThing } from "@/features/things/rpc";
 import { toast } from "sonner";
 import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
-import type { Thing } from "@/domain/thing";
+import type { Thing, Person } from "@/domain/thing";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { useAvatarUrl } from "@/features/people/directory";
+
+function NudgePerson({ name, thingAssignee }: { name: string; thingAssignee?: Person }) {
+  const src = useAvatarUrl(name, null, thingAssignee?.avatarUrl);
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <PersonAvatar name={name} initials={thingAssignee?.initials ?? name.slice(0, 2)} src={src} size={20} />
+      {name}
+    </span>
+  );
+}
 
 export const Route = createFileRoute("/nudges")({
   head: () => ({
@@ -23,16 +36,11 @@ export const Route = createFileRoute("/nudges")({
 function NudgesPage() {
   useLocalVersion();
   const [group, setGroup] = useState<NudgeGroup>("waiting_for_catch");
-  const [selected, setSelected] = useState<Thing | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const things = getMergedThings();
-
-  const counts = useMemo(() => {
-    const map = Object.fromEntries(nudgeGroups.map((g) => [g.id, 0])) as Record<NudgeGroup, number>;
-    for (const n of nudgeFixtures) map[n.group] += 1;
-    return map;
-  }, []);
-
-  const rows = nudgeFixtures.filter((n) => n.group === group);
+  const { rows: allRows, recent, counts } = useNudges();
+  const selected = things.find((t) => t.id === selectedId) ?? null;
+  const rows = allRows.filter((n) => n.group === group);
 
   return (
     <AppShell title="Nudges" subtitle="Gentle follow-up, without the awkwardness">
@@ -97,7 +105,9 @@ function NudgesPage() {
             {rows.map((row) => (
               <tr key={row.id} className="border-t border-border/80 hover:bg-muted/40">
                 <td className="px-4 py-3 text-[13px] font-medium text-foreground">{row.title}</td>
-                <td className="px-2 text-[13px] text-foreground">{row.person}</td>
+                <td className="px-2 text-[13px] text-foreground">
+                  <NudgePerson name={row.person} thingAssignee={things.find((t) => t.title === row.title)?.assignee} />
+                </td>
                 <td className="px-2 text-[12px] text-muted-foreground">{row.reason}</td>
                 <td className="px-2 text-[12px] text-foreground">{row.acknowledged}</td>
                 <td className="px-2 text-[12px] text-foreground">{row.workStatus}</td>
@@ -124,7 +134,7 @@ function NudgesPage() {
                       className="rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:bg-muted"
                       onClick={() => {
                         const thing = things.find((t) => t.title === row.title) ?? null;
-                        setSelected(thing);
+                        if (thing) setSelectedId(thing.id);
                       }}
                     >
                       Open
@@ -147,7 +157,7 @@ function NudgesPage() {
       <section>
         <h2 className="mb-3 katalist-section-title">Recently Nudged</h2>
         <div className="flex gap-3 overflow-x-auto pb-1">
-          {recentNudgeFixtures.map((r) => (
+          {recent.map((r) => (
             <article
               key={r.id}
               className="min-w-[220px] rounded-xl border border-border bg-card p-3"
@@ -161,7 +171,7 @@ function NudgesPage() {
           ))}
         </div>
       </section>
-      <ThingDetailSheet thing={selected} open={Boolean(selected)} onOpenChange={(v) => !v && setSelected(null)} />
+      <ThingDetailSheet thing={selected} open={Boolean(selected)} onOpenChange={(v) => !v && setSelectedId(null)} />
     </AppShell>
   );
 }

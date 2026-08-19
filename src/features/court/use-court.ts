@@ -1,12 +1,13 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
-import { isActiveThing, laneOf, theirStateFor, type Thing, type Person } from "@/domain/thing";
+import { isActiveThing, partitionCourt, theirStateFor, type Thing, type Person } from "@/domain/thing";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { MY_ACTOR_ID } from "./fixtures";
 import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { isPreviewSession } from "@/lib/session-mode";
 
 type ActorRow = {
   id: string;
@@ -33,11 +34,7 @@ async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; 
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) return { things: [], myActorId: null };
 
-  const { data: actor } = await supabase
-    .from("actors")
-    .select("id")
-    .eq("profile_id", auth.user.id)
-    .maybeSingle();
+  const { data: actor } = await supabase.from("actors").select("id").eq("profile_id", auth.user.id).maybeSingle();
   const myActorId = actor?.id ?? null;
 
   const { data: rows, error } = await supabase
@@ -102,45 +99,48 @@ async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; 
 }
 
 export function useCourt() {
-  const { session } = useSession();
-  const isAuthenticated = Boolean(session) && session?.app_metadata?.provider !== "demo";
+  const { session, user } = useSession();
+  const preview = isPreviewSession(session);
+  const liveAuth = Boolean(session) && !preview;
   const { context } = useAppContext();
   useLocalVersion();
 
   const query = useQuery({
-    queryKey: keys.court(isAuthenticated ? "me" : "preview", context),
+    queryKey: keys.court(user?.id, context),
     queryFn: () => fetchCourt(context),
     staleTime: 15_000,
-    enabled: isAuthenticated,
+    enabled: liveAuth,
   });
 
   const source = useMemo(() => {
-    const live = (query.data?.things ?? []).filter(isActiveThing);
-    if (live.length > 0) {
-      return { things: live, myActorId: query.data?.myActorId ?? null, live: true };
+    if (preview) {
+      return {
+        things: getMergedThings().filter((t) => t.context === context),
+        myActorId: MY_ACTOR_ID,
+        live: false,
+      };
     }
-    const local = getMergedThings().filter((t) => t.context === context || true);
     return {
-      things: local.filter(isActiveThing).filter((t) => t.context === context),
-      myActorId: MY_ACTOR_ID,
-      live: false,
+      things: query.data?.things ?? [],
+      myActorId: query.data?.myActorId ?? null,
+      live: true,
     };
-  }, [query.data, context]);
+  }, [preview, query.data, context]);
 
-  const now = source.things.filter((t) => laneOf(t) === "now");
-  const next = source.things.filter((t) => laneOf(t) === "next");
-  const later = source.things.filter((t) => laneOf(t) === "later");
-  const theirs = source.things.filter((t) => t.assignee.id !== source.myActorId);
+  const parts = partitionCourt(source.things, source.myActorId ?? "");
+  const theirs = parts.theirs;
 
   return {
-    isLoading: query.isLoading,
+    isLoading: liveAuth && query.isLoading,
     error: query.error,
     live: source.live,
-    now,
-    next,
-    later,
+    preview,
+    now: parts.now,
+    next: parts.next,
+    later: parts.later,
     theirs,
-    all: source.things,
+    all: source.things.filter(isActiveThing),
+    myActorId: source.myActorId,
     theirGroups: {
       waiting_for_catch: theirs.filter((t) => theirStateFor(t) === "waiting_for_catch"),
       moving: theirs.filter((t) => theirStateFor(t) === "moving"),

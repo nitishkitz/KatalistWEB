@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { Importance, Pace, Person, Thing, WorkStatus } from "@/domain/thing";
 import { courtFixtures, MY_ACTOR_ID } from "@/features/court/fixtures";
+import { getStoredDemoSession } from "@/hooks/useSession";
 import { listFixtures, type ListRow } from "@/features/lists/fixtures";
 import { bucketFixtures, type BucketCard } from "@/features/buckets/fixtures";
 
@@ -64,6 +65,15 @@ function bump(event?: LocalActivity & { thingId?: string }) {
   emit();
 }
 
+function overlayPerson(person: Person): Person {
+  if (person.id !== MY_ACTOR_ID) return person;
+  const demo = getStoredDemoSession();
+  const name = demo?.user.user_metadata?.display_name as string | undefined;
+  const initials = demo?.user.user_metadata?.initials as string | undefined;
+  if (!name) return person;
+  return { ...person, name, initials: initials ?? person.initials };
+}
+
 export function getMergedThings(): Thing[] {
   const byId = new Map<string, Thing>();
   for (const t of courtFixtures) byId.set(t.id, t);
@@ -72,15 +82,22 @@ export function getMergedThings(): Thing[] {
     const current = byId.get(id);
     if (current) byId.set(id, { ...current, ...patch });
   }
-  return [...byId.values()].filter((t) => !shredded.has(t.id));
+  return [...byId.values()]
+    .filter((t) => !shredded.has(t.id))
+    .map((t) => ({
+      ...t,
+      creator: overlayPerson(t.creator),
+      owner: overlayPerson(t.owner),
+      assignee: overlayPerson(t.assignee),
+    }));
 }
 
 export function directoryPeople(): Person[] {
   const map = new Map<string, Person>();
   for (const t of getMergedThings()) {
-    map.set(t.creator.id, t.creator);
-    map.set(t.owner.id, t.owner);
-    map.set(t.assignee.id, t.assignee);
+    map.set(t.creator.id, overlayPerson(t.creator));
+    map.set(t.owner.id, overlayPerson(t.owner));
+    map.set(t.assignee.id, overlayPerson(t.assignee));
   }
   return [...map.values()];
 }
@@ -109,6 +126,8 @@ export function tossLocalThing(input: {
   listId?: string | null;
   listName?: string | null;
   assigneeId?: string;
+  dueAt?: string;
+  dueHasTime?: boolean;
 }): Thing {
   const people = directoryPeople();
   const me = people.find((p) => p.id === MY_ACTOR_ID) ?? people[0];
@@ -123,8 +142,8 @@ export function tossLocalThing(input: {
     workStatus: "not_started",
     ownerImportance: input.ownerImportance ?? "next",
     personalPace: assignee.id === me.id ? "next" : null,
-    dueAt: null,
-    dueHasTime: false,
+    dueAt: input.dueAt ?? null,
+    dueHasTime: Boolean(input.dueHasTime),
     context: input.context,
     listId: input.listId ?? null,
     listName: input.listName ?? "Standalone",

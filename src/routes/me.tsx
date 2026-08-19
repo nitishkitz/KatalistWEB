@@ -13,9 +13,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useSession } from "@/hooks/useSession";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "@/features/context/use-app-context";
-import { getMergedThings, getShredded, restoreLocal, useLocalVersion } from "@/features/things/local-state";
+import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { useProfile, useUploadAvatar } from "@/features/me/use-profile";
+import { useTrophy } from "@/features/me/use-trophy";
+import { useAvatarUrl } from "@/features/people/directory";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/me")({
@@ -63,18 +68,23 @@ const settings = [
 
 function MePage() {
   const { user, signOut } = useSession();
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const { data: profile } = useProfile();
+  const uploadAvatar = useUploadAvatar();
+  const { stats, restore } = useTrophy();
   const { context, setContext } = useAppContext();
   const [panel, setPanel] = useState<string | null>(null);
   const [reduced, setReduced] = useState(() =>
     typeof window === "undefined" ? false : localStorage.getItem("katalist.reduced_motion") === "1",
   );
   const things = getMergedThings();
-  const shredded = getShredded();
-  const sorted = things.filter((t) => t.workStatus === "sorted").length;
-  const caught = things.filter((t) => t.acknowledgement === "caught").length;
-  const waiting = things.filter((t) => t.acknowledgement === "waiting_for_catch").length;
+  const sorted = stats.sorted;
+  const caught = stats.caught;
+  const waiting = stats.waiting;
 
   const name =
+    profile?.display_name ||
     user?.user_metadata?.display_name ||
     user?.user_metadata?.full_name ||
     user?.email?.split("@")[0] ||
@@ -90,13 +100,15 @@ function MePage() {
       .join("")
       .toUpperCase();
 
-  const email = user?.email || "rahul.mehta@email.com";
-  const phone = user?.phone || user?.user_metadata?.phone || "+1 (415) 555-0198";
+  const avatarUrl = useAvatarUrl(name, user?.email, profile?.avatar_url);
+  const email = profile?.email || user?.email || "";
+  const phone = profile?.phone_e164 || user?.phone || user?.user_metadata?.phone || "";
 
   async function handleSignOut() {
     await signOut();
+    qc.clear();
     toast.success("Signed out");
-    navigate({ to: "/auth", replace: true });
+    await navigate({ to: "/auth", replace: true });
   }
 
   return (
@@ -107,9 +119,23 @@ function MePage() {
           <section className="rounded-xl border border-border bg-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800 text-xl font-bold text-white">
-                  {initials}
-                </span>
+                <label className="cursor-pointer">
+                  <PersonAvatar name={name} initials={initials} src={avatarUrl} size={64} />
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      uploadAvatar.mutate(file, {
+                        onSuccess: () => toast.success("Photo updated."),
+                        onError: (err) =>
+                          toast.error(err instanceof Error ? err.message : "Couldn’t save photo to profile."),
+                      });
+                    }}
+                  />
+                </label>
                 <div>
                   <h2 className="text-xl font-bold text-foreground">{name}</h2>
                   <p className="mt-0.5 text-sm text-muted-foreground">{role}</p>
@@ -160,9 +186,9 @@ function MePage() {
                 ["Things Sorted", String(sorted)],
                 ["Things Caught", String(caught)],
                 ["Catch Response Time", "—"],
-                ["Current Streak", "—"],
-                ["Weekly Movement", String(things.filter((t) => t.workStatus === "under_progress").length)],
-                ["Recent Achievement", sorted > 0 ? "Movement on the board" : "—"],
+                ["Current Streak", stats.streak],
+                ["Weekly Movement", String(stats.weekly)],
+                ["Recent Achievement", stats.achievement],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-lg border border-border/80 bg-background px-3 py-3">
                   <p className="text-[11px] text-muted-foreground">{label}</p>
@@ -200,11 +226,11 @@ function MePage() {
               type="button"
               className="rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground hover:bg-muted"
               onClick={() => {
-                const first = shredded[0];
-                if (first) restoreLocal(first.id);
+                const first = stats.shredded[0];
+                if (first) void restore(first.id);
               }}
             >
-              Recently Shredded{shredded.length ? ` (${shredded.length})` : ""}
+              Recently Shredded{stats.shredded.length ? ` (${stats.shredded.length})` : ""}
             </button>
             <button
               type="button"
@@ -230,12 +256,12 @@ function MePage() {
                 ? "All clear on incoming work. Breathe easy."
                 : "Toss something when you’re ready."}
           </p>
-          {shredded.length > 0 ? (
+          {stats.shredded.length > 0 ? (
             <ul className="mt-4 space-y-2 border-t border-border pt-3">
-              {shredded.map((s) => (
+              {stats.shredded.map((s) => (
                 <li key={s.id} className="flex items-center justify-between text-[12px]">
                   <span>{s.title}</span>
-                  <button type="button" className="text-primary" onClick={() => restoreLocal(s.id)}>
+                  <button type="button" className="text-primary" onClick={() => void restore(s.id)}>
                     Restore
                   </button>
                 </li>

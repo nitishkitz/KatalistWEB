@@ -152,17 +152,28 @@ function TheirCard({
 }
 
 function CourtPage() {
-  const { now, next, later, theirGroups, isLoading } = useCourt();
-  const [selected, setSelected] = useState<Thing | null>(null);
+  const { now, next, later, theirs, theirGroups, isLoading, all } = useCourt();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [query, setQuery] = useState("");
+  const [sort, setSort] = useState<"due" | "updated" | "importance" | "pace">("due");
   const [theirFocus, setTheirFocus] = useState<"waiting_for_catch" | "moving" | "needs_attention" | null>(null);
+  const selected = all.find((t) => t.id === selectedId) ?? now.concat(next, later, theirs).find((t) => t.id === selectedId) ?? null;
 
-  const fNow = useMemo(() => now.filter((t) => matchesFilter(t, filter, query)), [now, filter, query]);
-  const fNext = useMemo(() => next.filter((t) => matchesFilter(t, filter, query)), [next, filter, query]);
+  function sortThings(list: Thing[]) {
+    return [...list].sort((a, b) => {
+      if (sort === "due") return (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) - (b.dueAt ? new Date(b.dueAt).getTime() : Infinity);
+      if (sort === "updated") return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      if (sort === "importance") return Number(a.ownerImportance === "now") > Number(b.ownerImportance === "now") ? -1 : a.ownerImportance.localeCompare(b.ownerImportance);
+      return (a.personalPace ?? "next").localeCompare(b.personalPace ?? "next");
+    });
+  }
+
+  const fNow = useMemo(() => sortThings(now.filter((t) => matchesFilter(t, filter, query))), [now, filter, query, sort]);
+  const fNext = useMemo(() => sortThings(next.filter((t) => matchesFilter(t, filter, query))), [next, filter, query, sort]);
   const fLater = useMemo(
-    () => later.filter((t) => matchesFilter(t, filter, query)),
-    [later, filter, query],
+    () => sortThings(later.filter((t) => matchesFilter(t, filter, query))),
+    [later, filter, query, sort],
   );
 
   const dueToday = now.filter(
@@ -170,7 +181,8 @@ function CourtPage() {
   ).length;
   const waiting = now.filter((t) => t.acknowledgement === "waiting_for_catch").length;
   const progress = now.filter((t) => t.workStatus === "under_progress").length;
-  const empty = now.length + next.length + later.length === 0;
+  const emptyCourt = now.length + next.length + later.length + theirs.length === 0;
+  const emptyFilter = !emptyCourt && fNow.length + fNext.length + fLater.length === 0;
 
   return (
     <AppShell title="Court" subtitle="What needs your attention">
@@ -178,9 +190,11 @@ function CourtPage() {
 
       <p className="mb-3 flex items-center gap-2 text-[13px] text-muted-foreground">
         <img src="/katalist-mark-app.png" alt="" className="h-4 w-4 opacity-70" />
-        {empty && !isLoading
+        {emptyCourt && !isLoading
           ? "Your Court is clear. Toss something when you’re ready."
-          : "Coey here — your lanes are ready."}
+          : emptyFilter
+            ? "No Things match this filter."
+            : "Coey here — your lanes are ready."}
       </p>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -221,10 +235,15 @@ function CourtPage() {
           </label>
           <button
             type="button"
+            onClick={() =>
+              setSort((s) =>
+                s === "due" ? "updated" : s === "updated" ? "importance" : s === "importance" ? "pace" : "due",
+              )
+            }
             className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] text-foreground"
           >
             <SlidersHorizontal className="h-3.5 w-3.5" />
-            Sort: Due soon
+            Sort: {sort === "due" ? "Due soon" : sort === "updated" ? "Recently updated" : sort === "importance" ? "Importance" : "Pace"}
           </button>
           <button
             type="button"
@@ -250,7 +269,7 @@ function CourtPage() {
               <span className="text-status-next">● {progress} under progress</span>
             </span>
           }
-          onSelect={setSelected}
+          onSelect={(t) => setSelectedId(t.id)}
       />
         <Lane
           title="NEXT"
@@ -265,7 +284,7 @@ function CourtPage() {
               {next.filter((t) => t.workStatus === "under_progress").length} under progress
             </span>
           }
-          onSelect={setSelected}
+          onSelect={(t) => setSelectedId(t.id)}
       />
         <Lane
           title="LATER"
@@ -273,7 +292,7 @@ function CourtPage() {
           things={fLater}
           defaultOpen={false}
           preview={0}
-          onSelect={setSelected}
+          onSelect={(t) => setSelectedId(t.id)}
         />
 
         <section className="rounded-xl border border-border bg-card">
@@ -318,7 +337,7 @@ function CourtPage() {
               <table className="w-full table-fixed">
                 <tbody>
                   {theirGroups[theirFocus].map((t) => (
-                    <ThingRow key={t.id} thing={t} onSelect={setSelected} />
+                    <ThingRow key={t.id} thing={t} onSelect={(t) => setSelectedId(t.id)} />
                   ))}
                 </tbody>
               </table>
@@ -335,7 +354,7 @@ function CourtPage() {
         thing={selected}
         open={selected != null}
         onOpenChange={(open) => {
-          if (!open) setSelected(null);
+          if (!open) setSelectedId(null);
         }}
       />
     </AppShell>

@@ -348,13 +348,16 @@ function WelcomePage() {
               </ul>
             )}
 
-            <div className="mt-8 flex items-center gap-3">
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button
                 size="lg"
                 onClick={() => (isLast ? navigate({ to: "/auth" }) : setIndex(index + 1))}
               >
                 {index === 0 ? "Get Started" : isLast ? "Create your account" : "Next"}
                 <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="lg" onClick={() => navigate({ to: "/auth" })}>
+                Enter with a demo account
               </Button>
               {!isLast && (
                 <Button variant="ghost" size="lg" onClick={() => navigate({ to: "/auth" })}>

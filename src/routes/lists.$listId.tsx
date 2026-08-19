@@ -4,8 +4,15 @@ import { AppShell } from "@/components/layout/AppShell";
 import { MagicBox } from "@/features/court/MagicBox";
 import { ThingRow } from "@/components/katalist/ThingRow";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
-import { getListMessages, addListMessage, getLists, getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { useList } from "@/features/lists/use-lists";
+import { useListMessages } from "@/features/lists/use-list-messages";
+import { useCourt } from "@/features/court/use-court";
+import { domainErrorMessage } from "@/lib/domain-error";
+import { toast } from "sonner";
 import type { Thing } from "@/domain/thing";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { useAvatarUrl } from "@/features/people/directory";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/lists/$listId")({
@@ -14,22 +21,51 @@ export const Route = createFileRoute("/lists/$listId")({
 
 type FeedFilter = "all" | "mine" | "waiting" | "progress" | "completed" | "cancelled";
 
+function MemberRow({
+  name,
+  initials,
+  avatarUrl,
+  isOwner,
+  ownerView,
+}: {
+  name: string;
+  initials: string;
+  avatarUrl?: string | null;
+  isOwner: boolean;
+  ownerView: boolean;
+}) {
+  const src = useAvatarUrl(name, null, avatarUrl);
+  return (
+    <li className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
+      <span className="flex items-center gap-2 text-[13px]">
+        <PersonAvatar name={name} initials={initials} src={src} size={28} />
+        {name}
+      </span>
+      <span className="text-[12px] text-muted-foreground">{isOwner ? "Owner" : ownerView ? "Collaborator" : "Member"}</span>
+    </li>
+  );
+}
+
 function ListDetailPage() {
   const { listId } = Route.useParams();
   useLocalVersion();
-  const list = getLists().find((l) => l.id === listId);
+  const { list } = useList(listId);
+  const chat = useListMessages(listId);
+  const court = useCourt();
   const [filter, setFilter] = useState<FeedFilter>("all");
-  const [selected, setSelected] = useState<Thing | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<"things" | "chat" | "members">("things");
   const [msg, setMsg] = useState("");
   const viewOnly = list?.role === "view_only";
+  const sourceThings = court.preview ? getMergedThings() : court.all;
+  const selected = sourceThings.find((t) => t.id === selectedId) ?? null;
 
   const things = useMemo(() => {
-    return getMergedThings().filter((t) => t.listName === list?.name || t.listId === listId);
-  }, [list, listId]);
+    return sourceThings.filter((t) => t.listId === listId || t.listName === list?.name);
+  }, [sourceThings, list, listId]);
 
   const visible = things.filter((t) => {
-    if (filter === "mine") return t.assignee.id === "p-me";
+    if (filter === "mine") return t.assignee.id === court.myActorId;
     if (filter === "waiting") return t.acknowledgement === "waiting_for_catch";
     if (filter === "progress") return t.workStatus === "under_progress";
     if (filter === "completed") return t.workStatus === "sorted";
@@ -37,7 +73,7 @@ function ListDetailPage() {
     return true;
   });
 
-  const messages = getListMessages(listId);
+  const messages = chat.messages;
 
   if (!list) {
     return (
@@ -103,7 +139,7 @@ function ListDetailPage() {
             <table className="hidden w-full md:table">
               <tbody>
                 {visible.map((t) => (
-                  <ThingRow key={t.id} thing={t} onSelect={setSelected} />
+                  <ThingRow key={t.id} thing={t} onSelect={(thing) => setSelectedId(thing.id)} />
                 ))}
               </tbody>
             </table>
@@ -139,8 +175,10 @@ function ListDetailPage() {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!msg.trim()) return;
-                addListMessage(listId, msg.trim());
-                setMsg("");
+                void chat.send.mutateAsync(msg.trim()).then(
+                  () => setMsg(""),
+                  (err) => toast.error(domainErrorMessage(err)),
+                );
               }}
             >
               <input
@@ -164,12 +202,7 @@ function ListDetailPage() {
           </p>
           <ul className="space-y-2">
             {list.members.map((m) => (
-              <li key={m.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                <span className="text-[13px]">{m.name}</span>
-                <span className="text-[12px] text-muted-foreground">
-                  {m.name.includes("you") || m.initials === "ME" ? "Owner" : list.role === "owner" ? "Collaborator" : "Member"}
-                </span>
-              </li>
+              <MemberRow key={m.name} name={m.name} initials={m.initials} avatarUrl={m.avatarUrl} isOwner={m.name.includes("you") || m.initials === "ME"} ownerView={list.role === "owner"} />
             ))}
           </ul>
           {list.role === "owner" ? (
@@ -180,7 +213,7 @@ function ListDetailPage() {
         </section>
       ) : null}
 
-      <ThingDetailSheet thing={selected} open={Boolean(selected)} onOpenChange={(v) => !v && setSelected(null)} />
+      <ThingDetailSheet thing={selected} open={Boolean(selected)} onOpenChange={(v) => !v && setSelectedId(null)} />
     </AppShell>
   );
 }

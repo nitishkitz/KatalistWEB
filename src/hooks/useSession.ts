@@ -187,7 +187,7 @@ export function useSession() {
     session,
     user: session?.user ?? null,
     loading,
-    isDemo: session?.app_metadata?.provider === "demo",
+    isDemo: session?.user?.app_metadata?.provider === "demo",
     signInAsDemo,
     signOut: signOutAll,
   };

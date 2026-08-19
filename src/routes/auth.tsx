@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession, DEMO_PERSONAS, signInAsDemo, DemoPersona } from "@/hooks/useSession";
 import { Logo } from "@/components/katalist/Logo";
+import { useAvatarUrl } from "@/features/people/directory";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 
 export const Route = createFileRoute("/auth")({
@@ -69,11 +70,46 @@ const COUNTRY_CODES = [
 
 type Channel = "phone" | "email";
 
+function DemoPersonaButton({ persona, onEnter }: { persona: DemoPersona; onEnter: () => void }) {
+  const src = useAvatarUrl(persona.name, persona.email);
+  return (
+    <button
+      type="button"
+      onClick={onEnter}
+      className="group flex w-full items-center justify-between rounded-xl border border-border bg-background p-3 text-left transition-all hover:border-primary hover:bg-accent/40"
+    >
+      <div className="flex items-center gap-3">
+        {src ? (
+          <img src={src} alt="" className="h-9 w-9 rounded-full object-cover ring-1 ring-border/50" />
+        ) : (
+          <span
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ring-1 ring-border/50",
+              persona.color,
+            )}
+          >
+            {persona.initials}
+          </span>
+        )}
+        <div>
+          <p className="text-sm font-semibold text-foreground transition-colors group-hover:text-primary">{persona.name}</p>
+          <p className="text-xs text-muted-foreground">
+            {persona.role} · <span className="font-mono">{persona.phone}</span>
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center text-xs font-medium text-primary">
+        Enter <ArrowRight className="ml-1 h-3.5 w-3.5" />
+      </div>
+    </button>
+  );
+}
+
 function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useSession();
 
-  const [tab, setTab] = useState<"otp" | "qr" | "preview">("otp");
+  const [tab, setTab] = useState<"otp" | "qr" | "preview">("preview");
   const [channel, setChannel] = useState<Channel>("phone");
   const [dialCode, setDialCode] = useState("+91");
   const [phone, setPhone] = useState("");
@@ -210,11 +246,12 @@ function AuthPage() {
         {/* Auth card */}
         <div className="flex flex-col justify-center">
           <div className="rounded-2xl border border-border bg-card katalist-shadow">
-            <div className="grid grid-cols-2 border-b border-border">
+            <div className="grid grid-cols-3 border-b border-border">
               {(
                 [
+                  ["preview", "Demo", Sparkles],
                   ["otp", "Phone / OTP", Smartphone],
-                  ["qr", "Scan QR to Login", QrCode],
+                  ["qr", "Scan QR", QrCode],
                 ] as const
               ).map(([key, label, Icon]) => (
                 <button
@@ -239,10 +276,10 @@ function AuthPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-base font-semibold text-foreground">
-                        Preview sample account
+                        Demo accounts
                       </h2>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        Local visual QA only — not production auth
+                        One tap. Uses the existing sample Court / Lists / Nudges data.
                       </p>
                     </div>
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
@@ -252,33 +289,7 @@ function AuthPage() {
 
                   <div className="mt-4 space-y-2.5">
                     {DEMO_PERSONAS.map((persona) => (
-                      <button
-                        key={persona.key}
-                        onClick={() => handleDemoLogin(persona)}
-                        className="group flex w-full items-center justify-between rounded-xl border border-border bg-background p-3 text-left transition-all hover:border-primary hover:bg-accent/40"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={cn(
-                              "flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ring-1 ring-border/50",
-                              persona.color,
-                            )}
-                          >
-                            {persona.initials}
-                          </span>
-                          <div>
-                            <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
-                              {persona.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {persona.role} · <span className="font-mono">{persona.phone}</span>
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-                          Sign In <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                        </div>
-                      </button>
+                      <DemoPersonaButton key={persona.key} persona={persona} onEnter={() => handleDemoLogin(persona)} />
                     ))}
                   </div>
                 </div>
@@ -436,14 +447,8 @@ function AuthPage() {
               )}
             </div>
 
-            <div className="border-t border-border px-6 py-3 text-center">
-              <button
-                type="button"
-                onClick={() => setTab("preview")}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Preview with sample account
-              </button>
+            <div className="border-t border-border px-6 py-3 text-center text-xs text-muted-foreground">
+              Demo is for testing. Phone / OTP and QR stay for live accounts.
             </div>
 
             <div className="border-t border-border px-6 py-4 text-center text-sm text-muted-foreground">

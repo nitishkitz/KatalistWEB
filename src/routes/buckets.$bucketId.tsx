@@ -5,12 +5,15 @@ import { AppShell } from "@/components/layout/AppShell";
 import {
   addBucketRef,
   getBucketRefs,
-  getBuckets,
   getLists,
   getMergedThings,
   removeBucketRef,
   useLocalVersion,
 } from "@/features/things/local-state";
+import { rpcAddToBucket, rpcRemoveFromBucket } from "@/features/things/rpc";
+import { isPreviewMode } from "@/lib/session-mode";
+import { domainErrorMessage } from "@/lib/domain-error";
+import { useBucket } from "@/features/buckets/use-buckets";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/buckets/$bucketId")({
@@ -20,7 +23,7 @@ export const Route = createFileRoute("/buckets/$bucketId")({
 function BucketDetailPage() {
   const { bucketId } = Route.useParams();
   useLocalVersion();
-  const bucket = getBuckets().find((b) => b.id === bucketId);
+  const { bucket } = useBucket(bucketId);
   const refs = getBucketRefs(bucketId);
   const [q, setQ] = useState("");
 
@@ -56,8 +59,15 @@ function BucketDetailPage() {
             onChange={(e) => {
               const thing = getMergedThings().find((t) => t.id === e.target.value);
               if (!thing) return;
-              addBucketRef(bucketId, { thingId: thing.id, title: thing.title, kind: "thing" });
-              toast.success("Referenced. The Thing itself did not change.");
+              if (isPreviewMode()) {
+                addBucketRef(bucketId, { thingId: thing.id, title: thing.title, kind: "thing" });
+                toast.success("Referenced. The Thing itself did not change.");
+              } else {
+                void rpcAddToBucket(bucketId, thing.id).then(
+                  () => toast.success("Referenced. The Thing itself did not change."),
+                  (err) => toast.error(domainErrorMessage(err)),
+                );
+              }
               e.target.value = "";
             }}
           >
@@ -77,8 +87,15 @@ function BucketDetailPage() {
             onChange={(e) => {
               const list = getLists().find((l) => l.id === e.target.value);
               if (!list) return;
-              addBucketRef(bucketId, { listId: list.id, title: list.name, kind: "list" });
-              toast.success("List referenced. Ownership unchanged.");
+              if (isPreviewMode()) {
+                addBucketRef(bucketId, { listId: list.id, title: list.name, kind: "list" });
+                toast.success("List referenced. Ownership unchanged.");
+              } else {
+                void rpcAddToBucket(bucketId, undefined, list.id).then(
+                  () => toast.success("List referenced. Ownership unchanged."),
+                  (err) => toast.error(domainErrorMessage(err)),
+                );
+              }
               e.target.value = "";
             }}
           >
