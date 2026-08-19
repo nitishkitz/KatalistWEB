@@ -21,11 +21,20 @@ function formatDue(thing: Thing): { label: string; urgent: boolean } {
   return { label: format(d, "MMM d"), urgent: false };
 }
 
-export function ThingRow({ thing }: { thing: Thing }) {
+export function ThingRow({
+  thing,
+  onSelect,
+}: {
+  thing: Thing;
+  onSelect?: (thing: Thing) => void;
+}) {
   const due = formatDue(thing);
 
   return (
-    <tr className="group cursor-pointer border-t border-border/80 hover:bg-muted/40">
+    <tr
+      className="group cursor-pointer border-t border-border/80 hover:bg-muted/40"
+      onClick={() => onSelect?.(thing)}
+    >
       <td className="py-2.5 pr-3 pl-3">
         <div className="flex items-center gap-2.5">
           <Star className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />

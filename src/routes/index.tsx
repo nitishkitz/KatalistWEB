@@ -13,6 +13,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { MagicBox } from "@/features/court/MagicBox";
 import { useCourt } from "@/features/court/use-court";
 import { ThingRow, ThingTableHeader } from "@/components/katalist/ThingRow";
+import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import type { Thing } from "@/domain/thing";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,7 @@ function Lane({
   defaultOpen,
   preview,
   meta,
+  onSelect,
 }: {
   title: string;
   count: number;
@@ -50,6 +52,7 @@ function Lane({
   defaultOpen: boolean;
   preview: number;
   meta?: React.ReactNode;
+  onSelect?: (thing: Thing) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const [showAll, setShowAll] = useState(false);
@@ -98,7 +101,7 @@ function Lane({
             <ThingTableHeader />
             <tbody>
               {visible.map((t) => (
-                <ThingRow key={t.id} thing={t} />
+                <ThingRow key={t.id} thing={t} onSelect={onSelect} />
               ))}
             </tbody>
           </table>
@@ -141,6 +144,7 @@ function TheirCard({
 
 function CourtPage() {
   const { now, next, later, theirGroups, isLoading } = useCourt();
+  const [selected, setSelected] = useState<Thing | null>(null);
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [query, setQuery] = useState("");
 
@@ -236,7 +240,8 @@ function CourtPage() {
               <span className="text-status-next">● {progress} under progress</span>
             </span>
           }
-        />
+          onSelect={setSelected}
+      />
         <Lane
           title="NEXT"
           count={next.length}
@@ -250,8 +255,16 @@ function CourtPage() {
               {next.filter((t) => t.workStatus === "under_progress").length} under progress
             </span>
           }
+          onSelect={setSelected}
+      />
+        <Lane
+          title="LATER"
+          count={later.length}
+          things={fLater}
+          defaultOpen={false}
+          preview={0}
+          onSelect={setSelected}
         />
-        <Lane title="LATER" count={later.length} things={fLater} defaultOpen={false} preview={0} />
 
         <section className="rounded-xl border border-border bg-card">
           <div className="flex items-center gap-3 px-4 py-2.5">
@@ -294,6 +307,13 @@ function CourtPage() {
         <img src="/katalist-mark-app.png" alt="" className="h-3.5 w-3.5 opacity-60" />
         Movement, not Storage.
       </p>
+          <ThingDetailSheet
+        thing={selected}
+        open={selected != null}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      />
     </AppShell>
   );
 }
