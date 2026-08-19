@@ -54,7 +54,7 @@ export function useBuckets() {
   });
 
   const buckets = useMemo(() => {
-    if (preview) return getBuckets();
+    if (preview) return getBuckets(context);
     return query.data ?? [];
   }, [preview, query.data, version]);
 
