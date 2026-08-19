@@ -14,18 +14,12 @@ export function useAssignablePeople() {
     enabled: !preview,
     staleTime: 30_000,
     queryFn: async (): Promise<Person[]> => {
-      const { data, error } = await supabase.from("actors").select("id, kind, profile_id, profiles(display_name, avatar_url)");
+      const { data, error } = await supabase.rpc("list_assignable_people");
       if (error) throw error;
-      const people: Person[] = [];
-      for (const row of data ?? []) {
-        if (row.kind !== "user") continue;
-        const profile = (Array.isArray(row.profiles) ? row.profiles[0] : row.profiles) as
-          | { display_name?: string; avatar_url?: string | null }
-          | null;
-        const name = profile?.display_name;
-        if (!name) continue;
-        people.push({
-          id: row.id,
+      return (data ?? []).map((row) => {
+        const name = row.display_name || "Someone";
+        return {
+          id: row.actor_id,
           name,
           initials: name
             .split(" ")
@@ -33,10 +27,9 @@ export function useAssignablePeople() {
             .slice(0, 2)
             .join("")
             .toUpperCase(),
-          avatarUrl: profile?.avatar_url ?? null,
-        });
-      }
-      return people;
+          avatarUrl: row.avatar_url,
+        };
+      });
     },
   });
 

@@ -1,9 +1,8 @@
 import type { Session } from "@supabase/supabase-js";
 import { getStoredDemoSession } from "@/hooks/useSession";
+import { demoEnabled } from "@/lib/demo-flag";
 
-export function demoEnabled(): boolean {
-  return import.meta.env.DEV || import.meta.env.VITE_KATALIST_DEMO_MODE === "true";
-}
+export { demoEnabled };
 
 /** Fixtures/local mutations are allowed only in explicit demo preview, never in production. */
 export function isPreviewSession(session: Session | null | undefined): boolean {

@@ -1522,6 +1522,14 @@ export type Database = {
           revoked_reason: string
         }[]
       }
+      list_assignable_people: {
+        Args: never
+        Returns: {
+          actor_id: string
+          avatar_url: string | null
+          display_name: string
+        }[]
+      }
       list_nudgeable_things: {
         Args: never
         Returns: {

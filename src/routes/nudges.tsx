@@ -1,15 +1,19 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, Clock, Hand, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { nudgeGroups, type NudgeGroup } from "@/features/nudges/fixtures";
 import { useNudges } from "@/features/nudges/use-nudges";
+import { useCourt } from "@/features/court/use-court";
 import { cn } from "@/lib/utils";
 import { rpcNudgeThing } from "@/features/things/rpc";
 import { toast } from "sonner";
-import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/local-state";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
-import type { Thing, Person } from "@/domain/thing";
+import { useThing } from "@/features/things/use-thing";
+import { useQueryClient } from "@tanstack/react-query";
+import { domainErrorMessage } from "@/lib/domain-error";
+import type { Person } from "@/domain/thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
 
@@ -35,11 +39,13 @@ export const Route = createFileRoute("/nudges")({
 
 function NudgesPage() {
   useLocalVersion();
+  const qc = useQueryClient();
   const [group, setGroup] = useState<NudgeGroup>("waiting_for_catch");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const things = getMergedThings();
   const { rows: allRows, recent, counts } = useNudges();
-  const selected = things.find((t) => t.id === selectedId) ?? null;
+  const court = useCourt();
+  const live = useThing(selectedId);
+  const selected = live.thing;
   const rows = allRows.filter((n) => n.group === group);
 
   return (
@@ -106,7 +112,7 @@ function NudgesPage() {
               <tr key={row.id} className="border-t border-border/80 hover:bg-muted/40">
                 <td className="px-4 py-3 text-[13px] font-medium text-foreground">{row.title}</td>
                 <td className="px-2 text-[13px] text-foreground">
-                  <NudgePerson name={row.person} thingAssignee={things.find((t) => t.id === row.id)?.assignee} />
+                  <NudgePerson name={row.person} thingAssignee={court.all.find((t) => t.id === row.id)?.assignee} />
                 </td>
                 <td className="px-2 text-[12px] text-muted-foreground">{row.reason}</td>
                 <td className="px-2 text-[12px] text-foreground">{row.acknowledged}</td>
@@ -119,10 +125,16 @@ function NudgesPage() {
                       type="button"
                       className="rounded-lg bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
                       onClick={() => {
-                        const thing = things.find((t) => t.id === row.id);
-                        void rpcNudgeThing(thing?.id ?? row.id).then(
-                          () => toast.success("Just a gentle paw tap on this one."),
-                          (err) => toast.error(err instanceof Error ? err.message : "Couldn’t nudge"),
+                        void rpcNudgeThing(row.id).then(
+                          () => {
+                            toast.success("Just a gentle paw tap on this one.");
+                            void qc.invalidateQueries({ queryKey: ["nudges"] });
+                            void qc.invalidateQueries({ queryKey: ["nudge-history"] });
+                            void qc.invalidateQueries({ queryKey: ["thing"] });
+                            void qc.invalidateQueries({ queryKey: ["thing-activity"] });
+                            void qc.invalidateQueries({ queryKey: ["notifications"] });
+                          },
+                          (err) => toast.error(domainErrorMessage(err)),
                         );
                       }}
                     >
@@ -133,9 +145,7 @@ function NudgesPage() {
                       type="button"
                       className="rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:bg-muted"
                       onClick={() => {
-                        const thing = things.find((t) => t.id === row.id) ?? null;
-                        if (thing) setSelectedId(thing.id);
-                        else setSelectedId(row.id);
+                        setSelectedId(row.id);
                       }}
                     >
                       Open

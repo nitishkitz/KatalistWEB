@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { getNotifications, markNotificationsRead, useLocalVersion } from "@/features/things/local-state";
+import { getNotifications, markNotificationsRead, markNotificationRead, useLocalVersion } from "@/features/things/local-state";
 import { keys } from "@/domain/query-keys";
 
 export type NotificationItem = {
@@ -68,7 +68,10 @@ export function useNotifications() {
 
   const markOne = useMutation({
     mutationFn: async (id: string) => {
-      if (preview) return;
+      if (preview) {
+        markNotificationRead(id);
+        return;
+      }
       const { error } = await supabase.rpc("mark_notification_read", { p_notification_id: id });
       if (error) throw error;
     },

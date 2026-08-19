@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
+import { demoEnabled } from "@/lib/demo-flag";
 
 export interface DemoPersona {
   key: string;
@@ -99,6 +100,7 @@ function createDemoSession(persona: DemoPersona): Session {
 
 export function getStoredDemoSession(): Session | null {
   if (typeof window === "undefined") return null;
+  if (!demoEnabled()) return null;
   try {
     const raw = localStorage.getItem(DEMO_STORAGE_KEY);
     if (!raw) return null;
@@ -110,6 +112,7 @@ export function getStoredDemoSession(): Session | null {
 }
 
 export function signInAsDemo(persona: DemoPersona) {
+  if (!demoEnabled()) return;
   if (typeof window !== "undefined") {
     localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(persona));
     window.dispatchEvent(new CustomEvent(AUTH_EVENT_NAME));

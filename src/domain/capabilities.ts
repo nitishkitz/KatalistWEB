@@ -1,5 +1,5 @@
 import type { Thing } from "./thing";
-import type { ListRole } from "@/features/lists/fixtures";
+import type { ListRole } from "../features/lists/fixtures";
 
 export function getListCapabilities(input: {
   currentProfileId?: string | null;
@@ -37,9 +37,9 @@ export function getThingCapabilities(thing: Thing, myActorId: string | null) {
     canAssign: Boolean(isOwner && !terminal),
     canReassign: Boolean((isOwner || (isAssignee && caught)) && !terminal),
     canNudge: Boolean(isOwner && !isAssignee && !terminal),
-    canSort: Boolean((isOwner || isAssignee) && !terminal),
+    canSort: Boolean(isAssignee && caught && !terminal),
     canCancel: Boolean(isOwner && !terminal),
-    canComment: Boolean(myActorId) && !Boolean(thing.cancelledAt && thing.workStatus === "cancelled" && false),
+    canComment: Boolean(myActorId),
     canShred: Boolean(myActorId),
     canAddToBucket: Boolean(myActorId),
     isAssignee,

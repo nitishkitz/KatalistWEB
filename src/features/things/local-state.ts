@@ -291,7 +291,8 @@ export function getListMessages(listId: string): LocalMessage[] {
 }
 
 export function getBuckets(): BucketCard[] {
-  return [...extraBuckets, ...bucketFixtures];
+  const me = currentDemoActorId();
+  return [...extraBuckets, ...bucketFixtures].filter((b) => !b.ownerActorId || b.ownerActorId === me);
 }
 
 export function createBucketLocal(name: string, description = ""): BucketCard {
@@ -304,6 +305,7 @@ export function createBucketLocal(name: string, description = ""): BucketCard {
     thingCount: 0,
     listCount: 0,
     updatedAt: "Updated just now",
+    ownerActorId: currentDemoActorId(),
     previews: [],
   };
   extraBuckets = [row, ...extraBuckets];
@@ -316,17 +318,32 @@ export function addBucketRef(bucketId: string, item: BucketItem) {
   bump();
 }
 
-export function removeBucketRef(bucketId: string, title: string) {
-  bucketItems.set(bucketId, (bucketItems.get(bucketId) ?? []).filter((i) => i.title !== title));
+export function removeBucketRef(bucketId: string, thingId?: string, listId?: string) {
+  bucketItems.set(
+    bucketId,
+    (bucketItems.get(bucketId) ?? []).filter((i) => {
+      if (thingId) return i.thingId !== thingId;
+      if (listId) return i.listId !== listId;
+      return true;
+    }),
+  );
   bump();
 }
 
 export function getBucketRefs(bucketId: string): BucketItem[] {
   const extra = bucketItems.get(bucketId) ?? [];
   const fixture = bucketFixtures.find((b) => b.id === bucketId);
-  const fromFixture = fixture?.previews.map((p) => ({ title: p.title, kind: p.kind })) ?? [];
+  const fromFixture =
+    fixture?.previews.map((p) => ({
+      title: p.title,
+      kind: p.kind,
+      thingId: p.thingId,
+      listId: p.listId,
+    })) ?? [];
   return [...extra, ...fromFixture];
 }
+
+const notificationRead = new Set<string>();
 
 export function getNotifications(): LocalNotification[] {
   const derived: LocalNotification[] = getMergedThings()
@@ -336,15 +353,25 @@ export function getNotifications(): LocalNotification[] {
       id: `from-${t.id}`,
       title: t.acknowledgement === "waiting_for_catch" ? "Waiting for Catch" : "Due soon",
       body: t.title,
-      read: false,
+      read: notificationRead.has(`from-${t.id}`),
       at: t.updatedAt,
       thingId: t.id,
     }));
-  return [...extraNotifications, ...derived];
+  return [
+    ...extraNotifications.map((n) => ({ ...n, read: n.read || notificationRead.has(n.id) })),
+    ...derived,
+  ];
 }
 
 export function markNotificationsRead() {
+  for (const n of getNotifications()) notificationRead.add(n.id);
   extraNotifications = extraNotifications.map((n) => ({ ...n, read: true }));
+  bump();
+}
+
+export function markNotificationRead(id: string) {
+  notificationRead.add(id);
+  extraNotifications = extraNotifications.map((n) => (n.id === id ? { ...n, read: true } : n));
   bump();
 }
 

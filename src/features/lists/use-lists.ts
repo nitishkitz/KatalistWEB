@@ -43,6 +43,8 @@ async function fetchLists(profileId: string, context: "work" | "home"): Promise<
         const name = profile?.display_name ?? "Member";
         return {
           name,
+          profileId: m.profile_id,
+          role: (m.role ?? "collaborator") as ListRow["role"],
           initials: name
             .split(" ")
             .map((p) => p[0])
@@ -79,7 +81,7 @@ export function useLists() {
   });
 
   const lists = useMemo(() => {
-    if (preview) return getLists().filter((l) => l.context === context || true);
+    if (preview) return getLists().filter((l) => l.context === context);
     return query.data ?? [];
   }, [preview, query.data, context, version]);
 
@@ -94,7 +96,29 @@ export function useLists() {
 }
 
 export function useList(listId: string | undefined) {
-  const { lists, isLoading, error, preview } = useLists();
-  const list = lists.find((l) => l.id === listId) ?? (preview ? getLists().find((l) => l.id === listId) : undefined);
-  return { list, isLoading, error, preview };
+  const { session, user } = useSession();
+  const preview = isPreviewSession(session);
+  useLocalVersion();
+
+  const byId = useQuery({
+    queryKey: ["list", listId],
+    enabled: Boolean(listId) && Boolean(user) && !preview,
+    queryFn: async (): Promise<ListRow | null> => {
+      const { data, error } = await supabase
+        .from("lists")
+        .select("id,name,context,owner_profile_id,updated_at")
+        .eq("id", listId!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const rows = await fetchLists(user!.id, data.context);
+      return rows.find((l) => l.id === data.id) ?? null;
+    },
+  });
+
+  if (preview) {
+    const list = getLists().find((l) => l.id === listId);
+    return { list, isLoading: false, error: null, preview: true };
+  }
+  return { list: byId.data ?? undefined, isLoading: byId.isLoading, error: byId.error, preview: false };
 }

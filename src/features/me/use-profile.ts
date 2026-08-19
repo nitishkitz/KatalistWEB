@@ -67,6 +67,14 @@ export function useUploadAvatar() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["profile", user?.id] });
+      void qc.invalidateQueries({ queryKey: ["profile-directory"] });
+      void qc.invalidateQueries({ queryKey: ["assignable-people"] });
+      void qc.invalidateQueries({ queryKey: ["court"] });
+      void qc.invalidateQueries({ queryKey: ["lists"] });
+      void qc.invalidateQueries({ queryKey: ["list"] });
+      void qc.invalidateQueries({ queryKey: ["nudges"] });
+      void qc.invalidateQueries({ queryKey: ["thing"] });
+      void qc.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 }

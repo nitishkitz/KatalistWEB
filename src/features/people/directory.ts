@@ -46,8 +46,6 @@ export async function fetchProfileIdentities(): Promise<ProfileIdentity[]> {
         avatar_url: r.avatar_url ?? null,
       }));
   }
-  const fromView = await readRows("public_profiles");
-  if (fromView.length) return fromView.map((r) => ({ ...r, email: null }));
   const own = await readRows("profiles");
   return own.map((r) => ({ ...r, email: null }));
 }

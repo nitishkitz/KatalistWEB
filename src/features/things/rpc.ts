@@ -3,12 +3,16 @@ import type { Importance, Pace, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
 import {
   addCommentLocal,
+  addBucketRef,
   catchLocal,
   createBucketLocal,
   createListLocal,
+  getThing,
+  getLists,
   nudgeLocal,
   patchThing,
   reassignLocal,
+  removeBucketRef,
   setDueLocal,
   setImportanceLocal,
   setPaceLocal,
@@ -194,7 +198,17 @@ export async function rpcCreateBucket(name: string, context: "work" | "home") {
 export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?: string) {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("add_to_bucket", { p_bucket_id: bucketId, p_thing_id: thingId, p_list_id: listId })),
-    preview: () => null as never,
+    preview: () => {
+      if (thingId) {
+        const t = getThing(thingId);
+        addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
+      }
+      if (listId) {
+        const list = getLists().find((l) => l.id === listId);
+        addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
+      }
+      return null as never;
+    },
   });
 }
 
@@ -202,7 +216,10 @@ export async function rpcRemoveFromBucket(bucketId: string, thingId?: string, li
   return runDomainMutation({
     live: () =>
       liveRpc(() => supabase.rpc("remove_from_bucket", { p_bucket_id: bucketId, p_thing_id: thingId, p_list_id: listId })),
-    preview: () => null as never,
+    preview: () => {
+      removeBucketRef(bucketId, thingId, listId);
+      return null as never;
+    },
   });
 }
 

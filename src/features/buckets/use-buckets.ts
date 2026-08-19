@@ -69,7 +69,39 @@ export function useBuckets() {
 }
 
 export function useBucket(bucketId: string | undefined) {
-  const { buckets, isLoading, error, preview } = useBuckets();
-  const bucket = buckets.find((b) => b.id === bucketId) ?? (preview ? getBuckets().find((b) => b.id === bucketId) : undefined);
-  return { bucket, isLoading, error, preview };
+  const { session, user } = useSession();
+  const preview = isPreviewSession(session);
+  useLocalVersion();
+
+  const query = useQuery({
+    queryKey: ["bucket", bucketId],
+    enabled: Boolean(bucketId) && Boolean(user) && !preview,
+    queryFn: async (): Promise<BucketCard | null> => {
+      const { data, error } = await supabase
+        .from("buckets")
+        .select("id,name,context,updated_at")
+        .eq("id", bucketId!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      const { data: items } = await supabase.from("bucket_items").select("thing_id,list_id").eq("bucket_id", data.id);
+      return {
+        id: data.id,
+        name: data.name,
+        description: "Private focus space",
+        color: "bg-violet-500",
+        pinned: false,
+        thingCount: (items ?? []).filter((r) => r.thing_id).length,
+        listCount: (items ?? []).filter((r) => r.list_id).length,
+        updatedAt: new Date(data.updated_at).toLocaleString(),
+        previews: [],
+      };
+    },
+  });
+
+  if (preview) {
+    const bucket = getBuckets().find((b) => b.id === bucketId);
+    return { bucket, isLoading: false, error: null, preview: true };
+  }
+  return { bucket: query.data ?? undefined, isLoading: query.isLoading, error: query.error, preview: false };
 }

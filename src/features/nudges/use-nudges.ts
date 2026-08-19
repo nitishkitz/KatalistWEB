@@ -23,9 +23,9 @@ function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string): 
   };
 }
 
-function groupThing(t: Thing, myActorId: string | null): { group: NudgeGroup; reason: string } {
+function groupThing(t: Thing, recently: boolean): { group: NudgeGroup; reason: string } {
   if (t.acknowledgement === "waiting_for_catch") return { group: "waiting_for_catch", reason: "Waiting for Catch" };
-  if (isRecentlyNudged(t.id)) return { group: "recently_nudged", reason: "Recently nudged" };
+  if (recently) return { group: "recently_nudged", reason: "Recently nudged" };
   const their = theirStateFor(t);
   if (their === "needs_attention") return { group: "stale", reason: "No recent movement" };
   if (t.workStatus === "under_progress") return { group: "caught_moving", reason: "Caught and moving" };
@@ -47,25 +47,51 @@ export function useNudges() {
     },
   });
 
+  const history = useQuery({
+    queryKey: ["nudge-history"],
+    enabled: !court.preview,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("nudges")
+        .select("id, thing_id, created_at, reason, to_actor_id")
+        .order("created_at", { ascending: false })
+        .limit(40);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   const derived = useMemo(() => {
     const rows: NudgeRow[] = [];
     const recent: RecentNudge[] = [];
     const allowed = new Set((nudgeable.data ?? []).map((n) => n.thing_id));
+    const recentlyIds = new Set((history.data ?? []).map((n) => n.thing_id));
     for (const t of liveThings) {
       if (t.workStatus === "sorted" || t.workStatus === "cancelled") continue;
-      const { group, reason } = groupThing(t, court.myActorId);
+      const recently = court.preview ? isRecentlyNudged(t.id) : recentlyIds.has(t.id);
+      const { group, reason } = groupThing(t, recently);
       const caps = getThingCapabilities(t, court.myActorId);
-      const can =
-        court.preview
-          ? caps.canNudge && demoCanNudge(t.id)
-          : caps.canNudge && (allowed.size === 0 || allowed.has(t.id));
+      const can = court.preview ? caps.canNudge && demoCanNudge(t.id) : caps.canNudge && allowed.has(t.id);
       rows.push(asRow(t, group, can, reason));
-      if (group === "recently_nudged") {
-        recent.push({ id: t.id, title: t.title, person: t.assignee.name, when: "Just now", state: reason });
+    }
+    if (court.preview) {
+      for (const t of liveThings.filter((x) => isRecentlyNudged(x.id))) {
+        recent.push({ id: t.id, title: t.title, person: t.assignee.name, when: "Just now", state: "Recently nudged" });
+      }
+    } else {
+      for (const n of history.data ?? []) {
+        const t = liveThings.find((x) => x.id === n.thing_id);
+        recent.push({
+          id: n.thing_id,
+          title: t?.title ?? "Thing",
+          person: t?.assignee.name ?? "",
+          when: new Date(n.created_at).toLocaleString(),
+          state: n.reason,
+        });
       }
     }
     return { rows, recent };
-  }, [liveThings, court.preview, court.myActorId, nudgeable.data]);
+  }, [liveThings, court.preview, court.myActorId, nudgeable.data, history.data]);
 
   const counts = useMemo(() => {
     const map: Record<NudgeGroup, number> = {

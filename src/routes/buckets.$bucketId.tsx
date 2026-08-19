@@ -2,18 +2,9 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import {
-  addBucketRef,
-  getBucketRefs,
-  getLists,
-  getMergedThings,
-  removeBucketRef,
-  useLocalVersion,
-} from "@/features/things/local-state";
-import { rpcAddToBucket, rpcRemoveFromBucket } from "@/features/things/rpc";
-import { isPreviewMode } from "@/lib/session-mode";
-import { domainErrorMessage } from "@/lib/domain-error";
 import { useBucket } from "@/features/buckets/use-buckets";
+import { useAccessibleLists, useAccessibleThings, useBucketItems } from "@/features/buckets/use-bucket-items";
+import { domainErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/buckets/$bucketId")({
@@ -22,10 +13,27 @@ export const Route = createFileRoute("/buckets/$bucketId")({
 
 function BucketDetailPage() {
   const { bucketId } = Route.useParams();
-  useLocalVersion();
-  const { bucket } = useBucket(bucketId);
-  const refs = getBucketRefs(bucketId);
+  const { bucket, isLoading, error } = useBucket(bucketId);
+  const { items, add, remove } = useBucketItems(bucketId);
+  const things = useAccessibleThings();
+  const lists = useAccessibleLists();
   const [q, setQ] = useState("");
+
+  if (isLoading) {
+    return (
+      <AppShell title="Bucket" subtitle="Loading">
+        <p className="text-sm text-muted-foreground">Opening this Bucket…</p>
+      </AppShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppShell title="Bucket" subtitle="Couldn’t load">
+        <p className="text-sm text-muted-foreground">{domainErrorMessage(error)}</p>
+      </AppShell>
+    );
+  }
 
   if (!bucket) {
     return (
@@ -57,22 +65,17 @@ function BucketDetailPage() {
             className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-2 text-[13px] text-foreground"
             defaultValue=""
             onChange={(e) => {
-              const thing = getMergedThings().find((t) => t.id === e.target.value);
-              if (!thing) return;
-              if (isPreviewMode()) {
-                addBucketRef(bucketId, { thingId: thing.id, title: thing.title, kind: "thing" });
-                toast.success("Referenced. The Thing itself did not change.");
-              } else {
-                void rpcAddToBucket(bucketId, thing.id).then(
-                  () => toast.success("Referenced. The Thing itself did not change."),
-                  (err) => toast.error(domainErrorMessage(err)),
-                );
-              }
+              const id = e.target.value;
+              if (!id) return;
+              void add.mutateAsync({ thingId: id }).then(
+                () => toast.success("Referenced. The Thing itself did not change."),
+                (err) => toast.error(domainErrorMessage(err)),
+              );
               e.target.value = "";
             }}
           >
             <option value="">Choose…</option>
-            {getMergedThings().map((t) => (
+            {things.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.title}
               </option>
@@ -85,22 +88,17 @@ function BucketDetailPage() {
             className="mt-1 h-9 w-full rounded-lg border border-border bg-card px-2 text-[13px] text-foreground"
             defaultValue=""
             onChange={(e) => {
-              const list = getLists().find((l) => l.id === e.target.value);
-              if (!list) return;
-              if (isPreviewMode()) {
-                addBucketRef(bucketId, { listId: list.id, title: list.name, kind: "list" });
-                toast.success("List referenced. Ownership unchanged.");
-              } else {
-                void rpcAddToBucket(bucketId, undefined, list.id).then(
-                  () => toast.success("List referenced. Ownership unchanged."),
-                  (err) => toast.error(domainErrorMessage(err)),
-                );
-              }
+              const id = e.target.value;
+              if (!id) return;
+              void add.mutateAsync({ listId: id }).then(
+                () => toast.success("List referenced. Ownership unchanged."),
+                (err) => toast.error(domainErrorMessage(err)),
+              );
               e.target.value = "";
             }}
           >
             <option value="">Choose…</option>
-            {getLists().map((l) => (
+            {lists.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
               </option>
@@ -110,10 +108,10 @@ function BucketDetailPage() {
       </div>
 
       <ul className="divide-y divide-border rounded-xl border border-border bg-card">
-        {refs
+        {items
           .filter((r) => r.title.toLowerCase().includes(q.toLowerCase()))
           .map((r) => (
-            <li key={r.title} className="flex items-center justify-between px-4 py-3">
+            <li key={`${r.kind}-${r.thingId ?? r.listId ?? r.title}`} className="flex items-center justify-between px-4 py-3">
               <div>
                 <p className="text-[13px] font-medium">{r.title}</p>
                 <p className="text-[11px] uppercase tracking-wide text-muted-foreground">{r.kind}</p>
@@ -121,10 +119,12 @@ function BucketDetailPage() {
               <button
                 type="button"
                 className="text-[12px] text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  removeBucketRef(bucketId, r.title);
-                  toast.success("Reference removed. Underlying object unchanged.");
-                }}
+                onClick={() =>
+                  void remove.mutateAsync({ thingId: r.thingId, listId: r.listId }).then(
+                    () => toast.success("Reference removed. Underlying object unchanged."),
+                    (err) => toast.error(domainErrorMessage(err)),
+                  )
+                }
               >
                 Remove
               </button>

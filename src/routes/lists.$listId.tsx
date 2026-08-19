@@ -25,23 +25,22 @@ function MemberRow({
   name,
   initials,
   avatarUrl,
-  isOwner,
-  ownerView,
+  role,
 }: {
   name: string;
   initials: string;
   avatarUrl?: string | null;
-  isOwner: boolean;
-  ownerView: boolean;
+  role?: string;
 }) {
   const src = useAvatarUrl(name, null, avatarUrl);
+  const label = role === "owner" ? "Owner" : role === "view_only" ? "View Only" : "Collaborator";
   return (
     <li className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
       <span className="flex items-center gap-2 text-[13px]">
         <PersonAvatar name={name} initials={initials} src={src} size={28} />
         {name}
       </span>
-      <span className="text-[12px] text-muted-foreground">{isOwner ? "Owner" : ownerView ? "Collaborator" : "Member"}</span>
+      <span className="text-[12px] text-muted-foreground">{label}</span>
     </li>
   );
 }
@@ -49,7 +48,7 @@ function MemberRow({
 function ListDetailPage() {
   const { listId } = Route.useParams();
   useLocalVersion();
-  const { list } = useList(listId);
+  const { list, isLoading, error } = useList(listId);
   const chat = useListMessages(listId);
   const { things: listThings, myActorId } = useListThings(listId);
   const [filter, setFilter] = useState<FeedFilter>("all");
@@ -73,6 +72,22 @@ function ListDetailPage() {
   });
 
   const messages = chat.messages;
+
+  if (isLoading) {
+    return (
+      <AppShell title="List" subtitle="Loading">
+        <p className="text-sm text-muted-foreground">Opening this List…</p>
+      </AppShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppShell title="List" subtitle="Couldn’t load">
+        <p className="text-sm text-muted-foreground">{domainErrorMessage(error)}</p>
+      </AppShell>
+    );
+  }
 
   if (!list) {
     return (
@@ -201,7 +216,13 @@ function ListDetailPage() {
           </p>
           <ul className="space-y-2">
             {list.members.map((m) => (
-              <MemberRow key={m.name} name={m.name} initials={m.initials} avatarUrl={m.avatarUrl} isOwner={false} ownerView={list.role === "owner"} />
+              <MemberRow
+                key={m.profileId ?? m.name}
+                name={m.name}
+                initials={m.initials}
+                avatarUrl={m.avatarUrl}
+                role={m.role}
+              />
             ))}
           </ul>
           {list.role === "owner" ? (

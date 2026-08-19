@@ -1,7 +1,13 @@
 export type ListRole = "owner" | "collaborator" | "view_only";
 export type ListContext = "work" | "home";
 
-export type ListMember = { initials: string; name: string; avatarUrl?: string | null };
+export type ListMember = {
+  profileId?: string;
+  role?: ListRole;
+  initials: string;
+  name: string;
+  avatarUrl?: string | null;
+};
 
 export type ListRow = {
   id: string;

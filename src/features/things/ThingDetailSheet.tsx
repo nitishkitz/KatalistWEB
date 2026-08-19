@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
@@ -149,7 +149,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                   <PersonCell person={thing.assignee} />
                 </div>
               </div>
-              {!terminal ? (
+              {caps?.canReassign ? (
                 <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
                   <UserPlus className="h-3.5 w-3.5" />
                   Reassign
@@ -279,6 +279,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                 <Calendar className="h-3.5 w-3.5" />
                 {dueLabel}
               </p>
+              {caps?.canSetDue ? (
               <div className="flex gap-2">
                 <input
                   type="datetime-local"
@@ -298,6 +299,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                   Set
                 </button>
               </div>
+              ) : null}
             </section>
 
             <section className="space-y-2">

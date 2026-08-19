@@ -7,7 +7,8 @@ export type BucketCard = {
   thingCount: number;
   listCount: number;
   updatedAt: string;
-  previews: { title: string; kind: "thing" | "list"; state?: string }[];
+  ownerActorId?: string;
+  previews: { title: string; kind: "thing" | "list"; state?: string; thingId?: string; listId?: string }[];
 };
 
 export const bucketFixtures: BucketCard[] = [
@@ -20,6 +21,7 @@ export const bucketFixtures: BucketCard[] = [
     thingCount: 14,
     listCount: 2,
     updatedAt: "Updated 20m ago",
+    ownerActorId: "p-priya",
     previews: [
       { title: "Finalize Play Store wording", kind: "thing", state: "NOW" },
       { title: "Prepare release notes", kind: "thing", state: "Progress" },
@@ -35,6 +37,7 @@ export const bucketFixtures: BucketCard[] = [
     thingCount: 9,
     listCount: 1,
     updatedAt: "Updated 2h ago",
+    ownerActorId: "p-priya",
     previews: [
       { title: "Review website launch copy", kind: "thing", state: "NEXT" },
       { title: "Book launch photographer", kind: "thing", state: "NEXT" },
@@ -50,6 +53,7 @@ export const bucketFixtures: BucketCard[] = [
     thingCount: 6,
     listCount: 0,
     updatedAt: "Updated yesterday",
+    ownerActorId: "p-priya",
     previews: [
       { title: "Renew insurance documents", kind: "thing", state: "LATER" },
       { title: "Schedule AC service", kind: "thing", state: "NEXT" },
@@ -64,6 +68,7 @@ export const bucketFixtures: BucketCard[] = [
     thingCount: 11,
     listCount: 0,
     updatedAt: "Updated 3d ago",
+    ownerActorId: "p-priya",
     previews: [
       { title: "Call vendor for shoot confirmation", kind: "thing", state: "NOW" },
       { title: "Waiting on printer quote", kind: "thing", state: "Waiting" },
@@ -78,6 +83,7 @@ export const bucketFixtures: BucketCard[] = [
     thingCount: 8,
     listCount: 1,
     updatedAt: "Updated 5d ago",
+    ownerActorId: "p-priya",
     previews: [
       { title: "Q3 Marketing Plan", kind: "list" },
       { title: "Draft OKR summary", kind: "thing", state: "LATER" },
@@ -92,6 +98,7 @@ export const bucketFixtures: BucketCard[] = [
     thingCount: 5,
     listCount: 1,
     updatedAt: "Updated 1w ago",
+    ownerActorId: "p-priya",
     previews: [
       { title: "Share access checklist", kind: "thing", state: "NEXT" },
     ],
