@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { dismissGhost, getGhostCandidate, useLocalVersion } from "@/features/things/local-state";
+import { dismissGhost, getGhostCandidate } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { useAppContext } from "@/features/context/use-app-context";
 import type { ContextKind, Thing } from "@/domain/thing";
 

@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { getBucketRefs, getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { getBucketRefs } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcAddToBucket, rpcRemoveFromBucket } from "@/features/things/rpc";
 import { useCourt } from "@/features/court/use-court";
 import { useLists } from "@/features/lists/use-lists";
@@ -18,7 +19,7 @@ export type BucketRef = {
 export function useAccessibleThings() {
   const court = useCourt();
   useLocalVersion();
-  if (court.preview) return getMergedThings();
+  // court.all is already filtered by canDemoActorViewThing in preview (and RLS live).
   return court.all;
 }
 
