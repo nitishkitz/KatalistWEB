@@ -1,25 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Importance, Pace, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
-import {
-  addCommentLocal,
-  addBucketRef,
-  catchLocal,
-  createBucketLocal,
-  createListLocal,
-  getThing,
-  getLists,
-  nudgeLocal,
-  patchThing,
-  reassignLocal,
-  removeBucketRef,
-  setDueLocal,
-  setImportanceLocal,
-  setPaceLocal,
-  setStatusLocal,
-  shredLocal,
-  tossLocalThing,
-} from "./local-state";
+import { addCommentLocal, addBucketRef, catchLocal, createBucketLocal, createListLocal, getThing, getLists, nudgeLocal, patchThing, reassignLocal, removeBucketRef, setDueLocal, setImportanceLocal, setPaceLocal, setStatusLocal, restoreLocal, shredLocal, tossLocalThing } from "./local-state";
 
 async function liveRpc<T>(fn: () => PromiseLike<{ data: T; error: { message: string } | null }>): Promise<T> {
   const { data, error } = await fn();
@@ -189,7 +171,9 @@ export async function rpcShred(objectId: string, objectType: "thing" | "list" | 
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("shred_for_me", { p_object_id: objectId, p_object_type: objectType })),
     preview: () => {
-      shredLocal(objectId);
+      // Demo local state supports Thing + List shred only (no Bucket shred).
+      if (objectType === "bucket") return null as never;
+      shredLocal(objectId, objectType === "list" ? "list" : "thing");
       return null as never;
     },
   });
@@ -198,7 +182,11 @@ export async function rpcShred(objectId: string, objectType: "thing" | "list" | 
 export async function rpcRestore(objectId: string, objectType: "thing" | "list" | "bucket" = "thing") {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("restore_for_me", { p_object_id: objectId, p_object_type: objectType })),
-    preview: () => null as never,
+    preview: () => {
+      if (objectType === "bucket") return null as never;
+      restoreLocal(objectId, objectType === "list" ? "list" : "thing");
+      return null as never;
+    },
   });
 }
 
