@@ -1,9 +1,9 @@
-import { useSyncExternalStore } from "react";
+// react import moved to use-local-version.ts
 import type { Importance, Pace, Person, Thing, WorkStatus } from "@/domain/thing";
 import { courtFixtures } from "@/features/court/fixtures";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { currentDemoActorId, currentDemoPerson, demoDirectory } from "@/features/demo/identities";
-import { projectDemoList } from "@/features/demo/visibility";
+import { canDemoActorViewThing, projectDemoList } from "@/features/demo/visibility";
 import { listFixtures, type ListRow } from "@/features/lists/fixtures";
 import { bucketFixtures, type BucketCard } from "@/features/buckets/fixtures";
 
@@ -46,16 +46,9 @@ const bucketItems = new Map<string, BucketItem[]>();
 const recentlyNudged = new Set<string>();
 const nudgeCooldownUntil = new Map<string, number>();
 let extraNotifications: LocalNotification[] = [];
-let ghostDismissed: string | null = null;
+/** Persona-scoped Ghost dismissals: actorId → set of thing ids. */
+const ghostDismissedByActor = new Map<string, Set<string>>();
 let version = 0;
-
-function snapshot() {
-  return version;
-}
-
-export function useLocalVersion() {
-  return useSyncExternalStore(subscribeLocal, snapshot, snapshot);
-}
 
 function bump(event?: LocalActivity & { thingId?: string }) {
   version += 1;
@@ -130,6 +123,18 @@ export function directoryPeople(): Person[] {
 
 export function personById(id: string): Person {
   return directoryPeople().find((p) => p.id === id) ?? { id, name: id, initials: id.slice(0, 2).toUpperCase() };
+}
+
+/** Unfiltered lookup (ignores actor shred) — used by shred/restore resolve path. */
+function getThingRaw(id: string): Thing | undefined {
+  const byId = new Map<string, Thing>();
+  for (const t of courtFixtures) byId.set(t.id, t);
+  for (const t of extras) byId.set(t.id, t);
+  for (const [pid, patch] of patches) {
+    const current = byId.get(pid);
+    if (current) byId.set(pid, { ...current, ...patch });
+  }
+  return byId.get(id);
 }
 
 export function getThing(id: string): Thing | undefined {
@@ -257,18 +262,20 @@ export function isRecentlyNudged(id: string) {
 
 export function shredLocal(id: string, kind: "thing" | "list" = "thing") {
   const actorId = currentDemoActorId();
-  shreddedSetFor(actorId).add(`${kind}:${id}`);
+  // Resolve underlying object FIRST (before adding to shredded filter).
   let title = id;
   let status = "";
   if (kind === "thing") {
-    const thing = getThing(id);
+    const thing = getThingRaw(id);
     if (!thing) return;
     title = thing.title;
     status = thing.workStatus;
   } else {
     const list = getListsRaw().find((l) => l.id === id);
-    title = list?.name ?? id;
+    if (!list) return;
+    title = list.name;
   }
+  shreddedSetFor(actorId).add(`${kind}:${id}`);
   const log = shreddedLogByActor.get(actorId) ?? [];
   shreddedLogByActor.set(actorId, [
     { id, title, kind, status, at: new Date().toISOString() },
@@ -468,20 +475,47 @@ export function markNotificationRead(id: string) {
 }
 
 export function dismissGhost(id: string) {
-  ghostDismissed = id;
+  const actorId = currentDemoActorId();
+  if (!ghostDismissedByActor.has(actorId)) ghostDismissedByActor.set(actorId, new Set());
+  ghostDismissedByActor.get(actorId)!.add(id);
   bump();
 }
 
 export function getGhostCandidate(activeContext: "work" | "home"): Thing | null {
   const other = activeContext === "work" ? "home" : "work";
+  const actorId = currentDemoActorId();
+  const dismissed = ghostDismissedByActor.get(actorId) ?? new Set<string>();
+  const lists = getListsRaw();
   return (
-    getMergedThings().find(
+    getMergedThings(actorId).find(
       (t) =>
         t.context === other &&
         t.ownerImportance === "now" &&
         t.workStatus !== "sorted" &&
         t.workStatus !== "cancelled" &&
-        t.id !== ghostDismissed,
+        !dismissed.has(t.id) &&
+        canDemoActorViewThing(t, actorId, lists),
     ) ?? null
   );
+}
+
+/** Test-only: wipe demo local mutations between multipersona scenarios. */
+export function resetDemoLocalStateForTests() {
+  extras = [];
+  patches.clear();
+  shreddedByActor.clear();
+  shreddedLogByActor.clear();
+  comments.clear();
+  activity.clear();
+  listMessages.clear();
+  extraLists = [];
+  extraBuckets = [];
+  bucketItems.clear();
+  recentlyNudged.clear();
+  nudgeCooldownUntil.clear();
+  extraNotifications = [];
+  ghostDismissedByActor.clear();
+  notificationReadByActor.clear();
+  version += 1;
+  emit();
 }
