@@ -11,7 +11,15 @@ export const DEMO_ACTOR_BY_KEY: Record<string, { id: string; name: string; initi
   sai: { id: "p-sai", name: "Sai", initials: "SA" },
 };
 
+/** Test-only persona override. Null restores session-based resolution. */
+let demoActorOverride: string | null = null;
+
+export function setDemoActorForTests(actorId: string | null) {
+  demoActorOverride = actorId;
+}
+
 export function currentDemoActorId(): string {
+  if (demoActorOverride) return demoActorOverride;
   const demo = getStoredDemoSession();
   const key = (demo?.user.user_metadata?.persona_key as string | undefined) ?? demo?.user.id?.replace("demo-", "");
   if (key && DEMO_ACTOR_BY_KEY[key]) return DEMO_ACTOR_BY_KEY[key]!.id;
