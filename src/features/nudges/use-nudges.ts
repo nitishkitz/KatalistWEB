@@ -1,8 +1,12 @@
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useCourt } from "@/features/court/use-court";
 import { isActiveThing, theirStateFor, type Thing } from "@/domain/thing";
+import { getThingCapabilities } from "@/domain/capabilities";
 import type { NudgeGroup, NudgeRow, RecentNudge } from "./fixtures";
-import { nudgeFixtures, recentNudgeFixtures } from "./fixtures";
+import { isRecentlyNudged, canNudge as demoCanNudge, getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { supabase } from "@/integrations/supabase/client";
+import { keys } from "@/domain/query-keys";
 
 function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string): NudgeRow {
   return {
@@ -19,31 +23,49 @@ function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string): 
   };
 }
 
+function groupThing(t: Thing, myActorId: string | null): { group: NudgeGroup; reason: string } {
+  if (t.acknowledgement === "waiting_for_catch") return { group: "waiting_for_catch", reason: "Waiting for Catch" };
+  if (isRecentlyNudged(t.id)) return { group: "recently_nudged", reason: "Recently nudged" };
+  const their = theirStateFor(t);
+  if (their === "needs_attention") return { group: "stale", reason: "No recent movement" };
+  if (t.workStatus === "under_progress") return { group: "caught_moving", reason: "Caught and moving" };
+  return { group: "needs_a_tap", reason: "Needs a tap" };
+}
+
 export function useNudges() {
   const court = useCourt();
-  const liveThings = court.all.filter(isActiveThing);
+  useLocalVersion();
+  const liveThings = (court.preview ? getMergedThings() : court.all).filter(isActiveThing);
+
+  const nudgeable = useQuery({
+    queryKey: keys.nudges(undefined, "work"),
+    enabled: !court.preview,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("list_nudgeable_things");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const derived = useMemo(() => {
-    if (court.preview) {
-      return {
-        rows: nudgeFixtures,
-        recent: recentNudgeFixtures,
-      };
-    }
     const rows: NudgeRow[] = [];
+    const recent: RecentNudge[] = [];
+    const allowed = new Set((nudgeable.data ?? []).map((n) => n.thing_id));
     for (const t of liveThings) {
       if (t.workStatus === "sorted" || t.workStatus === "cancelled") continue;
-      if (t.acknowledgement === "waiting_for_catch") {
-        rows.push(asRow(t, "waiting_for_catch", true, "Waiting for Catch"));
-        continue;
+      const { group, reason } = groupThing(t, court.myActorId);
+      const caps = getThingCapabilities(t, court.myActorId);
+      const can =
+        court.preview
+          ? caps.canNudge && demoCanNudge(t.id)
+          : caps.canNudge && (allowed.size === 0 || allowed.has(t.id));
+      rows.push(asRow(t, group, can, reason));
+      if (group === "recently_nudged") {
+        recent.push({ id: t.id, title: t.title, person: t.assignee.name, when: "Just now", state: reason });
       }
-      const their = theirStateFor(t);
-      if (their === "needs_attention") rows.push(asRow(t, "stale", true, "No recent movement"));
-      else if (t.workStatus === "under_progress") rows.push(asRow(t, "caught_moving", true, "Caught and moving"));
-      else rows.push(asRow(t, "needs_a_tap", true, "Needs a tap"));
     }
-    return { rows, recent: [] as RecentNudge[] };
-  }, [court.preview, liveThings]);
+    return { rows, recent };
+  }, [liveThings, court.preview, court.myActorId, nudgeable.data]);
 
   const counts = useMemo(() => {
     const map: Record<NudgeGroup, number> = {

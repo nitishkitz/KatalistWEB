@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from "react";
 import type { Importance, Pace, Person, Thing, WorkStatus } from "@/domain/thing";
-import { courtFixtures, MY_ACTOR_ID } from "@/features/court/fixtures";
-import { getStoredDemoSession } from "@/hooks/useSession";
+import { courtFixtures } from "@/features/court/fixtures";
+import { getThingCapabilities } from "@/domain/capabilities";
+import { currentDemoActorId, currentDemoPerson, demoDirectory } from "@/features/demo/identities";
 import { listFixtures, type ListRow } from "@/features/lists/fixtures";
 import { bucketFixtures, type BucketCard } from "@/features/buckets/fixtures";
 
@@ -65,13 +66,34 @@ function bump(event?: LocalActivity & { thingId?: string }) {
   emit();
 }
 
-function overlayPerson(person: Person): Person {
-  if (person.id !== MY_ACTOR_ID) return person;
-  const demo = getStoredDemoSession();
-  const name = demo?.user.user_metadata?.display_name as string | undefined;
-  const initials = demo?.user.user_metadata?.initials as string | undefined;
-  if (!name) return person;
-  return { ...person, name, initials: initials ?? person.initials };
+function requireCap(id: string, key: keyof ReturnType<typeof getThingCapabilities>) {
+  const thing = getThing(id);
+  if (!thing) throw new Error("That Thing isn’t available.");
+  const caps = getThingCapabilities(thing, currentDemoActorId());
+  if (!caps[key]) throw new Error("You don’t have permission to do that.");
+  return thing;
+}
+
+export function catchLocal(id: string, pace: Pace = "next") {
+  requireCap(id, "canCatch");
+  patchThing(id, { acknowledgement: "caught", personalPace: pace, caughtAt: new Date().toISOString() }, "caught");
+}
+export function setPaceLocal(id: string, pace: Pace) {
+  requireCap(id, "canSetPace");
+  patchThing(id, { personalPace: pace }, "pace_changed");
+}
+export function setImportanceLocal(id: string, importance: Importance) {
+  requireCap(id, "canSetImportance");
+  patchThing(id, { ownerImportance: importance }, "importance_changed");
+}
+export function setStatusLocal(id: string, status: WorkStatus) {
+  if (status === "sorted") requireCap(id, "canSort");
+  else if (status === "cancelled") requireCap(id, "canCancel");
+  else requireCap(id, "canSetStatus");
+  const extra: Partial<Thing> = { workStatus: status };
+  if (status === "sorted") extra.sortedAt = new Date().toISOString();
+  if (status === "cancelled") extra.cancelledAt = new Date().toISOString();
+  patchThing(id, extra, status === "sorted" ? "sorted" : status === "cancelled" ? "cancelled" : "status_changed");
 }
 
 export function getMergedThings(): Thing[] {
@@ -82,22 +104,16 @@ export function getMergedThings(): Thing[] {
     const current = byId.get(id);
     if (current) byId.set(id, { ...current, ...patch });
   }
-  return [...byId.values()]
-    .filter((t) => !shredded.has(t.id))
-    .map((t) => ({
-      ...t,
-      creator: overlayPerson(t.creator),
-      owner: overlayPerson(t.owner),
-      assignee: overlayPerson(t.assignee),
-    }));
+  return [...byId.values()].filter((t) => !shredded.has(t.id));
 }
 
 export function directoryPeople(): Person[] {
   const map = new Map<string, Person>();
+  for (const p of demoDirectory()) map.set(p.id, p);
   for (const t of getMergedThings()) {
-    map.set(t.creator.id, overlayPerson(t.creator));
-    map.set(t.owner.id, overlayPerson(t.owner));
-    map.set(t.assignee.id, overlayPerson(t.assignee));
+    map.set(t.creator.id, t.creator);
+    map.set(t.owner.id, t.owner);
+    map.set(t.assignee.id, t.assignee);
   }
   return [...map.values()];
 }
@@ -130,8 +146,8 @@ export function tossLocalThing(input: {
   dueHasTime?: boolean;
 }): Thing {
   const people = directoryPeople();
-  const me = people.find((p) => p.id === MY_ACTOR_ID) ?? people[0];
-  const assignee = people.find((p) => p.id === (input.assigneeId ?? MY_ACTOR_ID)) ?? me;
+  const me = currentDemoPerson();
+  const assignee = people.find((p) => p.id === (input.assigneeId ?? me.id)) ?? me;
   const thing: Thing = {
     id: `local-${crypto.randomUUID()}`,
     title: input.title,
@@ -157,25 +173,11 @@ export function tossLocalThing(input: {
   return thing;
 }
 
-export function catchLocal(id: string, pace: Pace = "next") {
-  patchThing(id, { acknowledgement: "caught", personalPace: pace, caughtAt: new Date().toISOString() }, "caught");
-}
-export function setPaceLocal(id: string, pace: Pace) {
-  patchThing(id, { personalPace: pace }, "pace_changed");
-}
-export function setImportanceLocal(id: string, importance: Importance) {
-  patchThing(id, { ownerImportance: importance }, "importance_changed");
-}
-export function setStatusLocal(id: string, status: WorkStatus) {
-  const extra: Partial<Thing> = { workStatus: status };
-  if (status === "sorted") extra.sortedAt = new Date().toISOString();
-  if (status === "cancelled") extra.cancelledAt = new Date().toISOString();
-  patchThing(id, extra, status === "sorted" ? "sorted" : "status_changed");
-}
 export function setDueLocal(id: string, dueAt: string | null, dueHasTime: boolean) {
   patchThing(id, { dueAt, dueHasTime }, "due_changed");
 }
 export function reassignLocal(id: string, assigneeId: string) {
+  requireCap(id, "canReassign");
   patchThing(
     id,
     {
@@ -189,6 +191,7 @@ export function reassignLocal(id: string, assigneeId: string) {
 }
 
 export function nudgeLocal(id: string) {
+  requireCap(id, "canNudge");
   const until = nudgeCooldownUntil.get(id) ?? 0;
   if (Date.now() < until) throw new Error("Give it a moment — this one was just nudged.");
   const thing = getThing(id);
@@ -232,8 +235,13 @@ export function getShredded(): ShreddedItem[] {
   return shreddedLog;
 }
 
-export function addCommentLocal(thingId: string, body: string, author = "Me") {
-  const row: LocalComment = { id: crypto.randomUUID(), body, author, at: new Date().toISOString() };
+export function addCommentLocal(thingId: string, body: string, author?: string) {
+  const row: LocalComment = {
+    id: crypto.randomUUID(),
+    body,
+    author: author ?? currentDemoPerson().name,
+    at: new Date().toISOString(),
+  };
   comments.set(thingId, [row, ...(comments.get(thingId) ?? [])]);
   bump({ id: crypto.randomUUID(), event: "commented", at: row.at, thingId });
 }

@@ -76,6 +76,8 @@ function createDemoSession(persona: DemoPersona): Session {
       initials: persona.initials,
       avatar_color: persona.color,
       phone: persona.phone,
+      persona_key: persona.key,
+      actor_id: `p-${persona.key}`,
     },
     aud: "authenticated",
     created_at: new Date().toISOString(),

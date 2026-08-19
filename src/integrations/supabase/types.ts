@@ -1132,6 +1132,14 @@ export type Database = {
       }
     }
     Views: {
+      public_identities: {
+        Row: {
+          id: string | null
+          display_name: string | null
+          avatar_url: string | null
+        }
+        Relationships: []
+      }
       public_profiles: {
         Row: {
           id: string | null

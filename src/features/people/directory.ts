@@ -33,9 +33,23 @@ async function readRows(table: "profiles" | "public_profiles"): Promise<ProfileI
 }
 
 export async function fetchProfileIdentities(): Promise<ProfileIdentity[]> {
+  const { data: identities, error: identError } = await supabase
+    .from("public_identities")
+    .select("id, display_name, avatar_url");
+  if (!identError && identities?.length) {
+    return identities
+      .filter((r) => r.id && r.display_name)
+      .map((r) => ({
+        id: r.id as string,
+        email: null,
+        display_name: r.display_name as string,
+        avatar_url: r.avatar_url ?? null,
+      }));
+  }
   const fromView = await readRows("public_profiles");
-  if (fromView.length) return fromView;
-  return readRows("profiles");
+  if (fromView.length) return fromView.map((r) => ({ ...r, email: null }));
+  const own = await readRows("profiles");
+  return own.map((r) => ({ ...r, email: null }));
 }
 
 export function matchProfile(

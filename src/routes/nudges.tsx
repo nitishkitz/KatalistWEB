@@ -106,7 +106,7 @@ function NudgesPage() {
               <tr key={row.id} className="border-t border-border/80 hover:bg-muted/40">
                 <td className="px-4 py-3 text-[13px] font-medium text-foreground">{row.title}</td>
                 <td className="px-2 text-[13px] text-foreground">
-                  <NudgePerson name={row.person} thingAssignee={things.find((t) => t.title === row.title)?.assignee} />
+                  <NudgePerson name={row.person} thingAssignee={things.find((t) => t.id === row.id)?.assignee} />
                 </td>
                 <td className="px-2 text-[12px] text-muted-foreground">{row.reason}</td>
                 <td className="px-2 text-[12px] text-foreground">{row.acknowledged}</td>
@@ -119,7 +119,7 @@ function NudgesPage() {
                       type="button"
                       className="rounded-lg bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
                       onClick={() => {
-                        const thing = things.find((t) => t.title === row.title);
+                        const thing = things.find((t) => t.id === row.id);
                         void rpcNudgeThing(thing?.id ?? row.id).then(
                           () => toast.success("Just a gentle paw tap on this one."),
                           (err) => toast.error(err instanceof Error ? err.message : "Couldn’t nudge"),
@@ -133,8 +133,9 @@ function NudgesPage() {
                       type="button"
                       className="rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:bg-muted"
                       onClick={() => {
-                        const thing = things.find((t) => t.title === row.title) ?? null;
+                        const thing = things.find((t) => t.id === row.id) ?? null;
                         if (thing) setSelectedId(thing.id);
+                        else setSelectedId(row.id);
                       }}
                     >
                       Open

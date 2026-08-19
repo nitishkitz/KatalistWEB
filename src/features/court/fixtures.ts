@@ -10,16 +10,16 @@ const person = (id: string, name: string) => ({
   avatarUrl: null as string | null,
 });
 
-const rahul = person("p-rahul", "Rahul");
+const rahul = person("p-rahul", "Rahul Mehta");
 const sai = person("p-sai", "Sai");
-const me = person("p-me", "Me");
-const arjun = person("p-arjun", "Arjun");
+const priya = person("p-priya", "Priya Sharma");
+const arjun = person("p-arjun", "Arjun Mehta");
 
 function thing(partial: Partial<Thing> & Pick<Thing, "id" | "title">): Thing {
   return {
     creator: rahul,
     owner: rahul,
-    assignee: me,
+    assignee: priya,
     acknowledgement: "caught",
     workStatus: "not_started",
     ownerImportance: "next",
@@ -27,7 +27,7 @@ function thing(partial: Partial<Thing> & Pick<Thing, "id" | "title">): Thing {
     dueAt: new Date().toISOString(),
     dueHasTime: false,
     context: "work",
-    listId: "l-android",
+    listId: "l1",
     listName: "Android Release",
     cancelledAt: null,
     sortedAt: null,
@@ -50,7 +50,7 @@ const days = (n: number) => {
   return d.toISOString();
 };
 
-export const MY_ACTOR_ID = "p-me";
+export const MY_ACTOR_ID = "p-priya";
 
 export const courtFixtures: Thing[] = [
   thing({
@@ -87,7 +87,7 @@ export const courtFixtures: Thing[] = [
   thing({
     id: "t4",
     title: "Review in-app update flow",
-    assignee: me,
+    assignee: priya,
     ownerImportance: "next",
     personalPace: "now",
     workStatus: "not_started",
@@ -130,7 +130,7 @@ export const courtFixtures: Thing[] = [
   thing({
     id: "t8",
     title: "Confirm domain & hosting",
-    assignee: me,
+    assignee: priya,
     ownerImportance: "next",
     personalPace: "next",
     workStatus: "not_started",

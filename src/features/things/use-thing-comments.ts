@@ -1,0 +1,79 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useSession } from "@/hooks/useSession";
+import { isPreviewSession } from "@/lib/session-mode";
+import { addCommentLocal, getActivity, getComments, useLocalVersion } from "./local-state";
+import { rpcComment } from "./rpc";
+import { currentDemoPerson } from "@/features/demo/identities";
+
+export type ThingComment = { id: string; body: string; author: string; at: string };
+export type ThingActivity = { id: string; event: string; at: string };
+
+export function useThingComments(thingId: string | null) {
+  const { session } = useSession();
+  const preview = isPreviewSession(session);
+  const qc = useQueryClient();
+  useLocalVersion();
+
+  const commentsQuery = useQuery({
+    queryKey: ["thing-comments", thingId],
+    enabled: Boolean(thingId) && !preview,
+    queryFn: async (): Promise<ThingComment[]> => {
+      const { data, error } = await supabase
+        .from("thing_comments")
+        .select("id, body, created_at, author_actor_id")
+        .eq("thing_id", thingId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((c) => ({
+        id: c.id,
+        body: c.body,
+        author: "Member",
+        at: c.created_at,
+      }));
+    },
+  });
+
+  const activityQuery = useQuery({
+    queryKey: ["thing-activity", thingId],
+    enabled: Boolean(thingId) && !preview,
+    queryFn: async (): Promise<ThingActivity[]> => {
+      const { data, error } = await supabase
+        .from("thing_activity")
+        .select("id, event, created_at")
+        .eq("thing_id", thingId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((e) => ({ id: e.id, event: e.event, at: e.created_at }));
+    },
+  });
+
+  const post = useMutation({
+    mutationFn: async (body: string) => {
+      if (!thingId) throw new Error("No Thing selected.");
+      if (preview) {
+        addCommentLocal(thingId, body, currentDemoPerson().name);
+        return;
+      }
+      await rpcComment(thingId, body);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["thing-comments", thingId] });
+      void qc.invalidateQueries({ queryKey: ["thing-activity", thingId] });
+    },
+  });
+
+  if (preview && thingId) {
+    return {
+      comments: getComments(thingId).map((c) => ({ id: c.id, body: c.body, author: c.author, at: c.at })),
+      activity: getActivity(thingId).map((e) => ({ id: e.id, event: e.event, at: e.at })),
+      post,
+    };
+  }
+
+  return {
+    comments: commentsQuery.data ?? [],
+    activity: activityQuery.data ?? [],
+    post,
+  };
+}

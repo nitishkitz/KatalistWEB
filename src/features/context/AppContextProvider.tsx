@@ -43,16 +43,22 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
   const setContext = useCallback(
     async (next: ContextKind) => {
+      const prev = context;
       setContextState(next);
       if (typeof window !== "undefined") {
         window.localStorage.setItem(STORAGE_KEY, next);
       }
       if (user && !isPreviewSession(session)) {
-        await supabase.from("profiles").update({ active_context: next }).eq("id", user.id);
+        const { error } = await supabase.from("profiles").update({ active_context: next }).eq("id", user.id);
+        if (error) {
+          setContextState(prev);
+          window.localStorage.setItem(STORAGE_KEY, prev);
+          throw error;
+        }
       }
       await qc.invalidateQueries();
     },
-    [user, session, qc],
+    [user, session, qc, context],
   );
 
   return <Ctx.Provider value={{ context, setContext }}>{children}</Ctx.Provider>;

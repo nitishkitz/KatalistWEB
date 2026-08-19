@@ -21,6 +21,7 @@ import { PersonCell } from "@/components/katalist/PersonCell";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import {
+  rpcAddToBucket,
   rpcCancelThing,
   rpcCatchThing,
   rpcNudgeThing,
@@ -32,15 +33,12 @@ import {
   rpcShred,
   rpcSortThing,
 } from "./rpc";
-import {
-  addBucketRef,
-  addCommentLocal,
-  directoryPeople,
-  getActivity,
-  getBuckets,
-  getComments,
-  useLocalVersion,
-} from "./local-state";
+import { getThingCapabilities } from "@/domain/capabilities";
+import { useCourt } from "@/features/court/use-court";
+import { useThing } from "./use-thing";
+import { useThingComments } from "./use-thing-comments";
+import { useAssignablePeople } from "@/features/people/use-assignable";
+import { useBuckets } from "@/features/buckets/use-buckets";
 
 type Props = {
   thing: Thing | null;
@@ -65,9 +63,15 @@ function statusLabel(s: WorkStatus) {
   }
 }
 
-export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
+export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) {
   const qc = useQueryClient();
-  useLocalVersion();
+  const court = useCourt();
+  const live = useThing(initial?.id ?? null);
+  const thing = live.thing ?? initial;
+  const caps = thing ? getThingCapabilities(thing, court.myActorId) : null;
+  const thread = useThingComments(thing?.id ?? null);
+  const people = useAssignablePeople();
+  const { buckets } = useBuckets();
   const [tab, setTab] = useState<"comments" | "activity">("comments");
   const [comment, setComment] = useState("");
   const [due, setDue] = useState("");
@@ -95,15 +99,12 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
     },
   });
 
-  const comments = useMemo(() => (thing ? getComments(thing.id) : []), [thing, open]);
-  const events = useMemo(() => (thing ? getActivity(thing.id) : []), [thing, open]);
-  const buckets = getBuckets();
-  const people = directoryPeople();
+  const comments = thread.comments;
+  const events = thread.activity;
   const busy = run.isPending;
 
   if (!thing) return null;
-
-  const terminal = thing.workStatus === "sorted" || thing.workStatus === "cancelled";
+  const terminal = caps?.terminal ?? false;
   const dueLabel = thing.dueAt
     ? format(new Date(thing.dueAt), thing.dueHasTime ? "EEE, MMM d · h:mm a" : "EEE, MMM d")
     : "No due date";
@@ -182,7 +183,7 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
               </div>
             </section>
 
-            {thing.acknowledgement === "caught" && !terminal ? (
+            {caps?.canSetPace ? (
               <section className="space-y-2">
                 <h3 className="katalist-section-title">My Pace</h3>
                 <div className="flex gap-1.5">
@@ -208,10 +209,14 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
                   ))}
                 </div>
               </section>
-            ) : (
+            ) : thing.acknowledgement === "waiting_for_catch" && caps?.isAssignee ? (
+              <p className="text-[12px] text-muted-foreground">Personal Pace unlocks after Catch.</p>
+            ) : thing.personalPace ? (
               <p className="text-[12px] text-muted-foreground">
-                Personal Pace unlocks after Catch.
+                Assignee pace: <span className="font-semibold uppercase">{thing.personalPace}</span> (read only)
               </p>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">Personal Pace is assignee-controlled after Catch.</p>
             )}
 
             <section className="space-y-2">
@@ -221,12 +226,13 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
                   <button
                     key={imp}
                     type="button"
-                    disabled={busy}
-                    onClick={() =>
+                    disabled={busy || !caps?.canSetImportance}
+                    onClick={() => {
+                      if (!caps?.canSetImportance) return;
                       run.mutate(async () => {
                         await rpcSetOwnerImportance(thing.id, imp);
-                      })
-                    }
+                      });
+                    }}
                     className={cn(
                       "rounded-lg border px-3 py-1.5 text-[12px] font-semibold uppercase tracking-wide",
                       thing.ownerImportance === imp
@@ -247,7 +253,7 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
                   <button
                     key={s}
                     type="button"
-                    disabled={busy || terminal}
+                    disabled={busy || terminal || (s === "sorted" ? !caps?.canSort : !caps?.canSetStatus)}
                     onClick={() =>
                       run.mutate(async () => {
                         if (s === "sorted") await rpcSortThing(thing.id);
@@ -300,13 +306,11 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
                 className="h-8 w-full rounded-md border border-border bg-card px-2 text-[12px]"
                 defaultValue=""
                 onChange={(e) => {
-                  if (!e.target.value) return;
-                  addBucketRef(e.target.value, {
-                    thingId: thing.id,
-                    title: thing.title,
-                    kind: "thing",
+                  if (!e.target.value || !caps?.canAddToBucket) return;
+                  run.mutate(async () => {
+                    await rpcAddToBucket(e.target.value, thing.id);
+                    toast.success("Referenced in bucket. Thing unchanged.");
                   });
-                  toast.success("Referenced in bucket. Thing unchanged.");
                   e.target.value = "";
                 }}
               >
@@ -352,8 +356,10 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
                     onSubmit={(e) => {
                       e.preventDefault();
                       if (!comment.trim()) return;
-                      addCommentLocal(thing.id, comment.trim());
-                      setComment("");
+                      void thread.post.mutateAsync(comment.trim()).then(
+                        () => setComment(""),
+                        (err) => toast.error(domainErrorMessage(err)),
+                      );
                     }}
                   >
                     <input
@@ -388,7 +394,7 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
           </div>
 
           <div className="space-y-2 border-t border-border px-5 py-4">
-            {thing.acknowledgement === "waiting_for_catch" && !terminal ? (
+            {caps?.canCatch ? (
               <button
                 type="button"
                 disabled={busy}
@@ -408,7 +414,7 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                disabled={busy || terminal}
+                disabled={busy || !caps?.canNudge}
                 onClick={() =>
                   run.mutate(async () => {
                     await rpcNudgeThing(thing.id);
@@ -422,7 +428,7 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
               </button>
               <button
                 type="button"
-                disabled={busy || terminal}
+                disabled={busy || !caps?.canSort}
                 onClick={() =>
                   run.mutate(async () => {
                     await rpcSortThing(thing.id);
@@ -440,7 +446,7 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
-                disabled={busy || terminal}
+                disabled={busy || !caps?.canCancel}
                 onClick={() =>
                   run.mutate(async () => {
                     await rpcCancelThing(thing.id);

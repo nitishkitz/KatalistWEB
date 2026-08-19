@@ -6,9 +6,11 @@ export function getListCapabilities(input: {
   ownerProfileId?: string | null;
   memberRole?: ListRole | null;
 }) {
-  const isOwner = Boolean(input.currentProfileId && input.currentProfileId === input.ownerProfileId) || input.memberRole === "owner";
-  const isCollab = isOwner || input.memberRole === "collaborator";
+  const isOwner =
+    Boolean(input.currentProfileId && input.currentProfileId === input.ownerProfileId) ||
+    input.memberRole === "owner";
   const isView = input.memberRole === "view_only";
+  const isCollab = isOwner || input.memberRole === "collaborator";
   return {
     canAdministerMembers: isOwner,
     canChangeRoles: isOwner,
@@ -25,19 +27,23 @@ export function getThingCapabilities(thing: Thing, myActorId: string | null) {
   const isAssignee = Boolean(myActorId && thing.assignee.id === myActorId);
   const isOwner = Boolean(myActorId && thing.owner.id === myActorId);
   const caught = thing.acknowledgement === "caught";
+  const waiting = thing.acknowledgement === "waiting_for_catch";
   return {
-    canCatch: isAssignee && thing.acknowledgement === "waiting_for_catch" && !terminal,
-    canSetPace: isAssignee && caught && !terminal,
-    canSetImportance: isOwner && !terminal,
-    canSetDue: (isOwner || isAssignee) && !terminal,
-    canSetStatus: isAssignee && caught && !terminal,
-    canAssign: isOwner && !terminal,
-    canReassign: (isOwner || (isAssignee && caught)) && !terminal,
-    canNudge: isOwner && !terminal && thing.acknowledgement !== "waiting_for_catch" ? true : isOwner && !terminal,
-    canSort: (isOwner || isAssignee) && !terminal,
-    canCancel: isOwner && !terminal,
-    canComment: true,
+    canCatch: Boolean(isAssignee && waiting && !terminal),
+    canSetPace: Boolean(isAssignee && caught && !terminal),
+    canSetImportance: Boolean(isOwner && !terminal),
+    canSetDue: Boolean((isOwner || (isAssignee && caught)) && !terminal),
+    canSetStatus: Boolean(isAssignee && caught && !terminal),
+    canAssign: Boolean(isOwner && !terminal),
+    canReassign: Boolean((isOwner || (isAssignee && caught)) && !terminal),
+    canNudge: Boolean(isOwner && !isAssignee && !terminal),
+    canSort: Boolean((isOwner || isAssignee) && !terminal),
+    canCancel: Boolean(isOwner && !terminal),
+    canComment: Boolean(myActorId) && !Boolean(thing.cancelledAt && thing.workStatus === "cancelled" && false),
     canShred: Boolean(myActorId),
-    canAddToBucket: Boolean(myActorId) && !terminal,
+    canAddToBucket: Boolean(myActorId),
+    isAssignee,
+    isOwner,
+    terminal,
   };
 }

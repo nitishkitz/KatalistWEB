@@ -4,10 +4,10 @@ import { AppShell } from "@/components/layout/AppShell";
 import { MagicBox } from "@/features/court/MagicBox";
 import { ThingRow } from "@/components/katalist/ThingRow";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
-import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
+import { useLocalVersion } from "@/features/things/local-state";
 import { useListMessages } from "@/features/lists/use-list-messages";
-import { useCourt } from "@/features/court/use-court";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";
 import type { Thing } from "@/domain/thing";
@@ -51,21 +51,20 @@ function ListDetailPage() {
   useLocalVersion();
   const { list } = useList(listId);
   const chat = useListMessages(listId);
-  const court = useCourt();
+  const { things: listThings, myActorId } = useListThings(listId);
   const [filter, setFilter] = useState<FeedFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<"things" | "chat" | "members">("things");
   const [msg, setMsg] = useState("");
   const viewOnly = list?.role === "view_only";
-  const sourceThings = court.preview ? getMergedThings() : court.all;
-  const selected = sourceThings.find((t) => t.id === selectedId) ?? null;
+  const selected = listThings.find((t) => t.id === selectedId) ?? null;
 
   const things = useMemo(() => {
-    return sourceThings.filter((t) => t.listId === listId || t.listName === list?.name);
-  }, [sourceThings, list, listId]);
+    return listThings.filter((t) => t.listId === listId || t.listName === list?.name);
+  }, [listThings, list, listId]);
 
   const visible = things.filter((t) => {
-    if (filter === "mine") return t.assignee.id === court.myActorId;
+    if (filter === "mine") return t.assignee.id === myActorId;
     if (filter === "waiting") return t.acknowledgement === "waiting_for_catch";
     if (filter === "progress") return t.workStatus === "under_progress";
     if (filter === "completed") return t.workStatus === "sorted";
@@ -202,7 +201,7 @@ function ListDetailPage() {
           </p>
           <ul className="space-y-2">
             {list.members.map((m) => (
-              <MemberRow key={m.name} name={m.name} initials={m.initials} avatarUrl={m.avatarUrl} isOwner={m.name.includes("you") || m.initials === "ME"} ownerView={list.role === "owner"} />
+              <MemberRow key={m.name} name={m.name} initials={m.initials} avatarUrl={m.avatarUrl} isOwner={false} ownerView={list.role === "owner"} />
             ))}
           </ul>
           {list.role === "owner" ? (

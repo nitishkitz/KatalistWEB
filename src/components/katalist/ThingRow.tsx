@@ -8,6 +8,9 @@ import { PersonCell } from "./PersonCell";
 import { cn } from "@/lib/utils";
 import { rpcCatchThing, rpcNudgeThing, rpcSortThing } from "@/features/things/rpc";
 import { toast } from "sonner";
+import { getThingCapabilities } from "@/domain/capabilities";
+import { useCourt } from "@/features/court/use-court";
+import { domainErrorMessage } from "@/lib/domain-error";
 
 function formatDue(thing: Thing): { label: string; urgent: boolean } {
   if (!thing.dueAt) return { label: "—", urgent: false };
@@ -30,8 +33,10 @@ export function ThingRow({
   thing: Thing;
   onSelect?: (thing: Thing) => void;
 }) {
+  const { myActorId } = useCourt();
   const due = formatDue(thing);
-  const terminal = thing.workStatus === "sorted" || thing.workStatus === "cancelled";
+  const caps = getThingCapabilities(thing, myActorId);
+  const terminal = caps.terminal;
 
   return (
     <tr
@@ -81,34 +86,44 @@ export function ThingRow({
             <button type="button" className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted" onClick={() => onSelect?.(thing)}>
               Open
             </button>
-            {thing.acknowledgement === "waiting_for_catch" && !terminal ? (
+            {caps.canCatch ? (
               <button
                 type="button"
                 className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
-                onClick={() => void rpcCatchThing(thing.id).then(() => toast.success("Caught."))}
+                onClick={() =>
+                  void rpcCatchThing(thing.id).then(
+                    () => toast.success("Caught."),
+                    (e) => toast.error(domainErrorMessage(e)),
+                  )
+                }
               >
                 Caught It
               </button>
             ) : null}
-            {!terminal ? (
+            {caps.canNudge ? (
               <button
                 type="button"
                 className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
                 onClick={() =>
                   void rpcNudgeThing(thing.id).then(
                     () => toast.success("Just a gentle paw tap on this one."),
-                    (e) => toast.error(e instanceof Error ? e.message : "Couldn’t nudge"),
+                    (e) => toast.error(domainErrorMessage(e)),
                   )
                 }
               >
                 Nudge
               </button>
             ) : null}
-            {!terminal ? (
+            {caps.canSort ? (
               <button
                 type="button"
                 className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
-                onClick={() => void rpcSortThing(thing.id).then(() => toast.success("Nicely sorted."))}
+                onClick={() =>
+                  void rpcSortThing(thing.id).then(
+                    () => toast.success("Nicely sorted."),
+                    (e) => toast.error(domainErrorMessage(e)),
+                  )
+                }
               >
                 Sort
               </button>

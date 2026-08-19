@@ -35,6 +35,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession, DEMO_PERSONAS, signInAsDemo, DemoPersona } from "@/hooks/useSession";
 import { Logo } from "@/components/katalist/Logo";
+import { demoEnabled } from "@/lib/session-mode";
 import { useAvatarUrl } from "@/features/people/directory";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 
@@ -109,7 +110,7 @@ function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useSession();
 
-  const [tab, setTab] = useState<"otp" | "qr" | "preview">("preview");
+  const [tab, setTab] = useState<"otp" | "qr" | "preview">(demoEnabled() ? "preview" : "otp");
   const [channel, setChannel] = useState<Channel>("phone");
   const [dialCode, setDialCode] = useState("+91");
   const [phone, setPhone] = useState("");
@@ -128,6 +129,7 @@ function AuthPage() {
     channel === "phone" ? `${dialCode}${phone.replace(/\D/g, "")}` : email.trim();
 
   function handleDemoLogin(persona: DemoPersona) {
+    if (!demoEnabled()) return;
     signInAsDemo(persona);
     toast.success(`Welcome, ${persona.name}!`);
     navigate({ to: "/", replace: true });
@@ -248,11 +250,11 @@ function AuthPage() {
           <div className="rounded-2xl border border-border bg-card katalist-shadow">
             <div className="grid grid-cols-3 border-b border-border">
               {(
-                [
-                  ["preview", "Demo", Sparkles],
-                  ["otp", "Phone / OTP", Smartphone],
-                  ["qr", "Scan QR", QrCode],
-                ] as const
+                (
+                  demoEnabled()
+                    ? ([["preview", "Demo", Sparkles], ["otp", "Phone / OTP", Smartphone], ["qr", "Scan QR", QrCode]] as const)
+                    : ([["otp", "Phone / OTP", Smartphone], ["qr", "Scan QR", QrCode]] as const)
+                )
               ).map(([key, label, Icon]) => (
                 <button
                   key={key}
@@ -461,7 +463,7 @@ function AuthPage() {
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5" /> End-to-end encrypted
+              <Lock className="h-3.5 w-3.5" /> Secure connection
             </span>
             <span className="flex items-center gap-1.5">
               <Shield className="h-3.5 w-3.5" /> Your data is private

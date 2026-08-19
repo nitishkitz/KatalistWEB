@@ -5,7 +5,7 @@ import { isActiveThing, partitionCourt, theirStateFor, type Thing, type Person }
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
-import { MY_ACTOR_ID } from "./fixtures";
+import { currentDemoActorId } from "@/features/demo/identities";
 import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
 import { isPreviewSession } from "@/lib/session-mode";
 
@@ -116,7 +116,7 @@ export function useCourt() {
     if (preview) {
       return {
         things: getMergedThings().filter((t) => t.context === context),
-        myActorId: MY_ACTOR_ID,
+        myActorId: currentDemoActorId(),
         live: false,
       };
     }
