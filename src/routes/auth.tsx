@@ -1,0 +1,463 @@
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Cloud,
+  Layers,
+  Lock,
+  Mail,
+  QrCode,
+  Shield,
+  Smartphone,
+  Sparkles,
+  UserCheck,
+  Users,
+} from "lucide-react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useSession, DEMO_PERSONAS, signInAsDemo, DemoPersona } from "@/hooks/useSession";
+import { Logo } from "@/components/katalist/Logo";
+import katalistMark from "@/assets/katalist-mark.png.asset.json";
+
+export const Route = createFileRoute("/auth")({
+  head: () => ({
+    meta: [
+      { title: "Sign in to Katalist" },
+      {
+        name: "description",
+        content:
+          "Sign in to Katalist with a one-time password and pick up exactly where you left off.",
+      },
+      { property: "og:title", content: "Sign in to Katalist" },
+      {
+        property: "og:description",
+        content: "Sign in to Katalist with a one-time password.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: AuthPage,
+});
+
+const COUNTRY_CODES = [
+  { code: "+91", label: "India" },
+  { code: "+1", label: "United States" },
+  { code: "+44", label: "United Kingdom" },
+  { code: "+61", label: "Australia" },
+  { code: "+971", label: "United Arab Emirates" },
+  { code: "+65", label: "Singapore" },
+];
+
+type Channel = "phone" | "email";
+
+function AuthPage() {
+  const navigate = useNavigate();
+  const { session, loading } = useSession();
+
+  const [tab, setTab] = useState<"demo" | "otp" | "qr">("demo");
+  const [channel, setChannel] = useState<Channel>("phone");
+  const [dialCode, setDialCode] = useState("+91");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!loading && session) {
+      navigate({ to: "/", replace: true });
+    }
+  }, [loading, session, navigate]);
+
+  const destination =
+    channel === "phone" ? `${dialCode}${phone.replace(/\D/g, "")}` : email.trim();
+
+  function handleDemoLogin(persona: DemoPersona) {
+    signInAsDemo(persona);
+    toast.success(`Welcome, ${persona.name}!`);
+    navigate({ to: "/", replace: true });
+  }
+
+  async function sendOtp() {
+    if (channel === "phone" && phone.replace(/\D/g, "").length < 6) {
+      toast.error("Enter a valid phone number");
+      return;
+    }
+    if (channel === "email" && !email.includes("@")) {
+      toast.error("Enter a valid email address");
+      return;
+    }
+
+    setBusy(true);
+    const { error } =
+      channel === "phone"
+        ? await supabase.auth.signInWithOtp({ phone: destination })
+        : await supabase.auth.signInWithOtp({
+            email: destination,
+            options: { shouldCreateUser: true },
+          });
+    setBusy(false);
+
+    if (error) {
+      if (error.message.toLowerCase().includes("unsupported phone provider")) {
+        toast.error(
+          "Phone provider is not configured. Try the 'Demo (1-Click)' tab above or email login below!",
+          { duration: 6000 }
+        );
+      } else {
+        toast.error(error.message);
+      }
+      return;
+    }
+    setSent(true);
+    setOtp("");
+    toast.success(`We sent a one-time password to ${destination}`);
+  }
+
+  async function verifyOtp(code: string) {
+    setBusy(true);
+    const { error } =
+      channel === "phone"
+        ? await supabase.auth.verifyOtp({ phone: destination, token: code, type: "sms" })
+        : await supabase.auth.verifyOtp({ email: destination, token: code, type: "email" });
+    setBusy(false);
+
+    if (error) {
+      toast.error(error.message);
+      setOtp("");
+      return;
+    }
+    navigate({ to: "/", replace: true });
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto grid min-h-screen max-w-6xl gap-12 px-6 py-8 lg:grid-cols-2">
+        {/* Brand panel */}
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between">
+            <Logo />
+            <p className="text-sm text-muted-foreground lg:hidden">
+              Life, <span className="font-semibold text-primary">Sorted.</span>
+            </p>
+          </div>
+
+          <div className="mt-16 max-w-md">
+            <h1 className="text-4xl font-bold leading-tight tracking-tight text-foreground md:text-5xl">
+              Welcome back
+              <br />
+              to <span className="text-primary">Katalist</span>
+            </h1>
+            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+              The smart way to capture, organize and get things done — together.
+            </p>
+
+            <ul className="mt-8 space-y-5">
+              {[
+                {
+                  icon: CheckCircle2,
+                  title: "Capture anything instantly",
+                  body: "Things, notes, links and more.",
+                },
+                {
+                  icon: Layers,
+                  title: "Organize with clarity",
+                  body: "Buckets, lists and court to stay focused.",
+                },
+                {
+                  icon: Users,
+                  title: "Collaborate effortlessly",
+                  body: "Assign, share and move things forward.",
+                },
+              ].map(({ icon: Icon, title, body }) => (
+                <li key={title} className="flex gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary">
+                    <Icon className="h-4 w-4 text-primary" />
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold text-foreground">{title}</span>
+                    <span className="block text-sm text-muted-foreground">{body}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="mt-auto hidden justify-center pt-12 lg:flex">
+            <img src={katalistMark.url} alt="" className="h-32 w-32 opacity-30" />
+          </div>
+        </div>
+
+        {/* Auth card */}
+        <div className="flex flex-col justify-center">
+          <div className="rounded-2xl border border-border bg-card katalist-shadow">
+            <div className="grid grid-cols-3 border-b border-border">
+              {(
+                [
+                  ["demo", "Demo (1-Click)", Sparkles],
+                  ["otp", "Phone / Email", Smartphone],
+                  ["qr", "Scan QR", QrCode],
+                ] as const
+              ).map(([key, label, Icon]) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 border-b-2 px-2 py-3.5 text-xs sm:text-sm font-medium transition-colors",
+                    tab === key
+                      ? "border-primary text-primary font-semibold"
+                      : "border-transparent text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="p-6">
+              {tab === "demo" ? (
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">
+                        Select a Demo Persona
+                      </h2>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Instant 1-click login without SMS or email setup
+                      </p>
+                    </div>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                      <Sparkles className="h-3 w-3" /> Dev Ready
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-2.5">
+                    {DEMO_PERSONAS.map((persona) => (
+                      <button
+                        key={persona.key}
+                        onClick={() => handleDemoLogin(persona)}
+                        className="group flex w-full items-center justify-between rounded-xl border border-border bg-background p-3 text-left transition-all hover:border-primary hover:bg-accent/40"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={cn(
+                              "flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ring-1 ring-border/50",
+                              persona.color,
+                            )}
+                          >
+                            {persona.initials}
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
+                              {persona.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {persona.role} · <span className="font-mono">{persona.phone}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+                          Sign In <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : tab === "otp" ? (
+                sent ? (
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">
+                      Enter your one-time password
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      We sent a 6-digit code to{" "}
+                      <span className="font-medium text-foreground">{destination}</span>
+                    </p>
+
+                    <div className="mt-6 flex justify-center">
+                      <InputOTP
+                        maxLength={6}
+                        value={otp}
+                        onChange={(value) => {
+                          setOtp(value);
+                          if (value.length === 6) void verifyOtp(value);
+                        }}
+                      >
+                        <InputOTPGroup>
+                          {[0, 1, 2, 3, 4, 5].map((i) => (
+                            <InputOTPSlot key={i} index={i} />
+                          ))}
+                        </InputOTPGroup>
+                      </InputOTP>
+                    </div>
+
+                    <Button
+                      className="mt-6 w-full"
+                      size="lg"
+                      disabled={busy || otp.length !== 6}
+                      onClick={() => void verifyOtp(otp)}
+                    >
+                      Verify & continue
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </Button>
+
+                    <div className="mt-4 flex items-center justify-between text-sm">
+                      <button
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          setSent(false);
+                          setOtp("");
+                        }}
+                      >
+                        Change {channel === "phone" ? "number" : "email"}
+                      </button>
+                      <button
+                        className="font-medium text-primary hover:underline disabled:opacity-50"
+                        disabled={busy}
+                        onClick={() => void sendOtp()}
+                      >
+                        Resend code
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <h2 className="text-base font-semibold text-foreground">
+                      {channel === "phone"
+                        ? "Login with your phone number"
+                        : "Login with your email"}
+                    </h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      We'll send you a one-time password (OTP)
+                    </p>
+
+                    {channel === "phone" ? (
+                      <div className="mt-5 flex gap-2">
+                        <Select value={dialCode} onValueChange={setDialCode}>
+                          <SelectTrigger className="w-28">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COUNTRY_CODES.map((c) => (
+                              <SelectItem key={c.code} value={c.code}>
+                                {c.code}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="tel"
+                          inputMode="tel"
+                          placeholder="Enter your phone number"
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
+                          className="flex-1"
+                          aria-label="Phone number"
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-5">
+                        <Label htmlFor="email" className="sr-only">
+                          Email address
+                        </Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          inputMode="email"
+                          placeholder="you@example.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
+                        />
+                      </div>
+                    )}
+
+                    <Button
+                      className="mt-4 w-full"
+                      size="lg"
+                      disabled={busy}
+                      onClick={() => void sendOtp()}
+                    >
+                      Send OTP
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </Button>
+
+                    <button
+                      className="mt-3 flex w-full items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                      onClick={() => setChannel(channel === "phone" ? "email" : "phone")}
+                    >
+                      {channel === "phone" ? (
+                        <>
+                          <Mail className="h-4 w-4" /> Use email instead
+                        </>
+                      ) : (
+                        <>
+                          <Smartphone className="h-4 w-4" /> Use phone instead
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )
+              ) : (
+                <div className="flex flex-col items-center gap-4 rounded-xl bg-secondary/60 p-6 text-center">
+                  <div className="flex h-40 w-40 items-center justify-center rounded-xl border border-border bg-card">
+                    <QrCode className="h-20 w-20 text-foreground/80" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Scan QR to login</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Open the Katalist mobile app and scan the QR code to login instantly.
+                    </p>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      QR login activates with the Katalist mobile app. Use Demo or Phone / Email for now.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-border px-6 py-4 text-center text-sm text-muted-foreground">
+              New to Katalist?{" "}
+              <Link to="/welcome" className="font-medium text-primary hover:underline">
+                Create an account
+              </Link>
+            </div>
+          </div>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5" /> End-to-end encrypted
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Shield className="h-3.5 w-3.5" /> Your data is private
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Cloud className="h-3.5 w-3.5" /> Secure and reliable
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

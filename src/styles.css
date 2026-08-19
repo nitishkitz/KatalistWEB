@@ -1,0 +1,242 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Katalist design system.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ */
+
+@theme inline {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+
+  /* Katalist semantic status colors */
+  --color-status-now: var(--status-now);
+  --color-status-now-bg: var(--status-now-bg);
+  --color-status-next: var(--status-next);
+  --color-status-next-bg: var(--status-next-bg);
+  --color-status-later: var(--status-later);
+  --color-status-later-bg: var(--status-later-bg);
+  --color-status-waiting: var(--status-waiting);
+  --color-status-waiting-bg: var(--status-waiting-bg);
+  --color-status-caught: var(--status-caught);
+  --color-status-caught-bg: var(--status-caught-bg);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+
+  /* Katalist sidebar tokens */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.75rem;
+
+  /* Warm neutral canvas */
+  --background: oklch(0.985 0.004 85);
+  --foreground: oklch(0.22 0.02 260);
+
+  /* Surfaces */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 260);
+
+  /* Primary: restrained violet used for active nav and primary actions only */
+  --primary: oklch(0.55 0.21 285);
+  --primary-foreground: oklch(1 0 0);
+
+  /* Secondary: soft neutral surface */
+  --secondary: oklch(0.96 0.01 85);
+  --secondary-foreground: oklch(0.22 0.02 260);
+
+  /* Muted */
+  --muted: oklch(0.96 0.01 85);
+  --muted-foreground: oklch(0.55 0.04 260);
+
+  /* Accent */
+  --accent: oklch(0.96 0.01 85);
+  --accent-foreground: oklch(0.22 0.02 260);
+
+  /* Destructive / urgent */
+  --destructive: oklch(0.63 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
+
+  /* Borders and inputs */
+  --border: oklch(0.91 0.01 85);
+  --input: oklch(0.91 0.01 85);
+  --ring: oklch(0.55 0.21 285 / 40%);
+
+  /* Status palette */
+  --status-now: oklch(0.58 0.20 25);
+  --status-now-bg: oklch(0.96 0.02 25);
+  --status-next: oklch(0.55 0.20 250);
+  --status-next-bg: oklch(0.95 0.02 250);
+  --status-later: oklch(0.55 0.04 260);
+  --status-later-bg: oklch(0.94 0.01 85);
+  --status-waiting: oklch(0.68 0.16 65);
+  --status-waiting-bg: oklch(0.97 0.02 65);
+  --status-caught: oklch(0.55 0.18 145);
+  --status-caught-bg: oklch(0.95 0.02 145);
+  --status-neutral: oklch(0.55 0.04 260);
+  --status-neutral-bg: oklch(0.94 0.01 85);
+
+  /* Sidebar */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.22 0.02 260);
+  --sidebar-primary: oklch(0.55 0.21 285);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0.01 85);
+  --sidebar-accent-foreground: oklch(0.22 0.02 260);
+  --sidebar-border: oklch(0.93 0.01 85);
+  --sidebar-ring: oklch(0.55 0.21 285 / 40%);
+}
+
+.dark {
+  --radius: 0.75rem;
+
+  --background: oklch(0.18 0.02 260);
+  --foreground: oklch(0.97 0.005 85);
+  --card: oklch(0.22 0.02 260);
+  --card-foreground: oklch(0.97 0.005 85);
+  --popover: oklch(0.22 0.02 260);
+  --popover-foreground: oklch(0.97 0.005 85);
+
+  --primary: oklch(0.65 0.18 285);
+  --primary-foreground: oklch(0.15 0.02 260);
+
+  --secondary: oklch(0.28 0.02 260);
+  --secondary-foreground: oklch(0.97 0.005 85);
+
+  --muted: oklch(0.28 0.02 260);
+  --muted-foreground: oklch(0.70 0.03 260);
+
+  --accent: oklch(0.28 0.02 260);
+  --accent-foreground: oklch(0.97 0.005 85);
+
+  --destructive: oklch(0.70 0.18 25);
+  --destructive-foreground: oklch(0.15 0.02 260);
+
+  --border: oklch(0.30 0.02 260);
+  --input: oklch(0.30 0.02 260);
+  --ring: oklch(0.65 0.18 285 / 40%);
+
+  /* Status palette dark */
+  --status-now: oklch(0.70 0.18 25);
+  --status-now-bg: oklch(0.25 0.03 25);
+  --status-next: oklch(0.70 0.18 250);
+  --status-next-bg: oklch(0.25 0.03 250);
+  --status-later: oklch(0.70 0.03 260);
+  --status-later-bg: oklch(0.25 0.02 260);
+  --status-waiting: oklch(0.78 0.14 65);
+  --status-waiting-bg: oklch(0.25 0.02 65);
+  --status-caught: oklch(0.70 0.16 145);
+  --status-caught-bg: oklch(0.25 0.02 145);
+  --status-neutral: oklch(0.70 0.03 260);
+  --status-neutral-bg: oklch(0.25 0.02 260);
+
+  --sidebar: oklch(0.22 0.02 260);
+  --sidebar-foreground: oklch(0.97 0.005 85);
+  --sidebar-primary: oklch(0.65 0.18 285);
+  --sidebar-primary-foreground: oklch(0.15 0.02 260);
+  --sidebar-accent: oklch(0.28 0.02 260);
+  --sidebar-accent-foreground: oklch(0.97 0.005 85);
+  --sidebar-border: oklch(0.30 0.02 260);
+  --sidebar-ring: oklch(0.65 0.18 285 / 40%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+  }
+}
+
+/* Katalist utilities */
+@utility katalist-shadow {
+  box-shadow: 0 1px 3px oklch(0.2 0.02 260 / 0.04), 0 1px 2px oklch(0.2 0.02 260 / 0.02);
+}
+
+@utility katalist-shadow-card {
+  box-shadow: 0 4px 6px -1px oklch(0.2 0.02 260 / 0.03), 0 2px 4px -1px oklch(0.2 0.02 260 / 0.02);
+}
+
+@utility katalist-page-title {
+  font-size: 1.75rem;
+  line-height: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--color-foreground);
+}
+
+@utility katalist-page-subtitle {
+  font-size: 0.9375rem;
+  line-height: 1.375rem;
+  color: var(--color-muted-foreground);
+}
+
+@utility katalist-section-title {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
