@@ -1,18 +1,22 @@
-import { ReactNode, useEffect } from "react";
+import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-
 import { AppSidebar } from "./Sidebar";
 import { PageHeader } from "./PageHeader";
+import { cn } from "@/lib/utils";
+import { useAppContext } from "@/features/context/use-app-context";
 import { useSession } from "@/hooks/useSession";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 
 interface AppShellProps {
   title: string;
   subtitle?: string;
+  actions?: ReactNode;
   children: ReactNode;
 }
 
-export function AppShell({ title, subtitle, children }: AppShellProps) {
+export function AppShell({ title, subtitle, actions, children }: AppShellProps) {
+  const { context } = useAppContext();
   const { session, loading } = useSession();
   const navigate = useNavigate();
 
@@ -25,23 +29,24 @@ export function AppShell({ title, subtitle, children }: AppShellProps) {
   if (loading || !session) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <img
-          src={katalistMark.url}
-          alt=""
-          className="h-16 w-16 animate-pulse opacity-60"
-        />
+        <img src={katalistMark.url} alt="" className="h-14 w-14 animate-pulse opacity-60" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
+    <div
+      className={cn(
+        "flex min-h-screen w-full transition-[background-color] duration-200",
+        context === "home" ? "bg-[oklch(0.99_0.008_80)]" : "bg-background",
+      )}
+    >
       <AppSidebar />
-      <div className="flex flex-1 flex-col pl-64">
-        <PageHeader title={title} subtitle={subtitle} />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-6xl">{children}</div>
-        </main>
+      <div className="flex min-h-screen flex-1 flex-col pl-[220px]">
+        <div className="mx-auto w-full max-w-[1440px] flex-1 px-8 pb-10 pt-6">
+          <PageHeader title={title} subtitle={subtitle} actions={actions} />
+          {children}
+        </div>
       </div>
     </div>
   );
