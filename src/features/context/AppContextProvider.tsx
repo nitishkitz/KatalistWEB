@@ -4,8 +4,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { useQueryClient } from "@tanstack/react-query";
+import { currentDemoActorId } from "@/features/demo/identities";
 
 const STORAGE_KEY = "katalist.active_context";
+
+function demoContextKey(): string {
+  try {
+    return `${STORAGE_KEY}.demo.${currentDemoActorId()}`;
+  } catch {
+    return STORAGE_KEY;
+  }
+}
 
 type AppCtx = {
   context: ContextKind;
@@ -17,11 +26,21 @@ const Ctx = createContext<AppCtx | null>(null);
 export function AppContextProvider({ children }: { children: ReactNode }) {
   const { user, session } = useSession();
   const qc = useQueryClient();
+  const preview = isPreviewSession(session);
+
   const [context, setContextState] = useState<ContextKind>(() => {
     if (typeof window === "undefined") return "work";
-    const stored = window.localStorage.getItem(STORAGE_KEY);
+    const key = preview ? demoContextKey() : STORAGE_KEY;
+    const stored = window.localStorage.getItem(key);
     return stored === "home" || stored === "work" ? stored : "work";
   });
+
+  useEffect(() => {
+    if (!preview || typeof window === "undefined") return;
+    const key = demoContextKey();
+    const stored = window.localStorage.getItem(key);
+    setContextState(stored === "home" || stored === "work" ? stored : "work");
+  }, [preview, session, user?.id]);
 
   useEffect(() => {
     if (!user || isPreviewSession(session)) return;
@@ -46,7 +65,8 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       const prev = context;
       setContextState(next);
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_KEY, next);
+        const key = isPreviewSession(session) ? demoContextKey() : STORAGE_KEY;
+        window.localStorage.setItem(key, next);
       }
       if (user && !isPreviewSession(session)) {
         const { error } = await supabase.from("profiles").update({ active_context: next }).eq("id", user.id);
@@ -66,8 +86,6 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
 export function useAppContext() {
   const value = useContext(Ctx);
-  if (!value) {
-    throw new Error("useAppContext must be used within AppContextProvider");
-  }
+  if (!value) throw new Error("useAppContext must be used within AppContextProvider");
   return value;
 }
