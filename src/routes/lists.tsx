@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Filter, MoreHorizontal, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { listFixtures, type ListRow } from "@/features/lists/fixtures";
+import { type ListRow } from "@/features/lists/fixtures";
+import { createListLocal, getLists, useLocalVersion } from "@/features/things/local-state";
+import { useAppContext } from "@/features/context/use-app-context";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/lists")({
@@ -51,6 +53,7 @@ function MemberStack({ members, count }: { members: ListRow["members"]; count: n
 }
 
 function ListTable({ rows }: { rows: ListRow[] }) {
+  const navigate = useNavigate();
   if (rows.length === 0) return null;
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -68,7 +71,11 @@ function ListTable({ rows }: { rows: ListRow[] }) {
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="cursor-pointer border-t border-border/80 hover:bg-muted/40">
+            <tr
+              key={row.id}
+              className="cursor-pointer border-t border-border/80 hover:bg-muted/40"
+              onClick={() => navigate({ to: "/lists/$listId", params: { listId: row.id } })}
+            >
               <td className="px-4 py-3">
                 <div className="flex items-center gap-3">
                   <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg text-[11px] font-bold text-white", row.color)}>
@@ -134,11 +141,16 @@ function Group({ title, rows }: { title: string; rows: ListRow[] }) {
 }
 
 function ListsPage() {
+  useLocalVersion();
+  const { context } = useAppContext();
   const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
   const filtered = useMemo(() => {
+    const source = getLists();
     const q = query.trim().toLowerCase();
-    if (!q) return listFixtures;
-    return listFixtures.filter((l) => l.name.toLowerCase().includes(q));
+    if (!q) return source;
+    return source.filter((l) => l.name.toLowerCase().includes(q));
   }, [query]);
 
   const owned = filtered.filter((l) => l.role === "owner");
@@ -152,6 +164,7 @@ function ListsPage() {
       actions={
         <button
           type="button"
+          onClick={() => setCreating(true)}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
@@ -183,6 +196,38 @@ function ListsPage() {
         <Group title="Collaborating" rows={collab} />
         <Group title="View Only" rows={viewOnly} />
       </div>
+
+      {creating ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+          <form
+            className="w-full max-w-sm rounded-xl border border-border bg-card p-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!name.trim()) return;
+              createListLocal(name.trim(), context);
+              setName("");
+              setCreating(false);
+            }}
+          >
+            <h2 className="text-[14px] font-semibold">New List</h2>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="List name"
+              className="mt-3 h-9 w-full rounded-lg border border-border px-3 text-[13px]"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" className="text-[13px]" onClick={() => setCreating(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-[13px] text-primary-foreground">
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

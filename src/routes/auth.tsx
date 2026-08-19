@@ -448,7 +448,7 @@ function AuthPage() {
 
             <div className="border-t border-border px-6 py-4 text-center text-sm text-muted-foreground">
               New to Katalist?{" "}
-              <Link to="/welcome" className="font-medium text-primary hover:underline">
+              <Link to="/onboarding" className="font-medium text-primary hover:underline">
                 Create an account
               </Link>
             </div>

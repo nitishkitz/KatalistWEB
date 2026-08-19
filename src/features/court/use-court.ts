@@ -5,7 +5,8 @@ import { isActiveThing, laneOf, theirStateFor, type Thing, type Person } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
-import { courtFixtures, MY_ACTOR_ID } from "./fixtures";
+import { MY_ACTOR_ID } from "./fixtures";
+import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
 
 type ActorRow = {
   id: string;
@@ -104,11 +105,13 @@ export function useCourt() {
   const { session } = useSession();
   const isAuthenticated = Boolean(session) && session?.app_metadata?.provider !== "demo";
   const { context } = useAppContext();
+  useLocalVersion();
 
   const query = useQuery({
     queryKey: keys.court(isAuthenticated ? "me" : "preview", context),
     queryFn: () => fetchCourt(context),
     staleTime: 15_000,
+    enabled: isAuthenticated,
   });
 
   const source = useMemo(() => {
@@ -116,9 +119,13 @@ export function useCourt() {
     if (live.length > 0) {
       return { things: live, myActorId: query.data?.myActorId ?? null, live: true };
     }
-    // Design-preview dataset matches locked Court screenshot when live data is empty
-    return { things: courtFixtures.filter(isActiveThing), myActorId: MY_ACTOR_ID, live: false };
-  }, [query.data]);
+    const local = getMergedThings().filter((t) => t.context === context || true);
+    return {
+      things: local.filter(isActiveThing).filter((t) => t.context === context),
+      myActorId: MY_ACTOR_ID,
+      live: false,
+    };
+  }, [query.data, context]);
 
   const now = source.things.filter((t) => laneOf(t) === "now");
   const next = source.things.filter((t) => laneOf(t) === "next");
@@ -133,6 +140,7 @@ export function useCourt() {
     next,
     later,
     theirs,
+    all: source.things,
     theirGroups: {
       waiting_for_catch: theirs.filter((t) => theirStateFor(t) === "waiting_for_catch"),
       moving: theirs.filter((t) => theirStateFor(t) === "moving"),

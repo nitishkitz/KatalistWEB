@@ -1,7 +1,8 @@
-import { Bell, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/hooks/useSession";
+import { NotificationBell } from "@/features/notifications/NotificationPanel";
 
 interface PageHeaderProps {
   title: string;
@@ -17,7 +18,7 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
     user?.user_metadata?.display_name ||
     user?.user_metadata?.full_name ||
     user?.email?.split("@")[0] ||
-    "Rahul Mehta";
+    "You";
 
   const initials =
     user?.user_metadata?.initials ||
@@ -36,14 +37,7 @@ export function PageHeader({ title, subtitle, actions, className }: PageHeaderPr
       </div>
       <div className="flex items-center gap-2 pt-1">
         {actions}
-        <button
-          type="button"
-          className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Notifications"
-        >
-          <Bell className="h-[18px] w-[18px]" />
-          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />
-        </button>
+        <NotificationBell />
         <Link to="/me" className="flex items-center gap-1 rounded-full pl-0.5 pr-1 hover:bg-muted">
           <span className="relative">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-zinc-800 text-[11px] font-semibold text-white">

@@ -13,6 +13,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { MagicBox } from "@/features/court/MagicBox";
 import { useCourt } from "@/features/court/use-court";
 import { ThingRow, ThingTableHeader } from "@/components/katalist/ThingRow";
+import { ThingCard } from "@/features/court/ThingCard";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import type { Thing } from "@/domain/thing";
 import { cn } from "@/lib/utils";
@@ -87,7 +88,12 @@ function Lane({
       </button>
       {open && things.length > 0 ? (
         <div className="px-1 pb-2">
-          <table className="w-full table-fixed">
+          <div className="space-y-2 p-2 md:hidden">
+            {visible.map((t) => (
+              <ThingCard key={t.id} thing={t} onSelect={onSelect} />
+            ))}
+          </div>
+          <table className="hidden w-full table-fixed md:table">
             <colgroup>
               <col className="w-[26%]" />
               <col className="w-[12%]" />
@@ -124,14 +130,17 @@ function TheirCard({
   icon,
   label,
   count,
+  onClick,
 }: {
   icon: React.ReactNode;
   label: string;
   count: number;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className="flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-3 text-left hover:bg-muted/40"
     >
       {icon}
@@ -147,6 +156,7 @@ function CourtPage() {
   const [selected, setSelected] = useState<Thing | null>(null);
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [query, setQuery] = useState("");
+  const [theirFocus, setTheirFocus] = useState<"waiting_for_catch" | "moving" | "needs_attention" | null>(null);
 
   const fNow = useMemo(() => now.filter((t) => matchesFilter(t, filter, query)), [now, filter, query]);
   const fNext = useMemo(() => next.filter((t) => matchesFilter(t, filter, query)), [next, filter, query]);
@@ -284,6 +294,7 @@ function CourtPage() {
               icon={<Clock className="h-4 w-4 text-status-waiting" />}
               label="Waiting for Catch"
               count={theirGroups.waiting_for_catch.length}
+              onClick={() => setTheirFocus("waiting_for_catch")}
             />
             <TheirCard
               icon={
@@ -293,13 +304,26 @@ function CourtPage() {
               }
               label="Moving"
               count={theirGroups.moving.length}
+              onClick={() => setTheirFocus("moving")}
             />
             <TheirCard
               icon={<AlertCircle className="h-4 w-4 text-status-now" />}
               label="Needs Attention"
               count={theirGroups.needs_attention.length}
+              onClick={() => setTheirFocus("needs_attention")}
             />
           </div>
+          {theirFocus ? (
+            <div className="px-4 pb-4">
+              <table className="w-full table-fixed">
+                <tbody>
+                  {theirGroups[theirFocus].map((t) => (
+                    <ThingRow key={t.id} thing={t} onSelect={setSelected} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
         </section>
       </div>
 

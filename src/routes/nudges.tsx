@@ -2,13 +2,13 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Bell, Clock, Hand, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import {
-  nudgeFixtures,
-  nudgeGroups,
-  recentNudgeFixtures,
-  type NudgeGroup,
-} from "@/features/nudges/fixtures";
+import { nudgeFixtures, nudgeGroups, recentNudgeFixtures, type NudgeGroup } from "@/features/nudges/fixtures";
 import { cn } from "@/lib/utils";
+import { rpcNudgeThing } from "@/features/things/rpc";
+import { toast } from "sonner";
+import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
+import type { Thing } from "@/domain/thing";
 
 export const Route = createFileRoute("/nudges")({
   head: () => ({
@@ -21,17 +21,14 @@ export const Route = createFileRoute("/nudges")({
 });
 
 function NudgesPage() {
+  useLocalVersion();
   const [group, setGroup] = useState<NudgeGroup>("waiting_for_catch");
+  const [selected, setSelected] = useState<Thing | null>(null);
+  const things = getMergedThings();
 
   const counts = useMemo(() => {
     const map = Object.fromEntries(nudgeGroups.map((g) => [g.id, 0])) as Record<NudgeGroup, number>;
     for (const n of nudgeFixtures) map[n.group] += 1;
-    // amplify to match screenshot-ish density for primary groups
-    map.waiting_for_catch = Math.max(map.waiting_for_catch, 14);
-    map.needs_a_tap = Math.max(map.needs_a_tap, 9);
-    map.recently_nudged = Math.max(map.recently_nudged, 5);
-    map.caught_moving = Math.max(map.caught_moving, 7);
-    map.stale = Math.max(map.stale, 4);
     return map;
   }, []);
 
@@ -111,6 +108,13 @@ function NudgesPage() {
                     <button
                       type="button"
                       className="rounded-lg bg-primary px-2.5 py-1 text-[12px] font-medium text-primary-foreground hover:bg-primary/90"
+                      onClick={() => {
+                        const thing = things.find((t) => t.title === row.title);
+                        void rpcNudgeThing(thing?.id ?? row.id).then(
+                          () => toast.success("Just a gentle paw tap on this one."),
+                          (err) => toast.error(err instanceof Error ? err.message : "Couldn’t nudge"),
+                        );
+                      }}
                     >
                       Nudge
                     </button>
@@ -118,6 +122,10 @@ function NudgesPage() {
                     <button
                       type="button"
                       className="rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium text-foreground hover:bg-muted"
+                      onClick={() => {
+                        const thing = things.find((t) => t.title === row.title) ?? null;
+                        setSelected(thing);
+                      }}
                     >
                       Open
                     </button>
@@ -153,6 +161,7 @@ function NudgesPage() {
           ))}
         </div>
       </section>
+      <ThingDetailSheet thing={selected} open={Boolean(selected)} onOpenChange={(v) => !v && setSelected(null)} />
     </AppShell>
   );
 }

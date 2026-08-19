@@ -6,6 +6,8 @@ import { AcknowledgementBadge } from "./AcknowledgementBadge";
 import { WorkStatusBadge } from "./WorkStatusBadge";
 import { PersonCell } from "./PersonCell";
 import { cn } from "@/lib/utils";
+import { rpcCatchThing, rpcNudgeThing, rpcSortThing } from "@/features/things/rpc";
+import { toast } from "sonner";
 
 function formatDue(thing: Thing): { label: string; urgent: boolean } {
   if (!thing.dueAt) return { label: "—", urgent: false };
@@ -29,6 +31,7 @@ export function ThingRow({
   onSelect?: (thing: Thing) => void;
 }) {
   const due = formatDue(thing);
+  const terminal = thing.workStatus === "sorted" || thing.workStatus === "cancelled";
 
   return (
     <tr
@@ -37,7 +40,7 @@ export function ThingRow({
     >
       <td className="py-2.5 pr-3 pl-3">
         <div className="flex items-center gap-2.5">
-          <Star className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+          <Star className={cn("h-3.5 w-3.5 shrink-0", thing.starred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/70")} />
           <span className="truncate text-[13px] font-medium text-foreground">{thing.title}</span>
         </div>
       </td>
@@ -69,14 +72,49 @@ export function ThingRow({
       </td>
       <td className="px-2 text-[12px] text-muted-foreground">{thing.listName ?? "Standalone"}</td>
       <td className="pr-2 text-right">
-        <button
-          type="button"
-          className="rounded p-1 text-muted-foreground opacity-0 hover:bg-muted group-hover:opacity-100"
-          aria-label="Thing actions"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
+        <details className="relative" onClick={(e) => e.stopPropagation()}>
+          <summary className="list-none rounded p-1 text-muted-foreground hover:bg-muted [&::-webkit-details-marker]:hidden">
+            <MoreHorizontal className="h-4 w-4" />
+            <span className="sr-only">Thing actions</span>
+          </summary>
+          <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-lg border border-border bg-card py-1 text-left shadow-sm">
+            <button type="button" className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted" onClick={() => onSelect?.(thing)}>
+              Open
+            </button>
+            {thing.acknowledgement === "waiting_for_catch" && !terminal ? (
+              <button
+                type="button"
+                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
+                onClick={() => void rpcCatchThing(thing.id).then(() => toast.success("Caught."))}
+              >
+                Caught It
+              </button>
+            ) : null}
+            {!terminal ? (
+              <button
+                type="button"
+                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
+                onClick={() =>
+                  void rpcNudgeThing(thing.id).then(
+                    () => toast.success("Just a gentle paw tap on this one."),
+                    (e) => toast.error(e instanceof Error ? e.message : "Couldn’t nudge"),
+                  )
+                }
+              >
+                Nudge
+              </button>
+            ) : null}
+            {!terminal ? (
+              <button
+                type="button"
+                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
+                onClick={() => void rpcSortThing(thing.id).then(() => toast.success("Nicely sorted."))}
+              >
+                Sort
+              </button>
+            ) : null}
+          </div>
+        </details>
       </td>
     </tr>
   );

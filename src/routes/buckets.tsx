@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Filter, Lock, MoreHorizontal, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { bucketFixtures, type BucketCard } from "@/features/buckets/fixtures";
+import { type BucketCard } from "@/features/buckets/fixtures";
+import { createBucketLocal, getBuckets, useLocalVersion } from "@/features/things/local-state";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/buckets")({
@@ -16,6 +17,7 @@ export const Route = createFileRoute("/buckets")({
 });
 
 function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean }) {
+  const navigate = useNavigate();
   return (
     <article
       className={cn(
@@ -61,7 +63,11 @@ function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean
 
       <div className="mt-auto flex items-center justify-between border-t border-border/70 pt-3">
         <span className="text-[11px] text-muted-foreground">{bucket.updatedAt}</span>
-        <button type="button" className="inline-flex items-center gap-1 text-[12px] font-medium text-primary">
+        <button
+          type="button"
+          onClick={() => navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } })}
+          className="inline-flex items-center gap-1 text-[12px] font-medium text-primary"
+        >
           View bucket
           <ArrowRight className="h-3.5 w-3.5" />
         </button>
@@ -71,11 +77,15 @@ function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean
 }
 
 function BucketsPage() {
+  useLocalVersion();
   const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
   const filtered = useMemo(() => {
+    const source = getBuckets();
     const q = query.trim().toLowerCase();
-    if (!q) return bucketFixtures;
-    return bucketFixtures.filter(
+    if (!q) return source;
+    return source.filter(
       (b) => b.name.toLowerCase().includes(q) || b.description.toLowerCase().includes(q),
     );
   }, [query]);
@@ -90,6 +100,7 @@ function BucketsPage() {
       actions={
         <button
           type="button"
+          onClick={() => setCreating(true)}
           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
         >
           <Plus className="h-4 w-4" />
@@ -141,6 +152,38 @@ function BucketsPage() {
           ))}
         </div>
       </section>
+
+      {creating ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+          <form
+            className="w-full max-w-sm rounded-xl border border-border bg-card p-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!name.trim()) return;
+              createBucketLocal(name.trim());
+              setName("");
+              setCreating(false);
+            }}
+          >
+            <h2 className="text-[14px] font-semibold">Create Bucket</h2>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Bucket name"
+              className="mt-3 h-9 w-full rounded-lg border border-border px-3 text-[13px]"
+            />
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" className="text-[13px]" onClick={() => setCreating(false)}>
+                Cancel
+              </button>
+              <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-[13px] text-primary-foreground">
+                Create
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </AppShell>
   );
 }

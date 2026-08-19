@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { useAppContext } from "@/features/context/use-app-context";
 import { useSession } from "@/hooks/useSession";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
+import { GhostCard } from "@/features/doorman/GhostCard";
+import { useRealtimeInvalidation } from "@/features/realtime/use-realtime";
 
 interface AppShellProps {
   title: string;
@@ -19,6 +21,7 @@ export function AppShell({ title, subtitle, actions, children }: AppShellProps) 
   const { context } = useAppContext();
   const { session, loading } = useSession();
   const navigate = useNavigate();
+  useRealtimeInvalidation();
 
   useEffect(() => {
     if (!loading && !session) {
@@ -48,6 +51,7 @@ export function AppShell({ title, subtitle, actions, children }: AppShellProps) 
           {children}
         </div>
       </div>
+      <GhostCard />
     </div>
   );
 }

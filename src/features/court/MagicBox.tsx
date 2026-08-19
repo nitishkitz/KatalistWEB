@@ -1,24 +1,32 @@
 import { useMemo, useState } from "react";
 import { Mic, Sparkles } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { keys } from "@/domain/query-keys";
 import { useAppContext } from "@/features/context/use-app-context";
-import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 import type { Importance } from "@/domain/thing";
 import { toast } from "sonner";
+import { rpcCreateThing } from "@/features/things/rpc";
+import { directoryPeople } from "@/features/things/local-state";
 
 type Chip = { kind: "assignee" | "due" | "importance" | "unresolved"; label: string; value: string };
 
-function parseToss(raw: string): { title: string; chips: Chip[]; importance: Importance } {
+function parseToss(raw: string): { title: string; chips: Chip[]; importance: Importance; assigneeId?: string } {
   let title = raw.trim();
   const chips: Chip[] = [];
   let importance: Importance = "next";
+  let assigneeId: string | undefined;
 
   const mention = title.match(/@([A-Za-z][\w.-]*)/);
   if (mention) {
-    chips.push({ kind: "assignee", label: mention[1], value: mention[1] });
+    const people = directoryPeople();
+    const hit = people.find((p) => p.name.toLowerCase().startsWith(mention[1].toLowerCase()));
+    if (hit) {
+      chips.push({ kind: "assignee", label: hit.name, value: hit.id });
+      assigneeId = hit.id;
+    } else {
+      chips.push({ kind: "unresolved", label: `Who is @${mention[1]}?`, value: "person" });
+    }
     title = title.replace(mention[0], "").trim();
   }
 
@@ -30,6 +38,8 @@ function parseToss(raw: string): { title: string; chips: Chip[]; importance: Imp
     importance = "later";
     chips.push({ kind: "importance", label: "LATER", value: "later" });
     title = title.replace(/\blater\b/i, "").trim();
+  } else {
+    chips.push({ kind: "importance", label: "NEXT", value: "next" });
   }
 
   const dateMatch = title.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday)\b/i);
@@ -42,34 +52,32 @@ function parseToss(raw: string): { title: string; chips: Chip[]; importance: Imp
     chips.push({ kind: "unresolved", label: "Check date", value: "ambiguous" });
   }
 
-  return { title: title || raw.trim(), chips, importance };
+  return { title: title || raw.trim(), chips, importance, assigneeId };
 }
 
-export function MagicBox() {
+export function MagicBox({ listId, listName }: { listId?: string; listName?: string }) {
   const [value, setValue] = useState("");
   const [tossed, setTossed] = useState(false);
   const { context } = useAppContext();
-  const { session } = useSession();
-  const isRealAuth = Boolean(session) && session?.app_metadata?.provider !== "demo";
   const qc = useQueryClient();
   const parsed = useMemo(() => parseToss(value), [value]);
+  const blocked = parsed.chips.some((c) => c.kind === "unresolved" && c.value === "person");
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (!isRealAuth) {
-        throw new Error("Sign in with a real session to toss a Thing.");
-      }
-      const { data, error } = await supabase.rpc("create_thing", {
-        p_title: parsed.title,
-        p_context: context,
-        p_owner_importance: parsed.importance,
+      if (blocked) throw new Error("Pick a person — Coey won’t guess.");
+      return rpcCreateThing({
+        title: parsed.title,
+        context,
+        ownerImportance: parsed.importance,
+        listId,
+        assigneeActorId: parsed.assigneeId,
       });
-      if (error) throw error;
-      return data;
     },
     onSuccess: async () => {
       setTossed(true);
       setValue("");
+      await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
       await qc.invalidateQueries({ queryKey: ["court"] });
       toast.success("Tossed.");
       window.setTimeout(() => setTossed(false), 240);
@@ -94,7 +102,7 @@ export function MagicBox() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && value.trim()) void mutation.mutate();
           }}
-          placeholder="Toss a thought..."
+          placeholder={listName ? `Toss into ${listName}…` : "Toss a thought..."}
           className="h-full flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground"
           aria-label="Magic Box"
         />
