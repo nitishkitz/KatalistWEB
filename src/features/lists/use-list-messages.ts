@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { addListMessage, getListMessages, useLocalVersion } from "@/features/things/local-state";
+import { addListMessage, getListMessages } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { fetchProfileIdentities, matchProfile } from "@/features/people/directory";
 
 export type ListChatMessage = { id: string; body: string; author: string; at: string };
