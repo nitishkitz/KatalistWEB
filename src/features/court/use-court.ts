@@ -1,34 +1,15 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
-import { isActiveThing, partitionCourt, theirStateFor, type Thing, type Person } from "@/domain/thing";
+import { isActiveThing, partitionCourt, theirStateFor, type Thing } from "@/domain/thing";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { currentDemoActorId } from "@/features/demo/identities";
-import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { canDemoActorViewThing } from "@/features/demo/visibility";
+import { getMergedThings, getLists, useLocalVersion } from "@/features/things/local-state";
 import { isPreviewSession } from "@/lib/session-mode";
-
-type ActorRow = {
-  id: string;
-  profile_id: string | null;
-  profiles: { display_name: string; avatar_url: string | null } | null;
-};
-
-function toPerson(id: string, name: string | null, avatar?: string | null): Person {
-  const n = name || "Someone";
-  return {
-    id,
-    name: n,
-    initials: n
-      .split(" ")
-      .map((p) => p[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase(),
-    avatarUrl: avatar,
-  };
-}
+import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
 
 async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; myActorId: string | null }> {
   const { data: auth } = await supabase.auth.getUser();
@@ -54,16 +35,8 @@ async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; 
     actorIds.add(r.current_assignee_actor_id);
   }
 
-  const people = new Map<string, Person>();
-  if (actorIds.size) {
-    const { data: actorRows } = await supabase
-      .from("actors")
-      .select("id, profile_id, profiles(display_name, avatar_url)")
-      .in("id", [...actorIds]);
-    for (const a of (actorRows ?? []) as unknown as ActorRow[]) {
-      people.set(a.id, toPerson(a.id, a.profiles?.display_name ?? null, a.profiles?.avatar_url));
-    }
-  }
+  const people = await resolveActorPeople([...actorIds]);
+  const fallback = (id: string) => personOrSomeone(people, id);
 
   const listIds = [...new Set((rows ?? []).map((r) => r.list_id).filter(Boolean))] as string[];
   const listNames = new Map<string, string>();
@@ -71,8 +44,6 @@ async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; 
     const { data: lists } = await supabase.from("lists").select("id,name").in("id", listIds);
     for (const l of lists ?? []) listNames.set(l.id, l.name);
   }
-
-  const fallback = (id: string) => people.get(id) ?? toPerson(id, "Someone");
 
   const things: Thing[] = (rows ?? []).map((r) => ({
     id: r.id,
@@ -114,16 +85,17 @@ export function useCourt() {
 
   const source = useMemo(() => {
     if (preview) {
-      return {
-        things: getMergedThings().filter((t) => t.context === context),
-        myActorId: currentDemoActorId(),
-        live: false,
-      };
+      const me = currentDemoActorId();
+      const lists = getLists();
+      const things = getMergedThings()
+        .filter((t) => t.context === context)
+        .filter((t) => canDemoActorViewThing(t, me, lists));
+      return { things, myActorId: me, live: false as const };
     }
     return {
       things: query.data?.things ?? [],
       myActorId: query.data?.myActorId ?? null,
-      live: true,
+      live: true as const,
     };
   }, [preview, query.data, context]);
 
@@ -147,5 +119,6 @@ export function useCourt() {
       needs_attention: theirs.filter((t) => theirStateFor(t) === "needs_attention"),
     },
     refetch: query.refetch,
+    context,
   };
 }
