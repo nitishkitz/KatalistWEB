@@ -65,10 +65,19 @@ export function useNudges() {
     const rows: NudgeRow[] = [];
     const recent: RecentNudge[] = [];
     const allowed = new Set((nudgeable.data ?? []).map((n) => n.thing_id));
-    const recentlyIds = new Set((history.data ?? []).map((n) => n.thing_id));
+    const COOLDOWN_MS = 120 * 60 * 1000;
+    const latestByThing = new Map<string, { created_at: string; reason: string }>();
+    for (const n of history.data ?? []) {
+      if (!latestByThing.has(n.thing_id)) latestByThing.set(n.thing_id, { created_at: n.created_at, reason: n.reason });
+    }
+    const isLiveRecent = (thingId: string) => {
+      const hit = latestByThing.get(thingId);
+      if (!hit) return false;
+      return Date.now() - new Date(hit.created_at).getTime() < COOLDOWN_MS;
+    };
     for (const t of liveThings) {
       if (t.workStatus === "sorted" || t.workStatus === "cancelled") continue;
-      const recently = court.preview ? isRecentlyNudged(t.id) : recentlyIds.has(t.id);
+      const recently = court.preview ? isRecentlyNudged(t.id) : isLiveRecent(t.id);
       const { group, reason } = groupThing(t, recently);
       const caps = getThingCapabilities(t, court.myActorId);
       const can = court.preview ? caps.canNudge && demoCanNudge(t.id) : caps.canNudge && allowed.has(t.id);
@@ -79,14 +88,15 @@ export function useNudges() {
         recent.push({ id: t.id, title: t.title, person: t.assignee.name, when: "Just now", state: "Recently nudged" });
       }
     } else {
-      for (const n of history.data ?? []) {
-        const t = liveThings.find((x) => x.id === n.thing_id);
+      for (const [thingId, hit] of latestByThing) {
+        if (Date.now() - new Date(hit.created_at).getTime() >= COOLDOWN_MS) continue;
+        const t = liveThings.find((x) => x.id === thingId);
         recent.push({
-          id: n.thing_id,
+          id: thingId,
           title: t?.title ?? "Thing",
           person: t?.assignee.name ?? "",
-          when: new Date(n.created_at).toLocaleString(),
-          state: n.reason,
+          when: new Date(hit.created_at).toLocaleString(),
+          state: hit.reason,
         });
       }
     }
