@@ -1,11 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LogOut, Sparkles, User, Mail, Phone, Briefcase, ShieldCheck } from "lucide-react";
+import {
+  Bell,
+  Briefcase,
+  ChevronRight,
+  Home,
+  LogOut,
+  Palette,
+  Shield,
+  Sparkles,
+  Trophy,
+} from "lucide-react";
 import { toast } from "sonner";
-
 import { AppShell } from "@/components/layout/AppShell";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useSession, DEMO_PERSONAS, signInAsDemo } from "@/hooks/useSession";
+import { useSession } from "@/hooks/useSession";
+import { useAppContext } from "@/features/context/use-app-context";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/me")({
@@ -18,15 +26,49 @@ export const Route = createFileRoute("/me")({
   component: MePage,
 });
 
+const settings = [
+  {
+    id: "preferences",
+    title: "Preferences",
+    body: "Doorman breakthrough, nudge style, default Catch action",
+    icon: Sparkles,
+  },
+  {
+    id: "notifications",
+    title: "Notifications",
+    body: "Nudge reminders, daily momentum, weekly recap",
+    icon: Bell,
+  },
+  {
+    id: "appearance",
+    title: "Appearance",
+    body: "Theme, reduced motion, language",
+    icon: Palette,
+  },
+  {
+    id: "privacy",
+    title: "Privacy",
+    body: "Share activity, data export, connected accounts",
+    icon: Shield,
+  },
+  {
+    id: "subscription",
+    title: "Subscription",
+    body: "Plan, renewal, entitlements",
+    icon: Trophy,
+  },
+];
+
 function MePage() {
-  const { user, signOut, isDemo } = useSession();
+  const { user, signOut } = useSession();
+  const { context, setContext } = useAppContext();
   const navigate = useNavigate();
 
   const name =
     user?.user_metadata?.display_name ||
     user?.user_metadata?.full_name ||
     user?.email?.split("@")[0] ||
-    "User";
+    "Rahul Mehta";
 
   const role = user?.user_metadata?.role_label || "Member";
   const initials =
@@ -36,114 +78,141 @@ function MePage() {
       .map((n: string) => n[0])
       .slice(0, 2)
       .join("")
-      .toUpperCase() ||
-    "U";
+      .toUpperCase();
+
+  const email = user?.email || "rahul.mehta@email.com";
+  const phone = user?.phone || user?.user_metadata?.phone || "+1 (415) 555-0198";
 
   async function handleSignOut() {
     await signOut();
-    toast.success("Signed out successfully");
+    toast.success("Signed out");
     navigate({ to: "/auth", replace: true });
   }
 
   return (
-    <AppShell title="Me" subtitle="Profile and settings">
-      <div className="space-y-6 max-w-2xl">
-        {/* Profile Card */}
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <Avatar className="h-16 w-16 text-lg font-bold">
-                <AvatarImage src={user?.user_metadata?.avatar_url || ""} />
-                <AvatarFallback className="bg-primary/10 text-primary text-xl font-bold">
+    <AppShell title="Me" subtitle="Profile, Trophy, preferences and settings">
+      <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+        <div className="space-y-5">
+          {/* Identity */}
+          <section className="rounded-xl border border-border bg-card p-5">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <span className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800 text-xl font-bold text-white">
                   {initials}
-                </AvatarFallback>
-              </Avatar>
-              <div>
-                <div className="flex items-center gap-2">
+                </span>
+                <div>
                   <h2 className="text-xl font-bold text-foreground">{name}</h2>
-                  {isDemo && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                      <Sparkles className="h-3 w-3" /> Demo Persona
-                    </span>
-                  )}
+                  <p className="mt-0.5 text-sm text-muted-foreground">{role}</p>
+                  <p className="mt-2 text-[13px] text-muted-foreground">{email}</p>
+                  <p className="text-[13px] text-muted-foreground">{phone}</p>
+                  <p className="mt-1 text-[12px] text-muted-foreground">Member since Aug 2026</p>
                 </div>
-                <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                  <Briefcase className="h-3.5 w-3.5" />
-                  {role}
-                </p>
+              </div>
+
+              <div className="rounded-xl border border-border p-1">
+                <div className="flex">
+                  <button
+                    type="button"
+                    onClick={() => void setContext("work")}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium",
+                      context === "work" ? "bg-muted text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    <Briefcase className="h-3.5 w-3.5" />
+                    Work
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void setContext("home")}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[12px] font-medium",
+                      context === "home" ? "bg-muted text-foreground" : "text-muted-foreground",
+                    )}
+                  >
+                    <Home className="h-3.5 w-3.5" />
+                    Home
+                  </button>
+                </div>
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
+          </section>
+
+          {/* Trophy */}
+          <section className="rounded-xl border border-border bg-card p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-primary" />
+              <h3 className="text-[14px] font-semibold text-foreground">Trophy</h3>
+              <span className="text-[12px] text-muted-foreground">Personal movement only</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {[
+                ["Things Sorted", "48"],
+                ["Things Caught", "63"],
+                ["Catch Response Time", "14m"],
+                ["Current Streak", "6 days"],
+                ["Weekly Movement", "27"],
+                ["Recent Achievement", "Ship week"],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-lg border border-border/80 bg-background px-3 py-3">
+                  <p className="text-[11px] text-muted-foreground">{label}</p>
+                  <p className="mt-1 text-lg font-semibold text-foreground">{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Settings grid */}
+          <section className="grid gap-3 sm:grid-cols-2">
+            {settings.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className="flex items-start gap-3 rounded-xl border border-border bg-card p-4 text-left hover:bg-muted/40"
+              >
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-foreground">
+                  <s.icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-semibold text-foreground">{s.title}</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </span>
+                  <span className="mt-0.5 block text-[12px] text-muted-foreground">{s.body}</span>
+                </span>
+              </button>
+            ))}
+          </section>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              className="rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground hover:bg-muted"
+            >
+              Recently Shredded
+            </button>
+            <button
+              type="button"
               onClick={handleSignOut}
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[13px] text-destructive hover:bg-destructive/10"
             >
               <LogOut className="h-4 w-4" />
               Sign out
-            </Button>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 border-t border-border pt-4 text-sm">
-            <div className="flex items-center gap-2.5 text-muted-foreground">
-              <Phone className="h-4 w-4 text-primary" />
-              <span>{user?.phone || user?.user_metadata?.phone || "No phone linked"}</span>
-            </div>
-            <div className="flex items-center gap-2.5 text-muted-foreground">
-              <Mail className="h-4 w-4 text-primary" />
-              <span>{user?.email || "No email linked"}</span>
-            </div>
+            </button>
           </div>
         </div>
 
-        {/* Persona Switcher Card */}
-        <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" /> Switch Demo Persona
-          </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Switch between demo users instantly to test assignments and multi-user workflows.
+        {/* Coey insight */}
+        <aside className="h-fit rounded-xl border border-border bg-card p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <img src="/katalist-mark-app.png" alt="" className="h-5 w-5" />
+            <h3 className="text-[13px] font-semibold text-foreground">Coey insight</h3>
+          </div>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            “Steady week. Six-day streak, and your Catch time is under 15 minutes. Keep the
+            movement light — no need to force the lanes.”
           </p>
-
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {DEMO_PERSONAS.map((p) => {
-              const isCurrent = user?.email === p.email;
-              return (
-                <button
-                  key={p.key}
-                  onClick={() => {
-                    signInAsDemo(p);
-                    toast.success(`Switched to ${p.name}`);
-                  }}
-                  className={cn(
-                    "flex items-center justify-between rounded-xl border p-3 text-left transition-all",
-                    isCurrent
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                      : "border-border bg-background hover:border-primary/40 hover:bg-accent/40",
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold",
-                        p.color,
-                      )}
-                    >
-                      {p.initials}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{p.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{p.role}</p>
-                    </div>
-                  </div>
-                  {isCurrent && (
-                    <span className="text-[11px] font-semibold text-primary">Active</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        </aside>
       </div>
     </AppShell>
   );

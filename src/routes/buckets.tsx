@@ -1,7 +1,9 @@
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-
+import { ArrowRight, Filter, Lock, MoreHorizontal, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { EmptyState } from "@/components/katalist/EmptyState";
+import { bucketFixtures, type BucketCard } from "@/features/buckets/fixtures";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/buckets")({
   head: () => ({
@@ -13,16 +15,132 @@ export const Route = createFileRoute("/buckets")({
   component: BucketsPage,
 });
 
+function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean }) {
+  return (
+    <article
+      className={cn(
+        "group flex flex-col rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/30",
+        large ? "min-h-[210px]" : "min-h-[180px]",
+      )}
+    >
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className={cn("flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold text-white", bucket.color)}>
+            {bucket.name.slice(0, 1)}
+          </span>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-[14px] font-semibold text-foreground">{bucket.name}</h3>
+              <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-label="Private" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {bucket.thingCount} Things · {bucket.listCount} Lists
+            </p>
+          </div>
+        </div>
+        <button type="button" className="rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Bucket actions">
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </div>
+
+      <p className="mb-3 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">{bucket.description}</p>
+
+      <ul className="mb-3 flex-1 space-y-1.5">
+        {bucket.previews.slice(0, 3).map((p) => (
+          <li key={p.title} className="flex items-center gap-2 text-[12px] text-foreground">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+            <span className="truncate">{p.title}</span>
+            {p.state ? (
+              <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {p.state}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+
+      <div className="mt-auto flex items-center justify-between border-t border-border/70 pt-3">
+        <span className="text-[11px] text-muted-foreground">{bucket.updatedAt}</span>
+        <button type="button" className="inline-flex items-center gap-1 text-[12px] font-medium text-primary">
+          View bucket
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function BucketsPage() {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return bucketFixtures;
+    return bucketFixtures.filter(
+      (b) => b.name.toLowerCase().includes(q) || b.description.toLowerCase().includes(q),
+    );
+  }, [query]);
+
+  const pinned = filtered.filter((b) => b.pinned);
+  const rest = filtered.filter((b) => !b.pinned);
+
   return (
     <AppShell
       title="Buckets"
       subtitle="Your private focus spaces"
+      actions={
+        <button
+          type="button"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          <Plus className="h-4 w-4" />
+          Create Bucket
+        </button>
+      }
     >
-      <EmptyState
-        title="No buckets yet"
-        description="Create a bucket to privately organize your things."
-      />
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        <label className="flex h-9 flex-1 items-center gap-2 rounded-lg border border-border bg-card px-3 sm:max-w-sm">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search your buckets"
+            className="w-full bg-transparent text-[13px] outline-none"
+          />
+        </label>
+        <button
+          type="button"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground"
+        >
+          Sort: Recently updated
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground"
+        >
+          <Filter className="h-3.5 w-3.5" />
+          Filter
+        </button>
+      </div>
+
+      {pinned.length > 0 ? (
+        <section className="mb-7">
+          <h2 className="mb-3 katalist-section-title">Pinned Buckets</h2>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {pinned.map((b) => (
+              <BucketCardView key={b.id} bucket={b} large />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section>
+        <h2 className="mb-3 katalist-section-title">All Buckets</h2>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {rest.map((b) => (
+            <BucketCardView key={b.id} bucket={b} />
+          ))}
+        </div>
+      </section>
     </AppShell>
   );
 }

@@ -73,7 +73,7 @@ function AuthPage() {
   const navigate = useNavigate();
   const { session, loading } = useSession();
 
-  const [tab, setTab] = useState<"demo" | "otp" | "qr">("demo");
+  const [tab, setTab] = useState<"otp" | "qr" | "preview">("otp");
   const [channel, setChannel] = useState<Channel>("phone");
   const [dialCode, setDialCode] = useState("+91");
   const [phone, setPhone] = useState("");
@@ -210,12 +210,11 @@ function AuthPage() {
         {/* Auth card */}
         <div className="flex flex-col justify-center">
           <div className="rounded-2xl border border-border bg-card katalist-shadow">
-            <div className="grid grid-cols-3 border-b border-border">
+            <div className="grid grid-cols-2 border-b border-border">
               {(
                 [
-                  ["demo", "Demo (1-Click)", Sparkles],
-                  ["otp", "Phone / Email", Smartphone],
-                  ["qr", "Scan QR", QrCode],
+                  ["otp", "Phone / OTP", Smartphone],
+                  ["qr", "Scan QR to Login", QrCode],
                 ] as const
               ).map(([key, label, Icon]) => (
                 <button
@@ -235,15 +234,15 @@ function AuthPage() {
             </div>
 
             <div className="p-6">
-              {tab === "demo" ? (
+              {tab === "preview" ? (
                 <div>
                   <div className="flex items-center justify-between">
                     <div>
                       <h2 className="text-base font-semibold text-foreground">
-                        Select a Demo Persona
+                        Preview sample account
                       </h2>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        Instant 1-click login without SMS or email setup
+                        Local visual QA only — not production auth
                       </p>
                     </div>
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
@@ -430,11 +429,21 @@ function AuthPage() {
                       Open the Katalist mobile app and scan the QR code to login instantly.
                     </p>
                     <p className="mt-3 text-xs text-muted-foreground">
-                      QR login activates with the Katalist mobile app. Use Demo or Phone / Email for now.
+                      QR login uses a short-lived secure challenge with the Katalist mobile app. Integration boundary — use Phone / OTP when available.
                     </p>
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="border-t border-border px-6 py-3 text-center">
+              <button
+                type="button"
+                onClick={() => setTab("preview")}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Preview with sample account
+              </button>
             </div>
 
             <div className="border-t border-border px-6 py-4 text-center text-sm text-muted-foreground">
