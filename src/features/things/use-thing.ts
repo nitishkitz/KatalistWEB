@@ -3,7 +3,8 @@ import { keys } from "@/domain/query-keys";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { getThing, useLocalVersion } from "./local-state";
+import { getThing } from "./local-state";
+import { useLocalVersion } from "./use-local-version";
 import type { Thing } from "@/domain/thing";
 import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
 
