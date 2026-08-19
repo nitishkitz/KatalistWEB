@@ -62,6 +62,7 @@ export const courtFixtures: Thing[] = [
     workStatus: "under_progress",
     dueAt: at(17, 0),
     dueHasTime: true,
+    listId: "l1",
     listName: "Android Release",
   }),
   thing({
@@ -72,6 +73,7 @@ export const courtFixtures: Thing[] = [
     personalPace: "now",
     workStatus: "not_started",
     dueAt: at(12, 0),
+    listId: "l2",
     listName: "Mobile App Launch",
   }),
   thing({
@@ -82,6 +84,7 @@ export const courtFixtures: Thing[] = [
     personalPace: "now",
     workStatus: "under_progress",
     dueAt: at(16, 0),
+    listId: "l1",
     listName: "Android Release",
   }),
   thing({
@@ -92,6 +95,7 @@ export const courtFixtures: Thing[] = [
     personalPace: "now",
     workStatus: "not_started",
     dueAt: at(18, 0),
+    listId: "l1",
     listName: "Android Release",
   }),
   thing({
@@ -104,6 +108,7 @@ export const courtFixtures: Thing[] = [
     workStatus: "not_started",
     dueAt: at(16, 0),
     dueHasTime: true,
+    listId: "l2",
     listName: "Mobile App Launch",
     caughtAt: null,
   }),
@@ -115,6 +120,7 @@ export const courtFixtures: Thing[] = [
     personalPace: "next",
     workStatus: "under_progress",
     dueAt: days(1),
+    listId: "l3",
     listName: "Website Launch",
   }),
   thing({
@@ -125,6 +131,7 @@ export const courtFixtures: Thing[] = [
     personalPace: "next",
     workStatus: "not_started",
     dueAt: days(5),
+    listId: "l3",
     listName: "Website Launch",
   }),
   thing({
@@ -135,6 +142,7 @@ export const courtFixtures: Thing[] = [
     personalPace: "next",
     workStatus: "not_started",
     dueAt: days(6),
+    listId: "l3",
     listName: "Website Launch",
   }),
   ...Array.from({ length: 18 }, (_, i) =>
