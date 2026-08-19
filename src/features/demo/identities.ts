@@ -1,4 +1,3 @@
-import { getStoredDemoSession } from "@/hooks/useSession";
 import type { Person } from "@/domain/thing";
 
 export const DEMO_ACTOR_BY_KEY: Record<string, { id: string; name: string; initials: string }> = {
@@ -18,10 +17,26 @@ export function setDemoActorForTests(actorId: string | null) {
   demoActorOverride = actorId;
 }
 
+function personaKeyFromStorage(): string | undefined {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") return undefined;
+  try {
+    const raw = localStorage.getItem("katalist.demo_session");
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as {
+      user?: { id?: string; user_metadata?: { persona_key?: string } };
+    };
+    return (
+      parsed.user?.user_metadata?.persona_key ??
+      parsed.user?.id?.replace(/^demo-/, "")
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 export function currentDemoActorId(): string {
   if (demoActorOverride) return demoActorOverride;
-  const demo = getStoredDemoSession();
-  const key = (demo?.user.user_metadata?.persona_key as string | undefined) ?? demo?.user.id?.replace("demo-", "");
+  const key = personaKeyFromStorage();
   if (key && DEMO_ACTOR_BY_KEY[key]) return DEMO_ACTOR_BY_KEY[key]!.id;
   return "p-priya";
 }
