@@ -5,21 +5,8 @@ import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
 import { useCourt } from "@/features/court/use-court";
-import type { Thing, Person } from "@/domain/thing";
-
-function toPerson(id: string, name: string | null): Person {
-  const n = name || "Someone";
-  return {
-    id,
-    name: n,
-    initials: n
-      .split(" ")
-      .map((p) => p[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase(),
-  };
-}
+import type { Thing } from "@/domain/thing";
+import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
 
 export function useListThings(listId: string | undefined) {
   const { session } = useSession();
@@ -39,12 +26,20 @@ export function useListThings(listId: string | undefined) {
         )
         .eq("list_id", listId!);
       if (error) throw error;
+      const ids = new Set<string>();
+      for (const r of data ?? []) {
+        ids.add(r.creator_actor_id);
+        ids.add(r.owner_actor_id);
+        ids.add(r.current_assignee_actor_id);
+      }
+      const people = await resolveActorPeople([...ids]);
+      const fb = (id: string) => personOrSomeone(people, id);
       return (data ?? []).map((r) => ({
         id: r.id,
         title: r.title,
-        creator: toPerson(r.creator_actor_id, null),
-        owner: toPerson(r.owner_actor_id, null),
-        assignee: toPerson(r.current_assignee_actor_id, null),
+        creator: fb(r.creator_actor_id),
+        owner: fb(r.owner_actor_id),
+        assignee: fb(r.current_assignee_actor_id),
         acknowledgement: r.acknowledgement,
         workStatus: r.work_status,
         ownerImportance: r.owner_importance,
@@ -63,7 +58,8 @@ export function useListThings(listId: string | undefined) {
   });
 
   const things = useMemo(() => {
-    if (preview) return getMergedThings().filter((t) => t.listId === listId || t.listName);
+    // List identity is UUID only — never listName
+    if (preview) return getMergedThings().filter((t) => t.listId === listId);
     return query.data ?? [];
   }, [preview, query.data, listId, version]);
 

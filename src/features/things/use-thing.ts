@@ -4,22 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { getThing, useLocalVersion } from "./local-state";
-import type { Person, Thing } from "@/domain/thing";
-
-function toPerson(id: string, name: string | null, avatar?: string | null): Person {
-  const n = name || "Someone";
-  return {
-    id,
-    name: n,
-    initials: n
-      .split(" ")
-      .map((p) => p[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase(),
-    avatarUrl: avatar,
-  };
-}
+import type { Thing } from "@/domain/thing";
+import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
 
 async function fetchThing(thingId: string): Promise<Thing | null> {
   const { data, error } = await supabase
@@ -33,16 +19,8 @@ async function fetchThing(thingId: string): Promise<Thing | null> {
   if (!data) return null;
 
   const ids = [data.creator_actor_id, data.owner_actor_id, data.current_assignee_actor_id];
-  const { data: actors } = await supabase
-    .from("actors")
-    .select("id, profiles(display_name, avatar_url)")
-    .in("id", ids);
-  const people = new Map<string, Person>();
-  for (const a of actors ?? []) {
-    const profile = (a as { profiles?: { display_name?: string; avatar_url?: string | null } }).profiles;
-    people.set(a.id, toPerson(a.id, profile?.display_name ?? null, profile?.avatar_url));
-  }
-  const fallback = (id: string) => people.get(id) ?? toPerson(id, "Someone");
+  const people = await resolveActorPeople(ids);
+  const fallback = (id: string) => personOrSomeone(people, id);
   let listName: string | null = null;
   if (data.list_id) {
     const { data: list } = await supabase.from("lists").select("name").eq("id", data.list_id).maybeSingle();
