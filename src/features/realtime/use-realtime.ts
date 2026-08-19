@@ -25,6 +25,7 @@ export function useRealtimeInvalidation() {
         void qc.invalidateQueries({ queryKey: ["nudge-history"] });
         void qc.invalidateQueries({ queryKey: ["trophy"] });
         void qc.invalidateQueries({ queryKey: ["notifications"] });
+        void qc.invalidateQueries({ queryKey: ["notifications-unread"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "thing_comments" }, () => {
         void qc.invalidateQueries({ queryKey: ["thing-comments"] });
@@ -44,6 +45,7 @@ export function useRealtimeInvalidation() {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => {
         void qc.invalidateQueries({ queryKey: ["notifications"] });
+        void qc.invalidateQueries({ queryKey: ["notifications-unread"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "list_messages" }, () => {
         void qc.invalidateQueries({ queryKey: ["list-messages"] });
