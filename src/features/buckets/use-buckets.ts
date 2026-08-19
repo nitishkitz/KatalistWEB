@@ -5,7 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
-import { getBuckets, useLocalVersion } from "@/features/things/local-state";
+import { getBuckets } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcCreateBucket } from "@/features/things/rpc";
 import type { BucketCard } from "./fixtures";
 
@@ -34,6 +35,7 @@ async function fetchBuckets(context: "work" | "home"): Promise<BucketCard[]> {
       thingCount: refs.filter((r) => r.thing_id).length,
       listCount: refs.filter((r) => r.list_id).length,
       updatedAt: new Date(b.updated_at).toLocaleString(),
+      context: (b.context === "home" ? "home" : "work") as "work" | "home",
       previews: [],
     } satisfies BucketCard;
   });
@@ -94,6 +96,7 @@ export function useBucket(bucketId: string | undefined) {
         thingCount: (items ?? []).filter((r) => r.thing_id).length,
         listCount: (items ?? []).filter((r) => r.list_id).length,
         updatedAt: new Date(data.updated_at).toLocaleString(),
+        context: (data.context === "home" ? "home" : "work") as "work" | "home",
         previews: [],
       };
     },
