@@ -83,3 +83,12 @@ test("View Only cannot workflow-mutate", () => {
   assert.equal(caps.canSort, false);
   assert.equal(caps.canReassign, false);
 });
+
+test("Due is owner only", () => {
+  const waiting = thing({});
+  assert.equal(getThingCapabilities(waiting, "a").canSetDue, true);
+  assert.equal(getThingCapabilities(waiting, "b").canSetDue, false);
+  const caught = thing({ acknowledgement: "caught" });
+  assert.equal(getThingCapabilities(caught, "a").canSetDue, true);
+  assert.equal(getThingCapabilities(caught, "b").canSetDue, false);
+});

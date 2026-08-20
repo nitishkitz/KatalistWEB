@@ -58,7 +58,7 @@ export function useBuckets() {
   const buckets = useMemo(() => {
     if (preview) return getBuckets(context);
     return query.data ?? [];
-  }, [preview, query.data, version]);
+  }, [preview, query.data, version, context]);
 
   const create = useMutation({
     mutationFn: (name: string) => rpcCreateBucket(name, context),
