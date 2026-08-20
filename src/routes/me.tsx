@@ -17,7 +17,6 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useSession } from "@/hooks/useSession";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "@/features/context/use-app-context";
-import { getMergedThings, useLocalVersion } from "@/features/things/local-state";
 import { useProfile, useUploadAvatar } from "@/features/me/use-profile";
 import { useTrophy } from "@/features/me/use-trophy";
 import { useAvatarUrl } from "@/features/people/directory";
@@ -78,7 +77,6 @@ function MePage() {
   const [reduced, setReduced] = useState(() =>
     typeof window === "undefined" ? false : localStorage.getItem("katalist.reduced_motion") === "1",
   );
-  const things = getMergedThings();
   const sorted = stats.sorted;
   const caught = stats.caught;
   const waiting = stats.waiting;
@@ -227,7 +225,7 @@ function MePage() {
               className="rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground hover:bg-muted"
               onClick={() => {
                 const first = stats.shredded[0];
-                if (first) void restore(first.id);
+                if (first) void restore(first.id, first.kind);
               }}
             >
               Recently Shredded{stats.shredded.length ? ` (${stats.shredded.length})` : ""}
@@ -261,7 +259,7 @@ function MePage() {
               {stats.shredded.map((s) => (
                 <li key={s.id} className="flex items-center justify-between text-[12px]">
                   <span>{s.title}</span>
-                  <button type="button" className="text-primary" onClick={() => void restore(s.id)}>
+                  <button type="button" className="text-primary" onClick={() => void restore(s.id, s.kind)}>
                     Restore
                   </button>
                 </li>

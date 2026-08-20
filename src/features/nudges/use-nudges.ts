@@ -4,7 +4,8 @@ import { useCourt } from "@/features/court/use-court";
 import { isActiveThing, theirStateFor, type Thing } from "@/domain/thing";
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { NudgeGroup, NudgeRow, RecentNudge } from "./fixtures";
-import { isRecentlyNudged, canNudge as demoCanNudge, getMergedThings, useLocalVersion } from "@/features/things/local-state";
+import { isRecentlyNudged, canNudge as demoCanNudge } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { supabase } from "@/integrations/supabase/client";
 import { keys } from "@/domain/query-keys";
 
@@ -35,7 +36,7 @@ function groupThing(t: Thing, recently: boolean): { group: NudgeGroup; reason: s
 export function useNudges() {
   const court = useCourt();
   useLocalVersion();
-  const liveThings = (court.preview ? getMergedThings() : court.all).filter(isActiveThing);
+  const liveThings = court.all.filter(isActiveThing);
 
   const nudgeable = useQuery({
     queryKey: keys.nudges(undefined, "work"),

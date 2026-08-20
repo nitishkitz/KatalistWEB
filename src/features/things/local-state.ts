@@ -198,6 +198,7 @@ export function tossLocalThing(input: {
 }
 
 export function setDueLocal(id: string, dueAt: string | null, dueHasTime: boolean) {
+  requireCap(id, "canSetDue");
   patchThing(id, { dueAt, dueHasTime }, "due_changed");
 }
 export function reassignLocal(id: string, assigneeId: string) {

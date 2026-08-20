@@ -25,9 +25,9 @@ export const bucketFixtures: BucketCard[] = [
     ownerActorId: "p-priya",
     context: "work",
     previews: [
-      { title: "Finalize Play Store wording", kind: "thing", state: "NOW" },
-      { title: "Prepare release notes", kind: "thing", state: "Progress" },
-      { title: "Android Release", kind: "list" },
+      { title: "Finalize Play Store wording", kind: "thing", state: "NOW", thingId: "t1" },
+      { title: "Prepare release notes", kind: "thing", state: "Progress", thingId: "t3" },
+      { title: "Android Release", kind: "list", listId: "l1" },
     ],
   },
   {
@@ -42,9 +42,9 @@ export const bucketFixtures: BucketCard[] = [
     ownerActorId: "p-priya",
     context: "work",
     previews: [
-      { title: "Review website launch copy", kind: "thing", state: "NEXT" },
-      { title: "Book launch photographer", kind: "thing", state: "NEXT" },
-      { title: "Website Launch", kind: "list" },
+      { title: "Review website launch copy", kind: "thing", state: "NEXT", thingId: "t6" },
+      { title: "Book launch photographer", kind: "thing", state: "NEXT", thingId: "t7" },
+      { title: "Website Launch", kind: "list", listId: "l3" },
     ],
   },
   {
@@ -58,10 +58,7 @@ export const bucketFixtures: BucketCard[] = [
     updatedAt: "Updated yesterday",
     ownerActorId: "p-priya",
     context: "home",
-    previews: [
-      { title: "Renew insurance documents", kind: "thing", state: "LATER" },
-      { title: "Schedule AC service", kind: "thing", state: "NEXT" },
-    ],
+    previews: [],
   },
   {
     id: "b4",
@@ -75,8 +72,7 @@ export const bucketFixtures: BucketCard[] = [
     ownerActorId: "p-priya",
     context: "work",
     previews: [
-      { title: "Call vendor for shoot confirmation", kind: "thing", state: "NOW" },
-      { title: "Waiting on printer quote", kind: "thing", state: "Waiting" },
+      { title: "Call vendor for shoot confirmation", kind: "thing", state: "NOW", thingId: "t2" },
     ],
   },
   {
@@ -91,8 +87,7 @@ export const bucketFixtures: BucketCard[] = [
     ownerActorId: "p-priya",
     context: "work",
     previews: [
-      { title: "Q3 Marketing Plan", kind: "list" },
-      { title: "Draft OKR summary", kind: "thing", state: "LATER" },
+      { title: "Q3 Marketing Plan", kind: "list", listId: "l4" },
     ],
   },
   {
@@ -106,8 +101,6 @@ export const bucketFixtures: BucketCard[] = [
     updatedAt: "Updated 1w ago",
     ownerActorId: "p-priya",
     context: "work",
-    previews: [
-      { title: "Share access checklist", kind: "thing", state: "NEXT" },
-    ],
+    previews: [],
   },
 ];

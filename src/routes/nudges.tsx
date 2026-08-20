@@ -8,7 +8,7 @@ import { useCourt } from "@/features/court/use-court";
 import { cn } from "@/lib/utils";
 import { rpcNudgeThing } from "@/features/things/rpc";
 import { toast } from "sonner";
-import { useLocalVersion } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import { useThing } from "@/features/things/use-thing";
 import { useQueryClient } from "@tanstack/react-query";
@@ -134,7 +134,7 @@ function NudgesPage() {
                             void qc.invalidateQueries({ queryKey: ["thing-activity"] });
                             void qc.invalidateQueries({ queryKey: ["notifications"] });
                           },
-                          (err) => toast.error(domainErrorMessage(err)),
+                          (err: unknown) => toast.error(domainErrorMessage(err)),
                         );
                       }}
                     >

@@ -93,7 +93,7 @@ export function ThingRow({
                 onClick={() =>
                   void rpcCatchThing(thing.id).then(
                     () => toast.success("Caught."),
-                    (e) => toast.error(domainErrorMessage(e)),
+                    (e: unknown) => toast.error(domainErrorMessage(e)),
                   )
                 }
               >
@@ -107,7 +107,7 @@ export function ThingRow({
                 onClick={() =>
                   void rpcNudgeThing(thing.id).then(
                     () => toast.success("Just a gentle paw tap on this one."),
-                    (e) => toast.error(domainErrorMessage(e)),
+                    (e: unknown) => toast.error(domainErrorMessage(e)),
                   )
                 }
               >
@@ -121,7 +121,7 @@ export function ThingRow({
                 onClick={() =>
                   void rpcSortThing(thing.id).then(
                     () => toast.success("Nicely sorted."),
-                    (e) => toast.error(domainErrorMessage(e)),
+                    (e: unknown) => toast.error(domainErrorMessage(e)),
                   )
                 }
               >

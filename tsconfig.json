@@ -13,5 +13,13 @@
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src", "server"]
+  "include": ["src", "server"],
+  "exclude": [
+    "src/components/ui/aspect-ratio.tsx",
+    "src/components/ui/carousel.tsx",
+    "src/components/ui/context-menu.tsx",
+    "src/components/ui/hover-card.tsx",
+    "src/components/ui/menubar.tsx",
+    "src/components/ui/navigation-menu.tsx"
+  ]
 }

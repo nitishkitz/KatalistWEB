@@ -1647,6 +1647,16 @@ export type Database = {
         Args: { p_list_id: string; p_profile_id: string }
         Returns: boolean
       }
+      resolve_actor_identities: {
+        Args: {
+          p_actor_ids: string[]
+        }
+        Returns: {
+          actor_id: string
+          display_name: string | null
+          avatar_url: string | null
+        }[]
+      }
       restore_for_me: {
         Args: {
           p_object_id: string

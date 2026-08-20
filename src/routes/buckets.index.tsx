@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ArrowRight, Filter, Lock, MoreHorizontal, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { type BucketCard } from "@/features/buckets/fixtures";
-import { useLocalVersion } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { useBuckets } from "@/features/buckets/use-buckets";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";

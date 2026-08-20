@@ -5,7 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
-import { createListLocal, getLists, useLocalVersion } from "@/features/things/local-state";
+import { createListLocal, getLists } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcCreateList } from "@/features/things/rpc";
 import type { ListRow } from "./fixtures";
 

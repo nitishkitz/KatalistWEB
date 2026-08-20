@@ -7,7 +7,8 @@ import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { currentDemoActorId } from "@/features/demo/identities";
 import { canDemoActorViewThing } from "@/features/demo/visibility";
-import { getMergedThings, getLists, useLocalVersion } from "@/features/things/local-state";
+import { getMergedThings, getLists } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPreviewSession } from "@/lib/session-mode";
 import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
 

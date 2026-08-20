@@ -72,7 +72,7 @@ export async function rpcSetDue(thingId: string, dueAt: string, dueHasTime: bool
 
 export async function rpcReassign(thingId: string, assigneeActorId: string) {
   return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("reassign_thing", { p_thing_id: thingId, p_assignee_actor_id: assigneeActorId })),
+    live: () => liveRpc(() => supabase.rpc("reassign_thing", { p_thing_id: thingId, p_new_assignee_actor_id: assigneeActorId })),
     preview: () => {
       reassignLocal(thingId, assigneeActorId);
       return null as never;
@@ -80,7 +80,10 @@ export async function rpcReassign(thingId: string, assigneeActorId: string) {
   });
 }
 
-export async function rpcNudge(thingId: string, reason = "gentle") {
+export async function rpcNudge(
+  thingId: string,
+  reason: "waiting_for_catch" | "quiet" | "due_soon" | "stale" | "repeated_handoff" = "quiet",
+) {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("nudge_thing", { p_thing_id: thingId, p_reason: reason })),
     preview: () => {
@@ -96,19 +99,21 @@ export async function rpcTossThing(input: {
   ownerImportance?: Importance;
   listId?: string | null;
   assigneeId?: string;
+  assigneeActorId?: string;
   dueAt?: string | null;
   dueHasTime?: boolean;
 }) {
+  const assigneeId = input.assigneeId ?? input.assigneeActorId;
   return runDomainMutation({
     live: () =>
       liveRpc(() =>
-        supabase.rpc("toss_thing", {
+        supabase.rpc("create_thing", {
           p_title: input.title,
           p_context: input.context,
           p_owner_importance: input.ownerImportance ?? "next",
-          p_list_id: input.listId ?? null,
-          p_assignee_actor_id: input.assigneeId ?? null,
-          p_due_at: input.dueAt ?? null,
+          p_list_id: input.listId ?? undefined,
+          p_assignee_actor_id: assigneeId ?? undefined,
+          p_due_at: input.dueAt ?? undefined,
           p_due_has_time: input.dueHasTime ?? false,
         }),
       ),
@@ -118,7 +123,7 @@ export async function rpcTossThing(input: {
         context: input.context,
         ownerImportance: input.ownerImportance,
         listId: input.listId,
-        assigneeId: input.assigneeId,
+        assigneeId,
         dueAt: input.dueAt ?? undefined,
         dueHasTime: input.dueHasTime,
       }) as never,
@@ -211,3 +216,14 @@ export async function rpcComment(thingId: string, body: string) {
 export function starLocal(thingId: string, starred: boolean) {
   patchThing(thingId, { starred });
 }
+
+export const rpcNudgeThing = rpcNudge;
+export const rpcReassignThing = rpcReassign;
+export const rpcCreateThing = rpcTossThing;
+export async function rpcSortThing(thingId: string) {
+  return rpcSetWorkStatus(thingId, "sorted");
+}
+export async function rpcCancelThing(thingId: string) {
+  return rpcSetWorkStatus(thingId, "cancelled");
+}
+

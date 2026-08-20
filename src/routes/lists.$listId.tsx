@@ -6,7 +6,7 @@ import { ThingRow } from "@/components/katalist/ThingRow";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
-import { useLocalVersion } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { useListMessages } from "@/features/lists/use-list-messages";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";

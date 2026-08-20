@@ -3,7 +3,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Filter, MoreHorizontal, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { type ListRow } from "@/features/lists/fixtures";
-import { useLocalVersion } from "@/features/things/local-state";
+import { useLocalVersion } from "@/features/things/use-local-version";
 import { useAppContext } from "@/features/context/use-app-context";
 import { useLists } from "@/features/lists/use-lists";
 import { domainErrorMessage } from "@/lib/domain-error";
