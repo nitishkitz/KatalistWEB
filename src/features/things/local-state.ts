@@ -330,6 +330,15 @@ export function getLists(): ListRow[] {
     .filter((l) => !shreddedSetFor(me).has(`list:${l.id}`));
 }
 
+/** Access-based Thing set for demo (includes Sorted/Cancelled). Independent of Court lanes. */
+export function accessibleDemoThings(context?: "work" | "home"): Thing[] {
+  const me = currentDemoActorId();
+  const lists = getLists();
+  return getMergedThings(me)
+    .filter((t) => (context ? t.context === context : true))
+    .filter((t) => canDemoActorViewThing(t, me, lists));
+}
+
 export function createListLocal(name: string, context: "work" | "home"): ListRow {
   const me = currentDemoPerson();
   const row: ListRow = {
@@ -396,7 +405,21 @@ export function createBucketLocal(name: string, context: "work" | "home" = "work
   return row;
 }
 
+function ownedBucket(bucketId: string): BucketCard | undefined {
+  const me = currentDemoActorId();
+  const bucket = getBuckets().find((b) => b.id === bucketId);
+  if (!bucket || (bucket.ownerActorId && bucket.ownerActorId !== me)) return undefined;
+  return bucket;
+}
+
+function requireOwnedBucket(bucketId: string): BucketCard {
+  const bucket = ownedBucket(bucketId);
+  if (!bucket) throw new Error("Bucket not found");
+  return bucket;
+}
+
 export function addBucketRef(bucketId: string, item: BucketItem) {
+  requireOwnedBucket(bucketId);
   const existing = getBucketRefs(bucketId);
   if (item.thingId && existing.some((i) => i.thingId === item.thingId)) return;
   if (item.listId && existing.some((i) => i.listId === item.listId)) return;
@@ -405,6 +428,7 @@ export function addBucketRef(bucketId: string, item: BucketItem) {
 }
 
 export function removeBucketRef(bucketId: string, thingId?: string, listId?: string) {
+  requireOwnedBucket(bucketId);
   bucketItems.set(
     bucketId,
     (bucketItems.get(bucketId) ?? []).filter((i) => {
@@ -417,6 +441,7 @@ export function removeBucketRef(bucketId: string, thingId?: string, listId?: str
 }
 
 export function getBucketRefs(bucketId: string): BucketItem[] {
+  if (!ownedBucket(bucketId)) return [];
   const extra = bucketItems.get(bucketId) ?? [];
   const fixture = bucketFixtures.find((b) => b.id === bucketId);
   const fromFixture =
@@ -450,11 +475,7 @@ export function getListById(id: string): ListRow | undefined {
 export function renameBucketLocal(bucketId: string, name: string) {
   const trimmed = name.trim();
   if (!trimmed) throw new Error("A Bucket needs a name.");
-  const me = currentDemoActorId();
-  const bucket = getBuckets().find((b) => b.id === bucketId);
-  if (!bucket || (bucket.ownerActorId && bucket.ownerActorId !== me)) {
-    throw new Error("Bucket not found");
-  }
+  requireOwnedBucket(bucketId);
   const clash = getBuckets().some(
     (b) => b.id !== bucketId && b.name.trim().toLowerCase() === trimmed.toLowerCase(),
   );
@@ -465,11 +486,8 @@ export function renameBucketLocal(bucketId: string, name: string) {
 }
 
 export function deleteBucketLocal(bucketId: string) {
+  requireOwnedBucket(bucketId);
   const me = currentDemoActorId();
-  const bucket = getBuckets().find((b) => b.id === bucketId);
-  if (!bucket || (bucket.ownerActorId && bucket.ownerActorId !== me)) {
-    throw new Error("Bucket not found");
-  }
   extraBuckets = extraBuckets.filter((b) => b.id !== bucketId);
   if (!deletedBucketIdsByActor.has(me)) deletedBucketIdsByActor.set(me, new Set());
   deletedBucketIdsByActor.get(me)!.add(bucketId);

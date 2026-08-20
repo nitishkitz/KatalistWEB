@@ -3,24 +3,8 @@ import { afterEach, test } from "node:test";
 import { isActiveThing, partitionCourt } from "@/domain/thing";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { setDemoActorForTests } from "@/features/demo/identities";
-import {
-  addBucketRef,
-  catchLocal,
-  createBucketLocal,
-  createListLocal,
-  deleteBucketLocal,
-  getBucketRefs,
-  getBuckets,
-  getListById,
-  getThing,
-  removeBucketRef,
-  renameBucketLocal,
-  resetDemoLocalStateForTests,
-  setImportanceLocal,
-  setPaceLocal,
-  setStatusLocal,
-  tossLocalThing,
-} from "@/features/things/local-state";
+import { accessibleDemoThings, addBucketRef, catchLocal, createBucketLocal, createListLocal, deleteBucketLocal, getBucketRefs, getBuckets, getListById, getThing, removeBucketRef, renameBucketLocal, resetDemoLocalStateForTests, setImportanceLocal, setPaceLocal, setStatusLocal, tossLocalThing } from "@/features/things/local-state";
+import { bucketItemsSurface } from "@/features/buckets/bucket-items-surface";
 
 afterEach(() => {
   resetDemoLocalStateForTests();
@@ -125,12 +109,43 @@ test("SCENARIO F — Bucket is private to its owner persona", () => {
   const thing = tossLocalThing({ title: "Hidden membership", context: "work" });
   addBucketRef(bucket.id, { thingId: thing.id, title: thing.title, kind: "thing" });
   assert.ok(getBuckets("work").some((b) => b.id === bucket.id && b.name === "Priya Private"));
+  assert.ok(getBucketRefs(bucket.id).some((r) => r.thingId === thing.id));
 
   setDemoActorForTests("p-arjun");
   assert.equal(getBuckets("work").some((b) => b.id === bucket.id), false);
   assert.equal(getBuckets().some((b) => b.name === "Priya Private"), false);
+  assert.equal(getBucketRefs(bucket.id).length, 0);
+  assert.equal(getBucketRefs(bucket.id).some((r) => r.thingId === thing.id), false);
+  assert.throws(() => addBucketRef(bucket.id, { thingId: thing.id, title: thing.title, kind: "thing" }));
+  assert.throws(() => removeBucketRef(bucket.id, thing.id));
   assert.throws(() => renameBucketLocal(bucket.id, "Hijack"));
   assert.throws(() => deleteBucketLocal(bucket.id));
+
+  setDemoActorForTests("p-priya");
+  assert.ok(getBucketRefs(bucket.id).some((r) => r.thingId === thing.id));
+  addBucketRef(bucket.id, { thingId: thing.id, title: thing.title, kind: "thing" });
+  assert.equal(getBucketRefs(bucket.id).filter((r) => r.thingId === thing.id).length, 1);
+  removeBucketRef(bucket.id, thing.id);
+  assert.equal(getBucketRefs(bucket.id).some((r) => r.thingId === thing.id), false);
+  addBucketRef(bucket.id, { thingId: thing.id, title: thing.title, kind: "thing" });
+});
+
+test("Sorted Thing is eligible for Bucket add-reference even when not in Court", () => {
+  setDemoActorForTests("p-priya");
+  const thing = tossLocalThing({ title: "Already sorted", context: "work" });
+  setStatusLocal(thing.id, "sorted");
+  assert.equal(isActiveThing(getThing(thing.id)), false);
+  const court = partitionCourt([getThing(thing.id)], "p-priya");
+  assert.equal(court.now.length + court.next.length + court.later.length + court.theirs.length, 0);
+  const accessible = accessibleDemoThings("work");
+  assert.ok(accessible.some((t) => t.id === thing.id && t.workStatus === "sorted"));
+});
+
+test("Bucket items error is not treated as empty", () => {
+  assert.equal(bucketItemsSurface({ itemsLoading: true, itemsError: new Error("x"), itemCount: 0 }), "loading");
+  assert.equal(bucketItemsSurface({ itemsLoading: false, itemsError: new Error("x"), itemCount: 0 }), "error");
+  assert.equal(bucketItemsSurface({ itemsLoading: false, itemsError: null, itemCount: 0 }), "empty");
+  assert.equal(bucketItemsSurface({ itemsLoading: false, itemsError: null, itemCount: 2 }), "data");
 });
 
 test("SCENARIO G — rename keeps id, context, and references", () => {

@@ -2,10 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { getBucketRefs, getListById, getThing } from "@/features/things/local-state";
+import { accessibleDemoThings, getBucketRefs, getListById, getThing } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcAddToBucket, rpcRemoveFromBucket } from "@/features/things/rpc";
-import { useCourt } from "@/features/court/use-court";
+import { useAppContext } from "@/features/context/use-app-context";
 import { useLists } from "@/features/lists/use-lists";
 import { keys } from "@/domain/query-keys";
 import type { Thing } from "@/domain/thing";
@@ -89,9 +89,27 @@ function resolveDemoItems(bucketId: string): BucketItem[] {
 }
 
 export function useAccessibleThings() {
-  const court = useCourt();
-  useLocalVersion();
-  return court.all;
+  const { session, user } = useSession();
+  const preview = isPreviewSession(session);
+  const { context } = useAppContext();
+  const version = useLocalVersion();
+
+  const query = useQuery({
+    queryKey: keys.accessibleThings(user?.id, context),
+    enabled: Boolean(user) && !preview,
+    queryFn: async (): Promise<Thing[]> => {
+      const { data, error } = await supabase.from("things").select(THING_COLUMNS).eq("context", context);
+      if (error) throw error;
+      return mapDbThingRows((data ?? []) as DbThingRow[]);
+    },
+    staleTime: 15_000,
+  });
+
+  if (preview) {
+    void version;
+    return accessibleDemoThings(context);
+  }
+  return query.data ?? [];
 }
 
 export function useAccessibleLists() {
@@ -160,5 +178,3 @@ export function useBucketItems(bucketId: string | undefined) {
   const items: BucketItem[] = preview && bucketId ? resolveDemoItems(bucketId) : (query.data ?? []);
   return { items, add, remove, isLoading: !preview && query.isLoading, error: query.error };
 }
-
-export type { Thing };

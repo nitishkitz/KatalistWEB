@@ -5,6 +5,7 @@ import { Lock, MoreHorizontal, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useBucket } from "@/features/buckets/use-buckets";
 import { useAccessibleLists, useAccessibleThings, useBucketItems, type BucketItem } from "@/features/buckets/use-bucket-items";
+import { bucketItemsSurface } from "@/features/buckets/bucket-items-surface";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import { useThing } from "@/features/things/use-thing";
 import { ImportanceBadge, PaceBadge } from "@/components/katalist/ImportanceBadge";
@@ -103,7 +104,7 @@ function BucketDetailPage() {
   const { bucketId } = Route.useParams();
   const navigate = useNavigate();
   const { bucket, isLoading, error, rename, remove: deleteBucket } = useBucket(bucketId);
-  const { items, add, remove, isLoading: itemsLoading } = useBucketItems(bucketId);
+  const { items, add, remove, isLoading: itemsLoading, error: itemsError } = useBucketItems(bucketId);
   const things = useAccessibleThings();
   const lists = useAccessibleLists();
   const [q, setQ] = useState("");
@@ -169,6 +170,11 @@ function BucketDetailPage() {
 
   const thingCount = items.filter((i) => i.kind === "thing").length;
   const listCount = items.filter((i) => i.kind === "list").length;
+  const itemsSurface = bucketItemsSurface({
+    itemsLoading,
+    itemsError,
+    itemCount: items.length,
+  });
 
   return (
     <AppShell title={bucket.name} subtitle="Private focus space. References only.">
@@ -308,9 +314,11 @@ function BucketDetailPage() {
         </Popover>
       </div>
 
-      {itemsLoading ? (
+      {itemsSurface === "loading" ? (
         <p className="text-sm text-muted-foreground">Loading references…</p>
-      ) : items.length === 0 ? (
+      ) : itemsSurface === "error" ? (
+        <p className="text-sm text-muted-foreground">{domainErrorMessage(itemsError)}</p>
+      ) : itemsSurface === "empty" ? (
         <div className="rounded-xl border border-dashed border-border px-5 py-10 text-center">
           <p className="text-[14px] font-medium">This Bucket is empty.</p>
           <p className="mt-1 text-[13px] text-muted-foreground">Add a Thing or List you already have access to.</p>

@@ -9,6 +9,8 @@ export const keys = {
     ["buckets", profileId, context] as const,
   bucket: (bucketId: string) => ["bucket", bucketId] as const,
   bucketItems: (bucketId: string) => ["bucket-items", bucketId] as const,
+  accessibleThings: (profileId: string | undefined, context: string) =>
+    ["accessible-things", profileId, context] as const,
   nudges: (profileId: string | undefined, context: string) =>
     ["nudges", profileId, context] as const,
   profile: (profileId: string | undefined) => ["profile", profileId] as const,

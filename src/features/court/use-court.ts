@@ -6,8 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { currentDemoActorId } from "@/features/demo/identities";
-import { canDemoActorViewThing } from "@/features/demo/visibility";
-import { getMergedThings, getLists } from "@/features/things/local-state";
+import { accessibleDemoThings } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPreviewSession } from "@/lib/session-mode";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
@@ -47,11 +46,7 @@ export function useCourt() {
   const source = useMemo(() => {
     if (preview) {
       const me = currentDemoActorId();
-      const lists = getLists();
-      const things = getMergedThings()
-        .filter((t) => t.context === context)
-        .filter((t) => canDemoActorViewThing(t, me, lists));
-      return { things, myActorId: me, live: false as const };
+      return { things: accessibleDemoThings(context), myActorId: me, live: false as const };
     }
     return {
       things: query.data?.things ?? [],
