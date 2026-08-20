@@ -190,10 +190,10 @@ export function tossLocalThing(input: {
     creator: me,
     owner: me,
     assignee,
-    acknowledgement: assignee.id === me.id ? "caught" : "waiting_for_catch",
+    acknowledgement: "waiting_for_catch",
     workStatus: "not_started",
     ownerImportance: input.ownerImportance ?? "next",
-    personalPace: assignee.id === me.id ? "next" : null,
+    personalPace: null,
     dueAt: input.dueAt ?? null,
     dueHasTime: Boolean(input.dueHasTime),
     context,
@@ -201,7 +201,7 @@ export function tossLocalThing(input: {
     listName,
     cancelledAt: null,
     sortedAt: null,
-    caughtAt: assignee.id === me.id ? new Date().toISOString() : null,
+    caughtAt: null,
     updatedAt: new Date().toISOString(),
   };
   extras = [thing, ...extras];

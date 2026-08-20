@@ -36,7 +36,7 @@ function groupThing(t: Thing, recently: boolean): { group: NudgeGroup; reason: s
 export function useNudges() {
   const court = useCourt();
   useLocalVersion();
-  const liveThings = court.all.filter(isActiveThing);
+  const liveThings = court.theirs.filter(isActiveThing);
 
   const nudgeable = useQuery({
     queryKey: keys.nudges(undefined, "work"),
@@ -92,10 +92,11 @@ export function useNudges() {
       for (const [thingId, hit] of latestByThing) {
         if (Date.now() - new Date(hit.created_at).getTime() >= COOLDOWN_MS) continue;
         const t = liveThings.find((x) => x.id === thingId);
+        if (!t) continue;
         recent.push({
           id: thingId,
-          title: t?.title ?? "Thing",
-          person: t?.assignee.name ?? "",
+          title: t.title,
+          person: t.assignee.name,
           when: new Date(hit.created_at).toLocaleString(),
           state: hit.reason,
         });

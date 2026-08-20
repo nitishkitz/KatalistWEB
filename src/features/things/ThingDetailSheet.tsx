@@ -465,17 +465,22 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                 <Trash2 className="h-3.5 w-3.5" />
                 Cancel
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void rpcShred(thing.id);
-                  toast.success("Shredded from your surfaces.");
-                  onOpenChange(false);
-                }}
-                className="inline-flex h-9 items-center justify-center rounded-lg border border-border text-[12.5px]"
-              >
-                Shred for me
-              </button>
+              {caps?.canShred ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run.mutate(async () => {
+                      await rpcShred(thing.id);
+                      toast.success("Shredded from your surfaces.");
+                      onOpenChange(false);
+                    })
+                  }
+                  className="inline-flex h-9 items-center justify-center rounded-lg border border-border text-[12.5px]"
+                >
+                  Shred for me
+                </button>
+              ) : null}
             </div>
           </div>
         </div>

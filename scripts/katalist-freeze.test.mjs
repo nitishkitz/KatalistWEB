@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { afterEach, test } from "node:test";
 import { partitionCourt } from "@/domain/thing";
+import { getThingCapabilities } from "@/domain/capabilities";
 import { setDemoActorForTests } from "@/features/demo/identities";
 import {
   addCommentLocal,
@@ -15,8 +16,10 @@ import {
   getLists,
   getShredded,
   getThing,
+  nudgeLocal,
   resetDemoLocalStateForTests,
   restoreLocal,
+  setPaceLocal,
   setStatusLocal,
   shredLocal,
   tossLocalThing,
@@ -216,4 +219,109 @@ test("List member/owner identities use public_identities, not nested profiles", 
   assert.match(mapperSrc, /Owned by you/);
   assert.equal(/\bemail\b/.test(mapperSrc), false);
   assert.equal(/\bphone\b/.test(mapperSrc), false);
+});
+
+test("Self-assigned Thing starts Waiting for Catch; Catch is explicit", () => {
+  resetDemoLocalStateForTests();
+  setDemoActorForTests("p-priya");
+  const self = tossLocalThing({ title: "Self toss", context: "work", assigneeId: "p-priya" });
+  assert.equal(self.assignee.id, "p-priya");
+  assert.equal(self.owner.id, "p-priya");
+  assert.equal(self.creator.id, "p-priya");
+  assert.equal(self.acknowledgement, "waiting_for_catch");
+  assert.equal(self.personalPace, null);
+  assert.equal(self.caughtAt, null);
+  const before = partitionCourt([self], "p-priya");
+  assert.equal(before.now.some((t) => t.id === self.id), true);
+  const caps = getThingCapabilities(self, "p-priya");
+  assert.equal(caps.canCatch, true);
+  assert.equal(caps.canSetPace, false);
+  catchLocal(self.id);
+  const after = getThing(self.id);
+  assert.equal(after.id, self.id);
+  assert.equal(after.acknowledgement, "caught");
+  assert.ok(after.caughtAt);
+  assert.equal(after.owner.id, "p-priya");
+  assert.equal(after.listId, self.listId);
+  assert.equal(after.context, "work");
+  assert.equal(after.ownerImportance, self.ownerImportance);
+  assert.equal(after.dueAt, self.dueAt);
+  assert.equal(getThingCapabilities(after, "p-priya").canSetPace, true);
+
+  const toB = tossLocalThing({ title: "To Arjun", context: "work", assigneeId: "p-arjun" });
+  assert.equal(toB.acknowledgement, "waiting_for_catch");
+  assert.equal(toB.personalPace, null);
+  assert.equal(toB.caughtAt, null);
+  setDemoActorForTests("p-arjun");
+  assert.equal(getThingCapabilities(getThing(toB.id), "p-arjun").canCatch, true);
+  assert.equal(getThingCapabilities(getThing(toB.id), "p-arjun").canSetPace, false);
+  assert.throws(() => setPaceLocal(toB.id, "later"));
+});
+
+test("Nudge is Owner → current Assignee only", () => {
+  resetDemoLocalStateForTests();
+  setDemoActorForTests("p-priya");
+  const x = tossLocalThing({ title: "Delegated nudge", context: "work", listId: "l2", assigneeId: "p-arjun" });
+  const priyaCourt = partitionCourt(accessibleDemoThings("work"), "p-priya");
+  assert.equal(priyaCourt.theirs.some((t) => t.id === x.id), true);
+  assert.equal(getThingCapabilities(x, "p-priya").canNudge, true);
+  nudgeLocal(x.id);
+  assert.throws(() => nudgeLocal(x.id));
+
+  setDemoActorForTests("p-arjun");
+  assert.equal(getThingCapabilities(getThing(x.id), "p-arjun").canNudge, false);
+  assert.throws(() => nudgeLocal(x.id));
+
+  setDemoActorForTests("p-mike");
+  assert.ok(getThing(x.id));
+  assert.equal(getThingCapabilities(getThing(x.id), "p-mike").canNudge, false);
+  assert.throws(() => nudgeLocal(x.id));
+
+  setDemoActorForTests("p-priya");
+  const self = tossLocalThing({ title: "Self held", context: "work" });
+  assert.equal(getThingCapabilities(self, "p-priya").canNudge, false);
+  assert.throws(() => nudgeLocal(self.id));
+  catchLocal(self.id);
+  setStatusLocal(self.id, "sorted");
+  const sorted = tossLocalThing({ title: "Will sort", context: "work", assigneeId: "p-arjun" });
+  setDemoActorForTests("p-arjun");
+  catchLocal(sorted.id);
+  setStatusLocal(sorted.id, "sorted");
+  setDemoActorForTests("p-priya");
+  assert.equal(getThingCapabilities(getThing(sorted.id), "p-priya").canNudge, false);
+  assert.throws(() => nudgeLocal(sorted.id));
+});
+
+test("Nudge projection uses Court THEIRS and skips unmatched recent history", () => {
+  const src = readFileSync(new URL("../src/features/nudges/use-nudges.ts", import.meta.url), "utf8");
+  assert.match(src, /court\.theirs/);
+  assert.equal(src.includes("court.all"), false);
+  assert.equal(src.includes('?? "Thing"'), false);
+  assert.match(src, /if \(!t\) continue/);
+});
+
+test("Shred UX awaits mutation and omits holder action", () => {
+  const sheet = readFileSync(new URL("../src/features/things/ThingDetailSheet.tsx", import.meta.url), "utf8");
+  assert.match(sheet, /caps\?\.canShred/);
+  assert.match(sheet, /await rpcShred\(thing\.id\)/);
+  assert.equal(sheet.includes("void rpcShred"), false);
+  const shredBlock = sheet.slice(sheet.indexOf("rpcShred"));
+  assert.match(shredBlock, /toast\.success\("Shredded from your surfaces\."\)/);
+});
+
+test("Live SQL: create_thing always Waiting; nudge is owner-only", () => {
+  const sql = readFileSync(
+    new URL("../supabase/migrations/20260820133000_create_thing_waiting_owner_nudge.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.create_thing\(/);
+  assert.match(sql, /p_personal_pace/);
+  assert.match(sql, /'waiting_for_catch'::public\.acknowledgement_state/);
+  assert.equal(sql.includes("CASE WHEN v_self THEN 'caught'"), false);
+  assert.equal(/assignee_personal_pace[\s\S]*COALESCE\(p_personal_pace/.test(sql), false);
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.nudge_thing\(/);
+  assert.match(sql, /v_me <> v_thing\.owner_actor_id/);
+  assert.equal(sql.includes("ELSIF v_me = v_thing.current_assignee_actor_id THEN"), false);
+  assert.match(sql, /t\.owner_actor_id = me\.actor_id/);
+  assert.match(sql, /t\.current_assignee_actor_id <> me\.actor_id/);
 });

@@ -40,7 +40,7 @@ export function getThingCapabilities(thing: Thing, myActorId: string | null) {
     canSort: Boolean(isAssignee && caught && !terminal),
     canCancel: Boolean(isOwner && !terminal),
     canComment: Boolean(myActorId),
-    canShred: Boolean(myActorId),
+    canShred: Boolean(myActorId && (terminal || (!isOwner && !isAssignee))),
     canAddToBucket: Boolean(myActorId),
     isAssignee,
     isOwner,

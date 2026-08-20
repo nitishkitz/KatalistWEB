@@ -35,6 +35,7 @@ test("SCENARIO B — mutating the Thing updates the Bucket reference (no snapsho
   addBucketRef(bucket.id, { thingId: thing.id, title: thing.title, kind: "thing" });
   const snapshotTitle = getBucketRefs(bucket.id)[0].title;
 
+  catchLocal(thing.id);
   setPaceLocal(thing.id, "later");
   setImportanceLocal(thing.id, "now");
   setStatusLocal(thing.id, "under_progress");
@@ -133,6 +134,7 @@ test("SCENARIO F — Bucket is private to its owner persona", () => {
 test("Sorted Thing is eligible for Bucket add-reference even when not in Court", () => {
   setDemoActorForTests("p-priya");
   const thing = tossLocalThing({ title: "Already sorted", context: "work" });
+  catchLocal(thing.id);
   setStatusLocal(thing.id, "sorted");
   assert.equal(isActiveThing(getThing(thing.id)), false);
   const court = partitionCourt([getThing(thing.id)], "p-priya");

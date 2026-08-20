@@ -143,3 +143,14 @@ test("Cancelled Thing cannot mutate", () => {
   }
 });
 
+test("Active owner and current assignee cannot Shred; merely-visible and terminal can", () => {
+  const active = thing({});
+  assert.equal(getThingCapabilities(active, "a").canShred, false);
+  assert.equal(getThingCapabilities(active, "b").canShred, false);
+  assert.equal(getThingCapabilities(active, "viewer").canShred, true);
+  const sorted = thing({ workStatus: "sorted", acknowledgement: "caught" });
+  assert.equal(getThingCapabilities(sorted, "a").canShred, true);
+  assert.equal(getThingCapabilities(sorted, "b").canShred, true);
+  assert.equal(getThingCapabilities(sorted, "viewer").canShred, true);
+});
+
