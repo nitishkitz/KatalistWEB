@@ -7,7 +7,7 @@ import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
 import { getBuckets } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { rpcCreateBucket } from "@/features/things/rpc";
+import { rpcCreateBucket, rpcDeleteBucket, rpcRenameBucket } from "@/features/things/rpc";
 import type { BucketCard } from "./fixtures";
 
 const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500"];
@@ -56,6 +56,7 @@ export function useBuckets() {
   });
 
   const buckets = useMemo(() => {
+    void version;
     if (preview) return getBuckets(context);
     return query.data ?? [];
   }, [preview, query.data, version, context]);
@@ -74,9 +75,10 @@ export function useBucket(bucketId: string | undefined) {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
   useLocalVersion();
+  const qc = useQueryClient();
 
   const query = useQuery({
-    queryKey: ["bucket", bucketId],
+    queryKey: keys.bucket(bucketId ?? "none"),
     enabled: Boolean(bucketId) && Boolean(user) && !preview,
     queryFn: async (): Promise<BucketCard | null> => {
       const { data, error } = await supabase
@@ -102,9 +104,32 @@ export function useBucket(bucketId: string | undefined) {
     },
   });
 
+  const rename = useMutation({
+    mutationFn: (name: string) => rpcRenameBucket(bucketId!, name),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bucket"] });
+      void qc.invalidateQueries({ queryKey: ["buckets"] });
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => rpcDeleteBucket(bucketId!),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bucket"] });
+      void qc.invalidateQueries({ queryKey: ["buckets"] });
+      void qc.invalidateQueries({ queryKey: ["bucket-items"] });
+    },
+  });
+
   if (preview) {
     const bucket = getBuckets().find((b) => b.id === bucketId);
-    return { bucket, isLoading: false, error: null, preview: true };
+    return { bucket, isLoading: false, error: null, preview: true, rename, remove };
   }
-  return { bucket: query.data ?? undefined, isLoading: query.isLoading, error: query.error, preview: false };
+  return {
+    bucket: query.data ?? undefined,
+    isLoading: query.isLoading,
+    error: query.error,
+    preview: false,
+    rename,
+    remove,
+  };
 }

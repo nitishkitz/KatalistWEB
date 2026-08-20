@@ -92,3 +92,54 @@ test("Due is owner only", () => {
   assert.equal(getThingCapabilities(caught, "a").canSetDue, true);
   assert.equal(getThingCapabilities(caught, "b").canSetDue, false);
 });
+
+test("Assignee after Catch can Sort; Owner of another's Thing cannot", () => {
+  const caught = thing({ acknowledgement: "caught" });
+  assert.equal(getThingCapabilities(caught, "b").canSort, true);
+  assert.equal(getThingCapabilities(caught, "a").canSort, false);
+});
+
+test("Owner can Cancel; assignee-only cannot", () => {
+  const caught = thing({ acknowledgement: "caught" });
+  assert.equal(getThingCapabilities(caught, "a").canCancel, true);
+  assert.equal(getThingCapabilities(caught, "b").canCancel, false);
+  const self = thing({
+    owner: assignee,
+    assignee,
+    acknowledgement: "caught",
+  });
+  assert.equal(getThingCapabilities(self, "b").canCancel, true);
+});
+
+test("Sorted Thing cannot mutate", () => {
+  const sorted = thing({ workStatus: "sorted", acknowledgement: "caught", personalPace: "now" });
+  const owner = getThingCapabilities(sorted, "a");
+  const assigneeCaps = getThingCapabilities(sorted, "b");
+  for (const caps of [owner, assigneeCaps]) {
+    assert.equal(caps.canCatch, false);
+    assert.equal(caps.canSetPace, false);
+    assert.equal(caps.canSetImportance, false);
+    assert.equal(caps.canSetDue, false);
+    assert.equal(caps.canSetStatus, false);
+    assert.equal(caps.canSort, false);
+    assert.equal(caps.canCancel, false);
+    assert.equal(caps.terminal, true);
+  }
+});
+
+test("Cancelled Thing cannot mutate", () => {
+  const cancelled = thing({ workStatus: "cancelled", cancelledAt: new Date().toISOString() });
+  const owner = getThingCapabilities(cancelled, "a");
+  const assigneeCaps = getThingCapabilities(cancelled, "b");
+  for (const caps of [owner, assigneeCaps]) {
+    assert.equal(caps.canCatch, false);
+    assert.equal(caps.canSetPace, false);
+    assert.equal(caps.canSetImportance, false);
+    assert.equal(caps.canSetDue, false);
+    assert.equal(caps.canSetStatus, false);
+    assert.equal(caps.canSort, false);
+    assert.equal(caps.canCancel, false);
+    assert.equal(caps.terminal, true);
+  }
+});
+

@@ -83,6 +83,8 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
       qc.invalidateQueries({ queryKey: ["lists"] }),
       qc.invalidateQueries({ queryKey: ["list"] }),
       qc.invalidateQueries({ queryKey: ["buckets"] }),
+      qc.invalidateQueries({ queryKey: ["bucket"] }),
+      qc.invalidateQueries({ queryKey: ["bucket-items"] }),
       qc.invalidateQueries({ queryKey: ["nudges"] }),
       qc.invalidateQueries({ queryKey: ["trophy"] }),
       qc.invalidateQueries({ queryKey: ["notifications"] }),
@@ -257,7 +259,9 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                     onClick={() =>
                       run.mutate(async () => {
                         if (s === "sorted") await rpcSortThing(thing.id);
-                        else await rpcSetWorkStatus(thing.id, s);
+                        else if (s === "not_started" || s === "under_progress") {
+                          await rpcSetWorkStatus(thing.id, s);
+                        }
                       })
                     }
                     className={cn(

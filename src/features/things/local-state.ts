@@ -43,6 +43,8 @@ const listMessages = new Map<string, LocalMessage[]>();
 let extraLists: ListRow[] = [];
 let extraBuckets: BucketCard[] = [];
 const bucketItems = new Map<string, BucketItem[]>();
+const bucketNameById = new Map<string, string>();
+const deletedBucketIdsByActor = new Map<string, Set<string>>();
 const recentlyNudged = new Set<string>();
 const nudgeCooldownUntil = new Map<string, number>();
 let extraNotifications: LocalNotification[] = [];
@@ -364,11 +366,15 @@ export function getListMessages(listId: string): LocalMessage[] {
 
 export function getBuckets(activeContext?: "work" | "home"): BucketCard[] {
   const me = currentDemoActorId();
-  return [...extraBuckets, ...bucketFixtures].filter((b) => {
-    if (b.ownerActorId && b.ownerActorId !== me) return false;
-    if (activeContext && b.context && b.context !== activeContext) return false;
-    return true;
-  });
+  const deleted = deletedBucketIdsByActor.get(me) ?? new Set<string>();
+  return [...extraBuckets, ...bucketFixtures]
+    .filter((b) => {
+      if (deleted.has(b.id)) return false;
+      if (b.ownerActorId && b.ownerActorId !== me) return false;
+      if (activeContext && b.context && b.context !== activeContext) return false;
+      return true;
+    })
+    .map((b) => (bucketNameById.has(b.id) ? { ...b, name: bucketNameById.get(b.id)! } : b));
 }
 
 export function createBucketLocal(name: string, context: "work" | "home" = "work", description = ""): BucketCard {
@@ -391,6 +397,9 @@ export function createBucketLocal(name: string, context: "work" | "home" = "work
 }
 
 export function addBucketRef(bucketId: string, item: BucketItem) {
+  const existing = getBucketRefs(bucketId);
+  if (item.thingId && existing.some((i) => i.thingId === item.thingId)) return;
+  if (item.listId && existing.some((i) => i.listId === item.listId)) return;
   bucketItems.set(bucketId, [item, ...(bucketItems.get(bucketId) ?? [])]);
   bump();
 }
@@ -417,7 +426,55 @@ export function getBucketRefs(bucketId: string): BucketItem[] {
       thingId: p.thingId,
       listId: p.listId,
     })) ?? [];
-  return [...extra, ...fromFixture];
+  const merged: BucketItem[] = [];
+  const seenThing = new Set<string>();
+  const seenList = new Set<string>();
+  for (const item of [...extra, ...fromFixture]) {
+    if (item.thingId) {
+      if (seenThing.has(item.thingId)) continue;
+      seenThing.add(item.thingId);
+    }
+    if (item.listId) {
+      if (seenList.has(item.listId)) continue;
+      seenList.add(item.listId);
+    }
+    merged.push(item);
+  }
+  return merged;
+}
+
+export function getListById(id: string): ListRow | undefined {
+  return getListsRaw().find((l) => l.id === id);
+}
+
+export function renameBucketLocal(bucketId: string, name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A Bucket needs a name.");
+  const me = currentDemoActorId();
+  const bucket = getBuckets().find((b) => b.id === bucketId);
+  if (!bucket || (bucket.ownerActorId && bucket.ownerActorId !== me)) {
+    throw new Error("Bucket not found");
+  }
+  const clash = getBuckets().some(
+    (b) => b.id !== bucketId && b.name.trim().toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (clash) throw new Error("You already have a Bucket with that name.");
+  bucketNameById.set(bucketId, trimmed);
+  extraBuckets = extraBuckets.map((b) => (b.id === bucketId ? { ...b, name: trimmed } : b));
+  bump();
+}
+
+export function deleteBucketLocal(bucketId: string) {
+  const me = currentDemoActorId();
+  const bucket = getBuckets().find((b) => b.id === bucketId);
+  if (!bucket || (bucket.ownerActorId && bucket.ownerActorId !== me)) {
+    throw new Error("Bucket not found");
+  }
+  extraBuckets = extraBuckets.filter((b) => b.id !== bucketId);
+  if (!deletedBucketIdsByActor.has(me)) deletedBucketIdsByActor.set(me, new Set());
+  deletedBucketIdsByActor.get(me)!.add(bucketId);
+  bucketItems.delete(bucketId);
+  bump();
 }
 
 const notificationReadByActor = new Map<string, Set<string>>();
@@ -512,6 +569,8 @@ export function resetDemoLocalStateForTests() {
   extraLists = [];
   extraBuckets = [];
   bucketItems.clear();
+  bucketNameById.clear();
+  deletedBucketIdsByActor.clear();
   recentlyNudged.clear();
   nudgeCooldownUntil.clear();
   extraNotifications = [];

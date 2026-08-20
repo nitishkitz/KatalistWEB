@@ -1371,6 +1371,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      delete_bucket: {
+        Args: { p_bucket_id: string }
+        Returns: boolean
+      }
       create_external_actor: {
         Args: {
           p_display_name: string
@@ -1646,6 +1650,24 @@ export type Database = {
       remove_list_member: {
         Args: { p_list_id: string; p_profile_id: string }
         Returns: boolean
+      }
+      rename_bucket: {
+        Args: { p_bucket_id: string; p_name: string }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          created_at: string
+          id: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "buckets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       resolve_actor_identities: {
         Args: {

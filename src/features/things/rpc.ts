@@ -1,7 +1,30 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Importance, Pace, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
-import { addCommentLocal, addBucketRef, catchLocal, createBucketLocal, createListLocal, getThing, getLists, nudgeLocal, patchThing, reassignLocal, removeBucketRef, setDueLocal, setImportanceLocal, setPaceLocal, setStatusLocal, restoreLocal, shredLocal, tossLocalThing } from "./local-state";
+import {
+  addCommentLocal,
+  addBucketRef,
+  catchLocal,
+  createBucketLocal,
+  createListLocal,
+  deleteBucketLocal,
+  getListById,
+  getThing,
+  nudgeLocal,
+  patchThing,
+  reassignLocal,
+  removeBucketRef,
+  renameBucketLocal,
+  setDueLocal,
+  setImportanceLocal,
+  setPaceLocal,
+  setStatusLocal,
+  restoreLocal,
+  shredLocal,
+  tossLocalThing,
+} from "./local-state";
+
+export type MutableWorkStatus = Extract<WorkStatus, "not_started" | "under_progress">;
 
 async function liveRpc<T>(fn: () => PromiseLike<{ data: T; error: { message: string } | null }>): Promise<T> {
   const { data, error } = await fn();
@@ -50,7 +73,7 @@ export async function rpcSetOwnerImportance(thingId: string, importance: Importa
   });
 }
 
-export async function rpcSetWorkStatus(thingId: string, status: WorkStatus) {
+export async function rpcSetWorkStatus(thingId: string, status: MutableWorkStatus) {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("set_work_status", { p_thing_id: thingId, p_work_status: status })),
     preview: () => {
@@ -70,22 +93,9 @@ export async function rpcSetDue(thingId: string, dueAt: string, dueHasTime: bool
   });
 }
 
-export async function rpcReassign(thingId: string, assigneeActorId: string) {
+export async function rpcNudgeThing(thingId: string) {
   return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("reassign_thing", { p_thing_id: thingId, p_new_assignee_actor_id: assigneeActorId })),
-    preview: () => {
-      reassignLocal(thingId, assigneeActorId);
-      return null as never;
-    },
-  });
-}
-
-export async function rpcNudge(
-  thingId: string,
-  reason: "waiting_for_catch" | "quiet" | "due_soon" | "stale" | "repeated_handoff" = "quiet",
-) {
-  return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("nudge_thing", { p_thing_id: thingId, p_reason: reason })),
+    live: () => liveRpc(() => supabase.rpc("nudge_thing", { p_thing_id: thingId })),
     preview: () => {
       nudgeLocal(thingId);
       return null as never;
@@ -93,17 +103,46 @@ export async function rpcNudge(
   });
 }
 
-export async function rpcTossThing(input: {
+export async function rpcSortThing(thingId: string) {
+  return runDomainMutation({
+    live: () =>
+      liveRpc(() =>
+        supabase.rpc("sort_thing", {
+          p_thing_id: thingId,
+        }),
+      ),
+    preview: () => {
+      setStatusLocal(thingId, "sorted");
+      return null as never;
+    },
+  });
+}
+
+export async function rpcCancelThing(thingId: string, reason?: string) {
+  return runDomainMutation({
+    live: () =>
+      liveRpc(() =>
+        supabase.rpc("cancel_thing", {
+          p_thing_id: thingId,
+          p_reason: reason,
+        }),
+      ),
+    preview: () => {
+      setStatusLocal(thingId, "cancelled");
+      return null as never;
+    },
+  });
+}
+
+export async function rpcCreateThing(input: {
   title: string;
   context: "work" | "home";
   ownerImportance?: Importance;
-  listId?: string | null;
-  assigneeId?: string;
+  listId?: string;
   assigneeActorId?: string;
-  dueAt?: string | null;
+  dueAt?: string;
   dueHasTime?: boolean;
 }) {
-  const assigneeId = input.assigneeId ?? input.assigneeActorId;
   return runDomainMutation({
     live: () =>
       liveRpc(() =>
@@ -111,22 +150,50 @@ export async function rpcTossThing(input: {
           p_title: input.title,
           p_context: input.context,
           p_owner_importance: input.ownerImportance ?? "next",
-          p_list_id: input.listId ?? undefined,
-          p_assignee_actor_id: assigneeId ?? undefined,
-          p_due_at: input.dueAt ?? undefined,
-          p_due_has_time: input.dueHasTime ?? false,
+          p_list_id: input.listId,
+          p_assignee_actor_id: input.assigneeActorId,
+          p_due_at: input.dueAt,
+          p_due_has_time: input.dueHasTime,
         }),
       ),
-    preview: () =>
+    preview: () => {
       tossLocalThing({
         title: input.title,
         context: input.context,
         ownerImportance: input.ownerImportance,
         listId: input.listId,
-        assigneeId,
-        dueAt: input.dueAt ?? undefined,
+        assigneeId: input.assigneeActorId,
+        dueAt: input.dueAt,
         dueHasTime: input.dueHasTime,
-      }) as never,
+      });
+      return null as never;
+    },
+  });
+}
+
+export async function rpcReassignThing(thingId: string, assigneeActorId: string) {
+  return runDomainMutation({
+    live: () =>
+      liveRpc(() =>
+        supabase.rpc("reassign_thing", {
+          p_thing_id: thingId,
+          p_new_assignee_actor_id: assigneeActorId,
+        }),
+      ),
+    preview: () => {
+      reassignLocal(thingId, assigneeActorId);
+      return null as never;
+    },
+  });
+}
+
+export async function rpcAssignThing(thingId: string, assigneeActorId: string) {
+  return runDomainMutation({
+    live: () => liveRpc(() => supabase.rpc("assign_thing", { p_thing_id: thingId, p_assignee_actor_id: assigneeActorId })),
+    preview: () => {
+      reassignLocal(thingId, assigneeActorId);
+      return null as never;
+    },
   });
 }
 
@@ -144,6 +211,26 @@ export async function rpcCreateBucket(name: string, context: "work" | "home") {
   });
 }
 
+export async function rpcRenameBucket(bucketId: string, name: string) {
+  return runDomainMutation({
+    live: () => liveRpc(() => supabase.rpc("rename_bucket", { p_bucket_id: bucketId, p_name: name })),
+    preview: () => {
+      renameBucketLocal(bucketId, name);
+      return null as never;
+    },
+  });
+}
+
+export async function rpcDeleteBucket(bucketId: string) {
+  return runDomainMutation({
+    live: () => liveRpc(() => supabase.rpc("delete_bucket", { p_bucket_id: bucketId })),
+    preview: () => {
+      deleteBucketLocal(bucketId);
+      return null as never;
+    },
+  });
+}
+
 export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?: string) {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("add_to_bucket", { p_bucket_id: bucketId, p_thing_id: thingId, p_list_id: listId })),
@@ -153,7 +240,7 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
         addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
       }
       if (listId) {
-        const list = getLists().find((l) => l.id === listId);
+        const list = getListById(listId);
         addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
       }
       return null as never;
@@ -176,7 +263,6 @@ export async function rpcShred(objectId: string, objectType: "thing" | "list" | 
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("shred_for_me", { p_object_id: objectId, p_object_type: objectType })),
     preview: () => {
-      // Demo local state supports Thing + List shred only (no Bucket shred).
       if (objectType === "bucket") return null as never;
       shredLocal(objectId, objectType === "list" ? "list" : "thing");
       return null as never;
@@ -216,14 +302,3 @@ export async function rpcComment(thingId: string, body: string) {
 export function starLocal(thingId: string, starred: boolean) {
   patchThing(thingId, { starred });
 }
-
-export const rpcNudgeThing = rpcNudge;
-export const rpcReassignThing = rpcReassign;
-export const rpcCreateThing = rpcTossThing;
-export async function rpcSortThing(thingId: string) {
-  return rpcSetWorkStatus(thingId, "sorted");
-}
-export async function rpcCancelThing(thingId: string) {
-  return rpcSetWorkStatus(thingId, "cancelled");
-}
-
