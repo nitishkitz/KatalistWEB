@@ -173,6 +173,7 @@ export const courtFixtures: Thing[] = [
     thing({
       id: `theirs-wait-${i}`,
       title: `Waiting catch ${i + 1}`,
+      owner: priya,
       assignee: rahul,
       acknowledgement: "waiting_for_catch",
       personalPace: null,
@@ -183,6 +184,7 @@ export const courtFixtures: Thing[] = [
     thing({
       id: `theirs-move-${i}`,
       title: `Moving ${i + 1}`,
+      owner: priya,
       assignee: sai,
       acknowledgement: "caught",
       workStatus: "under_progress",
@@ -193,6 +195,7 @@ export const courtFixtures: Thing[] = [
     thing({
       id: `theirs-attn-${i}`,
       title: `Needs attention ${i + 1}`,
+      owner: priya,
       assignee: arjun,
       acknowledgement: "caught",
       workStatus: "not_started",

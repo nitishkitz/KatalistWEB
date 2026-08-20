@@ -48,15 +48,6 @@ const CANONICAL_LISTS = {
   "Office Move Checklist": "l5",
 };
 
-test("setDemoActorForTests wins over session fallback", () => {
-  setDemoActorForTests("p-arjun");
-  assert.equal(currentDemoActorId(), "p-arjun");
-  setDemoActorForTests("p-sarah");
-  assert.equal(currentDemoActorId(), "p-sarah");
-  setDemoActorForTests("p-priya");
-  assert.equal(currentDemoActorId(), "p-priya");
-});
-
 test("SCENARIO A — assign → catch → pace", () => {
   resetDemoLocalStateForTests();
   setDemoActorForTests("p-priya");
@@ -124,7 +115,7 @@ test("SCENARIO B — reassign reset", () => {
   assert.equal(getThingCapabilities(sarahThing, "p-sarah").canSetPace, false);
 });
 
-test("SCENARIO C — shred / restore persona scope", () => {
+test("SCENARIO C — shred / restore persona scope and live authority", () => {
   resetDemoLocalStateForTests();
   setDemoActorForTests("p-priya");
   const thing = tossLocalThing({
@@ -133,27 +124,34 @@ test("SCENARIO C — shred / restore persona scope", () => {
     assigneeId: "p-arjun",
   });
   const thingId = thing.id;
+  assert.throws(() => shredLocal(thingId, "thing"));
+  assert.ok(getThing(thingId));
+
+  setDemoActorForTests("p-arjun");
+  assert.throws(() => shredLocal(thingId, "thing"));
+  assert.ok(getThing(thingId));
+
+  catchLocal(thingId);
+  setStatusLocal(thingId, "sorted");
   const snapshot = { ...getThing(thingId) };
   shredLocal(thingId, "thing");
   assert.equal(getThing(thingId), undefined);
-  assert.ok(getShredded().some((s) => s.id === thingId && s.kind === "thing" && s.title === "Shred me"));
-
-  setDemoActorForTests("p-arjun");
-  assert.equal(getShredded().some((s) => s.id === thingId), false);
-  assert.ok(getThing(thingId));
+  assert.ok(getShredded().some((s) => s.id === thingId && s.kind === "thing" && s.status === "sorted"));
 
   setDemoActorForTests("p-priya");
+  assert.equal(getShredded().some((s) => s.id === thingId), false);
+  assert.ok(getThing(thingId));
+  assert.equal(getThing(thingId).workStatus, "sorted");
+
   restoreLocal(thingId, "thing");
   const restored = getThing(thingId);
   assert.ok(restored);
   assert.equal(restored.assignee.id, snapshot.assignee.id);
-  assert.equal(restored.workStatus, snapshot.workStatus);
+  assert.equal(restored.workStatus, "sorted");
   assert.equal(restored.acknowledgement, snapshot.acknowledgement);
 
   const list = createListLocal("Shred list", "work");
-  shredLocal(list.id, "list");
-  assert.equal(getLists().some((l) => l.id === list.id), false);
-  restoreLocal(list.id, "list");
+  assert.throws(() => shredLocal(list.id, "list"));
   assert.ok(getLists().some((l) => l.id === list.id));
 });
 
@@ -272,8 +270,16 @@ test("Bucket fixture previews use canonical IDs", () => {
   }
 });
 
-test("Visibility helper is real domain function", () => {
+test("setDemoActorForTests wins over session", () => {
+  setDemoActorForTests("p-arjun");
+  assert.equal(currentDemoActorId(), "p-arjun");
+  setDemoActorForTests("p-sarah");
+  assert.equal(currentDemoActorId(), "p-sarah");
   setDemoActorForTests("p-priya");
+  assert.equal(currentDemoActorId(), "p-priya");
+});
+
+test("Visibility helper is real domain function", () => {
   const t = tossLocalThing({ title: "Vis", context: "work", assigneeId: "p-arjun" });
   const lists = getLists();
   assert.equal(canDemoActorViewThing(t, "p-priya", lists), true);

@@ -263,7 +263,7 @@ export async function rpcShred(objectId: string, objectType: "thing" | "list" | 
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("shred_for_me", { p_object_id: objectId, p_object_type: objectType })),
     preview: () => {
-      if (objectType === "bucket") return null as never;
+      if (objectType === "bucket") throw new Error("Buckets can’t be shredded.");
       shredLocal(objectId, objectType === "list" ? "list" : "thing");
       return null as never;
     },

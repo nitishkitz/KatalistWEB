@@ -5,12 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
-import { createListLocal, getLists } from "@/features/things/local-state";
+import { getLists } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcCreateList } from "@/features/things/rpc";
+import { mapDbListRows, type DbListRow } from "./map-list-rows";
 import type { ListRow } from "./fixtures";
-
-const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
 
 async function fetchLists(profileId: string, context: "work" | "home"): Promise<ListRow[]> {
   const { data: lists, error } = await supabase
@@ -19,52 +18,7 @@ async function fetchLists(profileId: string, context: "work" | "home"): Promise<
     .eq("context", context)
     .is("archived_at", null);
   if (error) throw error;
-
-  const ids = (lists ?? []).map((l) => l.id);
-  const { data: members } = ids.length
-    ? await supabase.from("list_members").select("list_id,profile_id,role,profiles(display_name,avatar_url)").in("list_id", ids)
-    : { data: [] };
-  const { data: things } = ids.length
-    ? await supabase.from("things").select("id,list_id,work_status").in("list_id", ids)
-    : { data: [] };
-
-  return (lists ?? []).map((l, i) => {
-    const listMembers = (members ?? []).filter((m) => m.list_id === l.id);
-    const mine = listMembers.find((m) => m.profile_id === profileId);
-    const role = l.owner_profile_id === profileId ? "owner" : (mine?.role ?? "view_only");
-    const listThings = (things ?? []).filter((t) => t.list_id === l.id);
-    return {
-      id: l.id,
-      name: l.name,
-      context: l.context,
-      role,
-      ownerLine: l.owner_profile_id === profileId ? "Owned by you" : "Shared list",
-      members: listMembers.slice(0, 5).map((m) => {
-        const profile = (m as { profiles?: { display_name?: string; avatar_url?: string | null } }).profiles;
-        const name = profile?.display_name ?? "Member";
-        return {
-          name,
-          profileId: m.profile_id,
-          role: (m.role ?? "collaborator") as ListRow["role"],
-          initials: name
-            .split(" ")
-            .map((p) => p[0])
-            .slice(0, 2)
-            .join("")
-            .toUpperCase(),
-          avatarUrl: profile?.avatar_url ?? null,
-        };
-      }),
-      memberCount: listMembers.length,
-      thingCount: listThings.length,
-      doneCount: listThings.filter((t) => t.work_status === "sorted").length,
-      inProgressCount: listThings.filter((t) => t.work_status === "under_progress").length,
-      unread: 0,
-      latestActivity: "Updated",
-      updatedAt: new Date(l.updated_at).toLocaleString(),
-      color: COLORS[i % COLORS.length]!,
-    } satisfies ListRow;
-  });
+  return mapDbListRows(profileId, (lists ?? []) as DbListRow[]);
 }
 
 export function useLists() {

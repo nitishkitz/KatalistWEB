@@ -101,6 +101,7 @@ function MePage() {
   const avatarUrl = useAvatarUrl(name, user?.email, profile?.avatar_url);
   const email = profile?.email || user?.email || "";
   const phone = profile?.phone_e164 || user?.phone || user?.user_metadata?.phone || "";
+  const demoSession = user?.app_metadata?.provider === "demo";
 
   async function handleSignOut() {
     await signOut();
@@ -117,23 +118,27 @@ function MePage() {
           <section className="rounded-xl border border-border bg-card p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-center gap-4">
-                <label className="cursor-pointer">
+                {demoSession ? (
                   <PersonAvatar name={name} initials={initials} src={avatarUrl} size={64} />
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="sr-only"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      uploadAvatar.mutate(file, {
-                        onSuccess: () => toast.success("Photo updated."),
-                        onError: (err) =>
-                          toast.error(err instanceof Error ? err.message : "Couldn’t save photo to profile."),
-                      });
-                    }}
-                  />
-                </label>
+                ) : (
+                  <label className="cursor-pointer">
+                    <PersonAvatar name={name} initials={initials} src={avatarUrl} size={64} />
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        uploadAvatar.mutate(file, {
+                          onSuccess: () => toast.success("Photo updated."),
+                          onError: (err) =>
+                            toast.error(err instanceof Error ? err.message : "Couldn’t save photo to profile."),
+                        });
+                      }}
+                    />
+                  </label>
+                )}
                 <div>
                   <h2 className="text-xl font-bold text-foreground">{name}</h2>
                   <p className="mt-0.5 text-sm text-muted-foreground">{role}</p>
@@ -223,10 +228,7 @@ function MePage() {
             <button
               type="button"
               className="rounded-lg border border-border bg-card px-3 py-2 text-[13px] text-foreground hover:bg-muted"
-              onClick={() => {
-                const first = stats.shredded[0];
-                if (first) void restore(first.id, first.kind);
-              }}
+              onClick={() => setPanel("shredded")}
             >
               Recently Shredded{stats.shredded.length ? ` (${stats.shredded.length})` : ""}
             </button>
@@ -272,25 +274,48 @@ function MePage() {
       {panel ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4" onClick={() => setPanel(null)}>
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-5" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-[15px] font-semibold">{settings.find((s) => s.id === panel)?.title}</h2>
-            <p className="mt-1 text-[12px] text-muted-foreground">{settings.find((s) => s.id === panel)?.body}</p>
-            {panel === "appearance" ? (
-              <label className="mt-4 flex items-center justify-between text-[13px]">
-                Reduced motion
-                <input
-                  type="checkbox"
-                  checked={reduced}
-                  onChange={(e) => {
-                    setReduced(e.target.checked);
-                    localStorage.setItem("katalist.reduced_motion", e.target.checked ? "1" : "0");
-                    document.documentElement.classList.toggle("reduce-motion", e.target.checked);
-                  }}
-                />
-              </label>
+            {panel === "shredded" ? (
+              <>
+                <h2 className="text-[15px] font-semibold">Recently Shredded</h2>
+                <p className="mt-1 text-[12px] text-muted-foreground">Restore something you shredded from your surfaces.</p>
+                {stats.shredded.length === 0 ? (
+                  <p className="mt-4 text-[13px] text-muted-foreground">Nothing shredded yet.</p>
+                ) : (
+                  <ul className="mt-4 space-y-2">
+                    {stats.shredded.map((s) => (
+                      <li key={`${s.kind}:${s.id}`} className="flex items-center justify-between text-[12px]">
+                        <span>{s.title}</span>
+                        <button type="button" className="text-primary" onClick={() => void restore(s.id, s.kind)}>
+                          Restore
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             ) : (
-              <p className="mt-4 text-[13px] text-muted-foreground">
-                Stored on your profile when a live session is present. Demo uses this device only.
-              </p>
+              <>
+                <h2 className="text-[15px] font-semibold">{settings.find((s) => s.id === panel)?.title}</h2>
+                <p className="mt-1 text-[12px] text-muted-foreground">{settings.find((s) => s.id === panel)?.body}</p>
+                {panel === "appearance" ? (
+                  <label className="mt-4 flex items-center justify-between text-[13px]">
+                    Reduced motion
+                    <input
+                      type="checkbox"
+                      checked={reduced}
+                      onChange={(e) => {
+                        setReduced(e.target.checked);
+                        localStorage.setItem("katalist.reduced_motion", e.target.checked ? "1" : "0");
+                        document.documentElement.classList.toggle("reduce-motion", e.target.checked);
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <p className="mt-4 text-[13px] text-muted-foreground">
+                    Stored on your profile when a live session is present. Demo uses this device only.
+                  </p>
+                )}
+              </>
             )}
             <button type="button" className="mt-5 text-[13px] text-primary" onClick={() => setPanel(null)}>
               Close

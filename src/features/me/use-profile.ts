@@ -52,6 +52,9 @@ export function useUploadAvatar() {
   return useMutation({
     mutationFn: async (file: File) => {
       if (!user?.id) throw new Error("Sign in with a live account to set a photo.");
+      if (user.app_metadata?.provider === "demo") {
+        throw new Error("Photos are demo-only and aren’t saved to a live profile.");
+      }
       const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
       const path = `${user.id}/avatar.${ext}`;
       const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, {

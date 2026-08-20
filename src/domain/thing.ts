@@ -58,7 +58,7 @@ export function isActiveThing(thing: Thing): boolean {
 export function partitionCourt(things: Thing[], myActorId: string) {
   const active = things.filter(isActiveThing);
   const mine = active.filter((t) => t.assignee.id === myActorId);
-  const theirs = active.filter((t) => t.assignee.id !== myActorId);
+  const theirs = active.filter((t) => t.owner.id === myActorId && t.assignee.id !== myActorId);
   return {
     mine,
     now: mine.filter((t) => laneOf(t) === "now"),

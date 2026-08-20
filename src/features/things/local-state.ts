@@ -1,9 +1,9 @@
 // react import moved to use-local-version.ts
-import type { Importance, Pace, Person, Thing, WorkStatus } from "@/domain/thing";
+import { isActiveThing, type Importance, type Pace, type Person, type Thing, type WorkStatus } from "@/domain/thing";
 import { courtFixtures } from "@/features/court/fixtures";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { currentDemoActorId, currentDemoPerson, demoDirectory } from "@/features/demo/identities";
-import { canDemoActorViewThing, projectDemoList } from "@/features/demo/visibility";
+import { canDemoActorViewThing, projectDemoList, roleForDemoList } from "@/features/demo/visibility";
 import { listFixtures, type ListRow } from "@/features/lists/fixtures";
 import { bucketFixtures, type BucketCard } from "@/features/buckets/fixtures";
 
@@ -140,7 +140,11 @@ function getThingRaw(id: string): Thing | undefined {
 }
 
 export function getThing(id: string): Thing | undefined {
-  return getMergedThings().find((t) => t.id === id);
+  const actorId = currentDemoActorId();
+  const thing = getMergedThings(actorId).find((t) => t.id === id);
+  if (!thing) return undefined;
+  if (!canDemoActorViewThing(thing, actorId, getListsRaw())) return undefined;
+  return thing;
 }
 
 export function patchThing(id: string, patch: Partial<Thing>, event?: string) {
@@ -164,6 +168,21 @@ export function tossLocalThing(input: {
 }): Thing {
   const people = directoryPeople();
   const me = currentDemoPerson();
+  let listId: string | null = null;
+  let listName = "Standalone";
+  let context = input.context;
+  if (input.listId) {
+    const list = getListsRaw().find((l) => l.id === input.listId);
+    if (!list) throw new Error("That List isn’t available.");
+    if (shreddedSetFor(me.id).has(`list:${list.id}`)) throw new Error("That List isn’t available.");
+    const role = roleForDemoList(list, me.id);
+    if (role !== "owner" && role !== "collaborator") {
+      throw new Error("You don’t have permission to add a Thing to this List.");
+    }
+    listId = list.id;
+    listName = list.name;
+    context = list.context;
+  }
   const assignee = people.find((p) => p.id === (input.assigneeId ?? me.id)) ?? me;
   const thing: Thing = {
     id: `local-${crypto.randomUUID()}`,
@@ -177,9 +196,9 @@ export function tossLocalThing(input: {
     personalPace: assignee.id === me.id ? "next" : null,
     dueAt: input.dueAt ?? null,
     dueHasTime: Boolean(input.dueHasTime),
-    context: input.context,
-    listId: input.listId ?? null,
-    listName: input.listName ?? "Standalone",
+    context,
+    listId,
+    listName,
     cancelledAt: null,
     sortedAt: null,
     caughtAt: assignee.id === me.id ? new Date().toISOString() : null,
@@ -265,17 +284,26 @@ export function isRecentlyNudged(id: string) {
 
 export function shredLocal(id: string, kind: "thing" | "list" = "thing") {
   const actorId = currentDemoActorId();
-  // Resolve underlying object FIRST (before adding to shredded filter).
   let title = id;
   let status = "";
   if (kind === "thing") {
     const thing = getThingRaw(id);
-    if (!thing) return;
+    if (!thing || !canDemoActorViewThing(thing, actorId, getListsRaw())) {
+      throw new Error("That Thing isn’t available.");
+    }
+    const holding = thing.owner.id === actorId || thing.assignee.id === actorId;
+    if (isActiveThing(thing) && holding) {
+      throw new Error("Sort, Cancel, or hand this Thing onward before shredding it.");
+    }
     title = thing.title;
     status = thing.workStatus;
   } else {
     const list = getListsRaw().find((l) => l.id === id);
-    if (!list) return;
+    const role = list ? roleForDemoList(list, actorId) : null;
+    if (!list || !role) throw new Error("That List isn’t available.");
+    if (role === "owner" || list.ownerActorId === actorId) {
+      throw new Error("You can’t shred a List you own.");
+    }
     title = list.name;
   }
   shreddedSetFor(actorId).add(`${kind}:${id}`);
@@ -300,6 +328,7 @@ export function getShredded(): ShreddedItem[] {
 }
 
 export function addCommentLocal(thingId: string, body: string, author?: string) {
+  if (!getThing(thingId)) throw new Error("That Thing isn’t available.");
   const row: LocalComment = {
     id: crypto.randomUUID(),
     body,
@@ -311,10 +340,12 @@ export function addCommentLocal(thingId: string, body: string, author?: string) 
 }
 
 export function getComments(thingId: string): LocalComment[] {
+  if (!getThing(thingId)) return [];
   return comments.get(thingId) ?? [];
 }
 
 export function getActivity(thingId: string): LocalActivity[] {
+  if (!getThing(thingId)) return [];
   return activity.get(thingId) ?? [];
 }
 
@@ -364,12 +395,27 @@ export function createListLocal(name: string, context: "work" | "home"): ListRow
 }
 
 export function addListMessage(listId: string, body: string, author = "Me") {
-  const row: LocalMessage = { id: crypto.randomUUID(), body, author, at: new Date().toISOString() };
+  const me = currentDemoPerson();
+  const list = getListsRaw().find((l) => l.id === listId);
+  const role = list ? roleForDemoList(list, me.id) : null;
+  if (!list || !role) throw new Error("That List isn’t available.");
+  if (role !== "owner" && role !== "collaborator") {
+    throw new Error("You don’t have permission to post in this List.");
+  }
+  const row: LocalMessage = {
+    id: crypto.randomUUID(),
+    body,
+    author: author === "Me" ? me.name : author,
+    at: new Date().toISOString(),
+  };
   listMessages.set(listId, [...(listMessages.get(listId) ?? []), row]);
   bump();
 }
 
 export function getListMessages(listId: string): LocalMessage[] {
+  const me = currentDemoActorId();
+  const list = getListsRaw().find((l) => l.id === listId);
+  if (!list || !roleForDemoList(list, me)) return [];
   return listMessages.get(listId) ?? [];
 }
 
