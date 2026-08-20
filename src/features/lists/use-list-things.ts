@@ -8,12 +8,14 @@ import { useLocalVersion } from "@/features/things/use-local-version";
 import { useCourt } from "@/features/court/use-court";
 import type { Thing } from "@/domain/thing";
 import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
+import { excludePersonallyShreddedThings, usePersonalShred } from "@/features/things/personal-shred";
 
 export function useListThings(listId: string | undefined) {
   const { session } = useSession();
   const preview = isPreviewSession(session);
   const version = useLocalVersion();
   const court = useCourt();
+  const shred = usePersonalShred();
 
   const query = useQuery({
     queryKey: ["list-things", listId],
@@ -61,8 +63,8 @@ export function useListThings(listId: string | undefined) {
   const things = useMemo(() => {
     // List identity is UUID only — never listName
     if (preview) return getMergedThings().filter((t) => t.listId === listId);
-    return query.data ?? [];
-  }, [preview, query.data, listId, version]);
+    return excludePersonallyShreddedThings(query.data ?? [], shred);
+  }, [preview, query.data, listId, version, shred]);
 
   return { things, isLoading: !preview && query.isLoading, myActorId: court.myActorId };
 }

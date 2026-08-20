@@ -22,6 +22,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { cn } from "@/lib/utils";
 import {
   rpcAddToBucket,
+  rpcAssignOutsideKatalist,
   rpcCancelThing,
   rpcCatchThing,
   rpcNudgeThing,
@@ -33,6 +34,7 @@ import {
   rpcShred,
   rpcSortThing,
 } from "./rpc";
+import { invalidatePersonalSurfaces } from "./personal-shred";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { useCourt } from "@/features/court/use-court";
 import { useThing } from "./use-thing";
@@ -63,6 +65,82 @@ function statusLabel(s: WorkStatus) {
   }
 }
 
+function AssignOutsideBlock({
+  thingId,
+  disabled,
+  onIssued,
+}: {
+  thingId: string;
+  disabled: boolean;
+  onIssued: (fn: () => Promise<unknown>) => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [bridgePath, setBridgePath] = useState<string | null>(null);
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-background p-3">
+      <p className="text-[12px] font-medium text-foreground">Assign outside Katalist</p>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Display name"
+        className="h-8 w-full rounded-md border border-border bg-card px-2 text-[12px]"
+      />
+      <input
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+        className="h-8 w-full rounded-md border border-border bg-card px-2 text-[12px]"
+      />
+      <input
+        value={phone}
+        onChange={(e) => setPhone(e.target.value)}
+        placeholder="Phone"
+        className="h-8 w-full rounded-md border border-border bg-card px-2 text-[12px]"
+      />
+      <button
+        type="button"
+        disabled={disabled}
+        className="h-8 w-full rounded-md border border-border text-[12px]"
+        onClick={() =>
+          onIssued(async () => {
+            const result = await rpcAssignOutsideKatalist({
+              thingId,
+              displayName: name,
+              email,
+              phone,
+            });
+            setBridgePath(result.path);
+            toast.success("Bridge opened. Share this link.");
+          })
+        }
+      >
+        Create Bridge link
+      </button>
+      {bridgePath ? (
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 truncate text-[11px] text-foreground">{bridgePath}</code>
+          <button
+            type="button"
+            className="shrink-0 text-[12px] text-primary"
+            onClick={() => {
+              const absolute = `${window.location.origin}${bridgePath}`;
+              void navigator.clipboard.writeText(absolute).then(
+                () => toast.success("Bridge link copied."),
+                () => toast.error("Copy the Bridge path from the field."),
+              );
+            }}
+          >
+            Copy link
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const court = useCourt();
@@ -77,16 +155,9 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
   const [due, setDue] = useState("");
 
   const invalidate = async () => {
+    await invalidatePersonalSurfaces(qc);
     await Promise.all([
-      qc.invalidateQueries({ queryKey: ["court"] }),
       qc.invalidateQueries({ queryKey: ["thing"] }),
-      qc.invalidateQueries({ queryKey: ["lists"] }),
-      qc.invalidateQueries({ queryKey: ["list"] }),
-      qc.invalidateQueries({ queryKey: ["buckets"] }),
-      qc.invalidateQueries({ queryKey: ["bucket"] }),
-      qc.invalidateQueries({ queryKey: ["bucket-items"] }),
-      qc.invalidateQueries({ queryKey: ["nudges"] }),
-      qc.invalidateQueries({ queryKey: ["trophy"] }),
       qc.invalidateQueries({ queryKey: ["notifications"] }),
     ]);
   };
@@ -172,6 +243,14 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                     ))}
                   </select>
                 </label>
+              ) : null}
+              {caps?.isOwner && !terminal ? (
+                <AssignOutsideBlock
+                  key={thing.id}
+                  thingId={thing.id}
+                  disabled={busy}
+                  onIssued={(fn) => run.mutate(fn)}
+                />
               ) : null}
             </section>
 

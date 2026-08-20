@@ -5,6 +5,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { dismissGhost, getGhostCandidate } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useAppContext } from "@/features/context/use-app-context";
+import { fetchPersonalShred } from "@/features/things/personal-shred";
 import type { ContextKind, Thing } from "@/domain/thing";
 
 export type Ghost = {
@@ -31,12 +32,16 @@ export function useDoorman() {
         .select("id, thing_id, dismissed_at, snoozed_until, breakthrough_reason")
         .is("dismissed_at", null);
       if (error) throw error;
+      const shred = await fetchPersonalShred();
       const now = Date.now();
-      const open = (rows ?? []).filter((r) => !r.snoozed_until || new Date(r.snoozed_until).getTime() < now);
+      const open = (rows ?? []).filter(
+        (r) =>
+          !shred.thingIds.has(r.thing_id) && (!r.snoozed_until || new Date(r.snoozed_until).getTime() < now),
+      );
       if (!open.length) return null;
       const ids = open.map((r) => r.thing_id);
       const { data: things } = await supabase.from("things").select("id, title, context").in("id", ids);
-      const other = (things ?? []).find((t) => t.context !== context);
+      const other = (things ?? []).find((t) => t.context !== context && !shred.thingIds.has(t.id));
       if (!other) return null;
       const state = open.find((r) => r.thing_id === other.id);
       if (state) {

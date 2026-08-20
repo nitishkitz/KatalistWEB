@@ -1246,6 +1246,7 @@ export type Database = {
           due_has_time: boolean
           id: string
           notes: string
+          owner_importance: Database["public"]["Enums"]["importance"]
           owner_name: string
           title: string
           work_status: Database["public"]["Enums"]["work_status"]

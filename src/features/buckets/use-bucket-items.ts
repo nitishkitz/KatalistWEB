@@ -12,6 +12,10 @@ import type { Thing } from "@/domain/thing";
 import type { ListRow } from "@/features/lists/fixtures";
 import { mapDbListRows, type DbListRow } from "@/features/lists/map-list-rows";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import {
+  excludePersonallyShreddedThings,
+  usePersonalShred,
+} from "@/features/things/personal-shred";
 
 export type BucketItem =
   | { kind: "thing"; thingId: string; thing: Thing }
@@ -46,6 +50,7 @@ export function useAccessibleThings() {
   const preview = isPreviewSession(session);
   const { context } = useAppContext();
   const version = useLocalVersion();
+  const shred = usePersonalShred();
 
   const query = useQuery({
     queryKey: keys.accessibleThings(user?.id, context),
@@ -62,7 +67,7 @@ export function useAccessibleThings() {
     void version;
     return accessibleDemoThings(context);
   }
-  return query.data ?? [];
+  return excludePersonallyShreddedThings(query.data ?? [], shred);
 }
 
 export function useAccessibleLists() {
@@ -75,6 +80,7 @@ export function useBucketItems(bucketId: string | undefined) {
   const preview = isPreviewSession(session);
   const qc = useQueryClient();
   useLocalVersion();
+  const shred = usePersonalShred();
 
   const query = useQuery({
     queryKey: keys.bucketItems(bucketId ?? "none"),
@@ -128,6 +134,9 @@ export function useBucketItems(bucketId: string | undefined) {
     onSuccess: invalidate,
   });
 
-  const items: BucketItem[] = preview && bucketId ? resolveDemoItems(bucketId) : (query.data ?? []);
+  const raw: BucketItem[] = preview && bucketId ? resolveDemoItems(bucketId) : (query.data ?? []);
+  const items = raw.filter((item) =>
+    item.kind === "thing" ? !shred.thingIds.has(item.thingId) : !shred.listIds.has(item.listId),
+  );
   return { items, add, remove, isLoading: !preview && query.isLoading, error: query.error };
 }

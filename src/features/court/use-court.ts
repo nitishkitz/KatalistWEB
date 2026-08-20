@@ -10,6 +10,7 @@ import { accessibleDemoThings } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPreviewSession } from "@/lib/session-mode";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { excludePersonallyShreddedThings, usePersonalShred } from "@/features/things/personal-shred";
 
 async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; myActorId: string | null }> {
   const { data: auth } = await supabase.auth.getUser();
@@ -35,6 +36,7 @@ export function useCourt() {
   const liveAuth = Boolean(session) && !preview;
   const { context } = useAppContext();
   useLocalVersion();
+  const shred = usePersonalShred();
 
   const query = useQuery({
     queryKey: keys.court(user?.id, context),
@@ -49,11 +51,11 @@ export function useCourt() {
       return { things: accessibleDemoThings(context), myActorId: me, live: false as const };
     }
     return {
-      things: query.data?.things ?? [],
+      things: excludePersonallyShreddedThings(query.data?.things ?? [], shred),
       myActorId: query.data?.myActorId ?? null,
       live: true as const,
     };
-  }, [preview, query.data, context]);
+  }, [preview, query.data, context, shred]);
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");
   const theirs = parts.theirs;

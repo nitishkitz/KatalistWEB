@@ -261,7 +261,15 @@ function MePage() {
               {stats.shredded.map((s) => (
                 <li key={s.id} className="flex items-center justify-between text-[12px]">
                   <span>{s.title}</span>
-                  <button type="button" className="text-primary" onClick={() => void restore(s.id, s.kind)}>
+                  <button
+                    type="button"
+                    className="text-primary"
+                    onClick={() =>
+                      void Promise.resolve(restore(s.id, s.kind)).catch((err) =>
+                        toast.error(err instanceof Error ? err.message : "Couldn’t restore that."),
+                      )
+                    }
+                  >
                     Restore
                   </button>
                 </li>
@@ -285,7 +293,15 @@ function MePage() {
                     {stats.shredded.map((s) => (
                       <li key={`${s.kind}:${s.id}`} className="flex items-center justify-between text-[12px]">
                         <span>{s.title}</span>
-                        <button type="button" className="text-primary" onClick={() => void restore(s.id, s.kind)}>
+                        <button
+                          type="button"
+                          className="text-primary"
+                          onClick={() =>
+                            void Promise.resolve(restore(s.id, s.kind)).catch((err) =>
+                              toast.error(err instanceof Error ? err.message : "Couldn’t restore that."),
+                            )
+                          }
+                        >
                           Restore
                         </button>
                       </li>

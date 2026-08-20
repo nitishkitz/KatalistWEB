@@ -12,11 +12,18 @@ type BridgeThing = {
   id: string;
   title: string;
   owner_name: string;
+  owner_importance: "now" | "next" | "later";
   due_at: string | null;
   due_has_time: boolean;
   acknowledgement: string;
   work_status: "not_started" | "under_progress" | "sorted" | "cancelled";
 };
+
+function importanceLabel(value: BridgeThing["owner_importance"] | undefined) {
+  if (value === "now") return "NOW";
+  if (value === "later") return "LATER";
+  return "NEXT";
+}
 
 function BridgePage() {
   const { token } = Route.useParams();
@@ -137,6 +144,14 @@ function BridgePage() {
         </p>
         <dl className="mt-4 grid grid-cols-2 gap-2 text-[13px]">
           <div>
+            <dt className="text-muted-foreground">Owner</dt>
+            <dd>{thing.owner_name}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Owner Importance</dt>
+            <dd>{importanceLabel(thing.owner_importance)}</dd>
+          </div>
+          <div>
             <dt className="text-muted-foreground">Due</dt>
             <dd>{thing.due_at ? new Date(thing.due_at).toLocaleDateString() : "—"}</dd>
           </div>
@@ -160,19 +175,21 @@ function BridgePage() {
               Caught It
             </button>
           ) : null}
-          <div className="flex gap-2">
-            {(["not_started", "under_progress", "sorted"] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                disabled={busy || terminal}
-                onClick={() => void act(s)}
-                className="flex-1 rounded-lg border border-border py-2 text-[12px] disabled:opacity-50"
-              >
-                {s.replace("_", " ")}
-              </button>
-            ))}
-          </div>
+          {caught && !terminal ? (
+            <div className="flex gap-2">
+              {(["not_started", "under_progress", "sorted"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void act(s)}
+                  className="flex-1 rounded-lg border border-border py-2 text-[12px] disabled:opacity-50"
+                >
+                  {s.replace("_", " ")}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <form
             className="flex gap-2"
             onSubmit={(e) => {

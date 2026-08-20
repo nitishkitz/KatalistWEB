@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
@@ -6,9 +6,8 @@ import { getMergedThings, getShredded, restoreLocal } from "@/features/things/lo
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { currentDemoActorId } from "@/features/demo/identities";
 import { rpcRestore } from "@/features/things/rpc";
+import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
 import { keys } from "@/domain/query-keys";
-
-export type TrophyObjectKind = "thing" | "list" | "bucket";
 
 export type TrophyStats = {
   sorted: number;
@@ -18,12 +17,13 @@ export type TrophyStats = {
   streak: string;
   weekly: number;
   achievement: string;
-  shredded: { id: string; title: string; kind: TrophyObjectKind }[];
+  shredded: { id: string; title: string; kind: "thing" | "list" | "bucket" }[];
 };
 
 export function useTrophy() {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
+  const qc = useQueryClient();
   useLocalVersion();
 
   const query = useQuery({
@@ -68,13 +68,17 @@ export function useTrophy() {
             lnames?.find((l) => l.id === s.object_id)?.name ??
             bnames?.find((b) => b.id === s.object_id)?.name ??
             s.object_type,
-          kind: s.object_type,
+          kind: (s.object_type === "list" || s.object_type === "bucket" ? s.object_type : "thing") as
+            | "thing"
+            | "list"
+            | "bucket",
         })),
       };
     },
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
   });
+
 
   if (preview) {
     const me = currentDemoActorId();
@@ -90,7 +94,7 @@ export function useTrophy() {
         achievement: mineAssigned.some((t) => t.workStatus === "sorted") ? "Movement on the board" : "—",
         shredded: getShredded().map((s) => ({ id: s.id, title: s.title, kind: s.kind })),
       } satisfies TrophyStats,
-      restore: (id: string, kind: TrophyObjectKind = "thing") => restoreLocal(id, kind === "list" ? "list" : "thing"),
+      restore: (id: string, kind: "thing" | "list" | "bucket" = "thing") => restoreLocal(id, kind === "list" ? "list" : "thing"),
       preview: true,
     };
   }
@@ -106,7 +110,10 @@ export function useTrophy() {
       achievement: "—",
       shredded: [],
     },
-    restore: (id: string, kind: TrophyObjectKind = "thing") => rpcRestore(id, kind),
+    restore: async (id: string, kind: "thing" | "list" | "bucket" = "thing") => {
+      await rpcRestore(id, kind);
+      await invalidatePersonalSurfaces(qc);
+    },
     preview: false,
   };
 }

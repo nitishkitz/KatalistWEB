@@ -197,6 +197,49 @@ export async function rpcAssignThing(thingId: string, assigneeActorId: string) {
   });
 }
 
+export async function rpcAssignOutsideKatalist(input: {
+  thingId: string;
+  displayName: string;
+  email?: string;
+  phone?: string;
+}): Promise<{ actorId: string; token: string; expiresAt: string; path: string }> {
+  if (isPreviewMode()) {
+    throw new Error("Assign outside Katalist needs a live session.");
+  }
+  const displayName = input.displayName.trim();
+  const email = input.email?.trim() || undefined;
+  const phone = input.phone?.trim() || undefined;
+  if (!displayName) throw new Error("A display name is required.");
+  if (!email && !phone) throw new Error("An email or phone number is required.");
+
+  const actor = await liveRpc(() =>
+    supabase.rpc("create_external_actor", {
+      p_display_name: displayName,
+      p_email: email,
+      p_phone_e164: phone,
+    }),
+  );
+  const actorId = actor?.id;
+  if (!actorId) throw new Error("Couldn’t create that external person.");
+
+  await liveRpc(() =>
+    supabase.rpc("reassign_thing", {
+      p_thing_id: input.thingId,
+      p_new_assignee_actor_id: actorId,
+    }),
+  );
+
+  const issued = await liveRpc(() => supabase.rpc("issue_bridge_grant", { p_thing_id: input.thingId }));
+  const grant = Array.isArray(issued) ? issued[0] : issued;
+  if (!grant?.token) throw new Error("Couldn’t open a Bridge for this Thing.");
+  return {
+    actorId,
+    token: grant.token,
+    expiresAt: grant.expires_at,
+    path: `/bridge/${grant.token}`,
+  };
+}
+
 export async function rpcCreateList(name: string, context: "work" | "home") {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("create_list", { p_name: name, p_context: context })),

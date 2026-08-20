@@ -8,6 +8,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { getLists } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcCreateList } from "@/features/things/rpc";
+import { excludePersonallyShreddedLists, usePersonalShred } from "@/features/things/personal-shred";
 import { mapDbListRows, type DbListRow } from "./map-list-rows";
 import type { ListRow } from "./fixtures";
 
@@ -27,6 +28,7 @@ export function useLists() {
   const preview = isPreviewSession(session);
   const version = useLocalVersion();
   const qc = useQueryClient();
+  const shred = usePersonalShred();
 
   const query = useQuery({
     queryKey: keys.lists(user?.id, context),
@@ -37,8 +39,8 @@ export function useLists() {
 
   const lists = useMemo(() => {
     if (preview) return getLists().filter((l) => l.context === context);
-    return query.data ?? [];
-  }, [preview, query.data, context, version]);
+    return excludePersonallyShreddedLists(query.data ?? [], shred);
+  }, [preview, query.data, context, version, shred]);
 
   const create = useMutation({
     mutationFn: (name: string) => rpcCreateList(name, context),

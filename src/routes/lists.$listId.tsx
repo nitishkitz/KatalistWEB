@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
 import { MagicBox } from "@/features/court/MagicBox";
@@ -58,9 +58,7 @@ function ListDetailPage() {
   const viewOnly = list?.role === "view_only";
   const selected = listThings.find((t) => t.id === selectedId) ?? null;
 
-  const things = useMemo(() => {
-    return listThings.filter((t) => t.listId === listId || t.listName === list?.name);
-  }, [listThings, list, listId]);
+  const things = listThings;
 
   const visible = things.filter((t) => {
     if (filter === "mine") return t.assignee.id === myActorId;

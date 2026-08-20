@@ -17,4 +17,5 @@ export const keys = {
   trophy: (profileId: string | undefined) => ["trophy", profileId] as const,
   notifications: (profileId: string | undefined) =>
     ["notifications", profileId] as const,
+  shredded: (profileId: string | undefined) => ["shredded", profileId] as const,
 };

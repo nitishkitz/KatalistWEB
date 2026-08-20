@@ -1,12 +1,11 @@
 import type { Thing } from "@/domain/thing";
 import type { ListRow } from "@/features/lists/fixtures";
 
-/** Demo visibility: only Things the actor owns, created, is assigned, or can view via List membership. */
+/** Demo visibility: Owner, current Assignee, or eligible List access. Creator is provenance only. */
 export function canDemoActorViewThing(thing: Thing, actorId: string, lists: ListRow[]): boolean {
   if (!actorId) return false;
   if (thing.assignee.id === actorId) return true;
   if (thing.owner.id === actorId) return true;
-  if (thing.creator.id === actorId) return true;
   if (thing.listId) {
     const list = lists.find((l) => l.id === thing.listId);
     if (list) {
