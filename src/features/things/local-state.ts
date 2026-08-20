@@ -298,7 +298,7 @@ export function shredLocal(id: string, kind: "thing" | "list" = "thing") {
     title = thing.title;
     status = thing.workStatus;
   } else {
-    const list = getListsRaw().find((l) => l.id === id);
+    const list = getListRawById(id);
     const role = list ? roleForDemoList(list, actorId) : null;
     if (!list || !role) throw new Error("That List isn’t available.");
     if (role === "owner" || list.ownerActorId === actorId) {
@@ -396,10 +396,9 @@ export function createListLocal(name: string, context: "work" | "home"): ListRow
 
 export function addListMessage(listId: string, body: string, author = "Me") {
   const me = currentDemoPerson();
-  const list = getListsRaw().find((l) => l.id === listId);
-  const role = list ? roleForDemoList(list, me.id) : null;
-  if (!list || !role) throw new Error("That List isn’t available.");
-  if (role !== "owner" && role !== "collaborator") {
+  const list = getListById(listId);
+  if (!list) throw new Error("That List isn’t available.");
+  if (list.role !== "owner" && list.role !== "collaborator") {
     throw new Error("You don’t have permission to post in this List.");
   }
   const row: LocalMessage = {
@@ -413,9 +412,7 @@ export function addListMessage(listId: string, body: string, author = "Me") {
 }
 
 export function getListMessages(listId: string): LocalMessage[] {
-  const me = currentDemoActorId();
-  const list = getListsRaw().find((l) => l.id === listId);
-  if (!list || !roleForDemoList(list, me)) return [];
+  if (!getListById(listId)) return [];
   return listMessages.get(listId) ?? [];
 }
 
@@ -514,8 +511,13 @@ export function getBucketRefs(bucketId: string): BucketItem[] {
   return merged;
 }
 
-export function getListById(id: string): ListRow | undefined {
+function getListRawById(id: string): ListRow | undefined {
   return getListsRaw().find((l) => l.id === id);
+}
+
+/** Actor-aware lookup: membership + personal Shred. UI surfaces must use this. */
+export function getListById(id: string): ListRow | undefined {
+  return getLists().find((l) => l.id === id);
 }
 
 export function renameBucketLocal(bucketId: string, name: string) {

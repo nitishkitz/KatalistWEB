@@ -8,7 +8,12 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { getLists } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcCreateList } from "@/features/things/rpc";
-import { excludePersonallyShreddedLists, usePersonalShred } from "@/features/things/personal-shred";
+import {
+  excludePersonallyShreddedList,
+  excludePersonallyShreddedLists,
+  isPersonallyShreddedList,
+  usePersonalShred,
+} from "@/features/things/personal-shred";
 import { mapDbListRows, type DbListRow } from "./map-list-rows";
 import type { ListRow } from "./fixtures";
 
@@ -55,11 +60,13 @@ export function useLists() {
 export function useList(listId: string | undefined) {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
+  const shred = usePersonalShred();
+  const hidden = isPersonallyShreddedList(listId, shred);
   useLocalVersion();
 
   const byId = useQuery({
     queryKey: ["list", listId],
-    enabled: Boolean(listId) && Boolean(user) && !preview,
+    enabled: Boolean(listId) && Boolean(user) && !preview && !hidden,
     queryFn: async (): Promise<ListRow | null> => {
       const { data, error } = await supabase
         .from("lists")
@@ -77,5 +84,13 @@ export function useList(listId: string | undefined) {
     const list = getLists().find((l) => l.id === listId);
     return { list, isLoading: false, error: null, preview: true };
   }
-  return { list: byId.data ?? undefined, isLoading: byId.isLoading, error: byId.error, preview: false };
+  if (hidden) {
+    return { list: undefined, isLoading: false, error: null, preview: false };
+  }
+  return {
+    list: excludePersonallyShreddedList(byId.data ?? undefined, shred),
+    isLoading: byId.isLoading,
+    error: byId.error,
+    preview: false,
+  };
 }

@@ -1230,6 +1230,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      assign_outside_katalist: {
+        Args: {
+          p_display_name: string
+          p_email?: string
+          p_phone_e164?: string
+          p_thing_id: string
+        }
+        Returns: {
+          actor_id: string
+          expires_at: string
+          token: string
+        }[]
+      }
       bridge_act: {
         Args: { p_action: string; p_session_token: string }
         Returns: Database["public"]["Enums"]["work_status"]

@@ -6,13 +6,21 @@ import {
   personalShredFromRows,
   excludePersonallyShreddedThings,
   excludePersonallyShreddedLists,
+  excludePersonallyShreddedList,
+  isPersonallyShreddedList,
 } from "@/features/things/personal-shred";
 import { canDemoActorViewThing } from "@/features/demo/visibility";
 import { parseToss, tossBlockedByPerson } from "@/features/court/parse-toss";
 import { setDemoActorForTests, demoDirectory } from "@/features/demo/identities";
 import {
   accessibleDemoThings,
+  addBucketRef,
+  addListMessage,
+  createBucketLocal,
   createListLocal,
+  getBucketRefs,
+  getListById,
+  getListMessages,
   getLists,
   getMergedThings,
   getShredded,
@@ -153,21 +161,33 @@ test("Live personal shred is one reusable lens applied to Court, Lists, Doorman,
   const court = readFileSync(new URL("../src/features/court/use-court.ts", import.meta.url), "utf8");
   const lists = readFileSync(new URL("../src/features/lists/use-lists.ts", import.meta.url), "utf8");
   const listThings = readFileSync(new URL("../src/features/lists/use-list-things.ts", import.meta.url), "utf8");
+  const listMessages = readFileSync(new URL("../src/features/lists/use-list-messages.ts", import.meta.url), "utf8");
   const doorman = readFileSync(new URL("../src/features/doorman/use-doorman.ts", import.meta.url), "utf8");
   const buckets = readFileSync(new URL("../src/features/buckets/use-bucket-items.ts", import.meta.url), "utf8");
   const realtime = readFileSync(new URL("../src/features/realtime/use-realtime.ts", import.meta.url), "utf8");
   const trophy = readFileSync(new URL("../src/features/me/use-trophy.ts", import.meta.url), "utf8");
   const sheet = readFileSync(new URL("../src/features/things/ThingDetailSheet.tsx", import.meta.url), "utf8");
+  const lens = readFileSync(new URL("../src/features/things/personal-shred.ts", import.meta.url), "utf8");
   assert.match(court, /excludePersonallyShreddedThings/);
   assert.match(court, /usePersonalShred/);
   assert.match(lists, /excludePersonallyShreddedLists/);
+  assert.match(lists, /excludePersonallyShreddedList/);
+  assert.match(lists, /isPersonallyShreddedList/);
   assert.match(listThings, /excludePersonallyShreddedThings/);
+  assert.match(listThings, /isPersonallyShreddedList/);
+  assert.match(listThings, /getListById/);
+  assert.match(listMessages, /isPersonallyShreddedList/);
+  assert.match(listMessages, /That List isn’t available/);
   assert.match(doorman, /fetchPersonalShred/);
   assert.match(buckets, /excludePersonallyShreddedThings/);
   assert.match(realtime, /profile_object_state/);
   assert.match(realtime, /invalidatePersonalSurfaces/);
   assert.match(trophy, /invalidatePersonalSurfaces/);
   assert.match(sheet, /invalidatePersonalSurfaces/);
+  assert.match(lens, /list-messages/);
+  assert.equal(lists.includes("from(\"profile_object_state\")"), false);
+  assert.equal(listThings.includes("from(\"profile_object_state\")"), false);
+  assert.equal(listMessages.includes("from(\"profile_object_state\")"), false);
 });
 
 test("Bridge SQL returns owner_importance; guest UI is Catch-first and read-only Importance", () => {
@@ -200,17 +220,17 @@ test("Bridge SQL returns owner_importance; guest UI is Catch-first and read-only
   assert.ok(catchGate > 0 && statusButtons > catchGate);
 });
 
-test("Assign outside Katalist uses create_external_actor → reassign_thing → issue_bridge_grant on the same Thing", () => {
+test("Assign outside Katalist uses one atomic assign_outside_katalist RPC", () => {
   const rpc = readFileSync(new URL("../src/features/things/rpc.ts", import.meta.url), "utf8");
   const fn = rpc.slice(rpc.indexOf("rpcAssignOutsideKatalist"));
   const body = fn.slice(0, fn.indexOf("export async function rpcCreateList"));
   assert.match(body, /needs a live session/);
-  const createAt = body.indexOf('supabase.rpc("create_external_actor"');
-  const reassignAt = body.indexOf('supabase.rpc("reassign_thing"');
-  const grantAt = body.indexOf('supabase.rpc("issue_bridge_grant"');
-  assert.ok(createAt > 0 && reassignAt > createAt && grantAt > reassignAt);
+  assert.match(body, /supabase\.rpc\("assign_outside_katalist"/);
+  assert.equal(body.includes('supabase.rpc("create_external_actor"'), false);
+  assert.equal(body.includes('supabase.rpc("reassign_thing"'), false);
+  assert.equal(body.includes('supabase.rpc("issue_bridge_grant"'), false);
   assert.match(body, /p_thing_id: input\.thingId/);
-  assert.match(body, /\/bridge\/\$\{grant\.token\}/);
+  assert.match(body, /\/bridge\/\$\{row\.token\}/);
   assert.equal(body.includes("add_list_member"), false);
 
   const sheet = readFileSync(new URL("../src/features/things/ThingDetailSheet.tsx", import.meta.url), "utf8");
@@ -219,4 +239,127 @@ test("Assign outside Katalist uses create_external_actor → reassign_thing → 
   assert.match(sheet, /rpcAssignOutsideKatalist/);
   assert.match(sheet, /Copy link/);
   assert.equal(sheet.includes("toast.success(\"Bridge opened") && sheet.includes("setBridgePath(result.path)"), true);
+});
+
+test("Demo List shred: getListById hides for A, other members still see, Restore returns", () => {
+  setDemoActorForTests("p-priya");
+  assert.ok(getListById("l4"));
+  assert.ok(getLists().some((l) => l.id === "l4"));
+  addListMessage("l2", "before shred on owned list");
+  shredLocal("l4", "list");
+  assert.equal(getListById("l4"), undefined);
+  assert.equal(getLists().some((l) => l.id === "l4"), false);
+  assert.equal(getListMessages("l4").length, 0);
+  assert.throws(() => addListMessage("l4", "hidden list chat"));
+  assert.ok(getListById("l2"));
+  assert.ok(getListMessages("l2").some((m) => m.body === "before shred on owned list"));
+
+  setDemoActorForTests("p-sarah");
+  assert.ok(getListById("l4"));
+  assert.equal(getListById("l4").id, "l4");
+  assert.ok(getLists().some((l) => l.id === "l4"));
+
+  setDemoActorForTests("p-arjun");
+  assert.ok(getListById("l4"));
+
+  setDemoActorForTests("p-priya");
+  restoreLocal("l4", "list");
+  assert.ok(getListById("l4"));
+  assert.ok(getLists().some((l) => l.id === "l4"));
+});
+
+test("Bucket cannot resurrect a personally shredded List; Restore returns the reference", () => {
+  setDemoActorForTests("p-priya");
+  const bucket = createBucketLocal("Shred refs", "work");
+  addBucketRef(bucket.id, { listId: "l4", title: "Q3 Marketing Plan", kind: "list" });
+  assert.ok(getBucketRefs(bucket.id).some((r) => r.listId === "l4"));
+  assert.ok(getListById("l4"));
+  const visibleBefore = getBucketRefs(bucket.id)
+    .filter((r) => r.kind === "list" && r.listId)
+    .map((r) => getListById(r.listId))
+    .filter(Boolean);
+  assert.ok(visibleBefore.some((l) => l.id === "l4"));
+
+  shredLocal("l4", "list");
+  assert.equal(getListById("l4"), undefined);
+  assert.ok(getBucketRefs(bucket.id).some((r) => r.listId === "l4"));
+  const visibleAfter = getBucketRefs(bucket.id)
+    .filter((r) => r.kind === "list" && r.listId)
+    .map((r) => getListById(r.listId))
+    .filter(Boolean);
+  assert.equal(visibleAfter.some((l) => l.id === "l4"), false);
+
+  setDemoActorForTests("p-sarah");
+  assert.ok(getListById("l4"));
+
+  setDemoActorForTests("p-priya");
+  restoreLocal("l4", "list");
+  assert.ok(getListById("l4"));
+  const visibleRestored = getBucketRefs(bucket.id)
+    .filter((r) => r.kind === "list" && r.listId)
+    .map((r) => getListById(r.listId))
+    .filter(Boolean);
+  assert.ok(visibleRestored.some((l) => l.id === "l4"));
+});
+
+test("Inaccessible List never resolves from fixture UUID", () => {
+  setDemoActorForTests("p-mike");
+  assert.equal(getListById("l1"), undefined);
+  assert.equal(getListById("l4"), undefined);
+  assert.ok(getListById("l2"));
+  const local = readFileSync(new URL("../src/features/things/local-state.ts", import.meta.url), "utf8");
+  const start = local.indexOf("export function getListById");
+  const end = local.indexOf("export function renameBucketLocal");
+  const publicLookup = local.slice(start, end);
+  assert.match(publicLookup, /getLists\(\)\.find/);
+  assert.equal(publicLookup.includes("getListsRaw()"), false);
+});
+
+test("Live List Detail / Things / Chat are wired to the same personal Shred lens", () => {
+  const shred = personalShredFromRows([{ object_id: "l4", object_type: "list" }]);
+  assert.equal(isPersonallyShreddedList("l4", shred), true);
+  assert.equal(isPersonallyShreddedList("l1", shred), false);
+  assert.equal(excludePersonallyShreddedList({ id: "l4", name: "Q3" }, shred), undefined);
+  assert.equal(excludePersonallyShreddedList({ id: "l1", name: "Android" }, shred)?.id, "l1");
+
+  const lists = readFileSync(new URL("../src/features/lists/use-lists.ts", import.meta.url), "utf8");
+  const useList = lists.slice(lists.indexOf("export function useList"));
+  assert.match(useList, /usePersonalShred/);
+  assert.match(useList, /isPersonallyShreddedList/);
+  assert.match(useList, /excludePersonallyShreddedList/);
+  assert.match(useList, /hidden/);
+
+  const things = readFileSync(new URL("../src/features/lists/use-list-things.ts", import.meta.url), "utf8");
+  assert.match(things, /isPersonallyShreddedList/);
+  assert.match(things, /if \(!listId \|\| hidden\) return \[\]/);
+  assert.match(things, /getListById\(listId\)/);
+
+  const chat = readFileSync(new URL("../src/features/lists/use-list-messages.ts", import.meta.url), "utf8");
+  assert.match(chat, /isPersonallyShreddedList/);
+  assert.match(chat, /if \(hidden\) throw/);
+  assert.match(chat, /hidden\s*\n\s*\? \[\]/);
+});
+
+test("Atomic assign_outside_katalist SQL composes existing primitives on the same Thing", () => {
+  const sql = readFileSync(
+    new URL("../supabase/migrations/20260820150000_assign_outside_katalist_atomic.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.assign_outside_katalist\(/);
+  assert.match(sql, /SECURITY DEFINER/);
+  assert.match(sql, /SET search_path = pg_catalog, public, katalist_priv/);
+  const createAt = sql.indexOf("public.create_external_actor");
+  const reassignAt = sql.indexOf("public.reassign_thing(p_thing_id");
+  const grantAt = sql.indexOf("public.issue_bridge_grant(p_thing_id)");
+  assert.ok(createAt > 0 && reassignAt > createAt && grantAt > reassignAt);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.assign_outside_katalist\(uuid, text, text, text\) TO authenticated, service_role/);
+  assert.match(sql, /REVOKE EXECUTE ON FUNCTION public\.assign_outside_katalist\(uuid, text, text, text\) FROM PUBLIC, anon/);
+  assert.equal(sql.includes("add_list_member"), false);
+  assert.equal(sql.includes("add_to_bucket"), false);
+  assert.equal(sql.includes("create_thing"), false);
+  assert.match(sql, /PERFORM public\.reassign_thing\(p_thing_id, v_actor\.id\)/);
+  assert.match(sql, /issue_bridge_grant\(p_thing_id\)/);
+
+  const types = readFileSync(new URL("../src/integrations/supabase/types.ts", import.meta.url), "utf8");
+  assert.match(types, /assign_outside_katalist:/);
 });

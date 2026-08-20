@@ -212,31 +212,21 @@ export async function rpcAssignOutsideKatalist(input: {
   if (!displayName) throw new Error("A display name is required.");
   if (!email && !phone) throw new Error("An email or phone number is required.");
 
-  const actor = await liveRpc(() =>
-    supabase.rpc("create_external_actor", {
+  const issued = await liveRpc(() =>
+    supabase.rpc("assign_outside_katalist", {
+      p_thing_id: input.thingId,
       p_display_name: displayName,
       p_email: email,
       p_phone_e164: phone,
     }),
   );
-  const actorId = actor?.id;
-  if (!actorId) throw new Error("Couldn’t create that external person.");
-
-  await liveRpc(() =>
-    supabase.rpc("reassign_thing", {
-      p_thing_id: input.thingId,
-      p_new_assignee_actor_id: actorId,
-    }),
-  );
-
-  const issued = await liveRpc(() => supabase.rpc("issue_bridge_grant", { p_thing_id: input.thingId }));
-  const grant = Array.isArray(issued) ? issued[0] : issued;
-  if (!grant?.token) throw new Error("Couldn’t open a Bridge for this Thing.");
+  const row = Array.isArray(issued) ? issued[0] : issued;
+  if (!row?.token || !row.actor_id) throw new Error("Couldn’t open a Bridge for this Thing.");
   return {
-    actorId,
-    token: grant.token,
-    expiresAt: grant.expires_at,
-    path: `/bridge/${grant.token}`,
+    actorId: row.actor_id,
+    token: row.token,
+    expiresAt: row.expires_at,
+    path: `/bridge/${row.token}`,
   };
 }
 

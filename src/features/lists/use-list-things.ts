@@ -3,12 +3,16 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { getMergedThings } from "@/features/things/local-state";
+import { getListById, getMergedThings } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useCourt } from "@/features/court/use-court";
 import type { Thing } from "@/domain/thing";
 import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
-import { excludePersonallyShreddedThings, usePersonalShred } from "@/features/things/personal-shred";
+import {
+  excludePersonallyShreddedThings,
+  isPersonallyShreddedList,
+  usePersonalShred,
+} from "@/features/things/personal-shred";
 
 export function useListThings(listId: string | undefined) {
   const { session } = useSession();
@@ -16,10 +20,11 @@ export function useListThings(listId: string | undefined) {
   const version = useLocalVersion();
   const court = useCourt();
   const shred = usePersonalShred();
+  const hidden = isPersonallyShreddedList(listId, shred);
 
   const query = useQuery({
     queryKey: ["list-things", listId],
-    enabled: Boolean(listId) && !preview,
+    enabled: Boolean(listId) && !preview && !hidden,
     staleTime: 10_000,
     queryFn: async (): Promise<Thing[]> => {
       const { data, error } = await supabase
@@ -61,10 +66,14 @@ export function useListThings(listId: string | undefined) {
   });
 
   const things = useMemo(() => {
+    if (!listId || hidden) return [];
     // List identity is UUID only — never listName
-    if (preview) return getMergedThings().filter((t) => t.listId === listId);
+    if (preview) {
+      if (!getListById(listId)) return [];
+      return getMergedThings().filter((t) => t.listId === listId);
+    }
     return excludePersonallyShreddedThings(query.data ?? [], shred);
-  }, [preview, query.data, listId, version, shred]);
+  }, [preview, query.data, listId, version, shred, hidden]);
 
-  return { things, isLoading: !preview && query.isLoading, myActorId: court.myActorId };
+  return { things, isLoading: !preview && !hidden && query.isLoading, myActorId: court.myActorId };
 }

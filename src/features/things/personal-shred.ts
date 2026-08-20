@@ -42,6 +42,22 @@ export function excludePersonallyShreddedLists<T extends { id: string }>(
   return lists.filter((l) => !shred.listIds.has(l.id));
 }
 
+export function isPersonallyShreddedList(
+  listId: string | undefined | null,
+  shred: PersonalShred,
+): boolean {
+  return Boolean(listId && shred.listIds.has(listId));
+}
+
+export function excludePersonallyShreddedList<T extends { id: string }>(
+  list: T | null | undefined,
+  shred: PersonalShred,
+): T | undefined {
+  if (!list) return undefined;
+  if (shred.listIds.has(list.id)) return undefined;
+  return list;
+}
+
 export async function fetchPersonalShred(): Promise<PersonalShred> {
   const { data, error } = await supabase
     .from("profile_object_state")
@@ -72,6 +88,7 @@ export async function invalidatePersonalSurfaces(qc: QueryClient) {
     qc.invalidateQueries({ queryKey: ["lists"] }),
     qc.invalidateQueries({ queryKey: ["list"] }),
     qc.invalidateQueries({ queryKey: ["list-things"] }),
+    qc.invalidateQueries({ queryKey: ["list-messages"] }),
     qc.invalidateQueries({ queryKey: ["doorman"] }),
     qc.invalidateQueries({ queryKey: ["nudges"] }),
     qc.invalidateQueries({ queryKey: ["nudge-history"] }),

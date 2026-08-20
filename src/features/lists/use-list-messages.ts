@@ -5,6 +5,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { addListMessage, getListMessages } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { fetchProfileIdentities, matchProfile } from "@/features/people/directory";
+import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
 
 export type ListChatMessage = { id: string; body: string; author: string; at: string };
 
@@ -32,17 +33,20 @@ export function useListMessages(listId: string) {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
   const qc = useQueryClient();
+  const shred = usePersonalShred();
+  const hidden = isPersonallyShreddedList(listId, shred);
   useLocalVersion();
 
   const query = useQuery({
     queryKey: ["list-messages", listId],
     queryFn: () => fetchMessages(listId),
-    enabled: Boolean(listId) && !preview,
+    enabled: Boolean(listId) && !preview && !hidden,
     staleTime: 10_000,
   });
 
   const send = useMutation({
     mutationFn: async (body: string) => {
+      if (hidden) throw new Error("That List isn’t available.");
       if (preview) {
         addListMessage(listId, body);
         return;
@@ -61,11 +65,14 @@ export function useListMessages(listId: string) {
     },
   });
 
-  const messages: ListChatMessage[] = preview
-    ? getListMessages(listId).map((m) => ({ id: m.id, body: m.body, author: m.author, at: m.at }))
-    : (query.data ?? []);
+  const messages: ListChatMessage[] =
+    hidden
+      ? []
+      : preview
+        ? getListMessages(listId).map((m) => ({ id: m.id, body: m.body, author: m.author, at: m.at }))
+        : (query.data ?? []);
 
-  return { messages, send, isLoading: !preview && query.isLoading };
+  return { messages, send, isLoading: !preview && !hidden && query.isLoading };
 }
 
 export { matchProfile };
