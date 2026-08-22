@@ -3,8 +3,6 @@ import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AppSidebar } from "./Sidebar";
 import { PageHeader } from "./PageHeader";
-import { cn } from "@/lib/utils";
-import { useAppContext } from "@/features/context/use-app-context";
 import { useSession } from "@/hooks/useSession";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 import { GhostCard } from "@/features/doorman/GhostCard";
@@ -18,7 +16,6 @@ interface AppShellProps {
 }
 
 export function AppShell({ title, subtitle, actions, children }: AppShellProps) {
-  const { context } = useAppContext();
   const { session, loading } = useSession();
   const navigate = useNavigate();
   useRealtimeInvalidation();
@@ -38,12 +35,7 @@ export function AppShell({ title, subtitle, actions, children }: AppShellProps) 
   }
 
   return (
-    <div
-      className={cn(
-        "flex min-h-screen w-full transition-[background-color] duration-200",
-        context === "home" ? "bg-[oklch(0.99_0.008_80)]" : "bg-background",
-      )}
-    >
+    <div className="flex min-h-screen w-full bg-background">
       <AppSidebar />
       <div className="flex min-h-screen flex-1 flex-col pb-16 md:pb-0 md:pl-[220px]">
         <div className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-10 pt-4 md:px-8 md:pt-6">

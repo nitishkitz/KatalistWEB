@@ -75,8 +75,8 @@
 :root {
   --radius: 0.75rem;
 
-  /* Warm neutral canvas */
-  --background: oklch(0.985 0.004 85);
+  /* Pure-white canvas and surfaces */
+  --background: oklch(1 0 0);
   --foreground: oklch(0.22 0.02 260);
 
   /* Surfaces */
@@ -89,16 +89,16 @@
   --primary: oklch(0.55 0.21 285);
   --primary-foreground: oklch(1 0 0);
 
-  /* Secondary: soft neutral surface */
-  --secondary: oklch(0.96 0.01 85);
+  /* Secondary actions stay white and are separated by borders */
+  --secondary: oklch(1 0 0);
   --secondary-foreground: oklch(0.22 0.02 260);
 
-  /* Muted */
-  --muted: oklch(0.96 0.01 85);
+  /* Neutral interaction surfaces remain pure white */
+  --muted: oklch(1 0 0);
   --muted-foreground: oklch(0.55 0.04 260);
 
-  /* Accent */
-  --accent: oklch(0.96 0.01 85);
+  /* Accent surfaces remain pure white */
+  --accent: oklch(1 0 0);
   --accent-foreground: oklch(0.22 0.02 260);
 
   /* Destructive / urgent */
@@ -106,86 +106,86 @@
   --destructive-foreground: oklch(1 0 0);
 
   /* Borders and inputs */
-  --border: oklch(0.91 0.01 85);
-  --input: oklch(0.91 0.01 85);
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.88 0 0);
   --ring: oklch(0.55 0.21 285 / 40%);
 
   /* Status palette */
-  --status-now: oklch(0.58 0.20 25);
-  --status-now-bg: oklch(0.96 0.02 25);
-  --status-next: oklch(0.55 0.20 250);
-  --status-next-bg: oklch(0.95 0.02 250);
-  --status-later: oklch(0.55 0.04 260);
-  --status-later-bg: oklch(0.94 0.01 85);
+  --status-now: oklch(0.58 0.2 25);
+  --status-now-bg: oklch(1 0 0);
+  --status-next: oklch(0.55 0.2 250);
+  --status-next-bg: oklch(1 0 0);
+  --status-later: oklch(0.55 0.21 285);
+  --status-later-bg: oklch(1 0 0);
   --status-waiting: oklch(0.68 0.16 65);
-  --status-waiting-bg: oklch(0.97 0.02 65);
+  --status-waiting-bg: oklch(1 0 0);
   --status-caught: oklch(0.55 0.18 145);
-  --status-caught-bg: oklch(0.95 0.02 145);
+  --status-caught-bg: oklch(1 0 0);
   --status-neutral: oklch(0.55 0.04 260);
-  --status-neutral-bg: oklch(0.94 0.01 85);
+  --status-neutral-bg: oklch(1 0 0);
 
   /* Sidebar */
   --sidebar: oklch(1 0 0);
   --sidebar-foreground: oklch(0.22 0.02 260);
   --sidebar-primary: oklch(0.55 0.21 285);
   --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.96 0.01 85);
+  --sidebar-accent: oklch(1 0 0);
   --sidebar-accent-foreground: oklch(0.22 0.02 260);
-  --sidebar-border: oklch(0.93 0.01 85);
+  --sidebar-border: oklch(0.88 0 0);
   --sidebar-ring: oklch(0.55 0.21 285 / 40%);
 }
 
 .dark {
   --radius: 0.75rem;
 
-  --background: oklch(0.18 0.02 260);
-  --foreground: oklch(0.97 0.005 85);
-  --card: oklch(0.22 0.02 260);
-  --card-foreground: oklch(0.97 0.005 85);
-  --popover: oklch(0.22 0.02 260);
-  --popover-foreground: oklch(0.97 0.005 85);
+  /* Katalist intentionally keeps the application on a pure-white surface. */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.22 0.02 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.02 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.02 260);
 
-  --primary: oklch(0.65 0.18 285);
-  --primary-foreground: oklch(0.15 0.02 260);
+  --primary: oklch(0.55 0.21 285);
+  --primary-foreground: oklch(1 0 0);
 
-  --secondary: oklch(0.28 0.02 260);
-  --secondary-foreground: oklch(0.97 0.005 85);
+  --secondary: oklch(1 0 0);
+  --secondary-foreground: oklch(0.22 0.02 260);
 
-  --muted: oklch(0.28 0.02 260);
-  --muted-foreground: oklch(0.70 0.03 260);
+  --muted: oklch(1 0 0);
+  --muted-foreground: oklch(0.55 0.04 260);
 
-  --accent: oklch(0.28 0.02 260);
-  --accent-foreground: oklch(0.97 0.005 85);
+  --accent: oklch(1 0 0);
+  --accent-foreground: oklch(0.22 0.02 260);
 
-  --destructive: oklch(0.70 0.18 25);
-  --destructive-foreground: oklch(0.15 0.02 260);
+  --destructive: oklch(0.63 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
 
-  --border: oklch(0.30 0.02 260);
-  --input: oklch(0.30 0.02 260);
-  --ring: oklch(0.65 0.18 285 / 40%);
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.88 0 0);
+  --ring: oklch(0.55 0.21 285 / 40%);
 
-  /* Status palette dark */
-  --status-now: oklch(0.70 0.18 25);
-  --status-now-bg: oklch(0.25 0.03 25);
-  --status-next: oklch(0.70 0.18 250);
-  --status-next-bg: oklch(0.25 0.03 250);
-  --status-later: oklch(0.70 0.03 260);
-  --status-later-bg: oklch(0.25 0.02 260);
-  --status-waiting: oklch(0.78 0.14 65);
-  --status-waiting-bg: oklch(0.25 0.02 65);
-  --status-caught: oklch(0.70 0.16 145);
-  --status-caught-bg: oklch(0.25 0.02 145);
-  --status-neutral: oklch(0.70 0.03 260);
-  --status-neutral-bg: oklch(0.25 0.02 260);
+  --status-now: oklch(0.58 0.2 25);
+  --status-now-bg: oklch(1 0 0);
+  --status-next: oklch(0.55 0.2 250);
+  --status-next-bg: oklch(1 0 0);
+  --status-later: oklch(0.55 0.21 285);
+  --status-later-bg: oklch(1 0 0);
+  --status-waiting: oklch(0.68 0.16 65);
+  --status-waiting-bg: oklch(1 0 0);
+  --status-caught: oklch(0.55 0.18 145);
+  --status-caught-bg: oklch(1 0 0);
+  --status-neutral: oklch(0.55 0.04 260);
+  --status-neutral-bg: oklch(1 0 0);
 
-  --sidebar: oklch(0.22 0.02 260);
-  --sidebar-foreground: oklch(0.97 0.005 85);
-  --sidebar-primary: oklch(0.65 0.18 285);
-  --sidebar-primary-foreground: oklch(0.15 0.02 260);
-  --sidebar-accent: oklch(0.28 0.02 260);
-  --sidebar-accent-foreground: oklch(0.97 0.005 85);
-  --sidebar-border: oklch(0.30 0.02 260);
-  --sidebar-ring: oklch(0.65 0.18 285 / 40%);
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.22 0.02 260);
+  --sidebar-primary: oklch(0.55 0.21 285);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(1 0 0);
+  --sidebar-accent-foreground: oklch(0.22 0.02 260);
+  --sidebar-border: oklch(0.88 0 0);
+  --sidebar-ring: oklch(0.55 0.21 285 / 40%);
 }
 
 @layer base {
@@ -207,11 +207,19 @@
 
 /* Katalist utilities */
 @utility katalist-shadow {
-  box-shadow: 0 1px 3px oklch(0.2 0.02 260 / 0.04), 0 1px 2px oklch(0.2 0.02 260 / 0.02);
+  box-shadow: none;
 }
 
 @utility katalist-shadow-card {
-  box-shadow: 0 4px 6px -1px oklch(0.2 0.02 260 / 0.03), 0 2px 4px -1px oklch(0.2 0.02 260 / 0.02);
+  box-shadow: none;
+}
+
+/* Keep borders and focus rings, but remove elevation shadows from every surface. */
+@layer utilities {
+  * {
+    --tw-shadow: 0 0 #0000 !important;
+    --tw-shadow-colored: 0 0 #0000 !important;
+  }
 }
 
 @utility katalist-page-title {

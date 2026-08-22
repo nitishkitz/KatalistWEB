@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
+  Camera,
   CheckCircle2,
   Cloud,
   Layers,
@@ -11,7 +12,6 @@ import {
   Shield,
   Smartphone,
   Sparkles,
-  UserCheck,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,6 +36,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession, DEMO_PERSONAS, signInAsDemo, DemoPersona } from "@/hooks/useSession";
 import { Logo } from "@/components/katalist/Logo";
 import { demoEnabled } from "@/lib/session-mode";
+import { localFixedOtp } from "@/lib/fixed-otp";
+import {
+  createLocalUser,
+  resolveFixedOtpOutcome,
+  type LocalProfileErrors,
+} from "@/lib/auth/local-user";
 import { useAvatarUrl } from "@/features/people/directory";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 
@@ -118,6 +124,12 @@ function AuthPage() {
   const [otp, setOtp] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [profilePhone, setProfilePhone] = useState<string | null>(null);
+  const [fullName, setFullName] = useState("");
+  const [age, setAge] = useState("");
+  const [occupation, setOccupation] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [profileErrors, setProfileErrors] = useState<LocalProfileErrors>({});
 
   useEffect(() => {
     if (!loading && session) {
@@ -146,6 +158,15 @@ function AuthPage() {
     }
 
     setBusy(true);
+    const fixedOtp = localFixedOtp();
+    if (fixedOtp && channel === "phone") {
+      setBusy(false);
+      setSent(true);
+      setOtp("");
+      toast.success(`Use the local test code ${fixedOtp}`);
+      return;
+    }
+
     const { error } =
       channel === "phone"
         ? await supabase.auth.signInWithOtp({ phone: destination })
@@ -173,6 +194,27 @@ function AuthPage() {
 
   async function verifyOtp(code: string) {
     setBusy(true);
+    const fixedOtp = localFixedOtp();
+    if (fixedOtp && channel === "phone") {
+      if (code !== fixedOtp) {
+        setBusy(false);
+        toast.error("Enter the 6-digit local test code");
+        setOtp("");
+        return;
+      }
+      const outcome = resolveFixedOtpOutcome(window.localStorage, destination, DEMO_PERSONAS);
+      if (outcome.kind === "profile-setup") {
+        setProfilePhone(outcome.phone);
+        setProfileErrors({});
+        setBusy(false);
+        return;
+      }
+      signInAsDemo(outcome.persona);
+      setBusy(false);
+      navigate({ to: "/", replace: true });
+      return;
+    }
+
     const { error } =
       channel === "phone"
         ? await supabase.auth.verifyOtp({ phone: destination, token: code, type: "sms" })
@@ -184,6 +226,23 @@ function AuthPage() {
       setOtp("");
       return;
     }
+    navigate({ to: "/", replace: true });
+  }
+
+  function completeLocalProfile() {
+    if (!profilePhone) return;
+    const result = createLocalUser(window.localStorage, profilePhone, {
+      fullName,
+      age,
+      occupation,
+      avatarUrl,
+    });
+    if (!result.ok) {
+      setProfileErrors(result.errors);
+      return;
+    }
+    signInAsDemo(result.persona);
+    toast.success(`Welcome, ${result.persona.name}!`);
     navigate({ to: "/", replace: true });
   }
 
@@ -273,7 +332,115 @@ function AuthPage() {
             </div>
 
             <div className="p-6">
-              {tab === "preview" ? (
+              {profilePhone ? (
+                <div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-base font-semibold text-foreground">Create your profile</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Tell us a little about you to finish setting up {profilePhone}.
+                      </p>
+                    </div>
+                    <label className="group relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-dashed border-border bg-muted text-muted-foreground hover:border-primary hover:text-primary">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt="Profile preview" className="h-full w-full object-cover" />
+                      ) : (
+                        <Camera className="h-5 w-5" />
+                      )}
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        aria-label="Profile photo"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => setAvatarUrl(typeof reader.result === "string" ? reader.result : null);
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="mt-6 space-y-4">
+                    <div>
+                      <Label htmlFor="profile-name">Full name</Label>
+                      <Input
+                        id="profile-name"
+                        autoComplete="name"
+                        className="mt-1.5"
+                        value={fullName}
+                        onChange={(event) => {
+                          setFullName(event.target.value);
+                          setProfileErrors((current) => ({ ...current, fullName: undefined }));
+                        }}
+                        aria-invalid={Boolean(profileErrors.fullName)}
+                      />
+                      {profileErrors.fullName ? (
+                        <p className="mt-1 text-xs text-destructive">{profileErrors.fullName}</p>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="profile-age">Age</Label>
+                      <Input
+                        id="profile-age"
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        max={120}
+                        className="mt-1.5"
+                        value={age}
+                        onChange={(event) => {
+                          setAge(event.target.value);
+                          setProfileErrors((current) => ({ ...current, age: undefined }));
+                        }}
+                        aria-invalid={Boolean(profileErrors.age)}
+                      />
+                      {profileErrors.age ? (
+                        <p className="mt-1 text-xs text-destructive">{profileErrors.age}</p>
+                      ) : null}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="profile-occupation">Occupation</Label>
+                      <Input
+                        id="profile-occupation"
+                        autoComplete="organization-title"
+                        className="mt-1.5"
+                        value={occupation}
+                        onChange={(event) => {
+                          setOccupation(event.target.value);
+                          setProfileErrors((current) => ({ ...current, occupation: undefined }));
+                        }}
+                        onKeyDown={(event) => event.key === "Enter" && completeLocalProfile()}
+                        aria-invalid={Boolean(profileErrors.occupation)}
+                      />
+                      {profileErrors.occupation ? (
+                        <p className="mt-1 text-xs text-destructive">{profileErrors.occupation}</p>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <Button className="mt-6 w-full" size="lg" onClick={completeLocalProfile}>
+                    Create profile
+                    <ArrowRight className="ml-1 h-4 w-4" />
+                  </Button>
+                  <button
+                    type="button"
+                    className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setProfilePhone(null);
+                      setSent(false);
+                      setOtp("");
+                      setProfileErrors({});
+                    }}
+                  >
+                    Use another number
+                  </button>
+                </div>
+              ) : tab === "preview" ? (
                 <div>
                   <div className="flex items-center justify-between">
                     <div>

@@ -1,3 +1,7 @@
+export function demoModeFromEnv(value: string | undefined): boolean {
+  return value === "true";
+}
+
 export function demoEnabled(): boolean {
-  return import.meta.env.DEV || import.meta.env.VITE_KATALIST_DEMO_MODE === "true";
+  return demoModeFromEnv(import.meta.env.VITE_KATALIST_DEMO_MODE);
 }

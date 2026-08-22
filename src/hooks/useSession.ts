@@ -3,16 +3,10 @@ import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
 import { demoEnabled } from "@/lib/demo-flag";
+import { localFixedOtpEnabled } from "@/lib/fixed-otp";
+import type { LocalPersona } from "@/lib/auth/local-user";
 
-export interface DemoPersona {
-  key: string;
-  name: string;
-  role: string;
-  phone: string;
-  email: string;
-  initials: string;
-  color: string;
-}
+export type DemoPersona = LocalPersona;
 
 export const DEMO_PERSONAS: DemoPersona[] = [
   {
@@ -63,7 +57,12 @@ export const DEMO_PERSONAS: DemoPersona[] = [
 ];
 
 const DEMO_STORAGE_KEY = "katalist_demo_session";
+const LOCAL_OTP_STORAGE_KEY = "katalist_local_otp_session";
 const AUTH_EVENT_NAME = "katalist_auth_state_change";
+
+function sessionStorageKey(): string {
+  return demoEnabled() ? DEMO_STORAGE_KEY : LOCAL_OTP_STORAGE_KEY;
+}
 
 function createDemoSession(persona: DemoPersona): Session {
   const user: User = {
@@ -79,6 +78,9 @@ function createDemoSession(persona: DemoPersona): Session {
       phone: persona.phone,
       persona_key: persona.key,
       actor_id: `p-${persona.key}`,
+      age: persona.age,
+      occupation: persona.occupation,
+      avatar_url: persona.avatarUrl,
     },
     aud: "authenticated",
     created_at: new Date().toISOString(),
@@ -100,9 +102,9 @@ function createDemoSession(persona: DemoPersona): Session {
 
 export function getStoredDemoSession(): Session | null {
   if (typeof window === "undefined") return null;
-  if (!demoEnabled()) return null;
+  if (!demoEnabled() && !localFixedOtpEnabled()) return null;
   try {
-    const raw = localStorage.getItem(DEMO_STORAGE_KEY);
+    const raw = localStorage.getItem(sessionStorageKey());
     if (!raw) return null;
     const persona: DemoPersona = JSON.parse(raw);
     return createDemoSession(persona);
@@ -112,9 +114,9 @@ export function getStoredDemoSession(): Session | null {
 }
 
 export function signInAsDemo(persona: DemoPersona) {
-  if (!demoEnabled()) return;
+  if (!demoEnabled() && !localFixedOtpEnabled()) return;
   if (typeof window !== "undefined") {
-    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(persona));
+    localStorage.setItem(sessionStorageKey(), JSON.stringify(persona));
     window.dispatchEvent(new CustomEvent(AUTH_EVENT_NAME));
   }
 }
@@ -122,6 +124,7 @@ export function signInAsDemo(persona: DemoPersona) {
 export async function signOutAll() {
   if (typeof window !== "undefined") {
     localStorage.removeItem(DEMO_STORAGE_KEY);
+    localStorage.removeItem(LOCAL_OTP_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent(AUTH_EVENT_NAME));
   }
   try {

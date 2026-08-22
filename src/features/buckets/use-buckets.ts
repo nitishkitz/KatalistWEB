@@ -34,6 +34,7 @@ async function fetchBuckets(context: "work" | "home"): Promise<BucketCard[]> {
       pinned: i < 2,
       thingCount: refs.filter((r) => r.thing_id).length,
       listCount: refs.filter((r) => r.list_id).length,
+      thingIds: refs.map((r) => r.thing_id).filter(Boolean) as string[],
       updatedAt: new Date(b.updated_at).toLocaleString(),
       context: (b.context === "home" ? "home" : "work") as "work" | "home",
       previews: [],
@@ -88,7 +89,10 @@ export function useBucket(bucketId: string | undefined) {
         .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      const { data: items } = await supabase.from("bucket_items").select("thing_id,list_id").eq("bucket_id", data.id);
+      const { data: items } = await supabase
+        .from("bucket_items")
+        .select("thing_id,list_id")
+        .eq("bucket_id", data.id);
       return {
         id: data.id,
         name: data.name,

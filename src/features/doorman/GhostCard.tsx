@@ -11,7 +11,7 @@ export function GhostCard() {
   const from = ghost.context === "work" ? "WORK BREAKTHROUGH" : "HOME BREAKTHROUGH";
 
   return (
-    <aside className="pointer-events-auto fixed bottom-20 right-4 z-50 w-[320px] rounded-xl border border-border bg-card/90 p-3 shadow-sm backdrop-blur md:bottom-6">
+    <aside className="pointer-events-auto fixed bottom-20 right-4 z-50 w-[320px] rounded-xl border border-border bg-card p-3 md:bottom-6">
       <p className="text-[10px] font-semibold tracking-wide text-muted-foreground">{from}</p>
       <p className="mt-1 text-[13px] font-medium text-foreground">{ghost.title}</p>
       <p className="mt-1 text-[12px] text-muted-foreground">

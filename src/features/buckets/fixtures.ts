@@ -9,7 +9,14 @@ export type BucketCard = {
   updatedAt: string;
   ownerActorId?: string;
   context: "work" | "home";
-  previews: { title: string; kind: "thing" | "list"; state?: string; thingId?: string; listId?: string }[];
+  thingIds?: string[];
+  previews: {
+    title: string;
+    kind: "thing" | "list";
+    state?: string;
+    thingId?: string;
+    listId?: string;
+  }[];
 };
 
 export const bucketFixtures: BucketCard[] = [
@@ -86,9 +93,7 @@ export const bucketFixtures: BucketCard[] = [
     updatedAt: "Updated 5d ago",
     ownerActorId: "p-priya",
     context: "work",
-    previews: [
-      { title: "Q3 Marketing Plan", kind: "list", listId: "l4" },
-    ],
+    previews: [{ title: "Q3 Marketing Plan", kind: "list", listId: "l4" }],
   },
   {
     id: "b6",

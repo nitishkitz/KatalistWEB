@@ -1,0 +1,186 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  DEFAULT_COURT_FILTERS,
+  applyCourtView,
+  cardDensityForLane,
+  filterCourtThings,
+  formatCourtDue,
+  sortCourtThings,
+  toggleLaneFocus,
+  toggleTheirsFocus,
+} from "@/features/court/court-view-model";
+
+const person = (id, name) => ({ id, name, initials: name.slice(0, 2).toUpperCase() });
+
+function thing(overrides = {}) {
+  return {
+    id: "thing-1",
+    title: "Review launch copy",
+    creator: person("creator", "Priya"),
+    owner: person("owner", "Rahul"),
+    assignee: person("assignee", "Arjun"),
+    acknowledgement: "caught",
+    workStatus: "not_started",
+    ownerImportance: "next",
+    personalPace: "next",
+    dueAt: "2026-08-20T12:00:00.000Z",
+    dueHasTime: true,
+    context: "work",
+    listId: "list-1",
+    listName: "Website Launch",
+    starred: false,
+    cancelledAt: null,
+    sortedAt: null,
+    caughtAt: "2026-08-18T12:00:00.000Z",
+    updatedAt: "2026-08-19T12:00:00.000Z",
+    ...overrides,
+  };
+}
+
+test("search matches title, owner, assignee, and list without changing the source", () => {
+  const source = [thing()];
+  for (const query of ["launch copy", "rahul", "arjun", "website launch"]) {
+    assert.deepEqual(filterCourtThings(source, DEFAULT_COURT_FILTERS, query), source);
+  }
+  assert.deepEqual(filterCourtThings(source, DEFAULT_COURT_FILTERS, "missing"), []);
+  assert.equal(source.length, 1);
+});
+
+test("quick and detailed filters compose", () => {
+  const now = new Date("2026-08-20T09:00:00.000Z");
+  const source = [
+    thing({ id: "overdue", dueAt: "2026-08-19T09:00:00.000Z", starred: true }),
+    thing({
+      id: "overdue-today",
+      dueAt: "2026-08-20T08:00:00.000Z",
+      dueHasTime: true,
+      starred: true,
+    }),
+    thing({
+      id: "today-no-time",
+      dueAt: "2026-08-20T08:00:00.000Z",
+      dueHasTime: false,
+      starred: true,
+    }),
+    thing({ id: "waiting", acknowledgement: "waiting_for_catch", workStatus: "under_progress" }),
+    thing({ id: "no-due", dueAt: null }),
+  ];
+
+  assert.deepEqual(
+    filterCourtThings(
+      source,
+      { ...DEFAULT_COURT_FILTERS, due: "overdue", starredOnly: true },
+      "",
+      now,
+    ).map((item) => item.id),
+    ["overdue", "overdue-today"],
+  );
+  assert.deepEqual(
+    filterCourtThings(
+      source,
+      {
+        ...DEFAULT_COURT_FILTERS,
+        quick: "waiting",
+        acknowledgement: "waiting_for_catch",
+        workStatus: "under_progress",
+      },
+      "",
+      now,
+    ).map((item) => item.id),
+    ["waiting"],
+  );
+  assert.deepEqual(
+    filterCourtThings(source, { ...DEFAULT_COURT_FILTERS, due: "no_due" }, "", now).map(
+      (item) => item.id,
+    ),
+    ["no-due"],
+  );
+  assert.deepEqual(
+    filterCourtThings(source, { ...DEFAULT_COURT_FILTERS, due: "this_week" }, "", now).map(
+      (item) => item.id,
+    ),
+    ["overdue-today", "today-no-time", "waiting"],
+  );
+});
+
+test("sorting is stable and puts missing due dates last", () => {
+  const source = [
+    thing({ id: "none", dueAt: null, updatedAt: "2026-08-20T10:00:00.000Z" }),
+    thing({ id: "later", dueAt: "2026-08-22T10:00:00.000Z", ownerImportance: "later" }),
+    thing({ id: "soon", dueAt: "2026-08-21T10:00:00.000Z", ownerImportance: "now" }),
+  ];
+
+  assert.deepEqual(
+    sortCourtThings(source, "due").map((item) => item.id),
+    ["soon", "later", "none"],
+  );
+  assert.deepEqual(
+    sortCourtThings(source, "importance").map((item) => item.id),
+    ["soon", "none", "later"],
+  );
+  assert.deepEqual(
+    source.map((item) => item.id),
+    ["none", "later", "soon"],
+  );
+});
+
+test("applying a Court view returns filtered counts and sorted lane items", () => {
+  const lanes = {
+    now: [
+      thing({ id: "now-a", ownerImportance: "later" }),
+      thing({ id: "now-b", ownerImportance: "now" }),
+    ],
+    next: [thing({ id: "next-a", title: "Unrelated" })],
+    later: [],
+    theirs: [thing({ id: "their-a", title: "Review external copy" })],
+  };
+  const view = applyCourtView(lanes, DEFAULT_COURT_FILTERS, "review", "importance");
+
+  assert.deepEqual(
+    view.now.map((item) => item.id),
+    ["now-b", "now-a"],
+  );
+  assert.deepEqual(view.next, []);
+  assert.deepEqual(
+    view.theirs.map((item) => item.id),
+    ["their-a"],
+  );
+  assert.deepEqual(view.counts, { now: 2, next: 0, later: 0, theirs: 1 });
+});
+
+test("lane and THEIRS selections toggle closed when selected twice", () => {
+  assert.equal(toggleLaneFocus(null, "now"), "now");
+  assert.equal(toggleLaneFocus("now", "now"), null);
+  assert.equal(toggleLaneFocus("now", "later"), "later");
+  assert.equal(toggleTheirsFocus(null, "moving"), "moving");
+  assert.equal(toggleTheirsFocus("moving", "moving"), null);
+});
+
+test("card density follows overview, focused, and peek lane states", () => {
+  assert.equal(cardDensityForLane(null, "now"), "overview");
+  assert.equal(cardDensityForLane("now", "now"), "focused");
+  assert.equal(cardDensityForLane("now", "next"), "peek");
+});
+
+test("due labels include exact time only when the Thing has one", () => {
+  const now = new Date(2026, 7, 20, 9, 0, 0);
+  assert.deepEqual(
+    formatCourtDue(
+      thing({ dueAt: new Date(2026, 7, 20, 17, 30, 0).toISOString(), dueHasTime: true }),
+      now,
+    ),
+    { label: "Today, 5:30 PM", urgent: true },
+  );
+  assert.deepEqual(
+    formatCourtDue(
+      thing({ dueAt: new Date(2026, 7, 21, 9, 0, 0).toISOString(), dueHasTime: false }),
+      now,
+    ),
+    { label: "Tomorrow", urgent: true },
+  );
+  assert.deepEqual(formatCourtDue(thing({ dueAt: null }), now), {
+    label: "No due date",
+    urgent: false,
+  });
+});

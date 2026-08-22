@@ -79,7 +79,7 @@ export function AppSidebar() {
       </aside>
 
       {/* Mobile — bottom tab bar */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t border-border bg-card/95 px-1 backdrop-blur md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t border-border bg-card px-1 md:hidden">
         {navItems.map((item) => {
           const isActive =
             item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);

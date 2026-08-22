@@ -21,6 +21,17 @@ export function useProfile() {
     enabled: live && Boolean(user?.id),
     queryFn: async (): Promise<ProfileRow | null> => {
       if (user?.app_metadata?.provider === "demo") {
+        const personaKey = user.user_metadata?.persona_key as string | undefined;
+        if (personaKey?.startsWith("local-")) {
+          return {
+            id: user.id,
+            display_name: (user.user_metadata?.display_name as string | undefined) || "Katalist user",
+            avatar_url: (user.user_metadata?.avatar_url as string | undefined) || null,
+            email: user.email ?? null,
+            phone_e164: user.phone ?? null,
+            active_context: "work",
+          };
+        }
         const rows = await fetchProfileIdentities();
         const hit = matchProfile(rows, user.user_metadata?.display_name as string | undefined, user.email);
         if (!hit) return null;

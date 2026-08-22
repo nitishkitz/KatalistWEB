@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { partitionCourt } from "@/domain/thing";
-import { setDemoActorForTests, currentDemoActorId } from "@/features/demo/identities";
+import {
+  setDemoActorForTests,
+  currentDemoActorId,
+  resolveDemoActorId,
+  resolveDemoPerson,
+} from "@/features/demo/identities";
 import { canDemoActorViewThing } from "@/features/demo/visibility";
 import { courtFixtures } from "@/features/court/fixtures";
 import { listFixtures } from "@/features/lists/fixtures";
@@ -47,6 +52,27 @@ const CANONICAL_LISTS = {
   "Q3 Marketing Plan": "l4",
   "Office Move Checklist": "l5",
 };
+
+test("a generated local persona keeps its own actor id instead of falling back to Priya", () => {
+  const session = {
+    user: {
+      id: "demo-local-919876543210",
+      user_metadata: {
+        persona_key: "local-919876543210",
+        actor_id: "p-local-919876543210",
+        display_name: "Naga Reddy",
+        initials: "NR",
+      },
+    },
+  };
+
+  assert.equal(resolveDemoActorId(session), "p-local-919876543210");
+  assert.deepEqual(resolveDemoPerson(session), {
+    id: "p-local-919876543210",
+    name: "Naga Reddy",
+    initials: "NR",
+  });
+});
 
 test("SCENARIO A — assign → catch → pace", () => {
   resetDemoLocalStateForTests();

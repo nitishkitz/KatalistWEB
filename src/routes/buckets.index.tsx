@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Filter, Lock, MoreHorizontal, Plus, Search } from "lucide-react";
+import {
+  ArrowDownUp,
+  ArrowRight,
+  ChevronDown,
+  Filter,
+  Lock,
+  MoreHorizontal,
+  Plus,
+  Search,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { type BucketCard } from "@/features/buckets/fixtures";
 import { useLocalVersion } from "@/features/things/use-local-version";
@@ -42,7 +51,12 @@ function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean
     >
       <div className="mb-3 flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <span className={cn("flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold text-white", bucket.color)}>
+          <span
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold text-white",
+              bucket.color,
+            )}
+          >
             {bucket.name.slice(0, 1)}
           </span>
           <div>
@@ -65,7 +79,9 @@ function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean
         </button>
       </div>
 
-      <p className="mb-3 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">{bucket.description}</p>
+      <p className="mb-3 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
+        {bucket.description}
+      </p>
 
       <ul className="mb-3 flex-1 space-y-1.5">
         {bucket.previews.slice(0, 3).map((p) => (
@@ -146,13 +162,20 @@ function BucketsPage() {
             className="w-full bg-transparent text-[13px] outline-none"
           />
         </label>
-        <button
-          type="button"
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground"
-          onClick={() => setSort((s) => (s === "recent" ? "name" : "recent"))}
-        >
-          Sort: {sort === "recent" ? "Recently updated" : "Name"}
-        </button>
+        <label className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground">
+          <ArrowDownUp className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-muted-foreground">Sort:</span>
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as "recent" | "name")}
+            className="appearance-none bg-transparent pr-4 text-[13px] outline-none"
+            aria-label="Sort buckets"
+          >
+            <option value="recent">Recently updated</option>
+            <option value="name">Name</option>
+          </select>
+          <ChevronDown className="pointer-events-none -ml-5 h-3.5 w-3.5 text-muted-foreground" />
+        </label>
         <button
           type="button"
           className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground"
@@ -212,7 +235,10 @@ function BucketsPage() {
               <button type="button" className="text-[13px]" onClick={() => setCreating(false)}>
                 Cancel
               </button>
-              <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-[13px] text-primary-foreground">
+              <button
+                type="submit"
+                className="rounded-lg bg-primary px-3 py-1.5 text-[13px] text-primary-foreground"
+              >
                 Create
               </button>
             </div>

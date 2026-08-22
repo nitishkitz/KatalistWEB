@@ -2,7 +2,7 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
 import { MagicBox } from "@/features/court/MagicBox";
-import { ThingRow } from "@/components/katalist/ThingRow";
+import { ThingRow, ThingTableHeader } from "@/components/katalist/ThingRow";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
@@ -149,6 +149,7 @@ function ListDetailPage() {
           </div>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <table className="hidden w-full md:table">
+              <ThingTableHeader />
               <tbody>
                 {visible.map((t) => (
                   <ThingRow key={t.id} thing={t} onSelect={(thing) => setSelectedId(thing.id)} />
@@ -156,7 +157,9 @@ function ListDetailPage() {
               </tbody>
             </table>
             {visible.length === 0 ? (
-              <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">No things in this filter.</p>
+              <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                No things in this filter.
+              </p>
             ) : null}
           </div>
         </>
@@ -180,7 +183,9 @@ function ListDetailPage() {
             )}
           </div>
           {viewOnly ? (
-            <p className="text-[12px] text-muted-foreground">View Only can observe and comment on Things, not administer.</p>
+            <p className="text-[12px] text-muted-foreground">
+              View Only can observe and comment on Things, not administer.
+            </p>
           ) : (
             <form
               className="flex gap-2"
@@ -199,7 +204,10 @@ function ListDetailPage() {
                 placeholder="Message the room — or turn a line into a Thing from Magic Box"
                 className="h-9 flex-1 rounded-lg border border-border bg-background px-3 text-[13px]"
               />
-              <button type="submit" className="rounded-lg bg-primary px-3 text-[13px] text-primary-foreground">
+              <button
+                type="submit"
+                className="rounded-lg bg-primary px-3 text-[13px] text-primary-foreground"
+              >
                 Send
               </button>
             </form>
@@ -210,7 +218,8 @@ function ListDetailPage() {
       {tab === "members" ? (
         <section className="rounded-xl border border-border bg-card p-4">
           <p className="mb-3 text-[12px] text-muted-foreground">
-            Only the List Owner can add, remove, or change roles. Assigning a Thing to a non-member does not make them a List member.
+            Only the List Owner can add, remove, or change roles. Assigning a Thing to a non-member
+            does not make them a List member.
           </p>
           <ul className="space-y-2">
             {list.members.map((m) => (
@@ -224,14 +233,22 @@ function ListDetailPage() {
             ))}
           </ul>
           {list.role === "owner" ? (
-            <p className="mt-3 text-[12px] text-muted-foreground">Owner tools: add people, change roles, promote Thing-only people.</p>
+            <p className="mt-3 text-[12px] text-muted-foreground">
+              Owner tools: add people, change roles, promote Thing-only people.
+            </p>
           ) : (
-            <p className="mt-3 text-[12px] text-muted-foreground">Collaborators cannot promote Thing-only people into membership.</p>
+            <p className="mt-3 text-[12px] text-muted-foreground">
+              Collaborators cannot promote Thing-only people into membership.
+            </p>
           )}
         </section>
       ) : null}
 
-      <ThingDetailSheet thing={selected} open={Boolean(selected)} onOpenChange={(v) => !v && setSelectedId(null)} />
+      <ThingDetailSheet
+        thing={selected}
+        open={Boolean(selected)}
+        onOpenChange={(v) => !v && setSelectedId(null)}
+      />
     </AppShell>
   );
 }
