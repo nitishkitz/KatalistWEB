@@ -3,7 +3,6 @@ import type { Session, User } from "@supabase/supabase-js";
 
 import { supabase } from "@/integrations/supabase/client";
 import { demoEnabled } from "@/lib/demo-flag";
-import { localFixedOtpEnabled } from "@/lib/fixed-otp";
 import type { LocalPersona } from "@/lib/auth/local-user";
 
 export type DemoPersona = LocalPersona;
@@ -60,10 +59,6 @@ const DEMO_STORAGE_KEY = "katalist_demo_session";
 const LOCAL_OTP_STORAGE_KEY = "katalist_local_otp_session";
 const AUTH_EVENT_NAME = "katalist_auth_state_change";
 
-function sessionStorageKey(): string {
-  return demoEnabled() ? DEMO_STORAGE_KEY : LOCAL_OTP_STORAGE_KEY;
-}
-
 function createDemoSession(persona: DemoPersona): Session {
   const user: User = {
     id: `demo-${persona.key}`,
@@ -102,9 +97,9 @@ function createDemoSession(persona: DemoPersona): Session {
 
 export function getStoredDemoSession(): Session | null {
   if (typeof window === "undefined") return null;
-  if (!demoEnabled() && !localFixedOtpEnabled()) return null;
+  if (!demoEnabled()) return null;
   try {
-    const raw = localStorage.getItem(sessionStorageKey());
+    const raw = localStorage.getItem(DEMO_STORAGE_KEY);
     if (!raw) return null;
     const persona: DemoPersona = JSON.parse(raw);
     return createDemoSession(persona);
@@ -114,15 +109,25 @@ export function getStoredDemoSession(): Session | null {
 }
 
 export function signInAsDemo(persona: DemoPersona) {
-  if (!demoEnabled() && !localFixedOtpEnabled()) return;
+  if (!demoEnabled()) return;
   if (typeof window !== "undefined") {
-    localStorage.setItem(sessionStorageKey(), JSON.stringify(persona));
+    localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(persona));
     window.dispatchEvent(new CustomEvent(AUTH_EVENT_NAME));
   }
 }
 
 export async function signOutAll() {
   if (typeof window !== "undefined") {
+    try {
+      const { data } = await supabase.auth.getSession();
+      const accessToken = data.session?.access_token;
+      if (accessToken) {
+        const { revokeCurrentPushToken } = await import("@/features/notifications/push-client");
+        await revokeCurrentPushToken(accessToken).catch(() => undefined);
+      }
+    } catch {
+      // Best-effort revocation; registration reassignment is the safety net.
+    }
     localStorage.removeItem(DEMO_STORAGE_KEY);
     localStorage.removeItem(LOCAL_OTP_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent(AUTH_EVENT_NAME));

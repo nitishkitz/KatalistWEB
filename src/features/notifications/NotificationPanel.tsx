@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNotifications } from "./use-notifications";
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const { items, unread, markAll, markOne } = useNotifications();
 
   return (
@@ -34,7 +36,22 @@ export function NotificationBell() {
                   key={n.id}
                   className={cn("cursor-pointer border-b border-border/70 px-3 py-2.5", !n.read && "bg-muted/40")}
                   onClick={() => {
-                    if (!n.read) void markOne.mutate(n.id);
+                    void (async () => {
+                      if (!n.read) await markOne.mutateAsync(n.id);
+                      setOpen(false);
+                      const path = n.path || "/";
+                      if (path.startsWith("/lists/")) {
+                        await navigate({ to: "/lists/$listId", params: { listId: path.slice("/lists/".length) } });
+                        return;
+                      }
+                      const thingMatch = /^\?thing=/.test(path.slice(1)) || path.startsWith("/?thing=");
+                      if (thingMatch) {
+                        const thing = path.replace(/^\/\?thing=/, "");
+                        await navigate({ to: "/", search: { thing } });
+                        return;
+                      }
+                      await navigate({ to: "/" });
+                    })();
                   }}
                 >
                   <p className="text-[12.5px] font-medium">{n.title}</p>

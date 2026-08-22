@@ -827,6 +827,8 @@ export type Database = {
           phone_e164: string | null
           timezone: string
           updated_at: string
+          age: number | null
+          occupation: string | null
         }
         Insert: {
           active_context?: Database["public"]["Enums"]["context_kind"]
@@ -838,6 +840,8 @@ export type Database = {
           phone_e164?: string | null
           timezone?: string
           updated_at?: string
+          age?: number | null
+          occupation?: string | null
         }
         Update: {
           active_context?: Database["public"]["Enums"]["context_kind"]
@@ -849,6 +853,8 @@ export type Database = {
           phone_e164?: string | null
           timezone?: string
           updated_at?: string
+          age?: number | null
+          occupation?: string | null
         }
         Relationships: []
       }
@@ -1364,6 +1370,25 @@ export type Database = {
         Args: { p_phone_e164: string }
         Returns: string
       }
+      claim_notification_deliveries: {
+        Args: { p_lease_seconds: number; p_limit: number }
+        Returns: {
+          attempt_count: number
+          body: string | null
+          delivery_id: string
+          fcm_token: string
+          kind: string
+          list_id: string | null
+          notification_id: string
+          subscription_id: string
+          thing_id: string | null
+          title: string
+        }[]
+      }
+      consume_uat_auth_rate_limit: {
+        Args: { p_limit: number; p_scope_hash: string; p_window_seconds: number }
+        Returns: boolean
+      }
       create_bucket: {
         Args: {
           p_context?: Database["public"]["Enums"]["context_kind"]
@@ -1512,6 +1537,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      finish_notification_delivery: {
+        Args: {
+          p_delivery_id: string
+          p_error_code?: string | null
+          p_error_detail?: string | null
+          p_fcm_message_id?: string | null
+          p_next_attempt_at?: string | null
+          p_result: string
+          p_revoke?: boolean
+        }
+        Returns: boolean
+      }
       get_thing_list_label: {
         Args: { p_thing_id: string }
         Returns: {
@@ -1582,6 +1619,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      notification_delivery_status: {
+        Args: { p_notification_id: string }
+        Returns: {
+          delivery_id: string
+          fcm_message_id: string | null
+          status: string
+        }[]
+      }
       nudge_thing: {
         Args: {
           p_message?: string
@@ -1625,6 +1670,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      register_push_subscription: {
+        Args: { p_fcm_token: string; p_profile_id: string; p_user_agent?: string | null }
+        Returns: string
       }
       reassign_thing: {
         Args: { p_new_assignee_actor_id: string; p_thing_id: string }
@@ -1715,6 +1764,10 @@ export type Database = {
         }
       }
       revoke_bridge_grant: { Args: { p_grant_id: string }; Returns: boolean }
+      revoke_push_subscription: {
+        Args: { p_fcm_token: string; p_profile_id: string }
+        Returns: boolean
+      }
       run_backend_tests: {
         Args: never
         Returns: {

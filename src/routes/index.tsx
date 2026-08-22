@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   ChevronDown,
@@ -18,8 +18,13 @@ import { ThingCard } from "@/features/court/ThingCard";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import type { Thing } from "@/domain/thing";
 import { cn } from "@/lib/utils";
+import { isUuid } from "@/features/notifications/push-delivery";
 
 export const Route = createFileRoute("/")({
+  validateSearch: (search: Record<string, unknown>): { thing?: string } => {
+    const raw = typeof search.thing === "string" ? search.thing : undefined;
+    return { thing: raw && isUuid(raw) ? raw : undefined };
+  },
   head: () => ({
     meta: [
       { title: "Court — Katalist" },
@@ -154,7 +159,9 @@ function TheirCard({
 
 function CourtPage() {
   const { now, next, later, theirs, theirGroups, isLoading, all, error, refetch } = useCourt();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const navigate = useNavigate({ from: "/" });
+  const { thing } = Route.useSearch();
+  const [selectedId, setSelectedId] = useState<string | null>(thing ?? null);
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"due" | "updated" | "importance" | "pace">("due");
@@ -165,6 +172,18 @@ function CourtPage() {
     all.find((t) => t.id === selectedId) ??
     now.concat(next, later, theirs).find((t) => t.id === selectedId) ??
     null;
+
+  useEffect(() => {
+    setSelectedId(thing ?? null);
+  }, [thing]);
+
+  function selectThing(id: string | null) {
+    setSelectedId(id);
+    void navigate({
+      search: (prev) => ({ ...prev, thing: id ?? undefined }),
+      replace: true,
+    });
+  }
 
   function sortThings(list: Thing[]) {
     return [...list].sort((a, b) => {
@@ -214,7 +233,7 @@ function CourtPage() {
         isLoading={isLoading}
         error={error}
         refetch={refetch}
-        onSelect={(thing) => setSelectedId(thing.id)}
+        onSelect={(thing) => selectThing(thing.id)}
       />
 
       <div className="lg:hidden">
@@ -316,7 +335,7 @@ function CourtPage() {
                 <span className="text-status-next">● {progress} under progress</span>
               </span>
             }
-            onSelect={(t) => setSelectedId(t.id)}
+            onSelect={(t) => selectThing(t.id)}
           />
           <Lane
             title="NEXT"
@@ -331,7 +350,7 @@ function CourtPage() {
                 {next.filter((t) => t.workStatus === "under_progress").length} under progress
               </span>
             }
-            onSelect={(t) => setSelectedId(t.id)}
+            onSelect={(t) => selectThing(t.id)}
           />
           <Lane
             title="LATER"
@@ -339,7 +358,7 @@ function CourtPage() {
             things={fLater}
             defaultOpen={false}
             preview={0}
-            onSelect={(t) => setSelectedId(t.id)}
+            onSelect={(t) => selectThing(t.id)}
           />
 
           <section className="rounded-xl border border-border bg-card">
@@ -385,7 +404,7 @@ function CourtPage() {
                   <ThingTableHeader />
                   <tbody>
                     {theirGroups[theirFocus].map((t) => (
-                      <ThingRow key={t.id} thing={t} onSelect={(t) => setSelectedId(t.id)} />
+                      <ThingRow key={t.id} thing={t} onSelect={(t) => selectThing(t.id)} />
                     ))}
                   </tbody>
                 </table>
@@ -403,7 +422,7 @@ function CourtPage() {
         thing={selected}
         open={selected != null}
         onOpenChange={(open) => {
-          if (!open) setSelectedId(null);
+          if (!open) selectThing(null);
         }}
       />
     </AppShell>

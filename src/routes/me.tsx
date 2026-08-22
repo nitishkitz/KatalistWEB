@@ -20,6 +20,7 @@ import { useAppContext } from "@/features/context/use-app-context";
 import { useProfile, useUploadAvatar } from "@/features/me/use-profile";
 import { useTrophy } from "@/features/me/use-trophy";
 import { useAvatarUrl } from "@/features/people/directory";
+import { PushNotificationControl } from "@/features/notifications/PushNotificationControl";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/me")({
@@ -326,6 +327,8 @@ function MePage() {
                       }}
                     />
                   </label>
+                ) : panel === "notifications" ? (
+                  <PushNotificationControl />
                 ) : (
                   <p className="mt-4 text-[13px] text-muted-foreground">
                     Stored on your profile when a live session is present. Demo uses this device only.

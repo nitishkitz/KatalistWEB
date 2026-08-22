@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { fetchProfileIdentities, matchProfile } from "@/features/people/directory";
+import { uploadAvatarForUser } from "@/features/me/avatar-upload";
 
 export type ProfileRow = {
   id: string;
@@ -66,18 +67,7 @@ export function useUploadAvatar() {
       if (user.app_metadata?.provider === "demo") {
         throw new Error("Photos are demo-only and aren’t saved to a live profile.");
       }
-      const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
-      const path = `${user.id}/avatar.${ext}`;
-      const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, {
-        upsert: true,
-        contentType: file.type,
-      });
-      if (upErr) throw upErr;
-      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-      const avatar_url = `${data.publicUrl}?v=${Date.now()}`;
-      const { error: rowErr } = await supabase.from("profiles").update({ avatar_url }).eq("id", user.id);
-      if (rowErr) throw rowErr;
-      return avatar_url;
+      return uploadAvatarForUser(user.id, file);
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["profile", user?.id] });

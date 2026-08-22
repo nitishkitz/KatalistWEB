@@ -22,6 +22,10 @@ import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
+import { Route as ApiPushSubscriptionsRouteImport } from './routes/api/push/subscriptions'
+import { Route as ApiUatAuthRequestRouteImport } from './routes/api/uat-auth/request'
+import { Route as ApiUatAuthVerifyRouteImport } from './routes/api/uat-auth/verify'
+import { Route as ApiInternalNotificationsDrainRouteImport } from './routes/api/internal/notifications/drain'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
 import { Route as ApiPublicBridgeCommentRouteImport } from './routes/api/public/bridge/comment'
 import { Route as ApiPublicBridgeRedeemRouteImport } from './routes/api/public/bridge/redeem'
@@ -92,6 +96,27 @@ const ListsListIdRoute = ListsListIdRouteImport.update({
   path: '/$listId',
   getParentRoute: () => ListsRoute,
 } as any)
+const ApiPushSubscriptionsRoute = ApiPushSubscriptionsRouteImport.update({
+  id: '/api/push/subscriptions',
+  path: '/api/push/subscriptions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUatAuthRequestRoute = ApiUatAuthRequestRouteImport.update({
+  id: '/api/uat-auth/request',
+  path: '/api/uat-auth/request',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUatAuthVerifyRoute = ApiUatAuthVerifyRouteImport.update({
+  id: '/api/uat-auth/verify',
+  path: '/api/uat-auth/verify',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalNotificationsDrainRoute =
+  ApiInternalNotificationsDrainRouteImport.update({
+    id: '/api/internal/notifications/drain',
+    path: '/api/internal/notifications/drain',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicBridgeActRoute = ApiPublicBridgeActRouteImport.update({
   id: '/api/public/bridge/act',
   path: '/api/public/bridge/act',
@@ -127,6 +152,10 @@ export interface FileRoutesByFullPath {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
+  '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
+  '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
+  '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -144,6 +173,10 @@ export interface FileRoutesByTo {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets': typeof BucketsIndexRoute
   '/lists': typeof ListsIndexRoute
+  '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
+  '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
+  '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
+  '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -164,6 +197,10 @@ export interface FileRoutesById {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
+  '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
+  '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
+  '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -185,6 +222,10 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/push/subscriptions'
+    | '/api/uat-auth/request'
+    | '/api/uat-auth/verify'
+    | '/api/internal/notifications/drain'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -202,6 +243,10 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets'
     | '/lists'
+    | '/api/push/subscriptions'
+    | '/api/uat-auth/request'
+    | '/api/uat-auth/verify'
+    | '/api/internal/notifications/drain'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -221,6 +266,10 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/push/subscriptions'
+    | '/api/uat-auth/request'
+    | '/api/uat-auth/verify'
+    | '/api/internal/notifications/drain'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -237,6 +286,10 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
+  ApiPushSubscriptionsRoute: typeof ApiPushSubscriptionsRoute
+  ApiUatAuthRequestRoute: typeof ApiUatAuthRequestRoute
+  ApiUatAuthVerifyRoute: typeof ApiUatAuthVerifyRoute
+  ApiInternalNotificationsDrainRoute: typeof ApiInternalNotificationsDrainRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
   ApiPublicBridgeCommentRoute: typeof ApiPublicBridgeCommentRoute
   ApiPublicBridgeRedeemRoute: typeof ApiPublicBridgeRedeemRoute
@@ -336,6 +389,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListsListIdRouteImport
       parentRoute: typeof ListsRoute
     }
+    '/api/push/subscriptions': {
+      id: '/api/push/subscriptions'
+      path: '/api/push/subscriptions'
+      fullPath: '/api/push/subscriptions'
+      preLoaderRoute: typeof ApiPushSubscriptionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/uat-auth/request': {
+      id: '/api/uat-auth/request'
+      path: '/api/uat-auth/request'
+      fullPath: '/api/uat-auth/request'
+      preLoaderRoute: typeof ApiUatAuthRequestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/uat-auth/verify': {
+      id: '/api/uat-auth/verify'
+      path: '/api/uat-auth/verify'
+      fullPath: '/api/uat-auth/verify'
+      preLoaderRoute: typeof ApiUatAuthVerifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal/notifications/drain': {
+      id: '/api/internal/notifications/drain'
+      path: '/api/internal/notifications/drain'
+      fullPath: '/api/internal/notifications/drain'
+      preLoaderRoute: typeof ApiInternalNotificationsDrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/bridge/act': {
       id: '/api/public/bridge/act'
       path: '/api/public/bridge/act'
@@ -402,6 +483,10 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
+  ApiPushSubscriptionsRoute: ApiPushSubscriptionsRoute,
+  ApiUatAuthRequestRoute: ApiUatAuthRequestRoute,
+  ApiUatAuthVerifyRoute: ApiUatAuthVerifyRoute,
+  ApiInternalNotificationsDrainRoute: ApiInternalNotificationsDrainRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,
   ApiPublicBridgeCommentRoute: ApiPublicBridgeCommentRoute,
   ApiPublicBridgeRedeemRoute: ApiPublicBridgeRedeemRoute,

@@ -1,3 +1,5 @@
+import { normalizePhone, validateRequiredProfile } from "@/lib/auth/profile-validation";
+
 export type LocalStorageLike = Pick<Storage, "getItem" | "setItem">;
 
 export type LocalPersona = {
@@ -29,8 +31,7 @@ type CreateLocalUserResult =
 const LOCAL_USERS_STORAGE_KEY = "katalist_local_users";
 
 export function normalizeLocalPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  return digits ? `+${digits}` : "";
+  return normalizePhone(phone) ?? "";
 }
 
 function readLocalUsers(storage: LocalStorageLike): Record<string, LocalPersona> {
@@ -59,14 +60,8 @@ export function loadLocalUser(storage: LocalStorageLike, phone: string): LocalPe
 }
 
 export function validateLocalProfile(profile: LocalProfileDraft): LocalProfileErrors {
-  const errors: LocalProfileErrors = {};
-  const age = Number(profile.age);
-
-  if (!profile.fullName.trim()) errors.fullName = "Enter your full name";
-  if (!Number.isInteger(age) || age < 1 || age > 120) errors.age = "Enter a valid age";
-  if (!profile.occupation.trim()) errors.occupation = "Enter your occupation";
-
-  return errors;
+  const result = validateRequiredProfile(profile);
+  return result.ok ? {} : result.errors;
 }
 
 export function createLocalUser(
@@ -74,13 +69,12 @@ export function createLocalUser(
   phone: string,
   profile: LocalProfileDraft,
 ): CreateLocalUserResult {
-  const errors = validateLocalProfile(profile);
-  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  const result = validateRequiredProfile(profile);
+  if (!result.ok) return { ok: false, errors: result.errors };
 
   const normalizedPhone = normalizeLocalPhone(phone);
   const digits = normalizedPhone.slice(1);
-  const name = profile.fullName.trim().replace(/\s+/g, " ");
-  const occupation = profile.occupation.trim().replace(/\s+/g, " ");
+  const { fullName: name, age, occupation } = result.value;
   const persona: LocalPersona = {
     key: `local-${digits}`,
     name,
@@ -89,7 +83,7 @@ export function createLocalUser(
     email: `local-${digits}@katalist.local`,
     initials: initialsFor(name),
     color: "bg-primary/10 text-primary",
-    age: Number(profile.age),
+    age,
     occupation,
     avatarUrl: profile.avatarUrl,
   };

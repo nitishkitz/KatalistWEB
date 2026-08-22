@@ -5,6 +5,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { getNotifications, markNotificationsRead, markNotificationRead } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { keys } from "@/domain/query-keys";
+import { notificationPath } from "@/features/notifications/push-delivery";
 
 export type NotificationItem = {
   id: string;
@@ -12,7 +13,27 @@ export type NotificationItem = {
   body: string;
   read: boolean;
   createdAt: string;
+  path: string;
 };
+
+export function mapNotificationRow(row: {
+  id: string;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  created_at: string;
+  thing_id?: string | null;
+  list_id?: string | null;
+}): NotificationItem {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body ?? "",
+    read: Boolean(row.read_at),
+    createdAt: row.created_at,
+    path: notificationPath({ thingId: row.thing_id ?? null, listId: row.list_id ?? null }),
+  };
+}
 
 export function useNotifications() {
   const { session, user } = useSession();
@@ -25,17 +46,11 @@ export function useNotifications() {
     queryFn: async (): Promise<NotificationItem[]> => {
       const { data, error } = await supabase
         .from("notifications")
-        .select("id, title, body, read_at, created_at")
+        .select("id, title, body, read_at, created_at, thing_id, list_id")
         .order("created_at", { ascending: false })
         .limit(40);
       if (error) throw error;
-      return (data ?? []).map((n) => ({
-        id: n.id,
-        title: n.title,
-        body: n.body ?? "",
-        read: Boolean(n.read_at),
-        createdAt: n.created_at,
-      }));
+      return (data ?? []).map((n) => mapNotificationRow(n));
     },
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
@@ -83,7 +98,14 @@ export function useNotifications() {
   });
 
   const items: NotificationItem[] = preview
-    ? getNotifications().map((n) => ({ id: n.id, title: n.title, body: n.body, read: n.read, createdAt: "" }))
+    ? getNotifications().map((n) => ({
+        id: n.id,
+        title: n.title,
+        body: n.body,
+        read: n.read,
+        createdAt: "",
+        path: "/",
+      }))
     : (list.data ?? []);
   const unread = preview ? items.some((n) => !n.read) : (unreadQuery.data ?? 0) > 0;
 
