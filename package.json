@@ -8,14 +8,15 @@
   },
   "scripts": {
     "dev": "vite dev --host 0.0.0.0 --port 8080",
-    "build": "vite build && npm run db:migrate",
+    "build": "vite build",
     "db:migrate": "node scripts/migrate.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview --host 0.0.0.0 --port 8080",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --experimental-loader ./scripts/alias-loader.mjs --test 'scripts/**/*.test.mjs'",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "release:verify": "npm test && npm run typecheck && npm run lint && npm run build"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",

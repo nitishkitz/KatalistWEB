@@ -15,6 +15,7 @@ import { findActiveMention, replaceMention } from "@/features/court/magic-box/me
 import { resolveComposerKey, wrapIndex } from "@/features/court/magic-box/keyboard";
 import { sanitizeCoeyCopy, coeyFallback, wordCount } from "@/features/court/magic-box/coey-copy";
 import { parseToss, tossBlockedByPerson } from "@/features/court/parse-toss";
+import { tossMotionClass, tossMotionDurationMs } from "@/features/court/magic-box/toss-motion";
 
 const TZ = "Asia/Kolkata";
 const NOW = new Date("2026-08-26T04:30:00.000Z");
@@ -277,6 +278,51 @@ test("source contract: keyboard, create_thing, no client Sarvam secret, chips ar
   assert.equal(clientTree.includes("SARVAM_API_KEY"), false);
   assert.match(sarvam, /SARVAM_API_KEY/);
   assert.match(assist, /Use corrected text/);
+  assert.match(composer, /role="combobox"/);
+  assert.match(composer, /aria-activedescendant/);
+  assert.match(composer, /Polish text/);
+  assert.match(composer, /aria-live="polite"/);
+  assert.match(controller, /createTossGuard/);
+  assert.match(controller, /recordPersonToss/);
+  assert.match(controller, /currentListMemberIds/);
+});
+
+test("MB-018 reduced motion removes flight but retains a confirmation class", () => {
+  assert.equal(tossMotionClass("delegated", true).includes("translate"), false);
+  assert.equal(tossMotionClass("self", true).includes("translate"), false);
+  assert.match(tossMotionClass("delegated", true), /opacity/);
+  assert.equal(tossMotionClass("delegated", false).includes("translate"), true);
+  assert.ok(tossMotionDurationMs("delegated", true) <= 200);
+});
+
+test("lifecycle invariants stay on create_thing; Magic Box payload does not set acknowledgement or pace", () => {
+  const rpc = readFileSync(new URL("../src/features/things/rpc.ts", import.meta.url), "utf8");
+  const payload = readFileSync(new URL("../src/features/court/magic-box/payload.ts", import.meta.url), "utf8");
+  const sql = readFileSync(
+    new URL("../supabase/migrations/20260820133000_create_thing_waiting_owner_nudge.sql", import.meta.url),
+    "utf8",
+  );
+  assert.match(rpc, /create_thing/);
+  assert.equal(payload.includes("acknowledgement"), false);
+  assert.equal(payload.includes("work_status"), false);
+  assert.equal(payload.includes("personal_pace"), false);
+  assert.match(sql, /waiting_for_catch/);
+  assert.match(sql, /not_started/);
+});
+
+test("secret and build contract: ordinary builds do not migrate and keys stay server-only", () => {
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const netlify = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
+  const envExample = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+  assert.equal(String(pkg.scripts.build).includes("db:migrate"), false);
+  assert.equal(String(pkg.scripts.build).includes("vite build"), true);
+  assert.equal(pkg.scripts["db:migrate"], "node scripts/migrate.mjs");
+  assert.equal(/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+/.test(netlify), false);
+  assert.equal(netlify.includes("SARVAM_API_KEY"), false);
+  assert.equal(netlify.includes("SERVICE_ROLE"), false);
+  assert.equal(envExample.includes("VITE_SARVAM"), false);
+  assert.match(envExample, /SARVAM_API_KEY=/);
+  assert.match(envExample, /MAGIC_BOX_AI_COEY_ENABLED=false/);
 });
 
 test("parser timezone is injected and not an uncontrolled clock", () => {
