@@ -1,0 +1,17 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NITRO_PRESET = "netlify"
+  VITE_KATALIST_DEMO_MODE = "false"
+  VITE_KATALIST_ENV = "uat"
+  KATALIST_ENV = "uat"
+  KATALIST_UAT_FIXED_OTP = "111111"
+  VITE_SUPABASE_URL = "https://dyxqlgnbwtbxxdfoiqva.supabase.co"
+  VITE_SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5eHFsZ25id3RieHhkZm9pcXZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNTI4NzgsImV4cCI6MjEwMjYyODg3OH0.DEKnMGYzrWSn_37IIVvyUOV-kJsUj17PffGGZE0UfPI"
+  VITE_SUPABASE_PROJECT_ID = "dyxqlgnbwtbxxdfoiqva"
+  SUPABASE_URL = "https://dyxqlgnbwtbxxdfoiqva.supabase.co"
+  SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5eHFsZ25id3RieHhkZm9pcXZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNTI4NzgsImV4cCI6MjEwMjYyODg3OH0.DEKnMGYzrWSn_37IIVvyUOV-kJsUj17PffGGZE0UfPI"
+  SUPABASE_PROJECT_ID = "dyxqlgnbwtbxxdfoiqva"
