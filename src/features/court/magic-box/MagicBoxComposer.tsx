@@ -1,11 +1,11 @@
-import { useRef } from "react";
-import { Mic, Paperclip, Sparkles, Square, X } from "lucide-react";
+import { useId, useRef } from "react";
+import { Mic, Paperclip, Sparkles, Square, WandSparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KatalistIcon } from "../KatalistIcon";
 import { AttachmentTray } from "./AttachmentTray";
 import { ConfirmationChips } from "./ConfirmationChips";
 import { MentionAutocomplete } from "./MentionAutocomplete";
-import { ghostSuffix } from "./mention";
+import { ghostSuffix, mentionOptionId } from "./mention";
 import { useMagicBoxController } from "./useMagicBoxController";
 
 export function MagicBoxComposer({
@@ -17,21 +17,36 @@ export function MagicBoxComposer({
   listName?: string;
   desktop?: boolean;
 }) {
+  const composerId = useId();
   const box = useMagicBoxController({
     listId,
     listName,
     surface: listId ? "list" : "court",
   });
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const highlighted = box.mentionMenuOpen ? box.ranked[box.highlight] : undefined;
   const ghost =
-    box.mentionMenuOpen && box.activeMention && box.ranked[box.highlight]
-      ? ghostSuffix(box.activeMention.query, box.ranked[box.highlight]!.name)
+    box.mentionMenuOpen && box.activeMention && highlighted
+      ? ghostSuffix(box.activeMention.query, highlighted.name)
       : "";
   const recording = box.voice.state === "recording";
   const transcribing = box.voice.state === "transcribing";
+  const recovering = box.draft.attachments.some((item) => item.status === "recovery-failed" || item.createdThingId);
+  const canPolish =
+    Boolean(box.assist) &&
+    !box.pending &&
+    !recording &&
+    !transcribing &&
+    box.draft.rawText.trim().length >= 8;
 
   return (
     <div className={cn("mb-3", box.motionClass)}>
+      <div className="sr-only" aria-live="polite">
+        {box.announce}
+      </div>
+      {recovering ? (
+        <p className="mb-2 text-[12px] text-status-waiting">Thing created. Retry or remove the remaining attachment.</p>
+      ) : null}
       <div
         className={cn(
           "relative flex h-11 items-center gap-2 transition-opacity duration-200",
@@ -59,6 +74,7 @@ export function MagicBoxComposer({
           ) : null}
           <input
             ref={box.inputRef}
+            role="combobox"
             value={box.draft.rawText}
             onChange={(event) => box.onTextChange(event.target.value, event.target.selectionStart ?? event.target.value.length)}
             onSelect={(event) => {
@@ -70,12 +86,15 @@ export function MagicBoxComposer({
             className="relative z-10 h-full w-full bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground"
             aria-label="Magic Box"
             aria-expanded={box.mentionMenuOpen}
-            aria-controls="magic-box-mentions"
+            aria-haspopup="listbox"
+            aria-controls={`${composerId}-listbox`}
             aria-autocomplete="list"
+            aria-activedescendant={highlighted ? mentionOptionId(composerId, highlighted.id) : undefined}
             autoComplete="off"
           />
           {box.mentionMenuOpen ? (
             <MentionAutocomplete
+              composerId={composerId}
               people={box.ranked}
               highlight={box.highlight}
               query={box.activeMention?.query ?? ""}
@@ -101,6 +120,19 @@ export function MagicBoxComposer({
             event.target.value = "";
           }}
         />
+        {canPolish ? (
+          <button
+            type="button"
+            onClick={() => void box.assist.requestCorrection()}
+            disabled={box.assist.busy}
+            className="hidden h-8 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed sm:inline-flex"
+            aria-label="Polish text"
+            title="Polish text"
+          >
+            <WandSparkles className="h-3.5 w-3.5" />
+            Polish text
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
@@ -157,7 +189,7 @@ export function MagicBoxComposer({
         ) : null}
         <button
           type="button"
-          disabled={!box.canToss}
+          disabled={!box.canToss || recovering}
           onClick={() => void box.toss()}
           className="inline-flex h-8 w-9 items-center justify-center rounded-md border border-primary text-primary outline-none disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Toss Thing"
@@ -201,7 +233,7 @@ export function MagicBoxComposer({
       />
       <AttachmentTray
         attachments={box.draft.attachments}
-        onRemove={(clientId) => box.dispatch({ type: "ATTACHMENT_REMOVED", clientId })}
+        onRemove={(clientId) => void box.removeAttachment(clientId)}
         onRetry={(clientId) => void box.retryAttachment(clientId)}
       />
     </div>
