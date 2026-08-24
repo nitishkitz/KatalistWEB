@@ -46,6 +46,7 @@ import { useAssignablePeople } from "@/features/people/use-assignable";
 import { useAvatarUrl } from "@/features/people/directory";
 import { useBuckets } from "@/features/buckets/use-buckets";
 import { getBucketRefs } from "./local-state";
+import { ThingAttachments } from "@/features/attachments/ThingAttachments";
 
 type Props = {
   thing: Thing | null;
@@ -298,6 +299,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
           </SheetHeader>
 
           <div className="space-y-5 px-8 py-5">
+            <ThingAttachments thingId={thing.id} />
             <section className="space-y-1.5">
               <h3 className="katalist-section-title">People</h3>
               <div className="grid gap-1 rounded-lg border border-border/70 bg-white p-3">

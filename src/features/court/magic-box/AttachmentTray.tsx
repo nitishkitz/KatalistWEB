@@ -19,17 +19,17 @@ export function AttachmentTray({
           key={item.clientId}
           className={cn(
             "inline-flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]",
-            item.status === "failed"
+            item.status === "failed" || item.status === "recovery-failed"
               ? "border-status-waiting/50 text-status-waiting"
               : "border-border text-foreground",
           )}
         >
           <Paperclip className="h-3 w-3 shrink-0" />
           <span className="truncate">{item.file.name}</span>
-          {item.status === "uploading" || item.status === "queued" ? (
+          {item.status === "uploading" || item.status === "finalizing" ? (
             <span className="text-muted-foreground">…</span>
           ) : null}
-          {item.status === "failed" ? (
+          {item.status === "failed" || item.status === "recovery-failed" ? (
             <button
               type="button"
               onClick={() => onRetry(item.clientId)}
