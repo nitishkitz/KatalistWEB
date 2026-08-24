@@ -18,13 +18,15 @@ export type PersonResolution =
   | { status: "resolved"; person: Person; source: "mention" | "manual" }
   | { status: "unresolved"; rawMention: string };
 
-export type DraftAttachmentStatus = "queued" | "uploading" | "ready" | "failed";
+export type DraftAttachmentStatus = "uploading" | "ready" | "finalizing" | "recovery-failed" | "failed";
 
 export type DraftAttachment = {
   clientId: string;
   file: File;
   status: DraftAttachmentStatus;
   stagingKey?: string;
+  attachmentId?: string;
+  createdThingId?: string;
   error?: string;
 };
 
@@ -132,4 +134,3 @@ export const MAGIC_BOX_ATTACHMENT_LIMITS = {
 } as const;
 
 export const MAGIC_BOX_VOICE_MAX_MS = 30_000;
-export const MAGIC_BOX_AI_DEBOUNCE_MS = 800;

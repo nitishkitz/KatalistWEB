@@ -182,13 +182,15 @@ export type TossBlockReason =
   | "unresolved-person"
   | "attachment-pending"
   | "attachment-failed"
+  | "attachment-recovery"
   | "pending";
 
 export function tossBlockReason(draft: MagicBoxDraft, pending: boolean): TossBlockReason | null {
   if (pending) return "pending";
   if (!draft.derivedTitle.trim()) return "empty-title";
   if (draft.assignee.status === "unresolved") return "unresolved-person";
-  if (draft.attachments.some((a) => a.status === "queued" || a.status === "uploading")) return "attachment-pending";
+  if (draft.attachments.some((a) => a.status === "recovery-failed" || a.createdThingId)) return "attachment-recovery";
+  if (draft.attachments.some((a) => a.status === "uploading" || a.status === "finalizing")) return "attachment-pending";
   if (draft.attachments.some((a) => a.status === "failed")) return "attachment-failed";
   return null;
 }

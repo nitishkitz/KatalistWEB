@@ -7,6 +7,7 @@ import { useAssignablePeople } from "@/features/people/use-assignable";
 import { rpcCreateThing } from "@/features/things/rpc";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewMode } from "@/lib/session-mode";
+import { useList } from "@/features/lists/use-lists";
 import { trackMagicBox, durationBucket, mimeCategory, sizeBucket } from "./analytics";
 import { defaultTimeZone } from "./date-time";
 import { recordPersonToss, readPersonHistory } from "./history";
@@ -16,10 +17,11 @@ import { buildFinalCreateThingInput, liveSafeAssigneeId } from "./payload";
 import { canTossDraft, emptyMagicBoxState, reduceMagicBox, selectDraft, tossBlockReason } from "./reducer";
 import { rankAssignablePeople } from "./ranking";
 import { coeyFallback, type CoeyEvent } from "./coey-copy";
-import { finalizeAttachments, stageAttachment, validateAttachment } from "./useMagicBoxAttachments";
+import { finalizeAttachments, removeStagedObject, stageAttachment, validateAttachmentBatch, abandonAttachment } from "./useMagicBoxAttachments";
 import { useMagicBoxVoice } from "./useMagicBoxVoice";
 import { useSarvamAssist } from "./useSarvamAssist";
 import { tossMotionClass, tossMotionDurationMs } from "./toss-motion";
+import { createTossGuard, runTossPipeline, submissionBlocksCreate } from "./submission";
 import type { MagicBoxAction, MagicBoxDraft, RankedPerson } from "./types";
 import type { Person } from "@/domain/thing";
 
@@ -28,6 +30,8 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
   const people = useAssignablePeople();
   const qc = useQueryClient();
   const { session } = useSession();
+  const { list } = useList(options.listId);
+  const [announce, setAnnounce] = useState("");
   const timeZone = useMemo(() => defaultTimeZone(), []);
   const [state, setState] = useState(emptyMagicBoxState);
   const [highlight, setHighlight] = useState(0);
@@ -36,6 +40,14 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
   const [motionClass, setMotionClass] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
   const live = !isPreviewMode();
+  const guardRef = useRef(createTossGuard());
+  const [submission, setSubmission] = useState(() => guardRef.current.getState());
+  const attachmentsRef = useRef(state.attachments);
+  attachmentsRef.current = state.attachments;
+
+  const syncSubmission = useCallback(() => {
+    setSubmission({ ...guardRef.current.getState() });
+  }, []);
 
   const ctx = useMemo(
     () => ({
@@ -68,16 +80,18 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     state.mentionBinding?.start === activeMention?.start;
   const mentionMenuOpen = Boolean(activeMention) && !bindingCoversActive && !mentionMenuForcedClosed && chipEditor === null;
 
-  const history = readPersonHistory();
+  const history = readPersonHistory(context);
   const ranked: RankedPerson[] = useMemo(
     () =>
       rankAssignablePeople({
         query: activeMention?.query ?? "",
         people,
+        currentListMemberIds: new Set((list?.members ?? []).flatMap((m) => (m.actorId ? [m.actorId] : []))),
         recentActorIds: history.recentActorIds,
         frequencyByActorId: history.frequencyByActorId,
+        sameContextActorIds: history.sameContextActorIds,
       }),
-    [activeMention?.query, people, history],
+    [activeMention?.query, people, history, list],
   );
 
   useEffect(() => {
@@ -102,7 +116,8 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     },
   });
 
-  const canToss = canTossDraft(draft, mutation.isPending);
+  const pending = submissionBlocksCreate(submission);
+  const canToss = canTossDraft(draft, pending);
 
   const showCoey = useCallback(
     async (event: CoeyEvent, personName?: string) => {
@@ -156,47 +171,73 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
   );
 
   const toss = useCallback(async () => {
-    const reason = tossBlockReason(draft, mutation.isPending);
+    const reason = tossBlockReason(draft, submissionBlocksCreate(guardRef.current.getState()));
     if (reason === "unresolved-person") {
-      await showCoey("PERSON_AMBIGUOUS");
+      void showCoey("PERSON_AMBIGUOUS");
       return;
     }
     if (reason) return;
     const snapshot = draft;
-    try {
-      const created = await mutation.mutateAsync(snapshot);
-      const thingId =
-        created && typeof created === "object" && "id" in created ? String((created as { id: string }).id) : "";
-      if (thingId && snapshot.attachments.length) {
-        const finalized = await finalizeAttachments({ thingId, attachments: snapshot.attachments });
-        if (finalized.failedClientIds.length) await showCoey("ATTACHMENT_FAILED");
-      }
-      if (snapshot.assignee.status === "resolved") recordPersonToss(snapshot.assignee.person.id);
-      const delegated = snapshot.assignee.status === "resolved";
-      const personName = snapshot.assignee.status === "resolved" ? snapshot.assignee.person.name : undefined;
-      setMotionClass(tossMotionClass(delegated ? "delegated" : "self"));
-      window.setTimeout(() => setMotionClass(""), tossMotionDurationMs(delegated ? "delegated" : "self"));
-      await showCoey(delegated ? "THING_TOSSED_OTHER" : "THING_TOSSED_SELF", personName);
-      trackMagicBox({
-        name: "magic_box_toss",
-        assignment: delegated ? "delegated" : "self",
-        due: snapshot.due.status === "resolved",
-        importance: snapshot.ownerImportance,
-        attachments: snapshot.attachments.length > 0,
-        surface: options.listId ? "list" : "global",
-      });
-      dispatch({ type: "RESET_AFTER_SUCCESS" });
-      await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
-      await qc.invalidateQueries({ queryKey: ["court"] });
-      if (options.listId) {
-        await qc.invalidateQueries({ queryKey: keys.listThings(options.listId) });
-        await qc.invalidateQueries({ queryKey: keys.list(options.listId) });
-      }
-    } catch {
+    const result = await runTossPipeline({
+      guard: guardRef.current,
+      snapshot,
+      createThing: async () => mutation.mutateAsync(snapshot),
+      finalize: async (thingId, snap) => {
+        if (!snap.attachments.length) return { failedClientIds: [] };
+        return finalizeAttachments({
+          thingId,
+          attachments: snap.attachments,
+          accessToken: session?.access_token,
+        });
+      },
+    });
+    syncSubmission();
+    if (result.status === "ignored") return;
+    if (result.status === "create-failed") {
       trackMagicBox({ name: "magic_box_toss_failed", category: "backend" });
-      await showCoey("TOSS_FAILED");
+      void showCoey("TOSS_FAILED");
+      return;
     }
-  }, [draft, mutation, showCoey, dispatch, qc, context, options.listId]);
+    if (result.status === "recovery") {
+      for (const clientId of result.failedClientIds) {
+        dispatch({
+          type: "ATTACHMENT_UPDATED",
+          clientId,
+          patch: { status: "recovery-failed", createdThingId: result.thingId, error: "finalize" },
+        });
+      }
+      for (const attachment of snapshot.attachments) {
+        if (!result.failedClientIds.includes(attachment.clientId)) {
+          dispatch({ type: "ATTACHMENT_REMOVED", clientId: attachment.clientId });
+        }
+      }
+      void showCoey("ATTACHMENT_FAILED");
+      setAnnounce("Thing created. Retry or remove the remaining attachment.");
+      return;
+    }
+    if (snapshot.assignee.status === "resolved") recordPersonToss(snapshot.assignee.person.id, snapshot.context);
+    const delegated = snapshot.assignee.status === "resolved";
+    const personName = snapshot.assignee.status === "resolved" ? snapshot.assignee.person.name : undefined;
+    setMotionClass(tossMotionClass(delegated ? "delegated" : "self"));
+    window.setTimeout(() => setMotionClass(""), tossMotionDurationMs(delegated ? "delegated" : "self"));
+    dispatch({ type: "RESET_AFTER_SUCCESS" });
+    setAnnounce("Thing tossed.");
+    trackMagicBox({
+      name: "magic_box_toss",
+      assignment: delegated ? "delegated" : "self",
+      due: snapshot.due.status === "resolved",
+      importance: snapshot.ownerImportance,
+      attachments: snapshot.attachments.length > 0,
+      surface: options.listId ? "list" : "global",
+    });
+    void showCoey(delegated ? "THING_TOSSED_OTHER" : "THING_TOSSED_SELF", personName);
+    void qc.invalidateQueries({ queryKey: keys.court("preview", context) }).catch(() => undefined);
+    void qc.invalidateQueries({ queryKey: ["court"] }).catch(() => undefined);
+    if (options.listId) {
+      void qc.invalidateQueries({ queryKey: keys.listThings(options.listId) }).catch(() => undefined);
+      void qc.invalidateQueries({ queryKey: keys.list(options.listId) }).catch(() => undefined);
+    }
+  }, [draft, mutation, showCoey, dispatch, qc, context, options.listId, syncSubmission, session?.access_token]);
 
   const onKeyDown = useCallback(
     (event: { key: string; preventDefault: () => void }) => {
@@ -235,17 +276,15 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       const userId = session?.user?.id ?? "preview";
-      for (const file of Array.from(files)) {
-        const error = validateAttachment(file, state.attachments.length);
-        if (error) {
-          toast.error(error);
-          continue;
-        }
+      const { accepted, rejected } = validateAttachmentBatch(Array.from(files), state.attachments.length);
+      for (const item of rejected) toast.error(item.reason);
+      for (const file of accepted) {
         const clientId = crypto.randomUUID();
         dispatch({
           type: "ATTACHMENT_ADDED",
           attachment: { clientId, file, status: "uploading" },
         });
+        setAnnounce(`Uploading ${file.name}.`);
         trackMagicBox({
           name: "magic_box_attachment_added",
           mime_category: mimeCategory(file.type),
@@ -257,16 +296,63 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
           clientId,
           patch: { status: staged.status, stagingKey: staged.stagingKey, error: staged.error },
         });
+        setAnnounce(staged.status === "failed" ? `${file.name} failed. Retry or remove it.` : `${file.name} uploaded.`);
         if (staged.status === "failed") await showCoey("ATTACHMENT_FAILED");
       }
     },
     [dispatch, session?.user?.id, state.attachments.length, showCoey],
   );
 
+  const removeAttachment = useCallback(
+    async (clientId: string) => {
+      const attachment = state.attachments.find((item) => item.clientId === clientId);
+      if (!attachment) return;
+      if (attachment.status === "recovery-failed" || attachment.createdThingId) {
+        await abandonAttachment({
+          attachmentId: attachment.attachmentId,
+          stagingKey: attachment.stagingKey,
+          accessToken: session?.access_token,
+        });
+      } else {
+        await removeStagedObject(attachment.stagingKey);
+      }
+      dispatch({ type: "ATTACHMENT_REMOVED", clientId });
+      if (attachment.status === "recovery-failed" || attachment.createdThingId) {
+        const remaining = state.attachments.filter((item) => item.clientId !== clientId && (item.status === "recovery-failed" || item.createdThingId));
+        if (remaining.length === 0) {
+          guardRef.current.apply({ type: "RECOVERY_CLEARED" });
+          syncSubmission();
+          dispatch({ type: "RESET_AFTER_SUCCESS" });
+        }
+      }
+    },
+    [dispatch, state.attachments, syncSubmission, session?.access_token],
+  );
+
   const retryAttachment = useCallback(
     async (clientId: string) => {
       const attachment = state.attachments.find((item) => item.clientId === clientId);
       if (!attachment) return;
+      if (attachment.createdThingId || attachment.status === "recovery-failed") {
+        dispatch({ type: "ATTACHMENT_UPDATED", clientId, patch: { status: "finalizing", error: undefined } });
+        const finalized = await finalizeAttachments({
+          thingId: attachment.createdThingId ?? guardRef.current.getState().createdThingId ?? "",
+          attachments: [{ ...attachment, status: "ready" }],
+          accessToken: session?.access_token,
+        });
+        if (finalized.failedClientIds.length) {
+          dispatch({ type: "ATTACHMENT_UPDATED", clientId, patch: { status: "recovery-failed", error: "finalize" } });
+          return;
+        }
+        dispatch({ type: "ATTACHMENT_REMOVED", clientId });
+        const remaining = state.attachments.filter((item) => item.clientId !== clientId && (item.status === "recovery-failed" || item.createdThingId));
+        if (remaining.length === 0) {
+          guardRef.current.apply({ type: "RECOVERY_CLEARED" });
+          syncSubmission();
+          dispatch({ type: "RESET_AFTER_SUCCESS" });
+        }
+        return;
+      }
       dispatch({ type: "ATTACHMENT_UPDATED", clientId, patch: { status: "uploading", error: undefined } });
       const staged = await stageAttachment({
         userId: session?.user?.id ?? "preview",
@@ -279,7 +365,7 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
         patch: { status: staged.status, stagingKey: staged.stagingKey, error: staged.error },
       });
     },
-    [dispatch, session?.user?.id, state.attachments],
+    [dispatch, session?.user?.id, session?.access_token, state.attachments, syncSubmission],
   );
 
   const voice = useMagicBoxVoice({
@@ -294,9 +380,10 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
       void showCoey("VOICE_FAILED");
       trackMagicBox({ name: "magic_box_voice_result", success: false, duration_bucket: durationBucket(0) });
     },
+    onAnnounce: setAnnounce,
   });
 
-  useSarvamAssist({
+  const assist = useSarvamAssist({
     text: state.rawText,
     enabled: Boolean(session?.access_token) && !session?.access_token?.startsWith("demo-") && state.rawText.trim().length >= 8,
     accessToken: session?.access_token,
@@ -323,6 +410,16 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     if (draft.due.status === "ambiguous") trackMagicBox({ name: "magic_box_date_ambiguous", category: "numeric" });
   }, [draft.due.status]);
 
+  useEffect(() => {
+    return () => {
+      for (const attachment of attachmentsRef.current) {
+        if (!attachment.createdThingId && attachment.stagingKey) {
+          void removeStagedObject(attachment.stagingKey);
+        }
+      }
+    };
+  }, []);
+
   return {
     draft,
     canToss,
@@ -335,15 +432,19 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     chipEditor,
     setChipEditor,
     motionClass,
-    pending: mutation.isPending,
+    pending,
+    submission,
     onTextChange,
     onKeyDown,
     toss,
     dispatch,
     acceptPerson,
     addFiles,
+    removeAttachment,
     retryAttachment,
     voice,
+    assist,
+    announce,
     people,
     listId: options.listId,
     listName: options.listName,
