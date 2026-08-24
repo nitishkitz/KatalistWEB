@@ -19,7 +19,7 @@ export function hashUserOperation(userId: string, operation: MagicBoxAiOperation
 
 export function createMemoryAiBudget(now: () => number = Date.now) {
   const hits = new Map<string, number[]>();
-  return async function enforceAiBudget(input: {
+  return async function enforceMemoryBudget(input: {
     userId: string;
     operation: MagicBoxAiOperation;
   }): Promise<AiBudgetDecision> {
@@ -40,24 +40,44 @@ export function createMemoryAiBudget(now: () => number = Date.now) {
 
 const processBudget = createMemoryAiBudget();
 
-export async function enforceAiBudget(input: {
+export async function consumeMagicBoxAiBudgetFromDb(input: {
   userId: string;
   operation: MagicBoxAiOperation;
-}): Promise<AiBudgetDecision> {
-  try {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin.rpc("consume_magic_box_ai_budget", {
-      p_user_id: input.userId,
-      p_operation: input.operation,
-    });
-    if (!error && typeof data === "boolean") {
-      return { allowed: data, retryAfterSeconds: data ? 0 : 60 };
-    }
-  } catch {
-    // SQL not applied yet; keep a process-local budget so a missing table cannot fail open.
-  }
-  return processBudget(input);
+}): Promise<boolean | null> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.rpc("consume_magic_box_ai_budget", {
+    p_user_id: input.userId,
+    p_operation: input.operation,
+  });
+  if (error) return null;
+  if (typeof data === "boolean") return data;
+  return null;
 }
+
+export function createPersistentAiBudget(options?: {
+  consumeFromDb?: (input: { userId: string; operation: MagicBoxAiOperation }) => Promise<boolean | null>;
+  fallback?: (input: { userId: string; operation: MagicBoxAiOperation }) => Promise<AiBudgetDecision>;
+}) {
+  const consumeFromDb = options?.consumeFromDb ?? consumeMagicBoxAiBudgetFromDb;
+  const fallback = options?.fallback ?? processBudget;
+  return async function persistentBudget(input: {
+    userId: string;
+    operation: MagicBoxAiOperation;
+  }): Promise<AiBudgetDecision> {
+    try {
+      const allowed = await consumeFromDb(input);
+      if (typeof allowed === "boolean") {
+        return { allowed, retryAfterSeconds: allowed ? 0 : 60 };
+      }
+    } catch {
+      // SQL not applied yet; keep a process-local budget so a missing table cannot fail open.
+    }
+    return fallback(input);
+  };
+}
+
+/** Production default: database limiter first, in-process fallback only when SQL is unavailable. */
+export const enforceAiBudget = createPersistentAiBudget();
 
 export function aiFlags(env: NodeJS.ProcessEnv = process.env) {
   const on = (value: string | undefined, fallback: boolean) => {

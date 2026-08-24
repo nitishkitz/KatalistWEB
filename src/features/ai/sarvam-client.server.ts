@@ -40,17 +40,23 @@ Return JSON only: {"text":"..."}`;
 
 type ChatResult = { text: string } | { error: string };
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+export async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("timeout")), ms);
-      }),
-    ]);
+    const parent = init.signal;
+    if (parent) {
+      if (parent.aborted) controller.abort();
+      else parent.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+    return await fetchImpl(url, { ...init, signal: controller.signal });
   } finally {
-    if (timer) clearTimeout(timer);
+    clearTimeout(timer);
   }
 }
 
@@ -65,8 +71,10 @@ async function sarvamChat(input: {
 }): Promise<ChatResult> {
   const fetchImpl = input.fetchImpl ?? fetch;
   try {
-    const response = await withTimeout(
-      fetchImpl(SARVAM_CHAT_URL, {
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      SARVAM_CHAT_URL,
+      {
         method: "POST",
         headers: {
           authorization: `Bearer ${input.key}`,
@@ -83,7 +91,7 @@ async function sarvamChat(input: {
           reasoning_effort: null,
           response_format: { type: "json_object" },
         }),
-      }),
+      },
       input.timeoutMs,
     );
     if (!response.ok) return { error: `sarvam_${response.status}` };
@@ -112,6 +120,7 @@ export async function correctMagicBoxText(input: {
   locale?: string;
   env?: SarvamEnv;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<{
   requestId: string;
   correctedText: string | null;
@@ -134,7 +143,7 @@ export async function correctMagicBoxText(input: {
     system: CORRECTION_PROMPT,
     user: JSON.stringify({ text: input.text, locale: input.locale ?? "en-IN" }),
     maxTokens: 160,
-    timeoutMs: 8000,
+    timeoutMs: input.timeoutMs ?? 8000,
     fetchImpl: input.fetchImpl,
   });
   if ("error" in result) return degraded;
@@ -158,6 +167,7 @@ export async function generateCoeyCopy(input: {
   personName?: string;
   env?: SarvamEnv;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<{ text: string; degraded?: boolean }> {
   const fallback = { text: sanitizeCoeyCopy(null, input.event, input.personName), degraded: true as const };
   const key = readSarvamApiKey(input.env);
@@ -168,7 +178,7 @@ export async function generateCoeyCopy(input: {
     system: COEY_PROMPT,
     user: JSON.stringify({ event: input.event, personName: input.personName ?? null }),
     maxTokens: 48,
-    timeoutMs: 8000,
+    timeoutMs: input.timeoutMs ?? 8000,
     fetchImpl: input.fetchImpl,
   });
   if ("error" in result) return fallback;
@@ -183,6 +193,7 @@ export async function transcribeMagicBoxAudio(input: {
   mimeType: string;
   env?: SarvamEnv;
   fetchImpl?: typeof fetch;
+  timeoutMs?: number;
 }): Promise<{ text: string | null; degraded?: boolean }> {
   const key = readSarvamApiKey(input.env);
   if (!key) return { text: null, degraded: true };
@@ -199,13 +210,15 @@ export async function transcribeMagicBoxAudio(input: {
     input.filename || "audio.webm",
   );
   try {
-    const response = await withTimeout(
-      fetchImpl(SARVAM_STT_URL, {
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      SARVAM_STT_URL,
+      {
         method: "POST",
         headers: { authorization: `Bearer ${key}` },
         body: form,
-      }),
-      35_000,
+      },
+      input.timeoutMs ?? 35_000,
     );
     if (!response.ok) return { text: null, degraded: true };
     const json = (await response.json()) as { transcript?: string; text?: string };

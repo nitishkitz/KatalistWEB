@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { createMagicBoxCorrectHandler, createMagicBoxCoeyHandler } from "@/features/ai/magic-box-api.server";
-import { createMemoryAiBudget } from "@/features/ai/ai-rate-limit.server";
+import { createMemoryAiBudget, createPersistentAiBudget } from "@/features/ai/ai-rate-limit.server";
 import { correctionPreservesTokens, extractProtectedTokens } from "@/features/ai/protected-tokens";
-import { correctMagicBoxText } from "@/features/ai/sarvam-client.server";
+import { correctMagicBoxText, transcribeMagicBoxAudio } from "@/features/ai/sarvam-client.server";
 
 test("unauthorized correction makes zero Sarvam calls", async () => {
   let calls = 0;
@@ -84,14 +84,98 @@ test("Coey disabled spends zero Sarvam credits and still returns fallback copy",
   assert.ok(json.text);
 });
 
+test("default handler invokes the database-aware budget function", async () => {
+  const api = readFileSync(new URL("../src/features/ai/magic-box-api.server.ts", import.meta.url), "utf8");
+  assert.match(api, /enforceAiBudget/);
+  assert.match(api, /options\?\.enforceBudget \?\? enforceAiBudget/);
+  assert.equal(api.includes("createMemoryAiBudget()"), false);
+
+  let dbCalls = 0;
+  let fallbackCalls = 0;
+  const budget = createPersistentAiBudget({
+    consumeFromDb: async (input) => {
+      dbCalls += 1;
+      assert.equal(input.operation, "correct");
+      assert.equal(input.userId, "u1");
+      return true;
+    },
+    fallback: async () => {
+      fallbackCalls += 1;
+      return { allowed: true, retryAfterSeconds: 0 };
+    },
+  });
+  const handler = createMagicBoxCorrectHandler({
+    getUser: async () => ({ id: "u1" }),
+    enforceBudget: budget,
+    fetchImpl: async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: '{"correctedText":"please polish this sentence now"}' } }] })),
+  });
+  await handler(
+    new Request("https://x/correct", {
+      method: "POST",
+      headers: { authorization: "Bearer tok", "content-type": "application/json" },
+      body: JSON.stringify({ text: "please polish this sentence" }),
+    }),
+  );
+  assert.equal(dbCalls, 1);
+  assert.equal(fallbackCalls, 0);
+});
+
+test("timeout aborts the provider fetch signal", async () => {
+  let aborted = false;
+  const result = await correctMagicBoxText({
+    text: "please polish this sentence",
+    env: { SARVAM_API_KEY: "sk_secret" },
+    timeoutMs: 25,
+    fetchImpl: (_url, init) =>
+      new Promise((_, reject) => {
+        const signal = init?.signal;
+        if (!signal) {
+          reject(new Error("missing signal"));
+          return;
+        }
+        signal.addEventListener("abort", () => {
+          aborted = true;
+          reject(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+        });
+      }),
+  });
+  assert.equal(aborted, true);
+  assert.equal(result.degraded, true);
+  assert.equal(result.correctedText, null);
+});
+
+test("STT timeout aborts the provider fetch signal", async () => {
+  let aborted = false;
+  const result = await transcribeMagicBoxAudio({
+    bytes: new Uint8Array([1, 2, 3, 4]),
+    filename: "clip.webm",
+    mimeType: "audio/webm",
+    env: { SARVAM_API_KEY: "sk_secret" },
+    timeoutMs: 25,
+    fetchImpl: (_url, init) =>
+      new Promise((_, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          aborted = true;
+          reject(Object.assign(new Error("Aborted"), { name: "AbortError" }));
+        });
+      }),
+  });
+  assert.equal(aborted, true);
+  assert.equal(result.degraded, true);
+  assert.equal(result.text, null);
+});
+
 test("Sarvam client caps tokens, timeouts, json_object, and never uses a type assertion as validation", () => {
   const src = readFileSync(new URL("../src/features/ai/sarvam-client.server.ts", import.meta.url), "utf8");
   const assist = readFileSync(new URL("../src/features/court/magic-box/useSarvamAssist.ts", import.meta.url), "utf8");
   const sql = readFileSync(new URL("../supabase/migrations/20260824124500_magic_box_ai_rate_limits.sql", import.meta.url), "utf8");
   assert.match(src, /maxTokens: 160/);
   assert.match(src, /maxTokens: 48/);
-  assert.match(src, /timeoutMs: 8000/);
+  assert.match(src, /timeoutMs: input.timeoutMs \?\? 8000/);
   assert.match(src, /35_000/);
+  assert.match(src, /controller.abort\(\)/);
+  assert.match(src, /signal: controller.signal/);
   assert.match(src, /json_object/);
   assert.match(src, /reasoning_effort: null/);
   assert.match(src, /safeParse/);
@@ -102,4 +186,3 @@ test("Sarvam client caps tokens, timeouts, json_object, and never uses a type as
   assert.match(sql, /service_role/);
   assert.equal(/GRANT EXECUTE[\s\S]*TO authenticated/i.test(sql), false);
 });
-

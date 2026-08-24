@@ -1,7 +1,7 @@
 import { HttpError, defaultGetUser, jsonNoStore, requireSupabaseUser, type GetUserFn } from "@/lib/supabase-user.server";
 import { magicBoxCoeyRequestSchema, magicBoxCorrectRequestSchema } from "@/features/ai/schemas";
 import { correctMagicBoxText, generateCoeyCopy, transcribeMagicBoxAudio } from "@/features/ai/sarvam-client.server";
-import { aiFlags, createMemoryAiBudget, type MagicBoxAiOperation } from "@/features/ai/ai-rate-limit.server";
+import { aiFlags, enforceAiBudget, type MagicBoxAiOperation } from "@/features/ai/ai-rate-limit.server";
 import { coeyFallback } from "@/features/court/magic-box/coey-copy";
 
 const MAX_JSON_BYTES = 8192;
@@ -15,8 +15,6 @@ const ALLOWED_AUDIO = new Set([
   "audio/ogg",
   "audio/mp3",
 ]);
-
-const defaultBudget = createMemoryAiBudget();
 
 async function readJson(request: Request): Promise<unknown> {
   const raw = await request.text();
@@ -48,7 +46,7 @@ export type MagicBoxApiOptions = {
 };
 
 async function consume(options: MagicBoxApiOptions | undefined, userId: string, operation: MagicBoxAiOperation) {
-  const decision = await (options?.enforceBudget ?? defaultBudget)({ userId, operation });
+  const decision = await (options?.enforceBudget ?? enforceAiBudget)({ userId, operation });
   if (!decision.allowed) {
     const error = new HttpError(429, "Give that a moment, then try again.");
     (error as HttpError & { retryAfterSeconds?: number }).retryAfterSeconds = decision.retryAfterSeconds;
