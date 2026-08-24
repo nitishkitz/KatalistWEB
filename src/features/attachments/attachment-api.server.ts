@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { HttpError, defaultGetUser, jsonNoStore, requireSupabaseUser, type GetUserFn } from "@/lib/supabase-user.server";
+import { attachmentsServerEnabled } from "@/features/attachments/flags";
 
 export type FinalizeAttachmentRequest = {
   thingId: string;
@@ -7,6 +8,12 @@ export type FinalizeAttachmentRequest = {
   stagingKey: string;
   fileName: string;
   mimeType: string;
+};
+
+export type RemoveAttachmentRequest = {
+  thingId: string;
+  clientId: string;
+  stagingKey: string;
 };
 
 export type FinalizeAttachmentResult = {
@@ -29,9 +36,10 @@ export type AttachmentRow = {
 
 export type AttachmentApiDeps = {
   getUser?: GetUserFn;
+  attachmentsEnabled?: () => boolean;
   reserve: (input: FinalizeAttachmentRequest, userId: string) => Promise<AttachmentRow>;
   complete: (attachmentId: string, storageKey: string, userId: string) => Promise<AttachmentRow>;
-  abandon: (attachmentId: string, userId: string) => Promise<void>;
+  abandon: (input: RemoveAttachmentRequest, userId: string) => Promise<void>;
   storageMove: (from: string, to: string) => Promise<{ ok: boolean; missingSource?: boolean }>;
   storageExists: (key: string) => Promise<boolean>;
   storageRemove: (key: string) => Promise<void>;
@@ -47,15 +55,20 @@ function sanitizeError(error: unknown): Response {
   const message = error instanceof Error ? error.message : "";
   if (/not found/i.test(message)) return jsonNoStore({ error: "not_found", message: "Thing not found." }, 404);
   if (/limit/i.test(message)) return jsonNoStore({ error: "limit", message: "You can attach up to 5 files." }, 409);
-  if (/collision|invalid staging|too large|spoof/i.test(message)) {
+  if (/collision|invalid staging|too large|spoof|attachment missing/i.test(message)) {
     return jsonNoStore({ error: "invalid_request", message: "Check the information and try again." }, 400);
   }
   return jsonNoStore({ error: "retryable", message: "That file slipped. Retry or remove it." }, 503);
 }
 
+function featureOff(deps: AttachmentApiDeps): boolean {
+  return !(deps.attachmentsEnabled ?? attachmentsServerEnabled)();
+}
+
 export function createFinalizeAttachmentHandler(deps: AttachmentApiDeps) {
   return async (request: Request) => {
     try {
+      if (featureOff(deps)) return jsonNoStore({ error: "not_found" }, 404);
       const user = await requireSupabaseUser(request, deps.getUser ?? defaultGetUser);
       const body = (await request.json()) as FinalizeAttachmentRequest;
       if (!body?.thingId || !body.clientId || !body.stagingKey || !body.fileName) {
@@ -94,15 +107,22 @@ export function createFinalizeAttachmentHandler(deps: AttachmentApiDeps) {
 export function createRemoveAttachmentHandler(deps: AttachmentApiDeps) {
   return async (request: Request) => {
     try {
+      if (featureOff(deps)) return jsonNoStore({ error: "not_found" }, 404);
       const user = await requireSupabaseUser(request, deps.getUser ?? defaultGetUser);
-      const body = (await request.json()) as { attachmentId?: string; stagingKey?: string };
-      if (body.stagingKey) {
-        if (!body.stagingKey.startsWith(`staging/${user.id}/`) || body.stagingKey.includes("..")) {
-          throw new HttpError(400, "Check the information and try again.");
-        }
-        await deps.storageRemove(body.stagingKey);
+      const body = (await request.json()) as RemoveAttachmentRequest;
+      if (!body?.thingId || !body.clientId || !body.stagingKey) {
+        throw new HttpError(400, "Check the information and try again.");
       }
-      if (body.attachmentId) await deps.abandon(body.attachmentId, user.id);
+      const expectedPrefix = `staging/${user.id}/${body.clientId}/`;
+      if (!body.stagingKey.startsWith(expectedPrefix) || body.stagingKey.includes("..")) {
+        throw new HttpError(400, "Check the information and try again.");
+      }
+      try {
+        await deps.storageRemove(body.stagingKey);
+      } catch {
+        // Object may already be gone.
+      }
+      await deps.abandon(body, user.id);
       return jsonNoStore({ ok: true });
     } catch (error) {
       return sanitizeError(error);
@@ -114,16 +134,46 @@ export async function cleanupStalePendingAttachments(deps: {
   listStale: () => Promise<Array<{ id: string; staging_key: string }>>;
   storageRemove: (key: string) => Promise<void>;
   abandon: (id: string) => Promise<void>;
-}): Promise<{ removed: number }> {
+}): Promise<{ processed: number; removed: number; failed: number }> {
   const rows = await deps.listStale();
   let removed = 0;
+  let failed = 0;
   for (const row of rows) {
-    if (!row.staging_key.startsWith("staging/") || row.staging_key.includes("..")) continue;
-    await deps.storageRemove(row.staging_key);
-    await deps.abandon(row.id);
-    removed += 1;
+    try {
+      if (!row.staging_key.startsWith("staging/") || row.staging_key.includes("..")) {
+        failed += 1;
+        continue;
+      }
+      await deps.storageRemove(row.staging_key);
+      await deps.abandon(row.id);
+      removed += 1;
+    } catch {
+      failed += 1;
+    }
   }
-  return { removed };
+  return { processed: rows.length, removed, failed };
+}
+
+export function createAttachmentCleanupHandler(options: {
+  secret?: string;
+  cleanup?: typeof cleanupStalePendingAttachments;
+  deps?: Parameters<typeof cleanupStalePendingAttachments>[0];
+  getDeps?: () => Promise<Parameters<typeof cleanupStalePendingAttachments>[0]>;
+} = {}) {
+  return async (request: Request) => {
+    const expected = (options.secret ?? process.env.MAGIC_BOX_CLEANUP_SECRET ?? "").trim();
+    if (!expected) return jsonNoStore({ error: "not_found" }, 404);
+    const header = request.headers.get("authorization") ?? "";
+    const match = /^Bearer\s+(\S+)$/.exec(header.trim());
+    const supplied = match?.[1] ?? "";
+    if (!supplied || supplied !== expected) {
+      return jsonNoStore({ error: "unauthorized" }, 401);
+    }
+    const deps = options.deps ?? (options.getDeps ? await options.getDeps() : null);
+    if (!deps) return jsonNoStore({ error: "unavailable" }, 503);
+    const summary = await (options.cleanup ?? cleanupStalePendingAttachments)(deps);
+    return jsonNoStore(summary);
+  };
 }
 
 function userClient(request: Request) {
@@ -170,9 +220,11 @@ export function createSupabaseAttachmentDeps(request: Request): AttachmentApiDep
       if (error) throw new Error(error.message);
       return mapRow(data as Record<string, unknown>);
     },
-    async abandon(attachmentId) {
+    async abandon(input) {
       const { error } = await userClient(request).rpc("abandon_pending_attachment", {
-        p_attachment_id: attachmentId,
+        p_thing_id: input.thingId,
+        p_client_id: input.clientId,
+        p_staging_key: input.stagingKey,
       });
       if (error) throw new Error(error.message);
     },
@@ -193,6 +245,23 @@ export function createSupabaseAttachmentDeps(request: Request): AttachmentApiDep
     async storageRemove(key) {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       await supabaseAdmin.storage.from("thing-attachments").remove([key]);
+    },
+  };
+}
+
+export async function createLiveCleanupDeps() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  return {
+    async listStale() {
+      const { data, error } = await supabaseAdmin.rpc("list_stale_pending_attachments");
+      if (error) throw error;
+      return ((data ?? []) as Array<{ id: string; staging_key: string }>).filter((row) => row.id && row.staging_key);
+    },
+    async storageRemove(key: string) {
+      await supabaseAdmin.storage.from("thing-attachments").remove([key]);
+    },
+    async abandon(id: string) {
+      await supabaseAdmin.from("thing_attachments").delete().eq("id", id).eq("status", "pending");
     },
   };
 }

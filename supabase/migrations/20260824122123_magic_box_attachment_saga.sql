@@ -185,11 +185,12 @@ CREATE OR REPLACE FUNCTION public.complete_thing_attachment(
 RETURNS public.thing_attachments
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public, katalist_priv
+SET search_path = pg_catalog, public, katalist_priv, storage
 AS $$
 DECLARE
   v_me uuid := katalist_priv.current_actor_id();
   v_row public.thing_attachments;
+  v_exists boolean := false;
 BEGIN
   IF v_me IS NULL THEN
     RAISE EXCEPTION 'Sign in to continue.';
@@ -201,11 +202,22 @@ BEGIN
   IF v_row.uploaded_by_actor_id IS DISTINCT FROM v_me THEN
     RAISE EXCEPTION 'Thing not found';
   END IF;
-  IF v_row.status = 'ready' AND v_row.storage_key IS NOT DISTINCT FROM p_storage_key THEN
-    RETURN v_row;
-  END IF;
   IF v_row.storage_key IS DISTINCT FROM p_storage_key THEN
     RAISE EXCEPTION 'invalid staging key';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1
+      FROM storage.objects o
+     WHERE o.bucket_id = 'thing-attachments'
+       AND o.name = p_storage_key
+  ) INTO v_exists;
+  IF NOT v_exists THEN
+    RAISE EXCEPTION 'attachment missing';
+  END IF;
+
+  IF v_row.status = 'ready' THEN
+    RETURN v_row;
   END IF;
   UPDATE public.thing_attachments
      SET status = 'ready',
@@ -216,7 +228,11 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.abandon_pending_attachment(p_attachment_id uuid)
+CREATE OR REPLACE FUNCTION public.abandon_pending_attachment(
+  p_thing_id uuid,
+  p_client_id uuid,
+  p_staging_key text
+)
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -224,19 +240,30 @@ SET search_path = pg_catalog, public, katalist_priv
 AS $$
 DECLARE
   v_me uuid := katalist_priv.current_actor_id();
+  v_uid uuid := auth.uid();
   v_row public.thing_attachments;
 BEGIN
-  IF v_me IS NULL THEN
+  IF v_me IS NULL OR v_uid IS NULL THEN
     RAISE EXCEPTION 'Sign in to continue.';
   END IF;
-  SELECT * INTO v_row FROM public.thing_attachments WHERE id = p_attachment_id;
+  IF p_staging_key IS NULL
+     OR p_staging_key NOT LIKE ('staging/' || v_uid::text || '/' || p_client_id::text || '/%')
+     OR position('..' in p_staging_key) > 0 THEN
+    RAISE EXCEPTION 'invalid staging key';
+  END IF;
+  SELECT * INTO v_row
+    FROM public.thing_attachments
+   WHERE uploaded_by_actor_id = v_me
+     AND thing_id = p_thing_id
+     AND client_id = p_client_id
+     AND staging_key = p_staging_key;
   IF NOT FOUND THEN
-    RETURN false;
+    RETURN true;
   END IF;
-  IF v_row.uploaded_by_actor_id IS DISTINCT FROM v_me OR v_row.status <> 'pending' THEN
-    RAISE EXCEPTION 'Thing not found';
+  IF v_row.status <> 'pending' THEN
+    RETURN true;
   END IF;
-  DELETE FROM public.thing_attachments WHERE id = p_attachment_id;
+  DELETE FROM public.thing_attachments WHERE id = v_row.id;
   RETURN true;
 END;
 $$;
@@ -267,13 +294,24 @@ AS $$
     AND t.created_at < now() - p_older_than;
 $$;
 
+CREATE OR REPLACE FUNCTION public.list_stale_pending_attachments(p_older_than interval DEFAULT interval '24 hours')
+RETURNS TABLE (id uuid, staging_key text)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = pg_catalog, public, katalist_priv
+AS $$
+  SELECT id, staging_key FROM katalist_priv.list_stale_pending_attachments(p_older_than);
+$$;
+
 REVOKE ALL ON FUNCTION public.reserve_thing_attachment(uuid, uuid, text, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.reserve_thing_attachment(uuid, uuid, text, text) TO authenticated, service_role;
 REVOKE ALL ON FUNCTION public.complete_thing_attachment(uuid, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.complete_thing_attachment(uuid, text) TO authenticated, service_role;
-REVOKE ALL ON FUNCTION public.abandon_pending_attachment(uuid) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.abandon_pending_attachment(uuid) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.abandon_pending_attachment(uuid, uuid, text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.abandon_pending_attachment(uuid, uuid, text) TO authenticated, service_role;
 REVOKE ALL ON FUNCTION public.list_thing_attachments(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.list_thing_attachments(uuid) TO authenticated, service_role;
 REVOKE ALL ON FUNCTION katalist_priv.list_stale_pending_attachments(interval) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION katalist_priv.list_stale_pending_attachments(interval) TO service_role;
+REVOKE ALL ON FUNCTION public.list_stale_pending_attachments(interval) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.list_stale_pending_attachments(interval) TO service_role;

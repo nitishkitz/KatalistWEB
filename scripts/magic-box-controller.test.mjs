@@ -114,3 +114,22 @@ test("partial finalize never re-enters create", async () => {
   assert.equal(guard.getState().phase, "attachment-recovery");
   assert.equal(guard.tryBegin(snap), false);
 });
+
+test("unexpected finalizer exception retains actionable client IDs and never uses unknown", async () => {
+  const guard = createTossGuard();
+  const file = { name: "brief.pdf", type: "application/pdf", size: 12 };
+  const snap = snapshot();
+  snap.attachments = [{ clientId: "c-real", file, status: "ready", stagingKey: "staging/u/c-real/brief.pdf" }];
+  const result = await runTossPipeline({
+    guard,
+    snapshot: snap,
+    createThing: async () => ({ id: "thing-1" }),
+    finalize: async () => {
+      throw new Error("boom");
+    },
+  });
+  assert.equal(result.status, "recovery");
+  assert.deepEqual(result.failedClientIds, ["c-real"]);
+  assert.equal(result.failedClientIds.includes("unknown"), false);
+  assert.equal(guard.tryBegin(snap), false);
+});

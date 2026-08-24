@@ -85,8 +85,8 @@ export const katalistRpc = {
   completeThingAttachment: (args: { p_attachment_id: string; p_storage_key: string }) =>
     rpc("complete_thing_attachment", args),
 
-  abandonPendingAttachment: (p_attachment_id: string) =>
-    rpc("abandon_pending_attachment", { p_attachment_id }),
+  abandonPendingAttachment: (args: { p_thing_id: string; p_client_id: string; p_staging_key: string }) =>
+    rpc("abandon_pending_attachment", args),
 
   listThingAttachments: (p_thing_id: string) => rpc("list_thing_attachments", { p_thing_id }),
 };

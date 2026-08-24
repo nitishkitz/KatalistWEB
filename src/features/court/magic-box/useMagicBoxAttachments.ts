@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { isPreviewMode } from "@/lib/session-mode";
+import { demoEnabled } from "@/lib/demo-flag";
 import { MAGIC_BOX_ATTACHMENT_LIMITS, type DraftAttachment } from "./types";
 
 export function stagingKey(userId: string, clientId: string, fileName: string): string {
@@ -63,13 +64,22 @@ export async function removeStagedObject(stagingKeyValue: string | undefined): P
   }
 }
 
+function demoFailFinalize(): boolean {
+  return (
+    demoEnabled() &&
+    typeof window !== "undefined" &&
+    Boolean((window as Window & { __KATALIST_MAGIC_BOX_FAIL_FINALIZE__?: boolean }).__KATALIST_MAGIC_BOX_FAIL_FINALIZE__)
+  );
+}
+
 export async function abandonAttachment(input: {
+  thingId?: string;
+  clientId?: string;
   stagingKey?: string;
-  attachmentId?: string;
   accessToken?: string | null;
 }): Promise<void> {
   if (isPreviewMode()) return;
-  if (input.stagingKey && !input.attachmentId) {
+  if (!input.thingId || !input.clientId || !input.stagingKey) {
     await removeStagedObject(input.stagingKey);
     return;
   }
@@ -80,10 +90,14 @@ export async function abandonAttachment(input: {
         "content-type": "application/json",
         ...(input.accessToken ? { authorization: `Bearer ${input.accessToken}` } : {}),
       },
-      body: JSON.stringify({ attachmentId: input.attachmentId, stagingKey: input.stagingKey }),
+      body: JSON.stringify({
+        thingId: input.thingId,
+        clientId: input.clientId,
+        stagingKey: input.stagingKey,
+      }),
     });
   } catch {
-    if (input.stagingKey) await removeStagedObject(input.stagingKey);
+    await removeStagedObject(input.stagingKey);
   }
 }
 
@@ -92,6 +106,9 @@ export async function finalizeAttachments(input: {
   attachments: DraftAttachment[];
   accessToken?: string | null;
 }): Promise<{ failedClientIds: string[] }> {
+  if (demoFailFinalize()) {
+    return { failedClientIds: input.attachments.map((item) => item.clientId) };
+  }
   if (isPreviewMode()) return { failedClientIds: [] };
   const failedClientIds: string[] = [];
   for (const attachment of input.attachments) {

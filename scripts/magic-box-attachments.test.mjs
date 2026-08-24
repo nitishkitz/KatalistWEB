@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { existsSync, readFileSync } from "node:fs";
 import { validateAttachmentBatch } from "@/features/court/magic-box/useMagicBoxAttachments";
-import { createFinalizeAttachmentHandler, createRemoveAttachmentHandler, cleanupStalePendingAttachments } from "@/features/attachments/attachment-api.server";
+import {
+  createFinalizeAttachmentHandler,
+  createRemoveAttachmentHandler,
+  cleanupStalePendingAttachments,
+  createAttachmentCleanupHandler,
+} from "@/features/attachments/attachment-api.server";
 
 function fakeFile(name, size) {
   return { name, size, type: "application/pdf" };
@@ -40,6 +45,7 @@ function makeDeps(overrides = {}) {
   };
   const deps = {
     getUser: async () => ({ id: "user-1" }),
+    attachmentsEnabled: () => true,
     async reserve(input) {
       store.reserveCalls = (store.reserveCalls ?? 0) + 1;
       const existing = [...store.rows.values()].find((r) => r.client_id === input.clientId);
@@ -59,13 +65,18 @@ function makeDeps(overrides = {}) {
       return row;
     },
     async complete(id, key) {
+      if (!store.objects.has(key)) throw new Error("attachment missing");
       const row = store.rows.get(id);
       row.status = "ready";
       row.storage_key = key;
       return row;
     },
-    async abandon(id) {
-      store.rows.delete(id);
+    async abandon(input) {
+      for (const [id, row] of store.rows) {
+        if (row.client_id === input.clientId && row.staging_key === input.stagingKey && row.status === "pending") {
+          store.rows.delete(id);
+        }
+      }
     },
     async storageMove(from, to) {
       store.adminMoves += 1;
@@ -195,6 +206,10 @@ test("SQL saga never writes storage.objects", () => {
   assert.match(sql, /20971520/);
   assert.match(sql, /attachment too large/);
   assert.match(sql, /FOR UPDATE/);
+  assert.match(sql, /FROM storage\.objects o/);
+  assert.match(sql, /p_thing_id uuid/);
+  assert.match(sql, /p_client_id uuid/);
+  assert.match(sql, /p_staging_key text/);
 });
 
 test("unsafe unapplied attachment migration was replaced", () => {
@@ -221,17 +236,24 @@ test("attachment saga: actual 21 MiB object is rejected before admin storage", a
   assert.equal(moves, 0);
 });
 
-test("MB-015 remove handler deletes staging bytes and pending rows", async () => {
+test("MB-015 remove handler deletes staging bytes and pending rows without attachmentId", async () => {
   const { deps, store } = makeDeps();
   store.objects.add(payload.stagingKey);
-  store.rows.set("att-1", { id: "att-1", status: "pending", client_id: payload.clientId, staging_key: payload.stagingKey });
+  store.rows.set("att-1", {
+    id: "att-1",
+    status: "pending",
+    client_id: payload.clientId,
+    staging_key: payload.stagingKey,
+    thing_id: payload.thingId,
+  });
   const handler = createRemoveAttachmentHandler(deps);
-  const res = await handler(
-    jsonRequest("https://x/remove", { attachmentId: "att-1", stagingKey: payload.stagingKey }),
-  );
+  const body = { thingId: payload.thingId, clientId: payload.clientId, stagingKey: payload.stagingKey };
+  const res = await handler(jsonRequest("https://x/remove", body));
   assert.equal(res.status, 200);
   assert.equal(store.objects.has(payload.stagingKey), false);
   assert.equal(store.rows.has("att-1"), false);
+  const again = await handler(jsonRequest("https://x/remove", body));
+  assert.equal(again.status, 200);
 });
 
 test("stale pending cleanup removes staging bytes without logging identities", async () => {
@@ -244,7 +266,109 @@ test("stale pending cleanup removes staging bytes without logging identities", a
     abandon: async () => undefined,
   });
   assert.equal(result.removed, 1);
+  assert.equal(result.processed, 1);
+  assert.equal(result.failed, 0);
   assert.deepEqual(removed, ["staging/user-1/c1/brief.pdf"]);
   assert.equal(JSON.stringify(result).includes("user-1"), false);
 });
 
+test("direct completion without destination object is rejected and row stays pending", async () => {
+  const { deps, store } = makeDeps({
+    storageMove: async () => ({ ok: true }),
+  });
+  store.objects.add(payload.stagingKey);
+  const handler = createFinalizeAttachmentHandler(deps);
+  const res = await handler(jsonRequest("https://x/finalize", payload));
+  assert.equal(res.status, 400);
+  assert.equal([...store.rows.values()][0].status, "pending");
+});
+
+test("repeated Retry of a pending finalize is idempotent once destination exists", async () => {
+  const { deps, store } = makeDeps();
+  store.objects.add(payload.stagingKey);
+  const handler = createFinalizeAttachmentHandler(deps);
+  const first = await handler(jsonRequest("https://x/finalize", payload));
+  assert.equal(first.status, 200);
+  const second = await handler(jsonRequest("https://x/finalize", payload));
+  assert.equal(second.status, 200);
+  const json = await second.json();
+  assert.equal(json.attachmentId, "att-1");
+});
+
+test("five-file capacity is restored immediately after Remove", () => {
+  const files = [1, 2, 3, 4, 5, 6].map((n) => fakeFile(`f${n}.pdf`, 10));
+  const first = validateAttachmentBatch(files, 0);
+  assert.equal(first.accepted.length, 5);
+  const afterRemove = validateAttachmentBatch([files[5]], 4);
+  assert.equal(afterRemove.accepted.length, 1);
+  assert.equal(afterRemove.accepted[0].name, "f6.pdf");
+});
+
+test("SQL complete verifies the final storage object before ready", () => {
+  const sql = readFileSync(new URL("../supabase/migrations/20260824122123_magic_box_attachment_saga.sql", import.meta.url), "utf8");
+  assert.match(sql, /bucket_id = 'thing-attachments'/);
+  assert.match(sql, /RAISE EXCEPTION 'attachment missing'/);
+  assert.equal(sql.includes("INSERT INTO storage.objects"), false);
+});
+
+test("attachment flag off returns 404 without storage work", async () => {
+  let moves = 0;
+  const { deps } = makeDeps({
+    attachmentsEnabled: () => false,
+    storageMove: async () => {
+      moves += 1;
+      return { ok: true };
+    },
+  });
+  const handler = createFinalizeAttachmentHandler(deps);
+  const res = await handler(jsonRequest("https://x/finalize", payload));
+  assert.equal(res.status, 404);
+  assert.equal(moves, 0);
+});
+
+test("cleanup authentication failure makes zero database/Storage calls", async () => {
+  let listed = 0;
+  const handler = createAttachmentCleanupHandler({
+    secret: "cleanup-secret",
+    deps: {
+      listStale: async () => {
+        listed += 1;
+        return [];
+      },
+      storageRemove: async () => undefined,
+      abandon: async () => undefined,
+    },
+  });
+  const res = await handler(new Request("https://x/cleanup", { method: "POST" }));
+  assert.equal(res.status, 401);
+  assert.equal(listed, 0);
+});
+
+test("one cleanup failure does not stop remaining stale rows", async () => {
+  const removed = [];
+  const result = await cleanupStalePendingAttachments({
+    listStale: async () => [
+      { id: "a1", staging_key: "staging/u/c1/one.pdf" },
+      { id: "a2", staging_key: "staging/u/c2/two.pdf" },
+    ],
+    storageRemove: async (key) => {
+      if (key.endsWith("one.pdf")) throw new Error("storage");
+      removed.push(key);
+    },
+    abandon: async () => undefined,
+  });
+  assert.equal(result.processed, 2);
+  assert.equal(result.removed, 1);
+  assert.equal(result.failed, 1);
+  assert.deepEqual(removed, ["staging/u/c2/two.pdf"]);
+});
+
+test("attachment flag source: UI and server flags default off in env example", () => {
+  const envExample = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+  const composer = readFileSync(new URL("../src/features/court/magic-box/MagicBoxComposer.tsx", import.meta.url), "utf8");
+  const netlify = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
+  assert.match(envExample, /VITE_MAGIC_BOX_ATTACHMENTS_ENABLED=false/);
+  assert.match(envExample, /MAGIC_BOX_ATTACHMENTS_ENABLED=false/);
+  assert.match(composer, /attachmentsUiEnabled\(\)/);
+  assert.match(netlify, /VITE_MAGIC_BOX_ATTACHMENTS_ENABLED = "false"/);
+});

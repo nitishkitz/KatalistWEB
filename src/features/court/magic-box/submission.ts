@@ -102,9 +102,13 @@ export async function runTossPipeline(input: {
       input.guard.apply({ type: "CREATE_FAILED" });
       return { status: "create-failed", error };
     }
-    const thingId = input.guard.getState().createdThingId;
+    const snapshot = input.guard.getState().snapshot;
+    const thingId = input.guard.getState().createdThingId ?? "";
     input.guard.apply({ type: "ATTACHMENTS_PARTIAL" });
-    return { status: "recovery", thingId: thingId ?? "", failedClientIds: ["unknown"] };
+    const failedClientIds = (snapshot?.attachments ?? [])
+      .filter((item) => item.status === "ready" || item.status === "finalizing" || item.status === "recovery-failed")
+      .map((item) => item.clientId);
+    return { status: "recovery", thingId, failedClientIds };
   }
 }
 

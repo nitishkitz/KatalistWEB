@@ -1589,7 +1589,7 @@ export type Database = {
         }
       }
       abandon_pending_attachment: {
-        Args: { p_attachment_id: string }
+        Args: { p_client_id: string; p_staging_key: string; p_thing_id: string }
         Returns: boolean
       }
       complete_thing_attachment: {
@@ -1631,6 +1631,10 @@ export type Database = {
           thing_id: string
           uploaded_by_actor_id: string
         }[]
+      }
+      list_stale_pending_attachments: {
+        Args: { p_older_than?: string }
+        Returns: { id: string; staging_key: string }[]
       }
       reserve_thing_attachment: {
         Args: {

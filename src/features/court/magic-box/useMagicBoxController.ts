@@ -68,6 +68,19 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     [ctx],
   );
 
+  const finishRecovery = useCallback(() => {
+    guardRef.current.apply({ type: "RECOVERY_CLEARED" });
+    syncSubmission();
+    dispatch({ type: "RESET_AFTER_SUCCESS" });
+    setAnnounce("Thing tossed.");
+    void qc.invalidateQueries({ queryKey: keys.court("preview", context) }).catch(() => undefined);
+    void qc.invalidateQueries({ queryKey: ["court"] }).catch(() => undefined);
+    if (options.listId) {
+      void qc.invalidateQueries({ queryKey: keys.listThings(options.listId) }).catch(() => undefined);
+      void qc.invalidateQueries({ queryKey: keys.list(options.listId) }).catch(() => undefined);
+    }
+  }, [syncSubmission, dispatch, qc, context, options.listId]);
+
   const draft: MagicBoxDraft = useMemo(
     () => selectDraft(state, { ...ctx, now: new Date() }),
     [state, ctx],
@@ -309,7 +322,8 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
       if (!attachment) return;
       if (attachment.status === "recovery-failed" || attachment.createdThingId) {
         await abandonAttachment({
-          attachmentId: attachment.attachmentId,
+          thingId: attachment.createdThingId ?? guardRef.current.getState().createdThingId ?? "",
+          clientId: attachment.clientId,
           stagingKey: attachment.stagingKey,
           accessToken: session?.access_token,
         });
@@ -319,14 +333,10 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
       dispatch({ type: "ATTACHMENT_REMOVED", clientId });
       if (attachment.status === "recovery-failed" || attachment.createdThingId) {
         const remaining = state.attachments.filter((item) => item.clientId !== clientId && (item.status === "recovery-failed" || item.createdThingId));
-        if (remaining.length === 0) {
-          guardRef.current.apply({ type: "RECOVERY_CLEARED" });
-          syncSubmission();
-          dispatch({ type: "RESET_AFTER_SUCCESS" });
-        }
+        if (remaining.length === 0) finishRecovery();
       }
     },
-    [dispatch, state.attachments, syncSubmission, session?.access_token],
+    [dispatch, state.attachments, finishRecovery, session?.access_token],
   );
 
   const retryAttachment = useCallback(
@@ -346,11 +356,7 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
         }
         dispatch({ type: "ATTACHMENT_REMOVED", clientId });
         const remaining = state.attachments.filter((item) => item.clientId !== clientId && (item.status === "recovery-failed" || item.createdThingId));
-        if (remaining.length === 0) {
-          guardRef.current.apply({ type: "RECOVERY_CLEARED" });
-          syncSubmission();
-          dispatch({ type: "RESET_AFTER_SUCCESS" });
-        }
+        if (remaining.length === 0) finishRecovery();
         return;
       }
       dispatch({ type: "ATTACHMENT_UPDATED", clientId, patch: { status: "uploading", error: undefined } });
@@ -365,7 +371,7 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
         patch: { status: staged.status, stagingKey: staged.stagingKey, error: staged.error },
       });
     },
-    [dispatch, session?.user?.id, session?.access_token, state.attachments, syncSubmission],
+    [dispatch, session?.user?.id, session?.access_token, state.attachments, finishRecovery],
   );
 
   const voice = useMagicBoxVoice({
