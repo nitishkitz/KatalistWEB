@@ -69,6 +69,10 @@ export function deriveUatPassword(pepper: string, phone: string): string {
   return createHmac("sha256", pepper).update(`katalist-uat-auth:${phone}`, "utf8").digest("hex");
 }
 
+function internalUatEmail(password: string): string {
+  return `uat-${password.slice(0, 32)}@users.katalist.invalid`;
+}
+
 export function hashRateLimitScope(pepper: string, kind: "phone" | "ip", value: string): string {
   return createHmac("sha256", pepper).update(`uat-auth-${kind}:${value}`, "utf8").digest("hex");
 }
@@ -242,10 +246,10 @@ export async function createDefaultUatDeps(): Promise<UatAuthDeps> {
       return data;
     },
     async createUser({ phone, password, profile }) {
-      const { error } = await supabaseAdmin.auth.admin.createUser({
-        phone,
+      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+        email: internalUatEmail(password),
         password,
-        phone_confirm: true,
+        email_confirm: true,
         user_metadata: {
           full_name: profile.fullName,
           display_name: profile.fullName,
@@ -257,10 +261,18 @@ export async function createDefaultUatDeps(): Promise<UatAuthDeps> {
         },
       });
       if (error) throw error;
+      const { error: profileError } = await supabaseAdmin
+        .from("profiles")
+        .update({ email: null })
+        .eq("id", data.user.id);
+      if (profileError) throw profileError;
     },
-    async signIn(phone, password) {
+    async signIn(_phone, password) {
       const client = createSupabasePasswordClient();
-      const { data, error } = await client.auth.signInWithPassword({ phone, password });
+      const { data, error } = await client.auth.signInWithPassword({
+        email: internalUatEmail(password),
+        password,
+      });
       if (error || !data.session) throw new UatAuthError(401, "Unable to sign in.", "invalid_code");
       return {
         access_token: data.session.access_token,
