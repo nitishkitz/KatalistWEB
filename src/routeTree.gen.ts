@@ -29,10 +29,13 @@ import { Route as ApiPushSubscriptionsRouteImport } from './routes/api/push/subs
 import { Route as ApiUatAuthRequestRouteImport } from './routes/api/uat-auth/request'
 import { Route as ApiUatAuthVerifyRouteImport } from './routes/api/uat-auth/verify'
 import { Route as ApiInternalNotificationsDrainRouteImport } from './routes/api/internal/notifications/drain'
+import { Route as ApiMagicBoxAttachmentsFinalizeRouteImport } from './routes/api/magic-box/attachments/finalize'
+import { Route as ApiMagicBoxAttachmentsRemoveRouteImport } from './routes/api/magic-box/attachments/remove'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
 import { Route as ApiPublicBridgeCommentRouteImport } from './routes/api/public/bridge/comment'
 import { Route as ApiPublicBridgeRedeemRouteImport } from './routes/api/public/bridge/redeem'
 import { Route as ApiPublicBridgeThingRouteImport } from './routes/api/public/bridge/thing'
+import { Route as ApiThingsThingIdAttachmentsAttachmentIdDownloadRouteImport } from './routes/api/things/$thingId/attachments/$attachmentId/download'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -135,6 +138,18 @@ const ApiInternalNotificationsDrainRoute =
     path: '/api/internal/notifications/drain',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiMagicBoxAttachmentsFinalizeRoute =
+  ApiMagicBoxAttachmentsFinalizeRouteImport.update({
+    id: '/api/magic-box/attachments/finalize',
+    path: '/api/magic-box/attachments/finalize',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiMagicBoxAttachmentsRemoveRoute =
+  ApiMagicBoxAttachmentsRemoveRouteImport.update({
+    id: '/api/magic-box/attachments/remove',
+    path: '/api/magic-box/attachments/remove',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicBridgeActRoute = ApiPublicBridgeActRouteImport.update({
   id: '/api/public/bridge/act',
   path: '/api/public/bridge/act',
@@ -155,6 +170,12 @@ const ApiPublicBridgeThingRoute = ApiPublicBridgeThingRouteImport.update({
   path: '/api/public/bridge/thing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute =
+  ApiThingsThingIdAttachmentsAttachmentIdDownloadRouteImport.update({
+    id: '/api/things/$thingId/attachments/$attachmentId/download',
+    path: '/api/things/$thingId/attachments/$attachmentId/download',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -177,10 +198,13 @@ export interface FileRoutesByFullPath {
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
   '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
+  '/api/magic-box/attachments/finalize': typeof ApiMagicBoxAttachmentsFinalizeRoute
+  '/api/magic-box/attachments/remove': typeof ApiMagicBoxAttachmentsRemoveRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/things/$thingId/attachments/$attachmentId/download': typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -201,10 +225,13 @@ export interface FileRoutesByTo {
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
   '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
+  '/api/magic-box/attachments/finalize': typeof ApiMagicBoxAttachmentsFinalizeRoute
+  '/api/magic-box/attachments/remove': typeof ApiMagicBoxAttachmentsRemoveRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/things/$thingId/attachments/$attachmentId/download': typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -228,10 +255,13 @@ export interface FileRoutesById {
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
   '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
+  '/api/magic-box/attachments/finalize': typeof ApiMagicBoxAttachmentsFinalizeRoute
+  '/api/magic-box/attachments/remove': typeof ApiMagicBoxAttachmentsRemoveRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/things/$thingId/attachments/$attachmentId/download': typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -256,10 +286,13 @@ export interface FileRouteTypes {
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
     | '/api/internal/notifications/drain'
+    | '/api/magic-box/attachments/finalize'
+    | '/api/magic-box/attachments/remove'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/things/$thingId/attachments/$attachmentId/download'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -280,10 +313,13 @@ export interface FileRouteTypes {
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
     | '/api/internal/notifications/drain'
+    | '/api/magic-box/attachments/finalize'
+    | '/api/magic-box/attachments/remove'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/things/$thingId/attachments/$attachmentId/download'
   id:
     | '__root__'
     | '/'
@@ -306,10 +342,13 @@ export interface FileRouteTypes {
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
     | '/api/internal/notifications/drain'
+    | '/api/magic-box/attachments/finalize'
+    | '/api/magic-box/attachments/remove'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/things/$thingId/attachments/$attachmentId/download'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -329,10 +368,13 @@ export interface RootRouteChildren {
   ApiUatAuthRequestRoute: typeof ApiUatAuthRequestRoute
   ApiUatAuthVerifyRoute: typeof ApiUatAuthVerifyRoute
   ApiInternalNotificationsDrainRoute: typeof ApiInternalNotificationsDrainRoute
+  ApiMagicBoxAttachmentsFinalizeRoute: typeof ApiMagicBoxAttachmentsFinalizeRoute
+  ApiMagicBoxAttachmentsRemoveRoute: typeof ApiMagicBoxAttachmentsRemoveRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
   ApiPublicBridgeCommentRoute: typeof ApiPublicBridgeCommentRoute
   ApiPublicBridgeRedeemRoute: typeof ApiPublicBridgeRedeemRoute
   ApiPublicBridgeThingRoute: typeof ApiPublicBridgeThingRoute
+  ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute: typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -477,6 +519,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiInternalNotificationsDrainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/magic-box/attachments/finalize': {
+      id: '/api/magic-box/attachments/finalize'
+      path: '/api/magic-box/attachments/finalize'
+      fullPath: '/api/magic-box/attachments/finalize'
+      preLoaderRoute: typeof ApiMagicBoxAttachmentsFinalizeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/magic-box/attachments/remove': {
+      id: '/api/magic-box/attachments/remove'
+      path: '/api/magic-box/attachments/remove'
+      fullPath: '/api/magic-box/attachments/remove'
+      preLoaderRoute: typeof ApiMagicBoxAttachmentsRemoveRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/bridge/act': {
       id: '/api/public/bridge/act'
       path: '/api/public/bridge/act'
@@ -503,6 +559,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/bridge/thing'
       fullPath: '/api/public/bridge/thing'
       preLoaderRoute: typeof ApiPublicBridgeThingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/things/$thingId/attachments/$attachmentId/download': {
+      id: '/api/things/$thingId/attachments/$attachmentId/download'
+      path: '/api/things/$thingId/attachments/$attachmentId/download'
+      fullPath: '/api/things/$thingId/attachments/$attachmentId/download'
+      preLoaderRoute: typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -550,10 +613,14 @@ const rootRouteChildren: RootRouteChildren = {
   ApiUatAuthRequestRoute: ApiUatAuthRequestRoute,
   ApiUatAuthVerifyRoute: ApiUatAuthVerifyRoute,
   ApiInternalNotificationsDrainRoute: ApiInternalNotificationsDrainRoute,
+  ApiMagicBoxAttachmentsFinalizeRoute: ApiMagicBoxAttachmentsFinalizeRoute,
+  ApiMagicBoxAttachmentsRemoveRoute: ApiMagicBoxAttachmentsRemoveRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,
   ApiPublicBridgeCommentRoute: ApiPublicBridgeCommentRoute,
   ApiPublicBridgeRedeemRoute: ApiPublicBridgeRedeemRoute,
   ApiPublicBridgeThingRoute: ApiPublicBridgeThingRoute,
+  ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute:
+    ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

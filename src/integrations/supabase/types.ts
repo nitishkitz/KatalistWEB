@@ -1027,31 +1027,43 @@ export type Database = {
       thing_attachments: {
         Row: {
           byte_size: number
+          client_id: string
           created_at: string
           file_name: string
+          finalized_at: string | null
           id: string
           mime_type: string
-          storage_key: string
+          staging_key: string
+          status: string
+          storage_key: string | null
           thing_id: string
           uploaded_by_actor_id: string
         }
         Insert: {
           byte_size: number
+          client_id: string
           created_at?: string
           file_name: string
+          finalized_at?: string | null
           id?: string
           mime_type: string
-          storage_key: string
+          staging_key: string
+          status?: string
+          storage_key?: string | null
           thing_id: string
           uploaded_by_actor_id: string
         }
         Update: {
           byte_size?: number
+          client_id?: string
           created_at?: string
           file_name?: string
+          finalized_at?: string | null
           id?: string
           mime_type?: string
-          storage_key?: string
+          staging_key?: string
+          status?: string
+          storage_key?: string | null
           thing_id?: string
           uploaded_by_actor_id?: string
         }
@@ -1444,6 +1456,10 @@ export type Database = {
         Args: { p_limit: number; p_scope_hash: string; p_window_seconds: number }
         Returns: boolean
       }
+      consume_magic_box_ai_budget: {
+        Args: { p_operation: string; p_user_id: string }
+        Returns: boolean
+      }
       create_bucket: {
         Args: {
           p_context?: Database["public"]["Enums"]["context_kind"]
@@ -1572,21 +1588,68 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      finalize_thing_attachment: {
+      abandon_pending_attachment: {
+        Args: { p_attachment_id: string }
+        Returns: boolean
+      }
+      complete_thing_attachment: {
+        Args: { p_attachment_id: string; p_storage_key: string }
+        Returns: {
+          byte_size: number
+          client_id: string
+          created_at: string
+          file_name: string
+          finalized_at: string | null
+          id: string
+          mime_type: string
+          staging_key: string
+          status: string
+          storage_key: string | null
+          thing_id: string
+          uploaded_by_actor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "thing_attachments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      list_thing_attachments: {
+        Args: { p_thing_id: string }
+        Returns: {
+          byte_size: number
+          client_id: string
+          created_at: string
+          file_name: string
+          finalized_at: string | null
+          id: string
+          mime_type: string
+          staging_key: string
+          status: string
+          storage_key: string | null
+          thing_id: string
+          uploaded_by_actor_id: string
+        }[]
+      }
+      reserve_thing_attachment: {
         Args: {
-          p_byte_size: number
+          p_client_id: string
           p_file_name: string
-          p_mime_type: string
-          p_storage_key: string
+          p_staging_key: string
           p_thing_id: string
         }
         Returns: {
           byte_size: number
+          client_id: string
           created_at: string
           file_name: string
+          finalized_at: string | null
           id: string
           mime_type: string
-          storage_key: string
+          staging_key: string
+          status: string
+          storage_key: string | null
           thing_id: string
           uploaded_by_actor_id: string
         }

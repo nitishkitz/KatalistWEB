@@ -75,11 +75,18 @@ export const katalistRpc = {
   restoreForMe: (p_object_id: string, p_object_type: "thing" | "list" | "bucket") =>
     rpc("restore_for_me", { p_object_id, p_object_type }),
 
-  finalizeThingAttachment: (args: {
+  reserveThingAttachment: (args: {
     p_thing_id: string;
-    p_storage_key: string;
+    p_client_id: string;
+    p_staging_key: string;
     p_file_name: string;
-    p_mime_type: string;
-    p_byte_size: number;
-  }) => rpc("finalize_thing_attachment", args),
+  }) => rpc("reserve_thing_attachment", args),
+
+  completeThingAttachment: (args: { p_attachment_id: string; p_storage_key: string }) =>
+    rpc("complete_thing_attachment", args),
+
+  abandonPendingAttachment: (p_attachment_id: string) =>
+    rpc("abandon_pending_attachment", { p_attachment_id }),
+
+  listThingAttachments: (p_thing_id: string) => rpc("list_thing_attachments", { p_thing_id }),
 };

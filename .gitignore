@@ -10,4 +10,4 @@ dist
 *.log
 .node_modules.lock
 .DS_Store
-attachments
+/attachments
