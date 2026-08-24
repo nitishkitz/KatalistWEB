@@ -7,6 +7,7 @@ import { ConfirmationChips } from "./ConfirmationChips";
 import { MentionAutocomplete } from "./MentionAutocomplete";
 import { ghostSuffix, mentionOptionId } from "./mention";
 import { useMagicBoxController } from "./useMagicBoxController";
+import { attachmentsUiEnabled } from "@/features/attachments/flags";
 
 export function MagicBoxComposer({
   listId,
@@ -45,7 +46,9 @@ export function MagicBoxComposer({
         {box.announce}
       </div>
       {recovering ? (
-        <p className="mb-2 text-[12px] text-status-waiting">Thing created. Retry or remove the remaining attachment.</p>
+        <p id="recovery" className="mb-2 text-[12px] text-status-waiting">
+          Thing created. Retry or remove the remaining attachment.
+        </p>
       ) : null}
       <div
         className={cn(
@@ -110,16 +113,6 @@ export function MagicBoxComposer({
         >
           ⌘K
         </kbd>
-        <input
-          ref={fileRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={(event) => {
-            if (event.target.files?.length) void box.addFiles(event.target.files);
-            event.target.value = "";
-          }}
-        />
         {canPolish ? (
           <button
             type="button"
@@ -133,15 +126,29 @@ export function MagicBoxComposer({
             Polish text
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Attach files"
-          title="Attach files"
-        >
-          <Paperclip className="h-4 w-4" />
-        </button>
+        {attachmentsUiEnabled() ? (
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                if (event.target.files?.length) void box.addFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Attach files"
+              title="Attach files"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+          </>
+        ) : null}
         {recording || transcribing ? (
           <>
             <button

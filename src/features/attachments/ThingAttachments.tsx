@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { useSession } from "@/hooks/useSession";
 import { mimeCategory } from "@/features/court/magic-box/analytics";
 import { requestAttachmentDownload, useThingAttachments } from "./queries";
+import { attachmentsUiEnabled } from "./flags";
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -15,7 +16,7 @@ export function ThingAttachments({ thingId }: { thingId: string }) {
   const { session } = useSession();
   const query = useThingAttachments(thingId);
   const rows = query.data ?? [];
-  if (!rows.length) return null;
+  if (!attachmentsUiEnabled() || !rows.length) return null;
 
   return (
     <section className="mt-4">

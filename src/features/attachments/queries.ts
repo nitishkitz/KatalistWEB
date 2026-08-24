@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isPreviewMode } from "@/lib/session-mode";
+import { attachmentsUiEnabled } from "@/features/attachments/flags";
 
 export type ThingAttachmentRow = {
   id: string;
@@ -15,7 +16,7 @@ export type ThingAttachmentRow = {
 export function useThingAttachments(thingId: string | undefined) {
   return useQuery({
     queryKey: ["thing-attachments", thingId],
-    enabled: Boolean(thingId) && !isPreviewMode(),
+    enabled: Boolean(thingId) && attachmentsUiEnabled() && !isPreviewMode(),
     queryFn: async (): Promise<ThingAttachmentRow[]> => {
       const { data, error } = await supabase.rpc("list_thing_attachments", { p_thing_id: thingId! });
       if (error) throw error;

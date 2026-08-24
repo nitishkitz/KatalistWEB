@@ -22,6 +22,7 @@ import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
+import { Route as ApiCronMagicBoxAttachmentCleanupRouteImport } from './routes/api/cron/magic-box-attachment-cleanup'
 import { Route as ApiMagicBoxCoeyRouteImport } from './routes/api/magic-box/coey'
 import { Route as ApiMagicBoxCorrectRouteImport } from './routes/api/magic-box/correct'
 import { Route as ApiMagicBoxTranscribeRouteImport } from './routes/api/magic-box/transcribe'
@@ -102,6 +103,12 @@ const ListsListIdRoute = ListsListIdRouteImport.update({
   path: '/$listId',
   getParentRoute: () => ListsRoute,
 } as any)
+const ApiCronMagicBoxAttachmentCleanupRoute =
+  ApiCronMagicBoxAttachmentCleanupRouteImport.update({
+    id: '/api/cron/magic-box-attachment-cleanup',
+    path: '/api/cron/magic-box-attachment-cleanup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiMagicBoxCoeyRoute = ApiMagicBoxCoeyRouteImport.update({
   id: '/api/magic-box/coey',
   path: '/api/magic-box/coey',
@@ -191,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/cron/magic-box-attachment-cleanup': typeof ApiCronMagicBoxAttachmentCleanupRoute
   '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
   '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
   '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
@@ -218,6 +226,7 @@ export interface FileRoutesByTo {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets': typeof BucketsIndexRoute
   '/lists': typeof ListsIndexRoute
+  '/api/cron/magic-box-attachment-cleanup': typeof ApiCronMagicBoxAttachmentCleanupRoute
   '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
   '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
   '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
@@ -248,6 +257,7 @@ export interface FileRoutesById {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/cron/magic-box-attachment-cleanup': typeof ApiCronMagicBoxAttachmentCleanupRoute
   '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
   '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
   '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
@@ -279,6 +289,7 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/cron/magic-box-attachment-cleanup'
     | '/api/magic-box/coey'
     | '/api/magic-box/correct'
     | '/api/magic-box/transcribe'
@@ -306,6 +317,7 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets'
     | '/lists'
+    | '/api/cron/magic-box-attachment-cleanup'
     | '/api/magic-box/coey'
     | '/api/magic-box/correct'
     | '/api/magic-box/transcribe'
@@ -335,6 +347,7 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/cron/magic-box-attachment-cleanup'
     | '/api/magic-box/coey'
     | '/api/magic-box/correct'
     | '/api/magic-box/transcribe'
@@ -361,6 +374,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
+  ApiCronMagicBoxAttachmentCleanupRoute: typeof ApiCronMagicBoxAttachmentCleanupRoute
   ApiMagicBoxCoeyRoute: typeof ApiMagicBoxCoeyRoute
   ApiMagicBoxCorrectRoute: typeof ApiMagicBoxCorrectRoute
   ApiMagicBoxTranscribeRoute: typeof ApiMagicBoxTranscribeRoute
@@ -469,6 +483,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/lists/$listId'
       preLoaderRoute: typeof ListsListIdRouteImport
       parentRoute: typeof ListsRoute
+    }
+    '/api/cron/magic-box-attachment-cleanup': {
+      id: '/api/cron/magic-box-attachment-cleanup'
+      path: '/api/cron/magic-box-attachment-cleanup'
+      fullPath: '/api/cron/magic-box-attachment-cleanup'
+      preLoaderRoute: typeof ApiCronMagicBoxAttachmentCleanupRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/magic-box/coey': {
       id: '/api/magic-box/coey'
@@ -606,6 +627,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
+  ApiCronMagicBoxAttachmentCleanupRoute: ApiCronMagicBoxAttachmentCleanupRoute,
   ApiMagicBoxCoeyRoute: ApiMagicBoxCoeyRoute,
   ApiMagicBoxCorrectRoute: ApiMagicBoxCorrectRoute,
   ApiMagicBoxTranscribeRoute: ApiMagicBoxTranscribeRoute,
