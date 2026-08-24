@@ -17,6 +17,20 @@ export const magicBoxCorrectResponseSchema = z.object({
   degraded: z.boolean().optional(),
 });
 
+export const sarvamCorrectionProviderSchema = z.object({
+  correctedText: z.string(),
+  hints: z
+    .object({
+      datePhrase: z.string().nullable().optional(),
+      importance: z.enum(["now", "next", "later"]).nullable().optional(),
+    })
+    .optional(),
+});
+
+export const sarvamCoeyProviderSchema = z.object({
+  text: z.string(),
+});
+
 export const magicBoxCoeyRequestSchema = z.object({
   event: z.enum([
     "THING_TOSSED_SELF",

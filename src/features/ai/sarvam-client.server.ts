@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sanitizeCoeyCopy, type CoeyEvent } from "@/features/court/magic-box/coey-copy";
+import { sarvamCoeyProviderSchema, sarvamCorrectionProviderSchema } from "@/features/ai/schemas";
+import { correctionPreservesTokens } from "@/features/ai/protected-tokens";
 
 const SARVAM_CHAT_URL = "https://api.sarvam.ai/v1/chat/completions";
 const SARVAM_STT_URL = "https://api.sarvam.ai/speech-to-text";
@@ -38,37 +40,63 @@ Return JSON only: {"text":"..."}`;
 
 type ChatResult = { text: string } | { error: string };
 
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function sarvamChat(input: {
   key: string;
   model: string;
   system: string;
   user: string;
+  maxTokens: number;
+  timeoutMs: number;
   fetchImpl?: typeof fetch;
 }): Promise<ChatResult> {
   const fetchImpl = input.fetchImpl ?? fetch;
-  const response = await fetchImpl(SARVAM_CHAT_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${input.key}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: input.model,
-      messages: [
-        { role: "system", content: input.system },
-        { role: "user", content: input.user },
-      ],
-      temperature: 0.2,
-    }),
-  });
-  if (!response.ok) return { error: `sarvam_${response.status}` };
-  const json = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const text = json.choices?.[0]?.message?.content?.trim();
-  if (!text) return { error: "empty" };
-  return { text };
+  try {
+    const response = await withTimeout(
+      fetchImpl(SARVAM_CHAT_URL, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${input.key}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: input.model,
+          messages: [
+            { role: "system", content: input.system },
+            { role: "user", content: input.user },
+          ],
+          temperature: 0.1,
+          max_tokens: input.maxTokens,
+          reasoning_effort: null,
+          response_format: { type: "json_object" },
+        }),
+      }),
+      input.timeoutMs,
+    );
+    if (!response.ok) return { error: `sarvam_${response.status}` };
+    const json = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = json.choices?.[0]?.message?.content?.trim();
+    if (!text) return { error: "empty" };
+    return { text };
+  } catch {
+    return { error: "timeout" };
+  }
 }
 
-function extractJson(text: string): unknown {
+export function extractJson(text: string): unknown {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start < 0 || end <= start) return null;
@@ -84,41 +112,43 @@ export async function correctMagicBoxText(input: {
   locale?: string;
   env?: SarvamEnv;
   fetchImpl?: typeof fetch;
-}): Promise<{ requestId: string; correctedText: string | null; hints: { datePhrase: string | null; importance: "now" | "next" | "later" | null }; degraded?: boolean }> {
+}): Promise<{
+  requestId: string;
+  correctedText: string | null;
+  hints: { datePhrase: string | null; importance: "now" | "next" | "later" | null };
+  degraded?: boolean;
+}> {
   const requestId = randomUUID();
+  const degraded = {
+    requestId,
+    correctedText: null as string | null,
+    hints: { datePhrase: null as string | null, importance: null as "now" | "next" | "later" | null },
+    degraded: true as const,
+  };
+  if (input.text.length > 2000) return degraded;
   const key = readSarvamApiKey(input.env);
-  if (!key) {
-    return {
-      requestId,
-      correctedText: null,
-      hints: { datePhrase: null, importance: null },
-      degraded: true,
-    };
-  }
+  if (!key) return degraded;
   const result = await sarvamChat({
     key,
     model: input.env?.SARVAM_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL,
     system: CORRECTION_PROMPT,
     user: JSON.stringify({ text: input.text, locale: input.locale ?? "en-IN" }),
+    maxTokens: 160,
+    timeoutMs: 8000,
     fetchImpl: input.fetchImpl,
   });
-  if ("error" in result) {
-    return { requestId, correctedText: null, hints: { datePhrase: null, importance: null }, degraded: true };
-  }
-  const parsed = extractJson(result.text) as {
-    correctedText?: unknown;
-    hints?: { datePhrase?: unknown; importance?: unknown };
-  } | null;
-  const corrected = typeof parsed?.correctedText === "string" ? parsed.correctedText.trim() : "";
-  const importanceRaw = parsed?.hints?.importance;
-  const importance =
-    importanceRaw === "now" || importanceRaw === "next" || importanceRaw === "later" ? importanceRaw : null;
+  if ("error" in result) return degraded;
+  const parsed = sarvamCorrectionProviderSchema.safeParse(extractJson(result.text));
+  if (!parsed.success) return degraded;
+  const corrected = parsed.data.correctedText.trim();
+  if (!corrected || !correctionPreservesTokens(input.text, corrected)) return degraded;
+  const importanceRaw = parsed.data.hints?.importance;
   return {
     requestId,
-    correctedText: corrected && corrected !== input.text ? corrected : corrected || null,
+    correctedText: corrected === input.text ? null : corrected,
     hints: {
-      datePhrase: typeof parsed?.hints?.datePhrase === "string" ? parsed.hints.datePhrase : null,
-      importance,
+      datePhrase: parsed.data.hints?.datePhrase ?? null,
+      importance: importanceRaw === "now" || importanceRaw === "next" || importanceRaw === "later" ? importanceRaw : null,
     },
   };
 }
@@ -129,19 +159,22 @@ export async function generateCoeyCopy(input: {
   env?: SarvamEnv;
   fetchImpl?: typeof fetch;
 }): Promise<{ text: string; degraded?: boolean }> {
-  const key = readSarvamApiKey(input.env);
   const fallback = { text: sanitizeCoeyCopy(null, input.event, input.personName), degraded: true as const };
+  const key = readSarvamApiKey(input.env);
   if (!key) return fallback;
   const result = await sarvamChat({
     key,
     model: input.env?.SARVAM_CHAT_MODEL?.trim() || DEFAULT_CHAT_MODEL,
     system: COEY_PROMPT,
     user: JSON.stringify({ event: input.event, personName: input.personName ?? null }),
+    maxTokens: 48,
+    timeoutMs: 8000,
     fetchImpl: input.fetchImpl,
   });
   if ("error" in result) return fallback;
-  const parsed = extractJson(result.text) as { text?: unknown } | null;
-  return { text: sanitizeCoeyCopy(parsed?.text, input.event, input.personName) };
+  const parsed = sarvamCoeyProviderSchema.safeParse(extractJson(result.text));
+  if (!parsed.success) return fallback;
+  return { text: sanitizeCoeyCopy(parsed.data.text, input.event, input.personName) };
 }
 
 export async function transcribeMagicBoxAudio(input: {
@@ -153,6 +186,7 @@ export async function transcribeMagicBoxAudio(input: {
 }): Promise<{ text: string | null; degraded?: boolean }> {
   const key = readSarvamApiKey(input.env);
   if (!key) return { text: null, degraded: true };
+  if (input.bytes.byteLength > 8 * 1024 * 1024) return { text: null, degraded: true };
   const fetchImpl = input.fetchImpl ?? fetch;
   const form = new FormData();
   form.set("model", input.env?.SARVAM_STT_MODEL?.trim() || DEFAULT_STT_MODEL);
@@ -164,13 +198,20 @@ export async function transcribeMagicBoxAudio(input: {
     new Blob([audio], { type: input.mimeType || "application/octet-stream" }),
     input.filename || "audio.webm",
   );
-  const response = await fetchImpl(SARVAM_STT_URL, {
-    method: "POST",
-    headers: { authorization: `Bearer ${key}` },
-    body: form,
-  });
-  if (!response.ok) return { text: null, degraded: true };
-  const json = (await response.json()) as { transcript?: string; text?: string };
-  const text = (json.transcript ?? json.text ?? "").trim();
-  return { text: text || null, degraded: !text };
+  try {
+    const response = await withTimeout(
+      fetchImpl(SARVAM_STT_URL, {
+        method: "POST",
+        headers: { authorization: `Bearer ${key}` },
+        body: form,
+      }),
+      35_000,
+    );
+    if (!response.ok) return { text: null, degraded: true };
+    const json = (await response.json()) as { transcript?: string; text?: string };
+    const text = (json.transcript ?? json.text ?? "").trim();
+    return { text: text || null, degraded: !text };
+  } catch {
+    return { text: null, degraded: true };
+  }
 }
