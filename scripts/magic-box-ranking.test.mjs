@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { findActiveMention, replaceMention, ghostSuffix, uniquePersonMatch } from "@/features/court/magic-box/mention";
 import { rankAssignablePeople } from "@/features/court/magic-box/ranking";
@@ -77,6 +78,18 @@ test("ranking: list membership, recency and frequency are bounded boosts", () =>
   assert.ok(rakesh.score < 1000);
 });
 
+test("ranking: same-context person receives the bounded context boost", () => {
+  const ranked = rankAssignablePeople({
+    query: "ra",
+    people,
+    sameContextActorIds: new Set(["a-rakesh"]),
+  });
+  const rakesh = ranked.find((p) => p.id === "a-rakesh");
+  assert.ok(rakesh?.reasons.includes("context"));
+  const without = rankAssignablePeople({ query: "ra", people }).find((p) => p.id === "a-rakesh");
+  assert.ok((rakesh?.score ?? 0) > (without?.score ?? 0));
+});
+
 test("ranking is deterministic on ties", () => {
   const a = rankAssignablePeople({ query: "rahul", people: [people[0], people[1]] });
   const b = rankAssignablePeople({ query: "rahul", people: [people[1], people[0]] });
@@ -103,4 +116,12 @@ test("non-ASCII names remain matchable", () => {
   assert.equal(mention?.query, "Sø");
   const ranked = rankAssignablePeople({ query: "sø", people: unicode });
   assert.equal(ranked[0].id, "a-soren");
+});
+
+test("history v2 writes context-keyed events and treats legacy rows as work recency", () => {
+  const src = readFileSync(new URL("../src/features/court/magic-box/history.ts", import.meta.url), "utf8");
+  assert.match(src, /v: 2/);
+  assert.match(src, /sameContextActorIds/);
+  assert.match(src, /context: "work" as const/);
+  assert.match(src, /MAX_EVENTS = 100/);
 });
