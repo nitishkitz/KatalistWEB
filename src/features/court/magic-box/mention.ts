@@ -77,3 +77,7 @@ export function uniquePersonMatch(query: string, people: Person[]): Person | nul
   });
   return hits.length === 1 ? hits[0]! : null;
 }
+
+export function mentionOptionId(composerId: string, personId: string) {
+  return `${composerId}-option-${personId}`;
+}
