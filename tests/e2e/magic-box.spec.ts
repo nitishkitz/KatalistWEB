@@ -1,109 +1,120 @@
-import { expect, test } from "playwright/test";
+import { expect, test, type Page } from "playwright/test";
 
-const FIXTURE = `<!doctype html>
-<html>
-  <body>
-    <div class="sr-only" aria-live="polite" id="live"></div>
-    <p id="recovery" hidden>Thing created. Retry or remove the remaining attachment.</p>
-    <input
-      id="magic"
-      role="combobox"
-      aria-label="Magic Box"
-      aria-expanded="false"
-      aria-haspopup="listbox"
-      aria-controls="composer-listbox"
-      aria-autocomplete="list"
-    />
-    <ul id="composer-listbox" role="listbox" hidden>
-      <li role="option" id="composer-option-a-rahul-s">Rahul Sharma</li>
-      <li role="option" id="composer-option-a-rakesh">Rakesh Kumar</li>
-    </ul>
-    <button type="button" id="polish">Polish text</button>
-    <button type="button" id="mic">Voice input</button>
-    <button type="button" id="toss">Toss Thing</button>
-    <div id="flight" class="transition-transform duration-300 ease-out translate-x-2 -translate-y-1"></div>
-    <script>
-      const input = document.getElementById("magic");
-      const list = document.getElementById("composer-listbox");
-      const options = [...list.querySelectorAll('[role="option"]')];
-      let open = false;
-      let highlight = 0;
-      let tosses = 0;
-      let selected = "";
-      document.getElementById("toss").addEventListener("click", () => { tosses += 1; });
-      function render() {
-        list.hidden = !open;
-        input.setAttribute("aria-expanded", String(open));
-        input.setAttribute("aria-activedescendant", open ? options[highlight].id : "");
-        options.forEach((el, i) => el.setAttribute("aria-selected", String(i === highlight)));
-      }
-      input.addEventListener("input", () => {
-        open = input.value.includes("@");
-        highlight = 0;
-        render();
-      });
-      input.addEventListener("keydown", (event) => {
-        if (!open) {
-          if (event.key === "Enter") tosses += 1;
-          return;
-        }
-        event.preventDefault();
-        if (event.key === "ArrowDown") highlight = (highlight + 1) % options.length;
-        if (event.key === "ArrowUp") highlight = (highlight - 1 + options.length) % options.length;
-        if (event.key === "Enter" || event.key === "Tab") {
-          selected = options[highlight].id;
-          open = false;
-        }
-        if (event.key === "Escape") open = false;
-        render();
-      });
-      window.__mb = () => ({ tosses, selected, open, highlight });
-    </script>
-  </body>
-</html>`;
+async function enterDemoCourt(page: Page) {
+  await page.goto("/auth", { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /Priya Sharma/ }).click();
+  await expect(page.getByRole("combobox", { name: "Magic Box" })).toBeVisible({ timeout: 30_000 });
+}
 
-test("MB-019 combobox is operable by keyboard only", async ({ page }) => {
-  await page.setContent(FIXTURE);
-  const input = page.getByRole("combobox", { name: "Magic Box" });
-  await expect(input).toHaveAttribute("aria-haspopup", "listbox");
-  await input.fill("Deck for @ra");
-  await expect(input).toHaveAttribute("aria-expanded", "true");
-  await expect(input).toHaveAttribute("aria-activedescendant", "composer-option-a-rahul-s");
-  await input.press("ArrowDown");
-  await expect(input).toHaveAttribute("aria-activedescendant", "composer-option-a-rakesh");
-  await input.press("Enter");
-  const state = await page.evaluate(() => (window as unknown as { __mb: () => { tosses: number; selected: string; open: boolean } }).__mb());
-  expect(state.tosses).toBe(0);
-  expect(state.selected).toBe("composer-option-a-rakesh");
-  expect(state.open).toBe(false);
-  await expect(page.getByRole("button", { name: "Polish text" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Voice input" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Toss Thing" })).toBeVisible();
+function composer(page: Page) {
+  return page.getByRole("combobox", { name: "Magic Box" });
+}
+
+function composerRoot(page: Page) {
+  return composer(page).locator('xpath=ancestor::div[contains(@class,"mb-3")][1]');
+}
+
+function courtThingByTitle(page: Page, title: string) {
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return page.getByRole("button", { name: new RegExp(`^${escaped}`) });
+}
+
+async function searchCourt(page: Page, title: string) {
+  await page.getByRole("textbox", { name: "Search Court" }).fill(title);
+}
+
+test("MB-019 real composer is operable by keyboard only", async ({ page }) => {
+  await enterDemoCourt(page);
+  const box = composer(page);
+  const root = composerRoot(page);
+  await box.click();
+  await page.keyboard.type("Deck for @rah");
+  const people = page.getByRole("listbox", { name: "People" });
+  await expect(people).toBeVisible();
+  await expect(people.getByRole("option").first()).toContainText("Rahul Mehta");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("Tab");
+  await expect(people).toHaveCount(0);
+  await expect(box).toHaveValue(/@Rahul Mehta/);
+  await expect(root.getByRole("button", { name: /Rahul Mehta/ })).toBeVisible();
+
+  await box.fill("Check date 3/5 unique-mb019");
+  await expect(root.getByRole("button", { name: "Check date" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Polish text" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Voice input" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Attach files" })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Toss Thing" })).toBeVisible();
+
+  await box.click();
+  await box.fill("");
+  await page.keyboard.type("Escapable @rah");
+  await expect(people).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(people).toHaveCount(0);
+});
+
+test("MB-019 Enter with mention menu open creates zero Things", async ({ page }) => {
+  await enterDemoCourt(page);
+  const title = `MB019-mention-${Date.now()}`;
+  const box = composer(page);
+  await box.click();
+  await page.keyboard.type(`${title} @rah`);
+  await expect(page.getByRole("listbox", { name: "People" })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("listbox", { name: "People" })).toHaveCount(0);
+  await expect(box).toHaveValue(new RegExp(title));
+  await searchCourt(page, title);
+  await expect(courtThingByTitle(page, title)).toHaveCount(0);
+});
+
+test("MB-016 rapid Enter against the real controller creates exactly one Thing", async ({ page }) => {
+  await enterDemoCourt(page);
+  const title = `MB016-${Date.now()}`;
+  const box = composer(page);
+  await box.fill(title);
+  await box.press("Enter");
+  await box.press("Enter");
+  await expect(composerRoot(page).getByText("Thing tossed.")).toBeVisible();
+  await searchCourt(page, title);
+  await expect(courtThingByTitle(page, title)).toHaveCount(1);
 });
 
 test("MB-018 reduced motion removes flight but keeps visible confirmation", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.setContent(FIXTURE);
-  await page.evaluate(() => {
-    const el = document.getElementById("flight")!;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    el.className = reduced
-      ? "transition-opacity duration-200 ease-out opacity-60"
-      : "transition-transform duration-300 ease-out translate-x-2 -translate-y-1";
-  });
-  const className = await page.locator("#flight").getAttribute("class");
-  expect(className?.includes("translate")).toBe(false);
-  expect(className).toContain("opacity");
+  await enterDemoCourt(page);
+  const title = `MB018-${Date.now()}`;
+  const box = composer(page);
+  const root = composerRoot(page);
+  await box.fill(title);
+  const confirmation = expect(root).toHaveClass(/opacity-60/);
+  await page.getByRole("button", { name: "Toss Thing" }).click();
+  await confirmation;
+  await expect(root).not.toHaveClass(/translate/);
+  await expect(root.getByText("Thing tossed.")).toBeVisible();
+  await searchCourt(page, title);
+  await expect(courtThingByTitle(page, title)).toHaveCount(1);
 });
 
-test("recovery copy and live region exist for attachment failures", async ({ page }) => {
-  await page.setContent(FIXTURE);
+test("recovery UI retries and removes without creating a second Thing", async ({ page }) => {
+  await enterDemoCourt(page);
   await page.evaluate(() => {
-    const recovery = document.getElementById("recovery")!;
-    recovery.hidden = false;
-    document.getElementById("live")!.textContent = "Thing created. Retry or remove the remaining attachment.";
+    (window as Window & { __KATALIST_MAGIC_BOX_FAIL_FINALIZE__?: boolean }).__KATALIST_MAGIC_BOX_FAIL_FINALIZE__ = true;
   });
-  await expect(page.locator("#recovery")).toBeVisible();
-  await expect(page.locator("#recovery")).toHaveText("Thing created. Retry or remove the remaining attachment.");
-  await expect(page.locator("[aria-live='polite']")).toHaveText("Thing created. Retry or remove the remaining attachment.");
+  const title = `MB-recovery-${Date.now()}`;
+  const root = composerRoot(page);
+  await root.locator('input[type="file"]').setInputFiles({
+    name: "brief.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 test"),
+  });
+  await expect(root.getByText("brief.pdf", { exact: true })).toBeVisible();
+  await composer(page).fill(title);
+  await page.getByRole("button", { name: "Toss Thing" }).click();
+  await expect(root.locator("#recovery")).toHaveText("Thing created. Retry or remove the remaining attachment.");
+  await searchCourt(page, title);
+  await expect(courtThingByTitle(page, title)).toHaveCount(1);
+  await root.getByRole("button", { name: /Remove brief.pdf/ }).click();
+  await expect(root.locator("#recovery")).toHaveCount(0);
+  await expect(courtThingByTitle(page, title)).toHaveCount(1);
 });

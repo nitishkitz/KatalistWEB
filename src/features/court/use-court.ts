@@ -35,7 +35,7 @@ export function useCourt() {
   const preview = isPreviewSession(session);
   const liveAuth = Boolean(session) && !preview;
   const { context } = useAppContext();
-  useLocalVersion();
+  const localVersion = useLocalVersion();
   const shred = usePersonalShred();
 
   const query = useQuery({
@@ -46,6 +46,7 @@ export function useCourt() {
   });
 
   const source = useMemo(() => {
+    void localVersion;
     if (preview) {
       const me = currentDemoActorId();
       return { things: accessibleDemoThings(context), myActorId: me, live: false as const };
@@ -55,7 +56,7 @@ export function useCourt() {
       myActorId: query.data?.myActorId ?? null,
       live: true as const,
     };
-  }, [preview, query.data, context, shred]);
+  }, [preview, query.data, context, shred, localVersion]);
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");
   const theirs = parts.theirs;
