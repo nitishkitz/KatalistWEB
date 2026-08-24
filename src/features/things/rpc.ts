@@ -157,7 +157,7 @@ export async function rpcCreateThing(input: {
         }),
       ),
     preview: () => {
-      tossLocalThing({
+      return tossLocalThing({
         title: input.title,
         context: input.context,
         ownerImportance: input.ownerImportance,
@@ -165,8 +165,7 @@ export async function rpcCreateThing(input: {
         assigneeId: input.assigneeActorId,
         dueAt: input.dueAt,
         dueHasTime: input.dueHasTime,
-      });
-      return null as never;
+      }) as never;
     },
   });
 }

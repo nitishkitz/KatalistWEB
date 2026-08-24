@@ -74,4 +74,12 @@ export const katalistRpc = {
 
   restoreForMe: (p_object_id: string, p_object_type: "thing" | "list" | "bucket") =>
     rpc("restore_for_me", { p_object_id, p_object_type }),
+
+  finalizeThingAttachment: (args: {
+    p_thing_id: string;
+    p_storage_key: string;
+    p_file_name: string;
+    p_mime_type: string;
+    p_byte_size: number;
+  }) => rpc("finalize_thing_attachment", args),
 };

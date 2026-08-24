@@ -7,6 +7,7 @@ import { getListById, getMergedThings } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useCourt } from "@/features/court/use-court";
 import type { Thing } from "@/domain/thing";
+import { keys } from "@/domain/query-keys";
 import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
 import {
   excludePersonallyShreddedThings,
@@ -23,7 +24,7 @@ export function useListThings(listId: string | undefined) {
   const hidden = isPersonallyShreddedList(listId, shred);
 
   const query = useQuery({
-    queryKey: ["list-things", listId],
+    queryKey: listId ? keys.listThings(listId) : ["list-things", listId],
     enabled: Boolean(listId) && !preview && !hidden,
     staleTime: 10_000,
     queryFn: async (): Promise<Thing[]> => {
@@ -66,6 +67,7 @@ export function useListThings(listId: string | undefined) {
   });
 
   const things = useMemo(() => {
+    void version;
     if (!listId || hidden) return [];
     // List identity is UUID only — never listName
     if (preview) {

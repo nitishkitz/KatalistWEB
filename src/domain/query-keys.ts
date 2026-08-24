@@ -5,6 +5,7 @@ export const keys = {
   lists: (profileId: string | undefined, context: string) =>
     ["lists", profileId, context] as const,
   list: (listId: string) => ["list", listId] as const,
+  listThings: (listId: string) => ["list-things", listId] as const,
   buckets: (profileId: string | undefined, context: string) =>
     ["buckets", profileId, context] as const,
   bucket: (bucketId: string) => ["bucket", bucketId] as const,

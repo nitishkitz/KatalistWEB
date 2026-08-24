@@ -22,6 +22,9 @@ import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
+import { Route as ApiMagicBoxCoeyRouteImport } from './routes/api/magic-box/coey'
+import { Route as ApiMagicBoxCorrectRouteImport } from './routes/api/magic-box/correct'
+import { Route as ApiMagicBoxTranscribeRouteImport } from './routes/api/magic-box/transcribe'
 import { Route as ApiPushSubscriptionsRouteImport } from './routes/api/push/subscriptions'
 import { Route as ApiUatAuthRequestRouteImport } from './routes/api/uat-auth/request'
 import { Route as ApiUatAuthVerifyRouteImport } from './routes/api/uat-auth/verify'
@@ -96,6 +99,21 @@ const ListsListIdRoute = ListsListIdRouteImport.update({
   path: '/$listId',
   getParentRoute: () => ListsRoute,
 } as any)
+const ApiMagicBoxCoeyRoute = ApiMagicBoxCoeyRouteImport.update({
+  id: '/api/magic-box/coey',
+  path: '/api/magic-box/coey',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMagicBoxCorrectRoute = ApiMagicBoxCorrectRouteImport.update({
+  id: '/api/magic-box/correct',
+  path: '/api/magic-box/correct',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMagicBoxTranscribeRoute = ApiMagicBoxTranscribeRouteImport.update({
+  id: '/api/magic-box/transcribe',
+  path: '/api/magic-box/transcribe',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPushSubscriptionsRoute = ApiPushSubscriptionsRouteImport.update({
   id: '/api/push/subscriptions',
   path: '/api/push/subscriptions',
@@ -152,6 +170,9 @@ export interface FileRoutesByFullPath {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
+  '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
+  '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
   '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
@@ -173,6 +194,9 @@ export interface FileRoutesByTo {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets': typeof BucketsIndexRoute
   '/lists': typeof ListsIndexRoute
+  '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
+  '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
+  '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
   '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
@@ -197,6 +221,9 @@ export interface FileRoutesById {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
+  '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
+  '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
   '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
@@ -222,6 +249,9 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/magic-box/coey'
+    | '/api/magic-box/correct'
+    | '/api/magic-box/transcribe'
     | '/api/push/subscriptions'
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
@@ -243,6 +273,9 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets'
     | '/lists'
+    | '/api/magic-box/coey'
+    | '/api/magic-box/correct'
+    | '/api/magic-box/transcribe'
     | '/api/push/subscriptions'
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
@@ -266,6 +299,9 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/magic-box/coey'
+    | '/api/magic-box/correct'
+    | '/api/magic-box/transcribe'
     | '/api/push/subscriptions'
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
@@ -286,6 +322,9 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
+  ApiMagicBoxCoeyRoute: typeof ApiMagicBoxCoeyRoute
+  ApiMagicBoxCorrectRoute: typeof ApiMagicBoxCorrectRoute
+  ApiMagicBoxTranscribeRoute: typeof ApiMagicBoxTranscribeRoute
   ApiPushSubscriptionsRoute: typeof ApiPushSubscriptionsRoute
   ApiUatAuthRequestRoute: typeof ApiUatAuthRequestRoute
   ApiUatAuthVerifyRoute: typeof ApiUatAuthVerifyRoute
@@ -389,6 +428,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListsListIdRouteImport
       parentRoute: typeof ListsRoute
     }
+    '/api/magic-box/coey': {
+      id: '/api/magic-box/coey'
+      path: '/api/magic-box/coey'
+      fullPath: '/api/magic-box/coey'
+      preLoaderRoute: typeof ApiMagicBoxCoeyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/magic-box/correct': {
+      id: '/api/magic-box/correct'
+      path: '/api/magic-box/correct'
+      fullPath: '/api/magic-box/correct'
+      preLoaderRoute: typeof ApiMagicBoxCorrectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/magic-box/transcribe': {
+      id: '/api/magic-box/transcribe'
+      path: '/api/magic-box/transcribe'
+      fullPath: '/api/magic-box/transcribe'
+      preLoaderRoute: typeof ApiMagicBoxTranscribeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/push/subscriptions': {
       id: '/api/push/subscriptions'
       path: '/api/push/subscriptions'
@@ -483,6 +543,9 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
+  ApiMagicBoxCoeyRoute: ApiMagicBoxCoeyRoute,
+  ApiMagicBoxCorrectRoute: ApiMagicBoxCorrectRoute,
+  ApiMagicBoxTranscribeRoute: ApiMagicBoxTranscribeRoute,
   ApiPushSubscriptionsRoute: ApiPushSubscriptionsRoute,
   ApiUatAuthRequestRoute: ApiUatAuthRequestRoute,
   ApiUatAuthVerifyRoute: ApiUatAuthVerifyRoute,

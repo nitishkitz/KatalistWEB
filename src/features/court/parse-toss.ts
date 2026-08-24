@@ -1,37 +1,11 @@
 import type { Importance, Person } from "@/domain/thing";
+import { defaultTimeZone } from "./magic-box/date-time";
+import { uniquePersonMatch } from "./magic-box/mention";
+import { parseMagicBoxText } from "./magic-box/parser";
 
 export type TossChip = { kind: "assignee" | "due" | "importance" | "unresolved"; label: string; value: string };
 
-function dueFromToken(token: string): { dueAt: string; dueHasTime: boolean } | null {
-  const now = new Date();
-  const day = now.getDay();
-  const start = new Date(now);
-  start.setHours(9, 0, 0, 0);
-  const map: Record<string, number> = {
-    sunday: 0,
-    monday: 1,
-    tuesday: 2,
-    wednesday: 3,
-    thursday: 4,
-    friday: 5,
-    saturday: 6,
-  };
-  const key = token.toLowerCase();
-  if (key === "today") return { dueAt: start.toISOString(), dueHasTime: false };
-  if (key === "tomorrow") {
-    start.setDate(start.getDate() + 1);
-    return { dueAt: start.toISOString(), dueHasTime: false };
-  }
-  if (key in map) {
-    const target = map[key]!;
-    let delta = (target - day + 7) % 7;
-    if (delta === 0) delta = 7;
-    start.setDate(start.getDate() + delta);
-    return { dueAt: start.toISOString(), dueHasTime: false };
-  }
-  return null;
-}
-
+/** Compatibility wrapper around Magic Box v2 parser. Remove after call sites migrate. */
 export function parseToss(
   raw: string,
   people: Person[],
@@ -43,54 +17,37 @@ export function parseToss(
   dueAt?: string;
   dueHasTime?: boolean;
 } {
-  let title = raw.trim();
+  const parsed = parseMagicBoxText(raw, { now: new Date(), timeZone: defaultTimeZone() });
   const chips: TossChip[] = [];
-  let importance: Importance = "next";
   let assigneeId: string | undefined;
-
-  const mention = title.match(/@([A-Za-z][\w.-]*)/);
+  const mention = parsed.mentionTokens[0];
   if (mention) {
-    const needle = mention[1].toLowerCase();
-    const hits = people.filter((p) => p.name.toLowerCase().startsWith(needle) || p.name.toLowerCase().includes(needle));
-    if (hits.length === 1) {
-      chips.push({ kind: "assignee", label: hits[0]!.name, value: hits[0]!.id });
-      assigneeId = hits[0]!.id;
+    const unique = uniquePersonMatch(mention.query, people);
+    if (unique) {
+      chips.push({ kind: "assignee", label: unique.name, value: unique.id });
+      assigneeId = unique.id;
     } else {
-      chips.push({ kind: "unresolved", label: `Who is @${mention[1]}?`, value: "person" });
-    }
-    title = title.replace(mention[0], "").trim();
-  }
-
-  if (/\bnow\b/i.test(title)) {
-    importance = "now";
-    chips.push({ kind: "importance", label: "NOW", value: "now" });
-    title = title.replace(/\bnow\b/i, "").trim();
-  } else if (/\blater\b/i.test(title)) {
-    importance = "later";
-    chips.push({ kind: "importance", label: "LATER", value: "later" });
-    title = title.replace(/\blater\b/i, "").trim();
-  } else {
-    chips.push({ kind: "importance", label: "NEXT", value: "next" });
-  }
-
-  const dateMatch = title.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday)\b/i);
-  let dueAt: string | undefined;
-  let dueHasTime: boolean | undefined;
-  if (dateMatch) {
-    chips.push({ kind: "due", label: dateMatch[1], value: dateMatch[1] });
-    title = title.replace(dateMatch[0], "").trim();
-    const parsedDue = dueFromToken(dateMatch[1]);
-    if (parsedDue) {
-      dueAt = parsedDue.dueAt;
-      dueHasTime = parsedDue.dueHasTime;
+      chips.push({ kind: "unresolved", label: `Who is @${mention.query}?`, value: "person" });
     }
   }
-
-  if (/\b\d{1,2}\/\d{1,2}\b/.test(raw) && !dateMatch) {
+  chips.push({
+    kind: "importance",
+    label: parsed.ownerImportance.toUpperCase(),
+    value: parsed.ownerImportance,
+  });
+  if (parsed.due.status === "resolved") {
+    chips.push({ kind: "due", label: parsed.due.label, value: parsed.due.dueAt });
+  } else if (parsed.due.status === "ambiguous") {
     chips.push({ kind: "unresolved", label: "Check date", value: "ambiguous" });
   }
-
-  return { title: title || raw.trim(), chips, importance, assigneeId, dueAt, dueHasTime };
+  return {
+    title: parsed.derivedTitle || raw.trim(),
+    chips,
+    importance: parsed.ownerImportance,
+    assigneeId,
+    dueAt: parsed.due.status === "resolved" ? parsed.due.dueAt : undefined,
+    dueHasTime: parsed.due.status === "resolved" ? parsed.due.dueHasTime : undefined,
+  };
 }
 
 export function tossBlockedByPerson(chips: TossChip[]): boolean {

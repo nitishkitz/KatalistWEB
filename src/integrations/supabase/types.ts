@@ -1024,6 +1024,61 @@ export type Database = {
           },
         ]
       }
+      thing_attachments: {
+        Row: {
+          byte_size: number
+          created_at: string
+          file_name: string
+          id: string
+          mime_type: string
+          storage_key: string
+          thing_id: string
+          uploaded_by_actor_id: string
+        }
+        Insert: {
+          byte_size: number
+          created_at?: string
+          file_name: string
+          id?: string
+          mime_type: string
+          storage_key: string
+          thing_id: string
+          uploaded_by_actor_id: string
+        }
+        Update: {
+          byte_size?: number
+          created_at?: string
+          file_name?: string
+          id?: string
+          mime_type?: string
+          storage_key?: string
+          thing_id?: string
+          uploaded_by_actor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thing_attachments_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "thing_list_label"
+            referencedColumns: ["thing_id"]
+          },
+          {
+            foreignKeyName: "thing_attachments_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "things"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "thing_attachments_uploaded_by_actor_id_fkey"
+            columns: ["uploaded_by_actor_id"]
+            isOneToOne: false
+            referencedRelation: "actors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       things: {
         Row: {
           acknowledgement: Database["public"]["Enums"]["acknowledgement_state"]
@@ -1513,6 +1568,31 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "doorman_state"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      finalize_thing_attachment: {
+        Args: {
+          p_byte_size: number
+          p_file_name: string
+          p_mime_type: string
+          p_storage_key: string
+          p_thing_id: string
+        }
+        Returns: {
+          byte_size: number
+          created_at: string
+          file_name: string
+          id: string
+          mime_type: string
+          storage_key: string
+          thing_id: string
+          uploaded_by_actor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "thing_attachments"
           isOneToOne: true
           isSetofReturn: false
         }
