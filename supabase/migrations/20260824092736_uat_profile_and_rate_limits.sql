@@ -1,0 +1,3 @@
+-- Compatibility marker: this version was applied during the UAT reset.
+-- Its schema is superseded by 20260822100000_uat_profile_and_rate_limits.sql
+-- in clean environments. Keep this file so linked migration history remains aligned.
