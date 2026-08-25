@@ -51,7 +51,7 @@ function CatchActionButtonReady({
     if (busy) return;
     setBusy(true);
     try {
-      await rpcCatchThing(thing.id);
+      await rpcCatchThing(thing.id, thing.ownerImportance);
       toast.success("Caught.");
       await invalidatePersonalSurfaces(qc);
       await Promise.all([

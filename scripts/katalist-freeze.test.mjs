@@ -232,7 +232,7 @@ test("Self-assigned Thing starts Waiting for Catch; Catch is explicit", () => {
   assert.equal(self.personalPace, null);
   assert.equal(self.caughtAt, null);
   const before = partitionCourt([self], "p-priya");
-  assert.equal(before.now.some((t) => t.id === self.id), true);
+  assert.equal(before[self.ownerImportance].some((t) => t.id === self.id), true);
   const caps = getThingCapabilities(self, "p-priya");
   assert.equal(caps.canCatch, true);
   assert.equal(caps.canSetPace, false);

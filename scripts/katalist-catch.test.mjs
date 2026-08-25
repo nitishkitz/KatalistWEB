@@ -81,11 +81,11 @@ test("Court card, mobile card, list row, and Thing Detail all expose Catch", () 
   assertCatchSurface("src/features/things/ThingDetailSheet.tsx", "Thing Detail");
 });
 
-test("Self Toss lands in NOW and Catch is eligible until caught", () => {
+test("Self Toss lands in Owner Importance and Catch is eligible until caught", () => {
   setDemoActorForTests("p-priya");
   const self = tossLocalThing({ title: "Self catch", context: "work", assigneeId: "p-priya" });
   const court = partitionCourt([self], "p-priya");
-  assert.equal(court.now.some((row) => row.id === self.id), true);
+  assert.equal(court.next.some((row) => row.id === self.id), true);
   assert.equal(court.theirs.some((row) => row.id === self.id), false);
   const waiting = getThingCapabilities(self, "p-priya");
   assert.equal(waiting.canCatch, true);
@@ -116,7 +116,7 @@ test("Delegated Toss: assignee can Catch; creator and stranger cannot", () => {
   assert.equal(creatorCourt.now.some((row) => row.id === delegated.id), false);
   setDemoActorForTests("p-arjun");
   const assigneeCourt = partitionCourt([getThing(delegated.id)], "p-arjun");
-  assert.equal(assigneeCourt.now.some((row) => row.id === delegated.id), true);
+  assert.equal(assigneeCourt.next.some((row) => row.id === delegated.id), true);
   assert.equal(getThingCapabilities(getThing(delegated.id), "p-arjun").canCatch, true);
   catchLocal(delegated.id);
   assert.equal(getThing(delegated.id).acknowledgement, "caught");
@@ -181,4 +181,59 @@ test("Capability predicate stays assignee + waiting + non-terminal", () => {
       .canCatch,
     false,
   );
+});
+
+test("Catch inherits Owner Importance and stays in that lane", () => {
+  setDemoActorForTests("p-priya");
+  const row = tossLocalThing({
+    title: "ASAP inherit",
+    context: "work",
+    assigneeId: "p-priya",
+    ownerImportance: "now",
+  });
+  assert.equal(row.personalPace, null);
+  assert.equal(partitionCourt([row], "p-priya").now.some((item) => item.id === row.id), true);
+  assert.equal(getThingCapabilities(row, "p-priya").canCatch, true);
+  catchLocal(row.id);
+  const after = getThing(row.id);
+  assert.equal(after.acknowledgement, "caught");
+  assert.equal(after.personalPace, "now");
+  assert.equal(partitionCourt([after], "p-priya").now.some((item) => item.id === row.id), true);
+});
+
+test("Explicit Catch Pace wins; double Catch does not overwrite the first Pace", () => {
+  setDemoActorForTests("p-priya");
+  const row = tossLocalThing({
+    title: "Later inherit",
+    context: "work",
+    assigneeId: "p-priya",
+    ownerImportance: "later",
+  });
+  catchLocal(row.id, "now");
+  const first = getThing(row.id);
+  assert.equal(first.personalPace, "now");
+  catchLocal(row.id, "later");
+  const second = getThing(row.id);
+  assert.equal(second.personalPace, "now");
+  assert.equal(second.caughtAt, first.caughtAt);
+});
+
+test("Catch action sends Owner Importance and omitted Pace reaches the database fallback", () => {
+  const button = source("src/features/things/CatchActionButton.tsx");
+  assert.match(button, /rpcCatchThing\(thing\.id,\s*thing\.ownerImportance\)/);
+  const rpc = source("src/features/things/rpc.ts");
+  assert.match(rpc, /pace\?: Pace \| null/);
+  assert.equal(rpc.includes('pace: Pace = "next"'), false);
+  assert.match(rpc, /pace == null \? \{ p_thing_id: thingId \}/);
+});
+
+test("catch_thing migration inherits owner_importance on first Catch only", () => {
+  const sql = source("supabase/migrations/20260825091541_catch_inherits_owner_importance.sql");
+  assert.match(sql, /CREATE OR REPLACE FUNCTION public\.catch_thing\(/);
+  assert.match(sql, /p_personal_pace public\.pace DEFAULT NULL/);
+  assert.match(sql, /COALESCE\(\s*p_personal_pace,\s*v_thing\.owner_importance::text::public\.pace,\s*'next'::public\.pace\s*\)/);
+  assert.match(sql, /FOR UPDATE/);
+  assert.match(sql, /IF v_thing\.acknowledgement = 'caught' THEN/);
+  assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.catch_thing\(uuid, public\.pace\)/);
+  assert.equal(sql.includes("DROP FUNCTION"), false);
 });

@@ -153,3 +153,89 @@ test("self Toss shows Catch at mobile width", async ({ page }) => {
   await expect(page.getByText("Caught.")).toBeVisible();
   await expect(catchBtn).toHaveCount(0);
 });
+
+async function tossPhrase(page: Page, text: string) {
+  const box = composer(page);
+  const root = composerRoot(page);
+  await box.fill(text);
+  return { box, root };
+}
+
+async function catchInLane(page: Page, title: string, lane: "NOW" | "NEXT" | "LATER") {
+  await searchCourt(page, title);
+  const laneSection = page.getByRole("region", { name: `${lane} lane` }).or(
+    page.locator(`section[aria-label="${lane} lane"]`),
+  );
+  await expect(laneSection.getByText(title).first()).toBeVisible();
+  const catchBtn = page.getByRole("button", { name: `Catch ${title}` });
+  await expect(catchBtn).toBeVisible();
+  await catchBtn.click();
+  await expect(page.getByText("Caught.")).toBeVisible();
+  await expect(page.getByRole("button", { name: `Catch ${title}` })).toHaveCount(0);
+  await expect(laneSection.getByText(title).first()).toBeVisible();
+}
+
+test("ASAP toss waits in NOW and Catch keeps NOW", async ({ page }) => {
+  await enterDemoCourt(page);
+  const stamp = Date.now();
+  const raw = `Leave office ASAP unique-asap-${stamp}`;
+  const title = `Leave office unique-asap-${stamp}`;
+  const { root } = await tossPhrase(page, raw);
+  await expect(root.getByRole("button", { name: /^NOW$/ })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Due" })).toBeVisible();
+  await composer(page).press("Enter");
+  await expect(root.getByText("Thing tossed.")).toBeVisible();
+  await catchInLane(page, title, "NOW");
+});
+
+test("in 10 min toss waits in NOW with a Due chip", async ({ page }) => {
+  await enterDemoCourt(page);
+  const stamp = Date.now();
+  const raw = `Call the vendor in 10 min unique-min-${stamp}`;
+  const title = `Call the vendor unique-min-${stamp}`;
+  const { root } = await tossPhrase(page, raw);
+  await expect(root.getByRole("button", { name: /^NOW$/ })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Due" })).toHaveCount(0);
+  await composer(page).press("Enter");
+  await expect(root.getByText("Thing tossed.")).toBeVisible();
+  await catchInLane(page, title, "NOW");
+});
+
+test("next week toss waits in LATER with no invented Due", async ({ page }) => {
+  await enterDemoCourt(page);
+  const stamp = Date.now();
+  const raw = `Review this next week unique-later-${stamp}`;
+  const title = `Review this unique-later-${stamp}`;
+  const { root } = await tossPhrase(page, raw);
+  await expect(root.getByRole("button", { name: /^LATER$/ })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Due" })).toBeVisible();
+  await composer(page).press("Enter");
+  await expect(root.getByText("Thing tossed.")).toBeVisible();
+  await catchInLane(page, title, "LATER");
+});
+
+test("tomorrow at 5 PM toss waits in NEXT with exact Due", async ({ page }) => {
+  await enterDemoCourt(page);
+  const stamp = Date.now();
+  const raw = `Send quote tomorrow at 5 PM unique-next-${stamp}`;
+  const title = `Send quote unique-next-${stamp}`;
+  const { root } = await tossPhrase(page, raw);
+  await expect(root.getByRole("button", { name: /^NEXT$/ })).toBeVisible();
+  await expect(root.getByRole("button", { name: "Due" })).toHaveCount(0);
+  await composer(page).press("Enter");
+  await expect(root.getByText("Thing tossed.")).toBeVisible();
+  await catchInLane(page, title, "NEXT");
+});
+
+test("not urgent never matches NOW", async ({ page }) => {
+  await enterDemoCourt(page);
+  const stamp = Date.now();
+  const raw = `This is not urgent unique-neg-${stamp}`;
+  const title = `This is unique-neg-${stamp}`;
+  const { root } = await tossPhrase(page, raw);
+  await expect(root.getByRole("button", { name: /^LATER$/ })).toBeVisible();
+  await expect(root.getByRole("button", { name: /^NOW$/ })).toHaveCount(0);
+  await composer(page).press("Enter");
+  await expect(root.getByText("Thing tossed.")).toBeVisible();
+  await catchInLane(page, title, "LATER");
+});

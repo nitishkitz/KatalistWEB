@@ -37,7 +37,9 @@ export type CourtLane = "now" | "next" | "later";
 export type TheirState = "waiting_for_catch" | "moving" | "needs_attention";
 
 export function laneOf(thing: Thing): CourtLane {
-  if (thing.acknowledgement === "waiting_for_catch") return "now";
+  if (thing.acknowledgement === "waiting_for_catch" && thing.personalPace == null) {
+    return thing.ownerImportance;
+  }
   return thing.personalPace ?? "next";
 }
 

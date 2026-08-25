@@ -1,4 +1,6 @@
 /** Canonical local times from Magic Box v2 BRD. */
+import type { Importance } from "@/domain/thing";
+
 export const PERIOD_TIMES = {
   morning: { hour: 9, minute: 0 },
   noon: { hour: 12, minute: 0 },
@@ -206,4 +208,53 @@ export function defaultTimeZone(): string {
   } catch {
     return "UTC";
   }
+}
+
+export type RelativeDurationUnit = "minute" | "hour" | "day" | "week";
+
+export function parseDurationUnit(raw: string): RelativeDurationUnit | null {
+  const unit = raw.toLowerCase();
+  if (unit.startsWith("min")) return "minute";
+  if (unit.startsWith("hour") || unit.startsWith("hr")) return "hour";
+  if (unit.startsWith("day")) return "day";
+  if (unit.startsWith("week")) return "week";
+  return null;
+}
+
+export function addRelativeDuration(
+  now: Date,
+  amount: number,
+  unit: RelativeDurationUnit,
+  timeZone: string,
+): { date: Date; hasTime: boolean } {
+  if (unit === "minute") return { date: new Date(now.getTime() + amount * 60_000), hasTime: true };
+  if (unit === "hour") return { date: new Date(now.getTime() + amount * 3_600_000), hasTime: true };
+  const parts = zonedParts(now, timeZone);
+  const days = unit === "week" ? amount * 7 : amount;
+  return {
+    date: fromZonedLocal(parts.year, parts.month, parts.day + days, 9, 0, timeZone),
+    hasTime: false,
+  };
+}
+
+export function importanceFromDueInstant(
+  now: Date,
+  dueAt: Date,
+  timeZone: string,
+  unit?: RelativeDurationUnit | null,
+): Importance {
+  if (unit === "week") return "later";
+  if (unit === "minute" || unit === "hour") {
+    const hours = (dueAt.getTime() - now.getTime()) / 3_600_000;
+    return hours <= 2 ? "now" : "next";
+  }
+  const nowParts = zonedParts(now, timeZone);
+  const dueParts = zonedParts(dueAt, timeZone);
+  const days =
+    (Date.UTC(dueParts.year, dueParts.month - 1, dueParts.day) -
+      Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day)) /
+    86_400_000;
+  if (days <= 0) return "now";
+  if (days <= 7) return "next";
+  return "later";
 }

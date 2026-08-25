@@ -1,16 +1,21 @@
 import type { Importance } from "@/domain/thing";
 import {
+  addRelativeDuration,
   applyPeriod,
   formatDueLabel,
   fromZonedLocal,
+  importanceFromDueInstant,
   isoFromDate,
   parseClock,
+  parseDurationUnit,
   resolveWeekday,
   withClock,
   zonedParts,
   type PeriodName,
+  type RelativeDurationUnit,
   type WeekdayModifier,
 } from "./date-time";
+import { selectImportanceFromText } from "./importance-language";
 import { findMentionTokens } from "./mention";
 import type { DueResolution, MagicBoxFieldSource, ParsedMagicBoxText } from "./types";
 
@@ -51,22 +56,6 @@ function stripSpans(text: string, spans: Span[]): string {
   return out.replace(/\s+/g, " ").trim();
 }
 
-function detectImportance(text: string): { importance: Importance; source: MagicBoxFieldSource; spans: Span[] } {
-  const bang = /!!!/.exec(text);
-  if (bang && bang.index != null) {
-    return { importance: "now", source: "parser", spans: [{ start: bang.index, end: bang.index + 3 }] };
-  }
-  const re = /\b(now|next|later)\b/gi;
-  const match = re.exec(text);
-  if (!match || match.index == null) return { importance: "next", source: "default", spans: [] };
-  const token = match[1]!.toLowerCase() as Importance;
-  return {
-    importance: token,
-    source: "parser",
-    spans: [{ start: match.index, end: match.index + match[0].length }],
-  };
-}
-
 function detectPeriod(fragment: string): PeriodName | null {
   const s = fragment.toLowerCase();
   if (/\btonight\b/.test(s)) return "tonight";
@@ -105,7 +94,7 @@ function applyTimeOrPeriod(
   return { date, hasTime: false };
 }
 
-type DateHit = { due: DueResolution; span: Span };
+type DateHit = { due: DueResolution; span: Span; durationUnit?: RelativeDurationUnit | null };
 
 function firstHit(text: string, builders: Array<() => DateHit | null>): DateHit | null {
   const hits: DateHit[] = [];
@@ -134,32 +123,18 @@ function detectDue(text: string, now: Date, timeZone: string): DateHit | null {
       };
     },
     () => {
-      const re = /\bin\s+(\d+)\s+(minutes?|mins?|hours?|hrs?|days?|weeks?)\b/gi;
+      const re = /\b(?:in|within)\s+(\d+)\s+(minutes?|mins?|hours?|hrs?|days?|weeks?)\b/gi;
       const m = re.exec(text);
       if (!m || m.index == null) return null;
       const n = Number(m[1]);
       if (!Number.isFinite(n) || n < 0) return null;
-      const unit = m[2]!.toLowerCase();
-      const date = new Date(now.getTime());
-      const hasTime = true;
-      if (unit.startsWith("min")) date.setUTCMinutes(date.getUTCMinutes() + n);
-      else if (unit.startsWith("hour") || unit.startsWith("hr")) date.setUTCHours(date.getUTCHours() + n);
-      else if (unit.startsWith("day")) {
-        const shifted = fromZonedLocal(parts.year, parts.month, parts.day + n, 9, 0, timeZone);
-        return {
-          due: dueResolved(shifted, false, timeZone, "parser"),
-          span: { start: m.index, end: m.index + m[0].length },
-        };
-      } else {
-        const shifted = fromZonedLocal(parts.year, parts.month, parts.day + n * 7, 9, 0, timeZone);
-        return {
-          due: dueResolved(shifted, false, timeZone, "parser"),
-          span: { start: m.index, end: m.index + m[0].length },
-        };
-      }
+      const unit = parseDurationUnit(m[2]!);
+      if (!unit) return null;
+      const added = addRelativeDuration(now, n, unit, timeZone);
       return {
-        due: dueResolved(date, hasTime, timeZone, "parser"),
+        due: dueResolved(added.date, added.hasTime, timeZone, "parser"),
         span: { start: m.index, end: m.index + m[0].length },
+        durationUnit: unit,
       };
     },
     () => {
@@ -207,7 +182,17 @@ function detectDue(text: string, now: Date, timeZone: string): DateHit | null {
       };
     },
     () => {
-      const re = /\b(tonight|(?:this\s+)?(?:morning|afternoon|evening)|noon|eod|end of day)\b/gi;
+      const re = /\bbefore lunch\b/gi;
+      const m = re.exec(text);
+      if (!m || m.index == null) return null;
+      const date = fromZonedLocal(parts.year, parts.month, parts.day, 12, 0, timeZone);
+      return {
+        due: dueResolved(date, true, timeZone, "parser"),
+        span: { start: m.index, end: m.index + m[0].length },
+      };
+    },
+    () => {
+      const re = /\b(?:by\s+)?(tonight|(?:this\s+)?(?:morning|afternoon|evening)|noon|eod|end of day)\b/gi;
       const m = re.exec(text);
       if (!m || m.index == null) return null;
       const token = m[1]!.toLowerCase();
@@ -263,25 +248,37 @@ export function parseMagicBoxText(rawText: string, options: ParseMagicBoxOptions
 
   let ownerImportance: Importance = "next";
   let importanceSource: MagicBoxFieldSource = "default";
+  let due: DueResolution = { status: "none" };
+  let dueHit: DateHit | null = null;
+  if (options.manualDue) {
+    due = { status: "resolved", ...options.manualDue, source: "manual" };
+  } else {
+    dueHit = detectDue(rawText, now, timeZone);
+    if (dueHit) due = dueHit.due;
+  }
+
   if (options.manualImportance) {
     ownerImportance = options.manualImportance;
     importanceSource = "manual";
   } else {
-    const detected = detectImportance(rawText);
-    ownerImportance = detected.importance;
-    importanceSource = detected.source;
-    for (const span of detected.spans) pushSpan(spans, span.start, span.end);
+    const selected = selectImportanceFromText(rawText, dueHit?.span ?? null);
+    if (selected) {
+      ownerImportance = selected.importance;
+      importanceSource = selected.source;
+      for (const span of selected.spans) pushSpan(spans, span.start, span.end);
+    } else if (due.status === "resolved") {
+      ownerImportance = importanceFromDueInstant(
+        now,
+        new Date(due.dueAt),
+        timeZone,
+        dueHit?.durationUnit,
+      );
+      importanceSource = "parser";
+    }
   }
 
-  let due: DueResolution = { status: "none" };
-  if (options.manualDue) {
-    due = { status: "resolved", ...options.manualDue, source: "manual" };
-  } else {
-    const hit = detectDue(rawText, now, timeZone);
-    if (hit) {
-      due = hit.due;
-      if (hit.due.status === "resolved") pushSpan(spans, hit.span.start, hit.span.end);
-    }
+  if (due.status === "resolved" && dueHit) {
+    pushSpan(spans, dueHit.span.start, dueHit.span.end);
   }
 
   const derivedTitle = stripSpans(rawText, spans);

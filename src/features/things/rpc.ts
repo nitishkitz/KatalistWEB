@@ -37,9 +37,15 @@ async function runDomainMutation<T>(handlers: { live: () => Promise<T>; preview:
   return handlers.live();
 }
 
-export async function rpcCatchThing(thingId: string, pace: Pace = "next") {
+export async function rpcCatchThing(thingId: string, pace?: Pace | null) {
   return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("catch_thing", { p_thing_id: thingId, p_personal_pace: pace })),
+    live: () =>
+      liveRpc(() =>
+        supabase.rpc(
+          "catch_thing",
+          pace == null ? { p_thing_id: thingId } : { p_thing_id: thingId, p_personal_pace: pace },
+        ),
+      ),
     preview: () => {
       catchLocal(thingId, pace);
       return null as never;

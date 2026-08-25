@@ -170,3 +170,26 @@ test("empty derived title when the input is only metadata", () => {
   assert.equal(parsed.ownerImportance, "now");
   assert.equal(parsed.due.status, "resolved");
 });
+
+test("natural language ASAP maps to NOW and is stripped from the title", () => {
+  const parsed = parse("I need to get out of the office ASAP");
+  assert.equal(parsed.ownerImportance, "now");
+  assert.equal(parsed.importanceSource, "parser");
+  assert.equal(parsed.derivedTitle, "I need to get out of the office");
+  assert.equal(parsed.due.status, "none");
+});
+
+test("Call the vendor in 10 min is NOW with exact Due", () => {
+  const parsed = parse("Call the vendor in 10 min");
+  assert.equal(parsed.ownerImportance, "now");
+  assert.equal(parsed.due.status, "resolved");
+  assert.equal(parsed.due.dueHasTime, true);
+  assert.equal(new Date(parsed.due.dueAt).getTime(), NOW.getTime() + 10 * 60 * 1000);
+});
+
+test("Review this next week is LATER with no invented Due", () => {
+  const parsed = parse("Review this next week");
+  assert.equal(parsed.ownerImportance, "later");
+  assert.equal(parsed.due.status, "none");
+  assert.equal(parsed.derivedTitle, "Review this");
+});

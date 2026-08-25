@@ -18,9 +18,19 @@ test("mine lanes exclude theirs", () => {
   assert.ok(!p.now.some((t) => p.theirs.includes(t)));
 });
 
-test("waiting for catch is incoming NOW, not owner importance", () => {
-  const thing = { acknowledgement: "waiting_for_catch", personalPace: null, ownerImportance: "later" };
-  assert.equal(laneOf(thing), "now");
+test("waiting for catch uses owner importance until Catch", () => {
+  assert.equal(
+    laneOf({ acknowledgement: "waiting_for_catch", personalPace: null, ownerImportance: "later" }),
+    "later",
+  );
+  assert.equal(
+    laneOf({ acknowledgement: "waiting_for_catch", personalPace: null, ownerImportance: "now" }),
+    "now",
+  );
+  assert.equal(
+    laneOf({ acknowledgement: "waiting_for_catch", personalPace: null, ownerImportance: "next" }),
+    "next",
+  );
 });
 
 test("caught uses personal pace, not owner importance", () => {

@@ -72,7 +72,7 @@ function requireCap(id: string, key: keyof ReturnType<typeof getThingCapabilitie
   return thing;
 }
 
-export function catchLocal(id: string, pace: Pace = "next") {
+export function catchLocal(id: string, pace?: Pace | null) {
   const existing = getThing(id);
   const me = currentDemoActorId();
   const terminal =
@@ -88,7 +88,8 @@ export function catchLocal(id: string, pace: Pace = "next") {
     return;
   }
   requireCap(id, "canCatch");
-  patchThing(id, { acknowledgement: "caught", personalPace: pace, caughtAt: new Date().toISOString() }, "caught");
+  const resolved = pace ?? existing?.ownerImportance ?? "next";
+  patchThing(id, { acknowledgement: "caught", personalPace: resolved, caughtAt: new Date().toISOString() }, "caught");
 }
 export function setPaceLocal(id: string, pace: Pace) {
   requireCap(id, "canSetPace");
