@@ -1732,6 +1732,14 @@ export type Database = {
           display_name: string
         }[]
       }
+      list_visible_profile_identities: {
+        Args: never
+        Returns: {
+          id: string
+          display_name: string | null
+          avatar_url: string | null
+        }[]
+      }
       list_nudgeable_things: {
         Args: never
         Returns: {
@@ -1885,6 +1893,16 @@ export type Database = {
         }
         Returns: {
           actor_id: string
+          display_name: string | null
+          avatar_url: string | null
+        }[]
+      }
+      resolve_profile_identities: {
+        Args: {
+          p_profile_ids: string[]
+        }
+        Returns: {
+          id: string
           display_name: string | null
           avatar_url: string | null
         }[]

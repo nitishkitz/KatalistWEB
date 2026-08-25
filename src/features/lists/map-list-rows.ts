@@ -21,7 +21,7 @@ function initialsFrom(name: string) {
 }
 
 /**
- * Safe List identity mapping: members + owner via public_identities only.
+ * Safe List identity mapping: members + owner via resolve_profile_identities.
  * Never joins profiles for display name or avatar. Owner name resolves even
  * when the owner is not a list_members row.
  */
@@ -39,7 +39,7 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
   const unique = [...new Set(profileIds.filter(Boolean))];
   const identities = new Map<string, { display_name: string; avatar_url: string | null }>();
   if (unique.length) {
-    const { data } = await supabase.from("public_identities").select("id, display_name, avatar_url").in("id", unique);
+    const { data } = await supabase.rpc("resolve_profile_identities", { p_profile_ids: unique });
     for (const row of data ?? []) {
       if (!row.id) continue;
       identities.set(row.id, {

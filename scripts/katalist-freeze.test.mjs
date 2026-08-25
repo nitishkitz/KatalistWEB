@@ -208,13 +208,13 @@ test("Demo avatar upload is omitted and cannot write live storage", () => {
   assert.match(profileSrc, /Photos are demo-only/);
 });
 
-test("List member/owner identities use public_identities, not nested profiles", () => {
+test("List member/owner identities use scoped profile RPCs, not nested profiles", () => {
   const listsSrc = readFileSync(new URL("../src/features/lists/use-lists.ts", import.meta.url), "utf8");
   const bucketSrc = readFileSync(new URL("../src/features/buckets/use-bucket-items.ts", import.meta.url), "utf8");
   const mapperSrc = readFileSync(new URL("../src/features/lists/map-list-rows.ts", import.meta.url), "utf8");
   assert.equal(listsSrc.includes("profiles(display_name"), false);
   assert.equal(bucketSrc.includes("profiles(display_name"), false);
-  assert.match(mapperSrc, /public_identities/);
+  assert.match(mapperSrc, /resolve_profile_identities/);
   assert.match(mapperSrc, /owner_profile_id/);
   assert.match(mapperSrc, /Owned by you/);
   assert.equal(/\bemail\b/.test(mapperSrc), false);

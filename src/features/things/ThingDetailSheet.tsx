@@ -27,7 +27,6 @@ import {
   rpcAddToBucket,
   rpcAssignOutsideKatalist,
   rpcCancelThing,
-  rpcCatchThing,
   rpcNudgeThing,
   rpcRemoveFromBucket,
   rpcReassignThing,
@@ -47,6 +46,7 @@ import { useAvatarUrl } from "@/features/people/directory";
 import { useBuckets } from "@/features/buckets/use-buckets";
 import { getBucketRefs } from "./local-state";
 import { ThingAttachments } from "@/features/attachments/ThingAttachments";
+import { CatchActionButton } from "@/features/things/CatchActionButton";
 
 type Props = {
   thing: Thing | null;
@@ -390,6 +390,15 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                   }
                 />
               </div>
+              {caps?.canCatch ? (
+                <CatchActionButton
+                  thing={thing}
+                  className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[11px] font-medium text-primary hover:bg-white"
+                >
+                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Hand className="h-3.5 w-3.5" />}
+                  Catch
+                </CatchActionButton>
+              ) : null}
             </section>
 
             <section className="space-y-1.5">
@@ -596,33 +605,11 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                     </div>
                   </section>
                 ) : null}
-                {caps?.canCatch ||
-                caps?.canNudge ||
+                {caps?.canNudge ||
                 caps?.canSort ||
                 caps?.canCancel ||
                 caps?.canShred ? (
                   <div className="mt-3 space-y-3">
-                    {caps?.canCatch ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          run.mutate(async () => {
-                            await rpcCatchThing(thing.id);
-                            toast.success("Caught.");
-                          })
-                        }
-                        className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[11px] font-medium text-primary hover:bg-white disabled:opacity-60"
-                      >
-                        {busy ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Hand className="h-3.5 w-3.5" />
-                        )}
-                        Caught It
-                      </button>
-                    ) : null}
-
                     {caps?.canNudge || caps?.canSort ? (
                       <div className="grid grid-cols-2 gap-2">
                         {caps?.canNudge ? (

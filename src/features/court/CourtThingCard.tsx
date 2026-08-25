@@ -5,6 +5,7 @@ import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
+import { CatchActionButton } from "@/features/things/CatchActionButton";
 
 const importanceLabel = { now: "NOW", next: "NEXT", later: "LATER" } as const;
 const workLabel = {
@@ -79,6 +80,18 @@ function StatusMark({ thing }: { thing: Thing }) {
   );
 }
 
+function CardCatchButton({ thing }: { thing: Thing }) {
+  return (
+    <CatchActionButton
+      thing={thing}
+      className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-primary bg-white px-2 text-[10px] font-medium text-primary outline-none hover:bg-white focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <KatalistIcon name="catch" className="h-3.5 w-3.5" />
+      Catch
+    </CatchActionButton>
+  );
+}
+
 export function CourtThingCard({
   thing,
   density,
@@ -99,27 +112,39 @@ export function CourtThingCard({
 
   if (density === "peek") {
     return (
-      <button
-        type="button"
-        onClick={open}
+      <div
         className={cn(
-          "group flex min-h-[62px] w-full items-center gap-2 border-b border-border/70 bg-white px-2 py-2.5 text-left outline-none transition-colors hover:bg-white focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "group relative flex min-h-[62px] w-full items-center gap-2 border-b border-border/70 bg-white px-2 py-2.5",
           muted && "text-muted-foreground",
         )}
       >
-        <span className={cn("h-5 w-0.5 shrink-0 rounded-full", tone.edge)} aria-hidden="true" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[11.5px] font-medium text-foreground">
-            {thing.title}
+        <button
+          type="button"
+          onClick={open}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        >
+          <span className={cn("h-5 w-0.5 shrink-0 rounded-full", tone.edge)} aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[11.5px] font-medium text-foreground">
+              {thing.title}
+            </span>
+            <span className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+              <KatalistIcon
+                name={thing.acknowledgement === "waiting_for_catch" ? "waiting" : workIcon[thing.workStatus]}
+                className="h-3 w-3"
+              />
+              <span className="truncate">
+                {thing.acknowledgement === "waiting_for_catch"
+                  ? "Waiting for Catch"
+                  : workLabel[thing.workStatus]}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className={cn("truncate", due.urgent && "text-status-now")}>{due.label}</span>
+            </span>
           </span>
-          <span className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
-            <KatalistIcon name={workIcon[thing.workStatus]} className="h-3 w-3" />
-            <span className="truncate">{workLabel[thing.workStatus]}</span>
-            <span aria-hidden="true">·</span>
-            <span className={cn("truncate", due.urgent && "text-status-now")}>{due.label}</span>
-          </span>
-        </span>
-      </button>
+        </button>
+        <CardCatchButton thing={thing} />
+      </div>
     );
   }
 
@@ -129,7 +154,7 @@ export function CourtThingCard({
         type="button"
         onClick={open}
         className={cn(
-          "w-full cursor-pointer border-l-2 bg-white px-3 py-2.5 pr-32 text-left outline-none transition-colors duration-200 hover:bg-white focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "w-full cursor-pointer border-l-2 bg-white px-3 py-2.5 pr-52 text-left outline-none transition-colors duration-200 hover:bg-white focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           density === "focused" ? "min-h-[104px]" : "min-h-[72px]",
           muted && "text-muted-foreground",
           tone.border,
@@ -173,6 +198,7 @@ export function CourtThingCard({
       </button>
 
       <span className="absolute right-1.5 top-2 flex items-center gap-1">
+        <CardCatchButton thing={thing} />
         <span className="hidden min-w-[44px] text-right sm:block">
           <span
             className={cn("block text-[10px] font-semibold", importanceTone[thing.ownerImportance])}

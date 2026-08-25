@@ -6,7 +6,8 @@ import { AcknowledgementBadge } from "./AcknowledgementBadge";
 import { WorkStatusBadge } from "./WorkStatusBadge";
 import { PersonCell } from "./PersonCell";
 import { cn } from "@/lib/utils";
-import { rpcCatchThing, rpcNudgeThing, rpcSortThing } from "@/features/things/rpc";
+import { rpcNudgeThing, rpcSortThing } from "@/features/things/rpc";
+import { CatchActionButton } from "@/features/things/CatchActionButton";
 import { toast } from "sonner";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { useCourt } from "@/features/court/use-court";
@@ -87,18 +88,12 @@ export function ThingRow({
               Open
             </button>
             {caps.canCatch ? (
-              <button
-                type="button"
+              <CatchActionButton
+                thing={thing}
                 className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
-                onClick={() =>
-                  void rpcCatchThing(thing.id).then(
-                    () => toast.success("Caught."),
-                    (e: unknown) => toast.error(domainErrorMessage(e)),
-                  )
-                }
               >
-                Caught It
-              </button>
+                Catch
+              </CatchActionButton>
             ) : null}
             {caps.canNudge ? (
               <button

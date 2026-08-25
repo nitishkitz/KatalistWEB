@@ -73,6 +73,20 @@ function requireCap(id: string, key: keyof ReturnType<typeof getThingCapabilitie
 }
 
 export function catchLocal(id: string, pace: Pace = "next") {
+  const existing = getThing(id);
+  const me = currentDemoActorId();
+  const terminal =
+    existing?.workStatus === "sorted" ||
+    existing?.workStatus === "cancelled" ||
+    Boolean(existing?.cancelledAt);
+  if (
+    existing &&
+    existing.assignee.id === me &&
+    existing.acknowledgement === "caught" &&
+    !terminal
+  ) {
+    return;
+  }
   requireCap(id, "canCatch");
   patchThing(id, { acknowledgement: "caught", personalPace: pace, caughtAt: new Date().toISOString() }, "caught");
 }

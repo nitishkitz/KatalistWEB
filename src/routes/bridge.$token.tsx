@@ -172,7 +172,7 @@ function BridgePage() {
               className="h-10 w-full rounded-lg bg-primary text-[13px] font-medium text-primary-foreground disabled:opacity-60"
               onClick={() => void act("catch")}
             >
-              Caught It
+              Catch
             </button>
           ) : null}
           {caught && !terminal ? (

@@ -118,3 +118,34 @@ test("recovery UI retries and removes without creating a second Thing", async ({
   await expect(root.locator("#recovery")).toHaveCount(0);
   await expect(courtThingByTitle(page, title)).toHaveCount(1);
 });
+
+test("self Toss shows Catch on the Court card and Catch succeeds once", async ({ page }) => {
+  await enterDemoCourt(page);
+  const title = `Catch-self-${Date.now()}`;
+  const box = composer(page);
+  await box.fill(title);
+  await box.press("Enter");
+  await expect(composerRoot(page).getByText("Thing tossed.")).toBeVisible();
+  await searchCourt(page, title);
+  await expect(courtThingByTitle(page, title)).toHaveCount(1);
+  const catchBtn = page.getByRole("button", { name: `Catch ${title}` });
+  await expect(catchBtn).toBeVisible();
+  await catchBtn.click();
+  await expect(page.getByText("Caught.")).toBeVisible();
+  await expect(catchBtn).toHaveCount(0);
+});
+
+test("self Toss shows Catch at mobile width", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await enterDemoCourt(page);
+  const title = `Catch-mobile-${Date.now()}`;
+  await composer(page).fill(title);
+  await page.getByRole("button", { name: "Toss Thing" }).click();
+  await expect(composerRoot(page).getByText("Thing tossed.")).toBeVisible();
+  await expect(page.getByText(title).first()).toBeVisible();
+  const catchBtn = page.getByRole("button", { name: `Catch ${title}` });
+  await expect(catchBtn).toBeVisible();
+  await catchBtn.click();
+  await expect(page.getByText("Caught.")).toBeVisible();
+  await expect(catchBtn).toHaveCount(0);
+});
