@@ -30,6 +30,7 @@ export type Thing = {
   cancelledAt: string | null;
   sortedAt: string | null;
   caughtAt: string | null;
+  createdAt?: string;
   updatedAt: string;
 };
 

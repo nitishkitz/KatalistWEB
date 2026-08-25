@@ -16,7 +16,7 @@ export function getListCapabilities(input: {
     canChangeRoles: isOwner,
     canPromoteThingPerson: isOwner,
     canCollaborate: isCollab && !isView,
-    canChat: isCollab && !isView,
+    canChat: Boolean(input.memberRole) || isOwner,
     canComment: Boolean(input.memberRole) || isOwner,
     canMutateWorkflow: isCollab && !isView,
   };

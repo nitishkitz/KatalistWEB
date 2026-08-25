@@ -7,7 +7,7 @@ import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
 import { getLists } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { rpcCreateList } from "@/features/things/rpc";
+import { rpcCreateListV2 } from "@/features/things/rpc";
 import {
   excludePersonallyShreddedList,
   excludePersonallyShreddedLists,
@@ -20,7 +20,7 @@ import type { ListRow } from "./fixtures";
 async function fetchLists(profileId: string, context: "work" | "home"): Promise<ListRow[]> {
   const { data: lists, error } = await supabase
     .from("lists")
-    .select("id,name,context,owner_profile_id,updated_at")
+    .select("id,name,description,cover_storage_path,context,owner_profile_id,updated_at")
     .eq("context", context)
     .is("archived_at", null);
   if (error) throw error;
@@ -48,7 +48,7 @@ export function useLists() {
   }, [preview, query.data, context, version, shred]);
 
   const create = useMutation({
-    mutationFn: (name: string) => rpcCreateList(name, context),
+    mutationFn: ({ name, description }: { name: string; description?: string }) => rpcCreateListV2(name, context, description),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: keys.lists(user?.id, context) });
     },
@@ -70,7 +70,7 @@ export function useList(listId: string | undefined) {
     queryFn: async (): Promise<ListRow | null> => {
       const { data, error } = await supabase
         .from("lists")
-        .select("id,name,context,owner_profile_id,updated_at")
+        .select("id,name,description,cover_storage_path,context,owner_profile_id,updated_at")
         .eq("id", listId!)
         .maybeSingle();
       if (error) throw error;

@@ -13,6 +13,8 @@ export type ListMember = {
 export type ListRow = {
   id: string;
   name: string;
+  description?: string | null;
+  coverStoragePath?: string | null;
   context: ListContext;
   role: ListRole;
   ownerLine: string;

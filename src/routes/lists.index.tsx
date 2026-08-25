@@ -6,10 +6,9 @@ import { type ListRow } from "@/features/lists/fixtures";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useAppContext } from "@/features/context/use-app-context";
 import { useLists } from "@/features/lists/use-lists";
-import { domainErrorMessage } from "@/lib/domain-error";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAvatarUrl } from "@/features/people/directory";
+import { NewListDialog } from "@/features/lists/NewListDialog";
 
 export const Route = createFileRoute("/lists/")({
   head: () => ({
@@ -175,7 +174,6 @@ function ListsPage() {
   const { lists, create } = useLists();
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
-  const [name, setName] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | "owner" | "collaborator" | "view_only">("all");
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -235,42 +233,7 @@ function ListsPage() {
         <Group title="View Only" rows={viewOnly} />
       </div>
 
-      {creating ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
-          <form
-            className="w-full max-w-sm rounded-xl border border-border bg-card p-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!name.trim()) return;
-              void create.mutateAsync(name.trim()).then(
-                () => {
-                  toast.success("List created.");
-                  setName("");
-                  setCreating(false);
-                },
-                (err) => toast.error(domainErrorMessage(err)),
-              );
-            }}
-          >
-            <h2 className="text-[14px] font-semibold">New List</h2>
-            <input
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="List name"
-              className="mt-3 h-9 w-full rounded-lg border border-border px-3 text-[13px]"
-            />
-            <div className="mt-3 flex justify-end gap-2">
-              <button type="button" className="text-[13px]" onClick={() => setCreating(false)}>
-                Cancel
-              </button>
-              <button type="submit" className="rounded-lg bg-primary px-3 py-1.5 text-[13px] text-primary-foreground">
-                Create
-              </button>
-            </div>
-          </form>
-        </div>
-      ) : null}
+      <NewListDialog open={creating} onClose={() => setCreating(false)} create={create} />
     </AppShell>
   );
 }

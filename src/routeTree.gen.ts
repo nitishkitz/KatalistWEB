@@ -16,26 +16,34 @@ import { Route as ListsRouteImport } from './routes/lists'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as NudgesRouteImport } from './routes/nudges'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as TeamRouteImport } from './routes/team'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as BridgeTokenRouteImport } from './routes/bridge.$token'
 import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
+import { Route as ListInvitationsAcceptRouteImport } from './routes/list-invitations.accept'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
+import { Route as TeamInvitationsAcceptRouteImport } from './routes/team-invitations.accept'
 import { Route as ApiCronMagicBoxAttachmentCleanupRouteImport } from './routes/api/cron/magic-box-attachment-cleanup'
+import { Route as ApiListInvitationsAcceptRouteImport } from './routes/api/list-invitations/accept'
 import { Route as ApiMagicBoxCoeyRouteImport } from './routes/api/magic-box/coey'
 import { Route as ApiMagicBoxCorrectRouteImport } from './routes/api/magic-box/correct'
 import { Route as ApiMagicBoxTranscribeRouteImport } from './routes/api/magic-box/transcribe'
 import { Route as ApiPushSubscriptionsRouteImport } from './routes/api/push/subscriptions'
+import { Route as ApiTeamRequestsRouteImport } from './routes/api/team/requests'
 import { Route as ApiUatAuthRequestRouteImport } from './routes/api/uat-auth/request'
 import { Route as ApiUatAuthVerifyRouteImport } from './routes/api/uat-auth/verify'
 import { Route as ApiInternalNotificationsDrainRouteImport } from './routes/api/internal/notifications/drain'
+import { Route as ApiListsListIdCoverRouteImport } from './routes/api/lists/$listId/cover'
+import { Route as ApiListsListIdInvitationsRouteImport } from './routes/api/lists/$listId/invitations'
 import { Route as ApiMagicBoxAttachmentsFinalizeRouteImport } from './routes/api/magic-box/attachments/finalize'
 import { Route as ApiMagicBoxAttachmentsRemoveRouteImport } from './routes/api/magic-box/attachments/remove'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
 import { Route as ApiPublicBridgeCommentRouteImport } from './routes/api/public/bridge/comment'
 import { Route as ApiPublicBridgeRedeemRouteImport } from './routes/api/public/bridge/redeem'
 import { Route as ApiPublicBridgeThingRouteImport } from './routes/api/public/bridge/thing'
+import { Route as ApiTeamInvitationsAcceptRouteImport } from './routes/api/team/invitations/accept'
 import { Route as ApiThingsThingIdAttachmentsAttachmentIdDownloadRouteImport } from './routes/api/things/$thingId/attachments/$attachmentId/download'
 
 const IndexRoute = IndexRouteImport.update({
@@ -73,6 +81,11 @@ const OnboardingRoute = OnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
+const TeamRoute = TeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
@@ -93,6 +106,11 @@ const BucketsBucketIdRoute = BucketsBucketIdRouteImport.update({
   path: '/$bucketId',
   getParentRoute: () => BucketsRoute,
 } as any)
+const ListInvitationsAcceptRoute = ListInvitationsAcceptRouteImport.update({
+  id: '/list-invitations/accept',
+  path: '/list-invitations/accept',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ListsIndexRoute = ListsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -103,10 +121,21 @@ const ListsListIdRoute = ListsListIdRouteImport.update({
   path: '/$listId',
   getParentRoute: () => ListsRoute,
 } as any)
+const TeamInvitationsAcceptRoute = TeamInvitationsAcceptRouteImport.update({
+  id: '/team-invitations/accept',
+  path: '/team-invitations/accept',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiCronMagicBoxAttachmentCleanupRoute =
   ApiCronMagicBoxAttachmentCleanupRouteImport.update({
     id: '/api/cron/magic-box-attachment-cleanup',
     path: '/api/cron/magic-box-attachment-cleanup',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiListInvitationsAcceptRoute =
+  ApiListInvitationsAcceptRouteImport.update({
+    id: '/api/list-invitations/accept',
+    path: '/api/list-invitations/accept',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiMagicBoxCoeyRoute = ApiMagicBoxCoeyRouteImport.update({
@@ -129,6 +158,11 @@ const ApiPushSubscriptionsRoute = ApiPushSubscriptionsRouteImport.update({
   path: '/api/push/subscriptions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTeamRequestsRoute = ApiTeamRequestsRouteImport.update({
+  id: '/api/team/requests',
+  path: '/api/team/requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiUatAuthRequestRoute = ApiUatAuthRequestRouteImport.update({
   id: '/api/uat-auth/request',
   path: '/api/uat-auth/request',
@@ -143,6 +177,17 @@ const ApiInternalNotificationsDrainRoute =
   ApiInternalNotificationsDrainRouteImport.update({
     id: '/api/internal/notifications/drain',
     path: '/api/internal/notifications/drain',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiListsListIdCoverRoute = ApiListsListIdCoverRouteImport.update({
+  id: '/api/lists/$listId/cover',
+  path: '/api/lists/$listId/cover',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiListsListIdInvitationsRoute =
+  ApiListsListIdInvitationsRouteImport.update({
+    id: '/api/lists/$listId/invitations',
+    path: '/api/lists/$listId/invitations',
     getParentRoute: () => rootRouteImport,
   } as any)
 const ApiMagicBoxAttachmentsFinalizeRoute =
@@ -177,6 +222,12 @@ const ApiPublicBridgeThingRoute = ApiPublicBridgeThingRouteImport.update({
   path: '/api/public/bridge/thing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiTeamInvitationsAcceptRoute =
+  ApiTeamInvitationsAcceptRouteImport.update({
+    id: '/api/team/invitations/accept',
+    path: '/api/team/invitations/accept',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute =
   ApiThingsThingIdAttachmentsAttachmentIdDownloadRouteImport.update({
     id: '/api/things/$thingId/attachments/$attachmentId/download',
@@ -192,26 +243,34 @@ export interface FileRoutesByFullPath {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
+  '/team': typeof TeamRoute
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/list-invitations/accept': typeof ListInvitationsAcceptRoute
   '/lists/$listId': typeof ListsListIdRoute
+  '/team-invitations/accept': typeof TeamInvitationsAcceptRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
   '/api/cron/magic-box-attachment-cleanup': typeof ApiCronMagicBoxAttachmentCleanupRoute
+  '/api/list-invitations/accept': typeof ApiListInvitationsAcceptRoute
   '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
   '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
   '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
   '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
+  '/api/team/requests': typeof ApiTeamRequestsRoute
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
   '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
+  '/api/lists/$listId/cover': typeof ApiListsListIdCoverRoute
+  '/api/lists/$listId/invitations': typeof ApiListsListIdInvitationsRoute
   '/api/magic-box/attachments/finalize': typeof ApiMagicBoxAttachmentsFinalizeRoute
   '/api/magic-box/attachments/remove': typeof ApiMagicBoxAttachmentsRemoveRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/team/invitations/accept': typeof ApiTeamInvitationsAcceptRoute
   '/api/things/$thingId/attachments/$attachmentId/download': typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute
 }
 export interface FileRoutesByTo {
@@ -220,26 +279,34 @@ export interface FileRoutesByTo {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
+  '/team': typeof TeamRoute
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/list-invitations/accept': typeof ListInvitationsAcceptRoute
   '/lists/$listId': typeof ListsListIdRoute
+  '/team-invitations/accept': typeof TeamInvitationsAcceptRoute
   '/buckets': typeof BucketsIndexRoute
   '/lists': typeof ListsIndexRoute
   '/api/cron/magic-box-attachment-cleanup': typeof ApiCronMagicBoxAttachmentCleanupRoute
+  '/api/list-invitations/accept': typeof ApiListInvitationsAcceptRoute
   '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
   '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
   '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
   '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
+  '/api/team/requests': typeof ApiTeamRequestsRoute
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
   '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
+  '/api/lists/$listId/cover': typeof ApiListsListIdCoverRoute
+  '/api/lists/$listId/invitations': typeof ApiListsListIdInvitationsRoute
   '/api/magic-box/attachments/finalize': typeof ApiMagicBoxAttachmentsFinalizeRoute
   '/api/magic-box/attachments/remove': typeof ApiMagicBoxAttachmentsRemoveRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/team/invitations/accept': typeof ApiTeamInvitationsAcceptRoute
   '/api/things/$thingId/attachments/$attachmentId/download': typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute
 }
 export interface FileRoutesById {
@@ -251,26 +318,34 @@ export interface FileRoutesById {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
+  '/team': typeof TeamRoute
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/list-invitations/accept': typeof ListInvitationsAcceptRoute
   '/lists/$listId': typeof ListsListIdRoute
+  '/team-invitations/accept': typeof TeamInvitationsAcceptRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
   '/api/cron/magic-box-attachment-cleanup': typeof ApiCronMagicBoxAttachmentCleanupRoute
+  '/api/list-invitations/accept': typeof ApiListInvitationsAcceptRoute
   '/api/magic-box/coey': typeof ApiMagicBoxCoeyRoute
   '/api/magic-box/correct': typeof ApiMagicBoxCorrectRoute
   '/api/magic-box/transcribe': typeof ApiMagicBoxTranscribeRoute
   '/api/push/subscriptions': typeof ApiPushSubscriptionsRoute
+  '/api/team/requests': typeof ApiTeamRequestsRoute
   '/api/uat-auth/request': typeof ApiUatAuthRequestRoute
   '/api/uat-auth/verify': typeof ApiUatAuthVerifyRoute
   '/api/internal/notifications/drain': typeof ApiInternalNotificationsDrainRoute
+  '/api/lists/$listId/cover': typeof ApiListsListIdCoverRoute
+  '/api/lists/$listId/invitations': typeof ApiListsListIdInvitationsRoute
   '/api/magic-box/attachments/finalize': typeof ApiMagicBoxAttachmentsFinalizeRoute
   '/api/magic-box/attachments/remove': typeof ApiMagicBoxAttachmentsRemoveRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/team/invitations/accept': typeof ApiTeamInvitationsAcceptRoute
   '/api/things/$thingId/attachments/$attachmentId/download': typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute
 }
 export interface FileRouteTypes {
@@ -283,26 +358,34 @@ export interface FileRouteTypes {
     | '/me'
     | '/nudges'
     | '/onboarding'
+    | '/team'
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
+    | '/list-invitations/accept'
     | '/lists/$listId'
+    | '/team-invitations/accept'
     | '/buckets/'
     | '/lists/'
     | '/api/cron/magic-box-attachment-cleanup'
+    | '/api/list-invitations/accept'
     | '/api/magic-box/coey'
     | '/api/magic-box/correct'
     | '/api/magic-box/transcribe'
     | '/api/push/subscriptions'
+    | '/api/team/requests'
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
     | '/api/internal/notifications/drain'
+    | '/api/lists/$listId/cover'
+    | '/api/lists/$listId/invitations'
     | '/api/magic-box/attachments/finalize'
     | '/api/magic-box/attachments/remove'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/team/invitations/accept'
     | '/api/things/$thingId/attachments/$attachmentId/download'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -311,26 +394,34 @@ export interface FileRouteTypes {
     | '/me'
     | '/nudges'
     | '/onboarding'
+    | '/team'
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
+    | '/list-invitations/accept'
     | '/lists/$listId'
+    | '/team-invitations/accept'
     | '/buckets'
     | '/lists'
     | '/api/cron/magic-box-attachment-cleanup'
+    | '/api/list-invitations/accept'
     | '/api/magic-box/coey'
     | '/api/magic-box/correct'
     | '/api/magic-box/transcribe'
     | '/api/push/subscriptions'
+    | '/api/team/requests'
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
     | '/api/internal/notifications/drain'
+    | '/api/lists/$listId/cover'
+    | '/api/lists/$listId/invitations'
     | '/api/magic-box/attachments/finalize'
     | '/api/magic-box/attachments/remove'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/team/invitations/accept'
     | '/api/things/$thingId/attachments/$attachmentId/download'
   id:
     | '__root__'
@@ -341,26 +432,34 @@ export interface FileRouteTypes {
     | '/me'
     | '/nudges'
     | '/onboarding'
+    | '/team'
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
+    | '/list-invitations/accept'
     | '/lists/$listId'
+    | '/team-invitations/accept'
     | '/buckets/'
     | '/lists/'
     | '/api/cron/magic-box-attachment-cleanup'
+    | '/api/list-invitations/accept'
     | '/api/magic-box/coey'
     | '/api/magic-box/correct'
     | '/api/magic-box/transcribe'
     | '/api/push/subscriptions'
+    | '/api/team/requests'
     | '/api/uat-auth/request'
     | '/api/uat-auth/verify'
     | '/api/internal/notifications/drain'
+    | '/api/lists/$listId/cover'
+    | '/api/lists/$listId/invitations'
     | '/api/magic-box/attachments/finalize'
     | '/api/magic-box/attachments/remove'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/team/invitations/accept'
     | '/api/things/$thingId/attachments/$attachmentId/download'
   fileRoutesById: FileRoutesById
 }
@@ -372,22 +471,30 @@ export interface RootRouteChildren {
   MeRoute: typeof MeRoute
   NudgesRoute: typeof NudgesRoute
   OnboardingRoute: typeof OnboardingRoute
+  TeamRoute: typeof TeamRoute
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
+  ListInvitationsAcceptRoute: typeof ListInvitationsAcceptRoute
+  TeamInvitationsAcceptRoute: typeof TeamInvitationsAcceptRoute
   ApiCronMagicBoxAttachmentCleanupRoute: typeof ApiCronMagicBoxAttachmentCleanupRoute
+  ApiListInvitationsAcceptRoute: typeof ApiListInvitationsAcceptRoute
   ApiMagicBoxCoeyRoute: typeof ApiMagicBoxCoeyRoute
   ApiMagicBoxCorrectRoute: typeof ApiMagicBoxCorrectRoute
   ApiMagicBoxTranscribeRoute: typeof ApiMagicBoxTranscribeRoute
   ApiPushSubscriptionsRoute: typeof ApiPushSubscriptionsRoute
+  ApiTeamRequestsRoute: typeof ApiTeamRequestsRoute
   ApiUatAuthRequestRoute: typeof ApiUatAuthRequestRoute
   ApiUatAuthVerifyRoute: typeof ApiUatAuthVerifyRoute
   ApiInternalNotificationsDrainRoute: typeof ApiInternalNotificationsDrainRoute
+  ApiListsListIdCoverRoute: typeof ApiListsListIdCoverRoute
+  ApiListsListIdInvitationsRoute: typeof ApiListsListIdInvitationsRoute
   ApiMagicBoxAttachmentsFinalizeRoute: typeof ApiMagicBoxAttachmentsFinalizeRoute
   ApiMagicBoxAttachmentsRemoveRoute: typeof ApiMagicBoxAttachmentsRemoveRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
   ApiPublicBridgeCommentRoute: typeof ApiPublicBridgeCommentRoute
   ApiPublicBridgeRedeemRoute: typeof ApiPublicBridgeRedeemRoute
   ApiPublicBridgeThingRoute: typeof ApiPublicBridgeThingRoute
+  ApiTeamInvitationsAcceptRoute: typeof ApiTeamInvitationsAcceptRoute
   ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute: typeof ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute
 }
 
@@ -442,6 +549,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/team': {
+      id: '/team'
+      path: '/team'
+      fullPath: '/team'
+      preLoaderRoute: typeof TeamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/welcome': {
       id: '/welcome'
       path: '/welcome'
@@ -470,6 +584,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BucketsBucketIdRouteImport
       parentRoute: typeof BucketsRoute
     }
+    '/list-invitations/accept': {
+      id: '/list-invitations/accept'
+      path: '/list-invitations/accept'
+      fullPath: '/list-invitations/accept'
+      preLoaderRoute: typeof ListInvitationsAcceptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/lists/': {
       id: '/lists/'
       path: '/'
@@ -484,11 +605,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListsListIdRouteImport
       parentRoute: typeof ListsRoute
     }
+    '/team-invitations/accept': {
+      id: '/team-invitations/accept'
+      path: '/team-invitations/accept'
+      fullPath: '/team-invitations/accept'
+      preLoaderRoute: typeof TeamInvitationsAcceptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/cron/magic-box-attachment-cleanup': {
       id: '/api/cron/magic-box-attachment-cleanup'
       path: '/api/cron/magic-box-attachment-cleanup'
       fullPath: '/api/cron/magic-box-attachment-cleanup'
       preLoaderRoute: typeof ApiCronMagicBoxAttachmentCleanupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/list-invitations/accept': {
+      id: '/api/list-invitations/accept'
+      path: '/api/list-invitations/accept'
+      fullPath: '/api/list-invitations/accept'
+      preLoaderRoute: typeof ApiListInvitationsAcceptRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/magic-box/coey': {
@@ -519,6 +654,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPushSubscriptionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/team/requests': {
+      id: '/api/team/requests'
+      path: '/api/team/requests'
+      fullPath: '/api/team/requests'
+      preLoaderRoute: typeof ApiTeamRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/uat-auth/request': {
       id: '/api/uat-auth/request'
       path: '/api/uat-auth/request'
@@ -538,6 +680,20 @@ declare module '@tanstack/react-router' {
       path: '/api/internal/notifications/drain'
       fullPath: '/api/internal/notifications/drain'
       preLoaderRoute: typeof ApiInternalNotificationsDrainRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lists/$listId/cover': {
+      id: '/api/lists/$listId/cover'
+      path: '/api/lists/$listId/cover'
+      fullPath: '/api/lists/$listId/cover'
+      preLoaderRoute: typeof ApiListsListIdCoverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lists/$listId/invitations': {
+      id: '/api/lists/$listId/invitations'
+      path: '/api/lists/$listId/invitations'
+      fullPath: '/api/lists/$listId/invitations'
+      preLoaderRoute: typeof ApiListsListIdInvitationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/magic-box/attachments/finalize': {
@@ -580,6 +736,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/bridge/thing'
       fullPath: '/api/public/bridge/thing'
       preLoaderRoute: typeof ApiPublicBridgeThingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/team/invitations/accept': {
+      id: '/api/team/invitations/accept'
+      path: '/api/team/invitations/accept'
+      fullPath: '/api/team/invitations/accept'
+      preLoaderRoute: typeof ApiTeamInvitationsAcceptRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/things/$thingId/attachments/$attachmentId/download': {
@@ -625,22 +788,30 @@ const rootRouteChildren: RootRouteChildren = {
   MeRoute: MeRoute,
   NudgesRoute: NudgesRoute,
   OnboardingRoute: OnboardingRoute,
+  TeamRoute: TeamRoute,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
+  ListInvitationsAcceptRoute: ListInvitationsAcceptRoute,
+  TeamInvitationsAcceptRoute: TeamInvitationsAcceptRoute,
   ApiCronMagicBoxAttachmentCleanupRoute: ApiCronMagicBoxAttachmentCleanupRoute,
+  ApiListInvitationsAcceptRoute: ApiListInvitationsAcceptRoute,
   ApiMagicBoxCoeyRoute: ApiMagicBoxCoeyRoute,
   ApiMagicBoxCorrectRoute: ApiMagicBoxCorrectRoute,
   ApiMagicBoxTranscribeRoute: ApiMagicBoxTranscribeRoute,
   ApiPushSubscriptionsRoute: ApiPushSubscriptionsRoute,
+  ApiTeamRequestsRoute: ApiTeamRequestsRoute,
   ApiUatAuthRequestRoute: ApiUatAuthRequestRoute,
   ApiUatAuthVerifyRoute: ApiUatAuthVerifyRoute,
   ApiInternalNotificationsDrainRoute: ApiInternalNotificationsDrainRoute,
+  ApiListsListIdCoverRoute: ApiListsListIdCoverRoute,
+  ApiListsListIdInvitationsRoute: ApiListsListIdInvitationsRoute,
   ApiMagicBoxAttachmentsFinalizeRoute: ApiMagicBoxAttachmentsFinalizeRoute,
   ApiMagicBoxAttachmentsRemoveRoute: ApiMagicBoxAttachmentsRemoveRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,
   ApiPublicBridgeCommentRoute: ApiPublicBridgeCommentRoute,
   ApiPublicBridgeRedeemRoute: ApiPublicBridgeRedeemRoute,
   ApiPublicBridgeThingRoute: ApiPublicBridgeThingRoute,
+  ApiTeamInvitationsAcceptRoute: ApiTeamInvitationsAcceptRoute,
   ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute:
     ApiThingsThingIdAttachmentsAttachmentIdDownloadRoute,
 }

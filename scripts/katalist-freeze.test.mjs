@@ -173,7 +173,7 @@ test("List Thing creation: owner/collaborator pass; view-only and non-member thr
   assert.throws(() => tossLocalThing({ title: "Non-member blocked", context: "work", listId: "l1" }));
 });
 
-test("List chat: owner/collaborator post; view-only and non-member blocked; reads do not leak", () => {
+test("List chat: all List viewers post; non-members remain blocked and reads do not leak", () => {
   resetDemoLocalStateForTests();
   setDemoActorForTests("p-priya");
   addListMessage("l2", "secret from owner");
@@ -185,7 +185,8 @@ test("List chat: owner/collaborator post; view-only and non-member blocked; read
 
   setDemoActorForTests("p-arjun");
   assert.ok(getListMessages("l2").some((m) => m.body === "secret from owner"));
-  assert.throws(() => addListMessage("l2", "view only blocked"));
+  addListMessage("l2", "view only reply");
+  assert.ok(getListMessages("l2").some((m) => m.body === "view only reply"));
 
   setDemoActorForTests("p-sarah");
   assert.equal(getListMessages("l2").length, 0);

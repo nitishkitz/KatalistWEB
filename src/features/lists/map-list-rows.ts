@@ -8,6 +8,8 @@ export type DbListRow = {
   name: string;
   context: "work" | "home";
   owner_profile_id: string;
+  description?: string | null;
+  cover_storage_path?: string | null;
   updated_at: string;
 };
 
@@ -60,10 +62,18 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
     return {
       id: l.id,
       name: l.name,
+      description: l.description ?? null,
+      coverStoragePath: l.cover_storage_path ?? null,
       context: l.context,
       role,
       ownerLine,
-      members: listMembers.slice(0, 5).map((m) => {
+      members: [{
+        name: ownerName ?? "Someone",
+        profileId: l.owner_profile_id,
+        role: "owner" as const,
+        initials: initialsFrom(ownerName ?? "Someone"),
+        avatarUrl: identities.get(l.owner_profile_id)?.avatar_url ?? null,
+      }, ...listMembers.slice(0, 4).map((m) => {
         const ident = identities.get(m.profile_id);
         const name = ident?.display_name ?? "Someone";
         return {
@@ -73,8 +83,8 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
           initials: initialsFrom(name),
           avatarUrl: ident?.avatar_url ?? null,
         };
-      }),
-      memberCount: listMembers.length,
+      })],
+      memberCount: listMembers.length + 1,
       thingCount: listThings.length,
       doneCount: listThings.filter((t) => t.work_status === "sorted").length,
       inProgressCount: listThings.filter((t) => t.work_status === "under_progress").length,

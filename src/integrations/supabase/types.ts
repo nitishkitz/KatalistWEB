@@ -558,8 +558,10 @@ export type Database = {
       lists: {
         Row: {
           archived_at: string | null
+          cover_storage_path: string | null
           context: Database["public"]["Enums"]["context_kind"]
           created_at: string
+          description: string | null
           id: string
           name: string
           owner_profile_id: string
@@ -567,8 +569,10 @@ export type Database = {
         }
         Insert: {
           archived_at?: string | null
+          cover_storage_path?: string | null
           context: Database["public"]["Enums"]["context_kind"]
           created_at?: string
+          description?: string | null
           id?: string
           name: string
           owner_profile_id: string
@@ -576,8 +580,10 @@ export type Database = {
         }
         Update: {
           archived_at?: string | null
+          cover_storage_path?: string | null
           context?: Database["public"]["Enums"]["context_kind"]
           created_at?: string
+          description?: string | null
           id?: string
           name?: string
           owner_profile_id?: string
@@ -1233,6 +1239,58 @@ export type Database = {
       }
     }
     Functions: {
+      add_connected_list_member: {
+        Args: { p_list_id: string; p_profile_id: string; p_role?: Database["public"]["Enums"]["list_role"] }
+        Returns: Database["public"]["Tables"]["list_members"]["Row"]
+      }
+      create_list_v2: {
+        Args: { p_name: string; p_context?: Database["public"]["Enums"]["context_kind"]; p_description?: string }
+        Returns: Database["public"]["Tables"]["lists"]["Row"]
+      }
+      create_list_invitation_server: {
+        Args: { p_requester_profile_id: string; p_list_id: string; p_invitee_profile_id: string | null; p_phone_hash: string; p_token_hash: string; p_role: Database["public"]["Enums"]["list_role"]; p_expires_at: string }
+        Returns: string
+      }
+      accept_list_invitation_server: {
+        Args: { p_token_hash: string; p_accepting_profile_id: string }
+        Returns: string
+      }
+      list_list_roster: {
+        Args: { p_list_id: string }
+        Returns: { profile_id: string; display_name: string; avatar_url: string | null; role: string; is_owner: boolean }[]
+      }
+      list_team_directory: {
+        Args: Record<PropertyKey, never>
+        Returns: { profile_id: string; display_name: string; avatar_url: string | null; phone_e164: string | null }[]
+      }
+      request_team_connection: {
+        Args: { p_recipient_profile_id: string }
+        Returns: string
+      }
+      accept_team_request: {
+        Args: { p_request_id: string }
+        Returns: boolean
+      }
+      list_team_requests: {
+        Args: Record<PropertyKey, never>
+        Returns: { request_id: string; direction: string; profile_id: string; display_name: string; avatar_url: string | null; created_at: string }[]
+      }
+      remove_team_connection: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
+      list_team_invitations: {
+        Args: Record<PropertyKey, never>
+        Returns: { invitation_id: string; phone_last4: string; created_at: string; expires_at: string }[]
+      }
+      create_team_invitation_server: {
+        Args: { p_requester_profile_id: string; p_phone_hash: string; p_phone_last4: string; p_token_hash: string; p_expires_at: string }
+        Returns: string
+      }
+      accept_team_invitation_server: {
+        Args: { p_token_hash: string; p_accepting_profile_id: string }
+        Returns: boolean
+      }
       add_list_member: {
         Args: {
           p_list_id: string

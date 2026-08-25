@@ -7,7 +7,18 @@ import { useLocalVersion } from "@/features/things/use-local-version";
 import { fetchProfileIdentities, matchProfile } from "@/features/people/directory";
 import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
 
-export type ListChatMessage = { id: string; body: string; author: string; at: string };
+export type ListChatMessage = {
+  id: string;
+  body: string;
+  author: string;
+  initials: string;
+  avatarUrl?: string | null;
+  at: string;
+};
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
+}
 
 async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
   const { data, error } = await supabase
@@ -20,10 +31,13 @@ async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
   const identities = await fetchProfileIdentities();
   return (data ?? []).map((row) => {
     const person = identities.find((p) => p.id === row.author_profile_id);
+    const author = person?.display_name ?? "Member";
     return {
       id: row.id,
       body: row.body,
-      author: person?.display_name ?? "Member",
+      author,
+      initials: initials(author),
+      avatarUrl: person?.avatar_url ?? null,
       at: row.created_at,
     };
   });
@@ -69,10 +83,12 @@ export function useListMessages(listId: string) {
     hidden
       ? []
       : preview
-        ? getListMessages(listId).map((m) => ({ id: m.id, body: m.body, author: m.author, at: m.at }))
+        ? getListMessages(listId).map((m) => ({ id: m.id, body: m.body, author: m.author, initials: initials(m.author), at: m.at }))
         : (query.data ?? []);
 
   return { messages, send, isLoading: !preview && !hidden && query.isLoading };
 }
+
+export type ReturnTypeUseListMessages = ReturnType<typeof useListMessages>;
 
 export { matchProfile };

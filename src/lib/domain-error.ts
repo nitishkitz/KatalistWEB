@@ -1,5 +1,12 @@
 export function domainErrorMessage(err: unknown): string {
-  const raw = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  const raw =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : err && typeof err === "object" && "message" in err && typeof err.message === "string"
+          ? err.message
+          : "";
   const lower = raw.toLowerCase();
   if (lower.includes("permission") || lower.includes("row-level") || lower.includes("42501") || lower.includes("not allowed")) {
     return "You don’t have permission to do that.";

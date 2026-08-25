@@ -6,7 +6,6 @@ import {
   Calendar,
   Check,
   Hand,
-  Loader2,
   List as ListIcon,
   Lock,
   MoreHorizontal,
@@ -44,7 +43,7 @@ import { useThingComments } from "./use-thing-comments";
 import { useAssignablePeople } from "@/features/people/use-assignable";
 import { useAvatarUrl } from "@/features/people/directory";
 import { useBuckets } from "@/features/buckets/use-buckets";
-import { getBucketRefs } from "./local-state";
+import { selectedBucketIds } from "@/features/buckets/bucket-items-surface";
 import { ThingAttachments } from "@/features/attachments/ThingAttachments";
 import { CatchActionButton } from "@/features/things/CatchActionButton";
 
@@ -220,7 +219,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
   const caps = thing ? getThingCapabilities(thing, court.myActorId) : null;
   const thread = useThingComments(thing?.id ?? null);
   const people = useAssignablePeople();
-  const { buckets, preview: bucketsPreview } = useBuckets();
+  const { buckets } = useBuckets();
   const [tab, setTab] = useState<"comments" | "activity">("comments");
   const [comment, setComment] = useState("");
   const [due, setDue] = useState("");
@@ -248,6 +247,31 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
     },
   });
 
+  const bucketRun = useMutation({
+    mutationFn: async ({
+      bucketId,
+      action,
+    }: {
+      bucketId: string;
+      action: "add" | "remove";
+    }) => {
+      if (!thing) return;
+      if (action === "add") await rpcAddToBucket(bucketId, thing.id);
+      else await rpcRemoveFromBucket(bucketId, thing.id);
+    },
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["buckets"] }),
+        qc.invalidateQueries({ queryKey: ["bucket"] }),
+        qc.invalidateQueries({ queryKey: ["bucket-items"] }),
+      ]);
+      toast.success(variables.action === "add" ? "Added to Bucket." : "Removed from Bucket.");
+    },
+    onError: (err) => {
+      toast.error(domainErrorMessage(err));
+    },
+  });
+
   const comments = thread.comments;
   const events = thread.activity;
   const busy = run.isPending;
@@ -265,12 +289,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
     caps?.canShred,
   );
   const activePace: Pace = thing.personalPace ?? "next";
-  const currentBucket = buckets.find(
-    (bucket) =>
-      bucket.thingIds?.includes(thing.id) ||
-      bucket.previews.some((preview) => preview.kind === "thing" && preview.thingId === thing.id) ||
-      (bucketsPreview && getBucketRefs(bucket.id).some((ref) => ref.thingId === thing.id)),
-  );
+  const selectedBuckets = selectedBucketIds(buckets, thing.id);
   const dueLabel = thing.dueAt
     ? format(new Date(thing.dueAt), thing.dueHasTime ? "EEE, MMM d · h:mm a" : "EEE, MMM d")
     : "No due date";
@@ -344,36 +363,38 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
             {caps?.canAddToBucket ? (
               <section className="space-y-1.5">
                 <h3 className="katalist-section-title">Add to Bucket</h3>
-                {currentBucket ? (
-                  <p className="text-[11px] text-muted-foreground">
-                    In <span className="font-medium text-foreground">{currentBucket.name}</span>
-                  </p>
-                ) : null}
-                <select
-                  disabled={busy}
-                  className="h-8 w-full rounded-lg border border-border bg-white px-2 text-[11px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                  defaultValue=""
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    run.mutate(async () => {
-                      if (currentBucket && currentBucket.id !== e.target.value) {
-                        await rpcRemoveFromBucket(currentBucket.id, thing.id);
-                      }
-                      await rpcAddToBucket(e.target.value, thing.id);
-                      toast.success(currentBucket ? "Bucket changed." : "Added to bucket.");
-                    });
-                    e.target.value = "";
-                  }}
-                >
-                  <option value="">
-                    {currentBucket ? "Change bucket…" : "Choose a private bucket…"}
-                  </option>
-                  {buckets.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="divide-y divide-border/70 rounded-lg border border-border/70 bg-white">
+                  {buckets.length === 0 ? (
+                    <p className="px-3 py-2 text-[11px] text-muted-foreground">
+                      Create a Bucket first, then add this Thing here.
+                    </p>
+                  ) : (
+                    buckets.map((bucket) => {
+                      const checked = selectedBuckets.has(bucket.id);
+                      return (
+                        <label
+                          key={bucket.id}
+                          className="flex min-h-9 cursor-pointer items-center gap-2 px-3 text-[11px] text-foreground"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={bucketRun.isPending}
+                            onChange={(event) =>
+                              bucketRun.mutate({
+                                bucketId: bucket.id,
+                                action: event.target.checked ? "add" : "remove",
+                              })
+                            }
+                            className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-ring"
+                          />
+                          <span className="min-w-0 flex-1 truncate">{bucket.name}</span>
+                          {checked ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
               </section>
             ) : null}
 
@@ -395,7 +416,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                   thing={thing}
                   className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[11px] font-medium text-primary hover:bg-white"
                 >
-                  {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Hand className="h-3.5 w-3.5" />}
+                  <Hand className="h-3.5 w-3.5" />
                   Catch
                 </CatchActionButton>
               ) : null}
@@ -521,6 +542,10 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                   </span>
                 </p>
               </section>
+            </div>
+            <div className="grid grid-cols-2 gap-3 border-t border-border/70 pt-3 text-[11px]">
+              <div><h3 className="katalist-section-title">Created</h3><p className="mt-1 text-muted-foreground">{format(new Date(thing.createdAt ?? thing.updatedAt), "MMM d, yyyy · h:mm a")}</p></div>
+              <div><h3 className="katalist-section-title">Last updated</h3><p className="mt-1 text-muted-foreground">{format(new Date(thing.updatedAt), "MMM d, yyyy · h:mm a")}</p></div>
             </div>
           </div>
 

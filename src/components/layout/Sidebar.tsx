@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   List,
   UserRound,
+  Users,
 } from "lucide-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,7 @@ const navItems = [
   { title: "Court", to: "/", icon: LayoutGrid },
   { title: "Lists", to: "/lists", icon: List },
   { title: "Buckets", to: "/buckets", icon: FolderPlus },
+  { title: "Team", to: "/team", icon: Users },
   { title: "Nudges", to: "/nudges", icon: Bell },
   { title: "Me", to: "/me", icon: UserRound },
 ] as const;

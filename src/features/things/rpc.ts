@@ -242,6 +242,21 @@ export async function rpcCreateList(name: string, context: "work" | "home") {
   });
 }
 
+export async function rpcCreateListV2(name: string, context: "work" | "home", description?: string) {
+  return runDomainMutation({
+    live: () => liveRpc(() => supabase.rpc("create_list_v2", { p_name: name, p_context: context, p_description: description })),
+    preview: () => createListLocal(name, context) as never,
+  });
+}
+
+export async function rpcAddConnectedListMember(
+  listId: string,
+  profileId: string,
+  role: "collaborator" | "view_only",
+) {
+  return liveRpc(() => supabase.rpc("add_connected_list_member", { p_list_id: listId, p_profile_id: profileId, p_role: role }));
+}
+
 export async function rpcCreateBucket(name: string, context: "work" | "home") {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("create_bucket", { p_name: name, p_context: context })),

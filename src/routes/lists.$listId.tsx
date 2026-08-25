@@ -1,36 +1,42 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AppShell } from "@/components/layout/AppShell";
 import { MagicBox } from "@/features/court/MagicBox";
-import { ThingRow, ThingTableHeader } from "@/components/katalist/ThingRow";
 import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useListMessages } from "@/features/lists/use-list-messages";
 import { domainErrorMessage } from "@/lib/domain-error";
-import { toast } from "sonner";
-import type { Thing } from "@/domain/thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
 import { cn } from "@/lib/utils";
+import { deriveListBoard, type ListScope, type ListStatusFilter } from "@/features/lists/list-board-model";
+import { ListThingsToolbar, type ListView } from "@/features/lists/ListThingsToolbar";
+import { ListThingsBoard } from "@/features/lists/ListThingsBoard";
+import { ListThingsTable } from "@/features/lists/ListThingsTable";
+import { ListChatPanel } from "@/features/lists/ListChatPanel";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/lists/$listId")({
   component: ListDetailPage,
 });
-
-type FeedFilter = "all" | "mine" | "waiting" | "progress" | "completed" | "cancelled";
 
 function MemberRow({
   name,
   initials,
   avatarUrl,
   role,
+  actions,
 }: {
   name: string;
   initials: string;
   avatarUrl?: string | null;
   role?: string;
+  actions?: ReactNode;
 }) {
   const src = useAvatarUrl(name, null, avatarUrl);
   const label = role === "owner" ? "Owner" : role === "view_only" ? "View Only" : "Collaborator";
@@ -40,36 +46,48 @@ function MemberRow({
         <PersonAvatar name={name} initials={initials} src={src} size={28} />
         {name}
       </span>
-      <span className="text-[12px] text-muted-foreground">{label}</span>
+      {actions ?? <span className="text-[12px] text-muted-foreground">{label}</span>}
     </li>
   );
 }
 
 function ListDetailPage() {
+  const qc = useQueryClient();
   const { listId } = Route.useParams();
   useLocalVersion();
   const { list, isLoading, error } = useList(listId);
   const chat = useListMessages(listId);
   const { things: listThings, myActorId } = useListThings(listId);
-  const [filter, setFilter] = useState<FeedFilter>("all");
+  const [view, setView] = useState<ListView>("board");
+  const [scope, setScope] = useState<ListScope>("mine");
+  const [status, setStatus] = useState<ListStatusFilter>("all");
+  const [query, setQuery] = useState("");
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tab, setTab] = useState<"things" | "chat" | "members">("things");
   const [msg, setMsg] = useState("");
   const viewOnly = list?.role === "view_only";
   const selected = listThings.find((t) => t.id === selectedId) ?? null;
-
-  const things = listThings;
-
-  const visible = things.filter((t) => {
-    if (filter === "mine") return t.assignee.id === myActorId;
-    if (filter === "waiting") return t.acknowledgement === "waiting_for_catch";
-    if (filter === "progress") return t.workStatus === "under_progress";
-    if (filter === "completed") return t.workStatus === "sorted";
-    if (filter === "cancelled") return t.workStatus === "cancelled";
-    return true;
+  const memberRun = useMutation({
+    mutationFn: async (input: { action: "role" | "remove"; profileId: string; role?: "collaborator" | "view_only" }) => {
+      const result = input.action === "remove"
+        ? await supabase.rpc("remove_list_member", { p_list_id: listId, p_profile_id: input.profileId })
+        : await supabase.rpc("change_list_role", { p_list_id: listId, p_profile_id: input.profileId, p_role: input.role! });
+      if (result.error) throw result.error;
+    },
+    onSuccess: async () => { await Promise.all([qc.invalidateQueries({ queryKey: ["list", listId] }), qc.invalidateQueries({ queryKey: ["lists"] })]); toast.success("List permissions updated."); },
+    onError: (error) => toast.error(domainErrorMessage(error)),
   });
 
-  const messages = chat.messages;
+  const board = deriveListBoard({
+    things: listThings,
+    myActorId,
+    scope,
+    status,
+    assigneeId,
+    query,
+    now: new Date(),
+  });
 
   if (isLoading) {
     return (
@@ -123,96 +141,17 @@ function ListDetailPage() {
       {tab === "things" ? (
         <>
           {viewOnly ? null : <MagicBox listId={list.id} listName={list.name} />}
-          <div className="mb-3 flex flex-wrap gap-1.5">
-            {(
-              [
-                ["all", "All"],
-                ["mine", "Mine"],
-                ["waiting", "Waiting"],
-                ["progress", "In Progress"],
-                ["completed", "Completed"],
-                ["cancelled", "Cancelled"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setFilter(id)}
-                className={cn(
-                  "rounded-full border px-3 py-1 text-[12px]",
-                  filter === id ? "border-primary/30 bg-primary/10 text-primary" : "border-border",
-                )}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <table className="hidden w-full md:table">
-              <ThingTableHeader />
-              <tbody>
-                {visible.map((t) => (
-                  <ThingRow key={t.id} thing={t} onSelect={(thing) => setSelectedId(thing.id)} />
-                ))}
-              </tbody>
-            </table>
-            {visible.length === 0 ? (
-              <p className="px-4 py-8 text-center text-[13px] text-muted-foreground">
-                No things in this filter.
-              </p>
-            ) : null}
-          </div>
+          <ListThingsToolbar view={view} onView={setView} scope={scope} onScope={setScope} status={status} onStatus={setStatus} query={query} onQuery={setQuery} assignees={board.assignees} assigneeId={assigneeId} onAssignee={setAssigneeId} />
+          {view === "board" ? (
+            <ListThingsBoard things={board.flat} myActorId={myActorId} onSelect={(thing) => setSelectedId(thing.id)} />
+          ) : (
+            <ListThingsTable things={board.flat} onSelect={(thing) => setSelectedId(thing.id)} />
+          )}
         </>
       ) : null}
 
       {tab === "chat" ? (
-        <section className="rounded-xl border border-border bg-card p-4">
-          <p className="mb-3 text-[12px] text-muted-foreground">
-            List Chat is room conversation. It is not Thing comments.
-          </p>
-          <div className="mb-3 max-h-80 space-y-2 overflow-y-auto">
-            {messages.length === 0 ? (
-              <p className="text-[13px] text-muted-foreground">No messages yet.</p>
-            ) : (
-              messages.map((m) => (
-                <div key={m.id} className="rounded-lg bg-muted/50 px-3 py-2 text-[13px]">
-                  <span className="font-medium">{m.author}: </span>
-                  {m.body}
-                </div>
-              ))
-            )}
-          </div>
-          {viewOnly ? (
-            <p className="text-[12px] text-muted-foreground">
-              View Only can observe and comment on Things, not administer.
-            </p>
-          ) : (
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!msg.trim()) return;
-                void chat.send.mutateAsync(msg.trim()).then(
-                  () => setMsg(""),
-                  (err) => toast.error(domainErrorMessage(err)),
-                );
-              }}
-            >
-              <input
-                value={msg}
-                onChange={(e) => setMsg(e.target.value)}
-                placeholder="Message the room — or turn a line into a Thing from Magic Box"
-                className="h-9 flex-1 rounded-lg border border-border bg-background px-3 text-[13px]"
-              />
-              <button
-                type="submit"
-                className="rounded-lg bg-primary px-3 text-[13px] text-primary-foreground"
-              >
-                Send
-              </button>
-            </form>
-          )}
-        </section>
+        <ListChatPanel chat={chat} message={msg} onMessage={setMsg} />
       ) : null}
 
       {tab === "members" ? (
@@ -229,6 +168,7 @@ function ListDetailPage() {
                 initials={m.initials}
                 avatarUrl={m.avatarUrl}
                 role={m.role}
+                actions={list.role === "owner" && m.role !== "owner" && m.profileId ? <span className="flex items-center gap-2"><select value={m.role} disabled={memberRun.isPending} onChange={(event) => memberRun.mutate({ action: "role", profileId: m.profileId!, role: event.target.value as "collaborator" | "view_only" })} className="h-7 rounded-md border border-border bg-card px-2 text-[11px]"><option value="collaborator">Collaborator</option><option value="view_only">View only</option></select><button type="button" disabled={memberRun.isPending} onClick={() => memberRun.mutate({ action: "remove", profileId: m.profileId! })} className="text-[11px] text-muted-foreground hover:text-destructive">Remove</button></span> : undefined}
               />
             ))}
           </ul>

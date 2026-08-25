@@ -31,10 +31,15 @@ export function useListThings(listId: string | undefined) {
       const { data, error } = await supabase
         .from("things")
         .select(
-          "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at",
+          "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,created_at,updated_at",
         )
         .eq("list_id", listId!);
       if (error) throw error;
+      const { data: listRow } = await supabase
+        .from("lists")
+        .select("name")
+        .eq("id", listId!)
+        .maybeSingle();
       const ids = new Set<string>();
       for (const r of data ?? []) {
         ids.add(r.creator_actor_id);
@@ -57,10 +62,11 @@ export function useListThings(listId: string | undefined) {
         dueHasTime: r.due_has_time,
         context: r.context,
         listId: r.list_id,
-        listName: null,
+        listName: listRow?.name ?? "List",
         cancelledAt: r.cancelled_at,
         sortedAt: r.sorted_at,
         caughtAt: r.caught_at,
+        createdAt: r.created_at,
         updatedAt: r.updated_at,
       }));
     },

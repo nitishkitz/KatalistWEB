@@ -413,9 +413,6 @@ export function addListMessage(listId: string, body: string, author = "Me") {
   const me = currentDemoPerson();
   const list = getListById(listId);
   if (!list) throw new Error("That List isn’t available.");
-  if (list.role !== "owner" && list.role !== "collaborator") {
-    throw new Error("You don’t have permission to post in this List.");
-  }
   const row: LocalMessage = {
     id: crypto.randomUUID(),
     body,

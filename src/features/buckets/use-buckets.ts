@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
-import { getBuckets } from "@/features/things/local-state";
+import { getBucketRefs, getBuckets } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcCreateBucket, rpcDeleteBucket, rpcRenameBucket } from "@/features/things/rpc";
 import type { BucketCard } from "./fixtures";
@@ -58,7 +58,12 @@ export function useBuckets() {
 
   const buckets = useMemo(() => {
     void version;
-    if (preview) return getBuckets(context);
+    if (preview) {
+      return getBuckets(context).map((bucket) => ({
+        ...bucket,
+        thingIds: getBucketRefs(bucket.id).flatMap((item) => item.thingId ? [item.thingId] : []),
+      }));
+    }
     return query.data ?? [];
   }, [preview, query.data, version, context]);
 
