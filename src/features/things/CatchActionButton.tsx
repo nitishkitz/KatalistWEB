@@ -1,4 +1,4 @@
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Thing } from "@/domain/thing";
@@ -10,6 +10,27 @@ import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 
 export function CatchActionButton({
+  thing,
+  className,
+  children,
+}: {
+  thing: Thing;
+  className?: string;
+  children?: ReactNode;
+}) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setReady(true);
+  }, []);
+  if (!ready) return null;
+  return (
+    <CatchActionButtonReady thing={thing} className={className}>
+      {children}
+    </CatchActionButtonReady>
+  );
+}
+
+function CatchActionButtonReady({
   thing,
   className,
   children,

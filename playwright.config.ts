@@ -16,7 +16,7 @@ export default defineConfig({
   webServer: {
     command:
       "VITE_KATALIST_DEMO_MODE=true VITE_KATALIST_ENV=development VITE_MAGIC_BOX_ATTACHMENTS_ENABLED=true npx vite dev --host 127.0.0.1 --port 4173",
-    url: "http://127.0.0.1:4173",
+    url: "http://127.0.0.1:4173/auth",
     reuseExistingServer: false,
     timeout: 120_000,
   },

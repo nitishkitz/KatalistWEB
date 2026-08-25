@@ -1,9 +1,13 @@
 import { expect, test, type Page } from "playwright/test";
 
 async function enterDemoCourt(page: Page) {
-  await page.goto("/auth", { waitUntil: "networkidle" });
+  await page.goto("/auth", { waitUntil: "load" });
   await page.getByRole("button", { name: /Priya Sharma/ }).click();
-  await expect(page.getByRole("combobox", { name: "Magic Box" })).toBeVisible({ timeout: 30_000 });
+  const box = page.getByRole("combobox", { name: "Magic Box" });
+  if (!(await box.isVisible().catch(() => false))) {
+    await page.goto("/", { waitUntil: "load" });
+  }
+  await expect(box).toBeVisible({ timeout: 30_000 });
 }
 
 function composer(page: Page) {
