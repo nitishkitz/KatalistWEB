@@ -293,6 +293,11 @@ export async function rpcRenameBucket(bucketId: string, name: string) {
   });
 }
 
+export async function rpcSetBucketPinned(bucketId: string, pinned: boolean) {
+  if (isPreviewMode()) return null as never;
+  return liveRpc(() => supabase.rpc("set_bucket_pinned", { p_bucket_id: bucketId, p_pinned: pinned }));
+}
+
 export async function rpcDeleteBucket(bucketId: string) {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("delete_bucket", { p_bucket_id: bucketId })),

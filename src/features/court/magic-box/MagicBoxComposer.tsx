@@ -5,6 +5,8 @@ import { KatalistIcon } from "../KatalistIcon";
 import { AttachmentTray } from "./AttachmentTray";
 import { ConfirmationChips } from "./ConfirmationChips";
 import { MentionAutocomplete } from "./MentionAutocomplete";
+import { ListAutocomplete } from "./ListAutocomplete";
+import { listOptionId } from "./list-token";
 import { ghostSuffix, mentionOptionId } from "./mention";
 import { useMagicBoxController } from "./useMagicBoxController";
 import { attachmentsUiEnabled } from "@/features/attachments/flags";
@@ -29,6 +31,7 @@ export function MagicBoxComposer({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [focused, setFocused] = useState(false);
   const highlighted = box.mentionMenuOpen ? box.ranked[box.highlight] : undefined;
+  const highlightedList = box.listMenuOpen ? box.rankedLists[box.highlight] : undefined;
   const ghost =
     box.mentionMenuOpen && box.activeMention && highlighted
       ? ghostSuffix(box.activeMention.query, highlighted.name)
@@ -63,13 +66,10 @@ export function MagicBoxComposer({
       ) : null}
       <div
         className={cn(
-          "relative flex h-11 items-center gap-2 transition-opacity duration-200",
+          "katalist-magic-box-frame relative flex h-11 items-center gap-2 transition-opacity duration-200",
           desktop
             ? "rounded-xl border border-border bg-white px-3 shadow-[0_0_18px_rgba(88,71,255,0.12)]"
             : "rounded-xl border border-border bg-card px-1.5",
-          visualState === "engaged" && "border-primary/50 shadow-[0_0_26px_rgba(88,71,255,0.28)]",
-          visualState === "busy" && "animate-pulse border-primary shadow-[0_0_30px_rgba(88,71,255,0.34)] motion-reduce:animate-none",
-          visualState === "recovery" && "animate-pulse border-status-waiting shadow-[0_0_30px_rgba(245,158,11,0.28)] motion-reduce:animate-none",
         )}
       >
         {desktop ? (
@@ -104,11 +104,11 @@ export function MagicBoxComposer({
             placeholder={listName ? `Toss into ${listName}…` : "Toss a thought..."}
             className="relative z-10 h-full w-full bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground"
             aria-label="Magic Box"
-            aria-expanded={box.mentionMenuOpen}
+            aria-expanded={box.mentionMenuOpen || box.listMenuOpen}
             aria-haspopup="listbox"
             aria-controls={`${composerId}-listbox`}
             aria-autocomplete="list"
-            aria-activedescendant={highlighted ? mentionOptionId(composerId, highlighted.id) : undefined}
+            aria-activedescendant={highlighted ? mentionOptionId(composerId, highlighted.id) : highlightedList ? listOptionId(composerId, highlightedList.id) : undefined}
             autoComplete="off"
           />
           {box.mentionMenuOpen ? (
@@ -121,6 +121,7 @@ export function MagicBoxComposer({
               onPick={(person, index) => box.acceptPerson(person, "click", index)}
             />
           ) : null}
+          {box.listMenuOpen ? <ListAutocomplete composerId={composerId} lists={box.rankedLists} highlight={box.highlight} query={box.activeListToken?.query ?? ""} floating={floating} onPick={(list) => box.acceptList(list)} /> : null}
         </div>
         <kbd
           className={cn(

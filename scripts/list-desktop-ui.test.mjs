@@ -4,14 +4,15 @@ import { test } from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("desktop List opens in Table without Mine/THEIRS and keeps avatar filters", async () => {
+test("desktop List opens in Table without Mine/THEIRS and uses explicit filters", async () => {
   const [route, toolbar] = await Promise.all([
     read("src/routes/lists.$listId.tsx"),
     read("src/features/lists/ListThingsToolbar.tsx"),
   ]);
   assert.match(route, /useState<[^>]*ListView[^>]*>\("table"\)/);
   assert.doesNotMatch(toolbar, /MINE|THEIRS/);
-  assert.match(toolbar, /PersonAvatar/);
+  assert.match(toolbar, /All people/);
+  assert.match(toolbar, /All statuses/);
   assert.match(toolbar, /Due/);
 });
 
@@ -56,7 +57,7 @@ test("Court removes duplicate Owner/My Pace labels and offers people filters", a
     read("src/components/katalist/ThingRow.tsx"),
     read("src/features/things/ThingDetailSheet.tsx"),
   ]);
-  assert.match(desktop, /Filter by \$\{person\.name\}/);
+  assert.match(desktop, /Show Things involving \$\{person\.name\}/);
   assert.doesNotMatch(desktop, /Owner importance|My pace/);
   assert.doesNotMatch(card, />Owner</);
   assert.doesNotMatch(card, />My Pace</);

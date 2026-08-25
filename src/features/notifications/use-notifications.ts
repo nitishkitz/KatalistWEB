@@ -5,7 +5,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { getNotifications, markNotificationsRead, markNotificationRead } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { keys } from "@/domain/query-keys";
-import { notificationPath } from "@/features/notifications/push-delivery";
+import { notificationPath, trustedNotificationPath } from "@/features/notifications/push-delivery";
 
 export type NotificationItem = {
   id: string;
@@ -24,14 +24,17 @@ export function mapNotificationRow(row: {
   created_at: string;
   thing_id?: string | null;
   list_id?: string | null;
+  payload?: unknown;
 }): NotificationItem {
+  const payload = row.payload && typeof row.payload === "object" ? row.payload as { path?: unknown } : null;
+  const explicitPath = typeof payload?.path === "string" ? trustedNotificationPath(payload.path) : null;
   return {
     id: row.id,
     title: row.title,
     body: row.body ?? "",
     read: Boolean(row.read_at),
     createdAt: row.created_at,
-    path: notificationPath({ thingId: row.thing_id ?? null, listId: row.list_id ?? null }),
+    path: explicitPath ?? notificationPath({ thingId: row.thing_id ?? null, listId: row.list_id ?? null }),
   };
 }
 
@@ -46,7 +49,7 @@ export function useNotifications() {
     queryFn: async (): Promise<NotificationItem[]> => {
       const { data, error } = await supabase
         .from("notifications")
-        .select("id, title, body, read_at, created_at, thing_id, list_id")
+        .select("id, title, body, read_at, created_at, thing_id, list_id, payload")
         .order("created_at", { ascending: false })
         .limit(40);
       if (error) throw error;
@@ -57,7 +60,7 @@ export function useNotifications() {
   });
 
   const unreadQuery = useQuery({
-    queryKey: ["notifications-unread", user?.id],
+    queryKey: keys.notificationsUnread(user?.id),
     queryFn: async () => {
       const { data, error } = await supabase.rpc("unread_notification_count");
       if (error) throw error;
@@ -78,7 +81,7 @@ export function useNotifications() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.notifications(user?.id) });
-      void qc.invalidateQueries({ queryKey: ["notifications-unread", user?.id] });
+      void qc.invalidateQueries({ queryKey: keys.notificationsUnread(user?.id) });
     },
   });
 
@@ -93,7 +96,7 @@ export function useNotifications() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.notifications(user?.id) });
-      void qc.invalidateQueries({ queryKey: ["notifications-unread", user?.id] });
+      void qc.invalidateQueries({ queryKey: keys.notificationsUnread(user?.id) });
     },
   });
 

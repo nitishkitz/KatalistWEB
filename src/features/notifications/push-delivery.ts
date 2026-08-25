@@ -48,6 +48,7 @@ export function trustedNotificationPath(path: string | null | undefined): string
     return "/";
   }
   if (path === "/") return "/";
+  if (path === "/team") return "/team";
   if (/^\/\?thing=[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(path)) {
     return path;
   }

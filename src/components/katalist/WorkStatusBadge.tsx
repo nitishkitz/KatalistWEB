@@ -9,10 +9,10 @@ const label: Record<WorkStatus, string> = {
 };
 
 const map: Record<WorkStatus, string> = {
-  not_started: "bg-status-neutral-bg text-status-neutral",
-  under_progress: "bg-status-next-bg text-status-next",
-  sorted: "bg-emerald-50 text-emerald-700",
-  cancelled: "bg-muted text-muted-foreground",
+  not_started: "bg-status-not-started-bg text-status-not-started",
+  under_progress: "bg-status-progress-bg text-status-progress",
+  sorted: "bg-status-sorted-bg text-status-sorted",
+  cancelled: "bg-status-cancelled-bg text-status-cancelled",
 };
 
 export function WorkStatusBadge({

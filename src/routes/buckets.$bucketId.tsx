@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { format } from "date-fns";
-import { Lock, MoreHorizontal, Plus, Search } from "lucide-react";
+import { Lock, MoreHorizontal, Pin, PinOff, Plus, Search } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useBucket } from "@/features/buckets/use-buckets";
 import { useAccessibleLists, useAccessibleThings, useBucketItems, type BucketItem } from "@/features/buckets/use-bucket-items";
@@ -103,7 +103,7 @@ function BucketListRow({ list, onRemove }: { list: ListRow; onRemove: () => void
 function BucketDetailPage() {
   const { bucketId } = Route.useParams();
   const navigate = useNavigate();
-  const { bucket, isLoading, error, rename, remove: deleteBucket } = useBucket(bucketId);
+  const { bucket, isLoading, error, rename, remove: deleteBucket, pin } = useBucket(bucketId);
   const { items, add, remove, isLoading: itemsLoading, error: itemsError } = useBucketItems(bucketId);
   const things = useAccessibleThings();
   const lists = useAccessibleLists();
@@ -202,6 +202,14 @@ function BucketDetailPage() {
             <MoreHorizontal className="h-4 w-4" />
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-40 rounded-lg border border-border bg-card p-1 shadow-md">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[13px] hover:bg-muted"
+              onClick={() => void pin.mutateAsync(!bucket.pinned).then(() => toast.success(bucket.pinned ? "Bucket unpinned." : "Bucket pinned."), (error) => toast.error(domainErrorMessage(error)))}
+            >
+              {bucket.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+              {bucket.pinned ? "Unpin" : "Pin"}
+            </button>
             <button
               type="button"
               className="block w-full rounded px-2 py-1.5 text-left text-[13px] hover:bg-muted"

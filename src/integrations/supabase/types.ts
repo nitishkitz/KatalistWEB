@@ -267,6 +267,7 @@ export type Database = {
           id: string
           name: string
           owner_profile_id: string
+          pinned_at: string | null
           updated_at: string
         }
         Insert: {
@@ -276,6 +277,7 @@ export type Database = {
           id?: string
           name: string
           owner_profile_id: string
+          pinned_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -285,6 +287,7 @@ export type Database = {
           id?: string
           name?: string
           owner_profile_id?: string
+          pinned_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1517,6 +1520,7 @@ export type Database = {
           kind: string
           list_id: string | null
           notification_id: string
+          path: string
           subscription_id: string
           thing_id: string | null
           title: string
@@ -1525,6 +1529,16 @@ export type Database = {
       consume_uat_auth_rate_limit: {
         Args: { p_limit: number; p_scope_hash: string; p_window_seconds: number }
         Returns: boolean
+      }
+      set_bucket_pinned: {
+        Args: { p_bucket_id: string; p_pinned: boolean }
+        Returns: Database["public"]["Tables"]["buckets"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "buckets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       consume_magic_box_ai_budget: {
         Args: { p_operation: string; p_user_id: string }

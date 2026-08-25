@@ -16,6 +16,7 @@ export type Thing = {
   title: string;
   creator: Person;
   owner: Person;
+  assignedBy: Person;
   assignee: Person;
   acknowledgement: Acknowledgement;
   workStatus: WorkStatus;

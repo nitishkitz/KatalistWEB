@@ -26,6 +26,8 @@ export function ListPeoplePanel({ listId, members, isOwner }: Props) {
       queryClient.invalidateQueries({ queryKey: ["list", listId] }),
       queryClient.invalidateQueries({ queryKey: ["lists"] }),
       queryClient.invalidateQueries({ queryKey: ["assignable-people"] }),
+      queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+      queryClient.invalidateQueries({ queryKey: ["notifications-unread"] }),
     ]);
   };
 

@@ -5,6 +5,7 @@ import {
   applyCourtView,
   cardDensityForLane,
   courtAssignees,
+  courtPeople,
   filterCourtThings,
   formatCourtDue,
   sortCourtThings,
@@ -20,6 +21,7 @@ function thing(overrides = {}) {
     title: "Review launch copy",
     creator: person("creator", "Priya"),
     owner: person("owner", "Rahul"),
+    assignedBy: person("assigner", "Maya"),
     assignee: person("assignee", "Arjun"),
     acknowledgement: "caught",
     workStatus: "not_started",
@@ -125,6 +127,19 @@ test("assignee avatar filter composes across every Court lane", () => {
   assert.deepEqual(view.next, []);
   assert.deepEqual(view.later.map((item) => item.id), ["later-arjun"]);
   assert.deepEqual(view.theirs, []);
+});
+
+test("involved-person filter includes creator, Owner, assigner, and assignee across lanes", () => {
+  const maya = person("maya", "Maya");
+  const lanes = {
+    now: [thing({ id: "created", creator: maya })],
+    next: [thing({ id: "owned", owner: maya })],
+    later: [thing({ id: "assigned", assignedBy: maya })],
+    theirs: [thing({ id: "assignee", assignee: maya })],
+  };
+  assert.equal(courtPeople(lanes).some((candidate) => candidate.id === "maya"), true);
+  const view = applyCourtView(lanes, { ...DEFAULT_COURT_FILTERS, personId: "maya" }, "", "due");
+  assert.deepEqual([view.now[0].id, view.next[0].id, view.later[0].id, view.theirs[0].id], ["created", "owned", "assigned", "assignee"]);
 });
 
 test("sorting is stable and offers only due or recently updated", () => {

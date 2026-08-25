@@ -7,7 +7,8 @@ import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
 import { getBucketRefs, getBuckets } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { rpcCreateBucket, rpcDeleteBucket, rpcRenameBucket } from "@/features/things/rpc";
+import { rpcCreateBucket, rpcDeleteBucket, rpcRenameBucket, rpcSetBucketPinned } from "@/features/things/rpc";
+import { bucketPinned, orderBuckets } from "./bucket-pinning";
 import type { BucketCard } from "./fixtures";
 
 const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500"];
@@ -15,7 +16,7 @@ const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500"]
 async function fetchBuckets(context: "work" | "home"): Promise<BucketCard[]> {
   const { data: buckets, error } = await supabase
     .from("buckets")
-    .select("id,name,context,updated_at")
+    .select("id,name,context,updated_at,pinned_at")
     .eq("context", context)
     .is("archived_at", null);
   if (error) throw error;
@@ -25,14 +26,15 @@ async function fetchBuckets(context: "work" | "home"): Promise<BucketCard[]> {
     : { data: [], error: null };
   if (itemsError) throw itemsError;
 
-  return (buckets ?? []).map((b, i) => {
+  return orderBuckets((buckets ?? []).map((b, i) => {
     const refs = (items ?? []).filter((it) => it.bucket_id === b.id);
     return {
       id: b.id,
       name: b.name,
       description: "Private focus space",
       color: COLORS[i % COLORS.length]!,
-      pinned: i < 2,
+      pinned: bucketPinned(b),
+      pinnedAt: b.pinned_at,
       thingCount: refs.filter((r) => r.thing_id).length,
       listCount: refs.filter((r) => r.list_id).length,
       thingIds: refs.map((r) => r.thing_id).filter(Boolean) as string[],
@@ -40,7 +42,7 @@ async function fetchBuckets(context: "work" | "home"): Promise<BucketCard[]> {
       context: (b.context === "home" ? "home" : "work") as "work" | "home",
       previews: [],
     } satisfies BucketCard;
-  });
+  }));
 }
 
 export function useBuckets() {
@@ -74,8 +76,14 @@ export function useBuckets() {
       await qc.invalidateQueries({ queryKey: keys.buckets(user?.id, context) });
     },
   });
+  const pin = useMutation({
+    mutationFn: ({ bucketId, pinned }: { bucketId: string; pinned: boolean }) => rpcSetBucketPinned(bucketId, pinned),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: keys.buckets(user?.id, context) });
+    },
+  });
 
-  return { buckets, isLoading: !preview && query.isLoading, error: query.error, preview, create };
+  return { buckets, isLoading: !preview && query.isLoading, error: query.error, preview, create, pin };
 }
 
 export function useBucket(bucketId: string | undefined) {
@@ -90,7 +98,7 @@ export function useBucket(bucketId: string | undefined) {
     queryFn: async (): Promise<BucketCard | null> => {
       const { data, error } = await supabase
         .from("buckets")
-        .select("id,name,context,updated_at")
+        .select("id,name,context,updated_at,pinned_at")
         .eq("id", bucketId!)
         .maybeSingle();
       if (error) throw error;
@@ -104,7 +112,8 @@ export function useBucket(bucketId: string | undefined) {
         name: data.name,
         description: "Private focus space",
         color: "bg-violet-500",
-        pinned: false,
+        pinned: bucketPinned(data),
+        pinnedAt: data.pinned_at,
         thingCount: (items ?? []).filter((r) => r.thing_id).length,
         listCount: (items ?? []).filter((r) => r.list_id).length,
         updatedAt: new Date(data.updated_at).toLocaleString(),
@@ -129,10 +138,17 @@ export function useBucket(bucketId: string | undefined) {
       void qc.invalidateQueries({ queryKey: ["bucket-items"] });
     },
   });
+  const pin = useMutation({
+    mutationFn: (pinned: boolean) => rpcSetBucketPinned(bucketId!, pinned),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["bucket"] });
+      void qc.invalidateQueries({ queryKey: ["buckets"] });
+    },
+  });
 
   if (preview) {
     const bucket = getBuckets().find((b) => b.id === bucketId);
-    return { bucket, isLoading: false, error: null, preview: true, rename, remove };
+    return { bucket, isLoading: false, error: null, preview: true, rename, remove, pin };
   }
   return {
     bucket: query.data ?? undefined,
@@ -141,5 +157,6 @@ export function useBucket(bucketId: string | undefined) {
     preview: false,
     rename,
     remove,
+    pin,
   };
 }

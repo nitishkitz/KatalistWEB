@@ -1,8 +1,8 @@
 import { LayoutGrid, List, Search, X } from "lucide-react";
-import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import type { Person } from "@/domain/thing";
 import type { ListStatusFilter } from "./list-board-model";
 import { cn } from "@/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export type ListView = "board" | "table";
 
@@ -32,18 +32,32 @@ export function ListThingsToolbar(props: Props) {
           <button type="button" aria-label="Table" onClick={() => props.onView("table")} className={cn("rounded-md p-1.5", props.view === "table" && "bg-muted text-primary")}><List className="h-4 w-4" /></button>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {(["all", "due", "waiting", "progress", "completed"] as const).map((status) => (
-          <button key={status} type="button" onClick={() => props.onStatus(status)} className={cn("rounded-full border px-2.5 py-1 text-[11px] capitalize", props.status === status ? "border-primary/30 bg-primary/10 text-primary" : "border-border text-muted-foreground")}>
-            {status === "due" ? "Due" : status === "progress" ? "In Progress" : status}
-          </button>
-        ))}
-        <span className="mx-1 h-5 w-px bg-border" />
-        {props.assignees.map((person) => (
-          <button key={person.id} type="button" title={person.name} aria-label={`Filter by ${person.name}`} onClick={() => props.onAssignee(props.assigneeId === person.id ? null : person.id)} className={cn("rounded-full p-0.5", props.assigneeId === person.id && "ring-2 ring-primary ring-offset-1")}>
-            <PersonAvatar name={person.name} initials={person.initials} src={person.avatarUrl} size={24} />
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          Status
+          <Select value={props.status} onValueChange={(value) => props.onStatus(value as ListStatusFilter)}>
+            <SelectTrigger className="h-8 w-44 text-[12px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="due">Due / Overdue</SelectItem>
+              <SelectItem value="waiting">Waiting for Catch</SelectItem>
+              <SelectItem value="not_started">Not Started</SelectItem>
+              <SelectItem value="progress">Under Progress</SelectItem>
+              <SelectItem value="sorted">Sorted</SelectItem>
+              <SelectItem value="cancelled">Cancelled</SelectItem>
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          Assignee
+          <Select value={props.assigneeId ?? "all"} onValueChange={(value) => props.onAssignee(value === "all" ? null : value)}>
+            <SelectTrigger className="h-8 w-48 text-[12px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All people</SelectItem>
+              {props.assignees.map((person) => <SelectItem key={person.id} value={person.id}>{person.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </label>
         {activeFilters ? (
           <button type="button" onClick={() => { props.onStatus("all"); props.onAssignee(null); props.onQuery(""); }} className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"><X className="h-3 w-3" />Clear</button>
         ) : null}

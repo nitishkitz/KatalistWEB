@@ -31,11 +31,14 @@ test("Court and List routes do not render duplicate route-level composers", () =
 
 test("floating composer has idle, engaged, busy, recovery, and reduced-motion states", () => {
   const composer = read("src/features/court/magic-box/MagicBoxComposer.tsx");
+  const styles = read("src/styles.css");
   assert.match(composer, /visualState/);
   assert.match(composer, /"engaged"/);
   assert.match(composer, /"busy"/);
   assert.match(composer, /"recovery"/);
-  assert.match(composer, /motion-reduce:animate-none/);
+  assert.match(composer, /katalist-magic-box-frame/);
+  assert.match(styles, /prefers-reduced-motion/);
+  assert.match(styles, /animation:\s*none\s*!important/);
   assert.match(composer, /onFocus/);
 });
 

@@ -2,6 +2,8 @@ import { format, formatDistanceToNowStrict } from "date-fns";
 import { MoreHorizontal } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { laneOf, type Thing } from "@/domain/thing";
+import { AcknowledgementBadge } from "@/components/katalist/AcknowledgementBadge";
+import { WorkStatusBadge } from "@/components/katalist/WorkStatusBadge";
 
 export function ListThingsTable({ things, onSelect }: { things: Thing[]; onSelect: (thing: Thing) => void }) {
   return (
@@ -12,7 +14,7 @@ export function ListThingsTable({ things, onSelect }: { things: Thing[]; onSelec
           <tr key={thing.id} className="border-b border-border/70 last:border-0 hover:bg-muted/30">
             <td className="px-4 py-3"><button type="button" onClick={() => onSelect(thing)} className="text-left text-[13px] font-medium">{thing.title}</button></td>
             <td className="px-3 py-3"><span className="flex items-center gap-2 text-[11px]"><PersonAvatar name={thing.assignee.name} initials={thing.assignee.initials} src={thing.assignee.avatarUrl} size={24} />{thing.assignee.name}</span></td>
-            <td className="px-3 py-3 text-[11px]"><span className="block">{thing.acknowledgement === "caught" ? "Caught" : "Waiting"}</span><span className="text-muted-foreground">{thing.workStatus.replace("_", " ")}</span></td>
+            <td className="px-3 py-3"><div className="flex flex-col items-start gap-1"><AcknowledgementBadge value={thing.acknowledgement} /><WorkStatusBadge value={thing.workStatus} /></div></td>
             <td className="px-3 py-3 text-[11px] font-semibold text-primary">{laneOf(thing).toUpperCase()}</td>
             <td className="px-3 py-3 text-[11px] text-muted-foreground">{thing.dueAt ? format(new Date(thing.dueAt), "MMM d, yyyy") : null}</td>
             <td className="px-3 py-3 text-[11px] text-muted-foreground" title={format(new Date(thing.updatedAt), "PPpp")}>{formatDistanceToNowStrict(new Date(thing.updatedAt), { addSuffix: true })}</td>

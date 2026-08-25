@@ -8,7 +8,7 @@ import { useLocalVersion } from "@/features/things/use-local-version";
 import { useCurrentActor } from "@/features/people/use-current-actor";
 import type { Thing } from "@/domain/thing";
 import { keys } from "@/domain/query-keys";
-import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
+import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import {
   excludePersonallyShreddedThings,
   isPersonallyShreddedList,
@@ -30,45 +30,10 @@ export function useListThings(listId: string | undefined) {
     queryFn: async (): Promise<Thing[]> => {
       const { data, error } = await supabase
         .from("things")
-        .select(
-          "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,created_at,updated_at",
-        )
+        .select(THING_COLUMNS)
         .eq("list_id", listId!);
       if (error) throw error;
-      const { data: listRow } = await supabase
-        .from("lists")
-        .select("name")
-        .eq("id", listId!)
-        .maybeSingle();
-      const ids = new Set<string>();
-      for (const r of data ?? []) {
-        ids.add(r.creator_actor_id);
-        ids.add(r.owner_actor_id);
-        ids.add(r.current_assignee_actor_id);
-      }
-      const people = await resolveActorPeople([...ids]);
-      const fb = (id: string) => personOrSomeone(people, id);
-      return (data ?? []).map((r) => ({
-        id: r.id,
-        title: r.title,
-        creator: fb(r.creator_actor_id),
-        owner: fb(r.owner_actor_id),
-        assignee: fb(r.current_assignee_actor_id),
-        acknowledgement: r.acknowledgement,
-        workStatus: r.work_status,
-        ownerImportance: r.owner_importance,
-        personalPace: r.assignee_personal_pace,
-        dueAt: r.due_at,
-        dueHasTime: r.due_has_time,
-        context: r.context,
-        listId: r.list_id,
-        listName: listRow?.name ?? "List",
-        cancelledAt: r.cancelled_at,
-        sortedAt: r.sorted_at,
-        caughtAt: r.caught_at,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      }));
+      return mapDbThingRows((data ?? []) as DbThingRow[]);
     },
   });
 

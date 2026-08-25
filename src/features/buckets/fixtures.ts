@@ -4,6 +4,7 @@ export type BucketCard = {
   description: string;
   color: string;
   pinned: boolean;
+  pinnedAt?: string | null;
   thingCount: number;
   listCount: number;
   updatedAt: string;

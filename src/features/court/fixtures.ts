@@ -19,6 +19,7 @@ function thing(partial: Partial<Thing> & Pick<Thing, "id" | "title">): Thing {
   return {
     creator: rahul,
     owner: rahul,
+    assignedBy: rahul,
     assignee: priya,
     acknowledgement: "caught",
     workStatus: "not_started",

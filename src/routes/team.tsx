@@ -31,9 +31,11 @@ function TeamPage() {
       qc.invalidateQueries({ queryKey: ["team-requests"] }),
       qc.invalidateQueries({ queryKey: ["assignable-people"] }),
       qc.invalidateQueries({ queryKey: ["profile-directory"] }),
+      qc.invalidateQueries({ queryKey: ["notifications"] }),
+      qc.invalidateQueries({ queryKey: ["notifications-unread"] }),
     ]);
   };
-  const add = useMutation({ mutationFn: postPhone, onSuccess: async (result) => { await Promise.all([qc.invalidateQueries({ queryKey: ["team-requests"] }), qc.invalidateQueries({ queryKey: ["team-invitations"] })]); if (result.shareUrl) { await navigator.clipboard?.writeText(result.shareUrl).catch(() => undefined); toast.success("Invite link copied. Share it through WhatsApp or SMS."); } else toast.success("Team request sent."); setPhone(""); }, onError: (error) => toast.error(domainErrorMessage(error)) });
+  const add = useMutation({ mutationFn: postPhone, onSuccess: async (result) => { await Promise.all([qc.invalidateQueries({ queryKey: ["team-requests"] }), qc.invalidateQueries({ queryKey: ["team-invitations"] }), qc.invalidateQueries({ queryKey: ["notifications"] }), qc.invalidateQueries({ queryKey: ["notifications-unread"] })]); if (result.shareUrl) { await navigator.clipboard?.writeText(result.shareUrl).catch(() => undefined); toast.success("Invite link copied. Share it through WhatsApp or SMS."); } else toast.success("Team request sent."); setPhone(""); }, onError: (error) => toast.error(domainErrorMessage(error)) });
   const accept = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.rpc("accept_team_request", { p_request_id: id }); if (error) throw error; }, onSuccess: async () => { await invalidateIdentityCaches(); toast.success("Added to each other’s Team."); } });
   const remove = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.rpc("remove_team_connection", { p_profile_id: id }); if (error) throw error; }, onSuccess: invalidateIdentityCaches });
   const syncSelected = async () => {

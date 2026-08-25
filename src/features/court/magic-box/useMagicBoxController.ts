@@ -8,11 +8,13 @@ import { rpcCreateThing } from "@/features/things/rpc";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewMode } from "@/lib/session-mode";
 import { useList } from "@/features/lists/use-lists";
+import { useLists } from "@/features/lists/use-lists";
 import { trackMagicBox, durationBucket, mimeCategory, sizeBucket } from "./analytics";
 import { defaultTimeZone } from "./date-time";
 import { recordPersonToss, readPersonHistory } from "./history";
 import { resolveComposerKey, wrapIndex } from "./keyboard";
 import { findActiveMention, replaceMention, bindingStillValid } from "./mention";
+import { findActiveListToken, replaceListToken } from "./list-token";
 import { buildFinalCreateThingInput, liveSafeAssigneeId } from "./payload";
 import { canTossDraft, emptyMagicBoxState, reduceMagicBox, selectDraft, tossBlockReason } from "./reducer";
 import { rankAssignablePeople } from "./ranking";
@@ -31,12 +33,14 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
   const qc = useQueryClient();
   const { session } = useSession();
   const { list } = useList(options.listId);
+  const { lists } = useLists();
   const [announce, setAnnounce] = useState("");
   const timeZone = useMemo(() => defaultTimeZone(), []);
   const [state, setState] = useState(emptyMagicBoxState);
   const [highlight, setHighlight] = useState(0);
   const [chipEditor, setChipEditor] = useState<null | "assignee" | "due" | "importance">(null);
   const [mentionMenuForcedClosed, setMentionMenuForcedClosed] = useState(false);
+  const [listMenuForcedClosed, setListMenuForcedClosed] = useState(false);
   const [motionClass, setMotionClass] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
   const live = !isPreviewMode();
@@ -54,11 +58,12 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
       now: new Date(),
       timeZone,
       people,
+      lists: lists.map((candidate) => ({ id: candidate.id, name: candidate.name })),
       listId: options.listId,
       listName: options.listName,
       context,
     }),
-    [timeZone, people, options.listId, options.listName, context],
+    [timeZone, people, lists, options.listId, options.listName, context],
   );
 
   const dispatch = useCallback(
@@ -92,6 +97,15 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     bindingStillValid(state.rawText, state.mentionBinding) &&
     state.mentionBinding?.start === activeMention?.start;
   const mentionMenuOpen = Boolean(activeMention) && !bindingCoversActive && !mentionMenuForcedClosed && chipEditor === null;
+  const activeListToken = options.listId ? null : findActiveListToken(state.rawText, state.caret);
+  const listBindingCoversActive = Boolean(activeListToken) && Boolean(state.listBinding) && state.listBinding?.start === activeListToken?.start;
+  const listMenuOpen = Boolean(activeListToken) && !listBindingCoversActive && !listMenuForcedClosed && chipEditor === null;
+  const rankedLists = useMemo(() => {
+    const query = activeListToken?.query.toLocaleLowerCase() ?? "";
+    return lists
+      .filter((candidate) => !query || candidate.name.toLocaleLowerCase().includes(query))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [lists, activeListToken?.query]);
 
   const history = readPersonHistory(context);
   const ranked: RankedPerson[] = useMemo(
@@ -111,6 +125,11 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     setHighlight(0);
     setMentionMenuForcedClosed(false);
   }, [activeMention?.start, activeMention?.query]);
+
+  useEffect(() => {
+    setHighlight(0);
+    setListMenuForcedClosed(false);
+  }, [activeListToken?.start, activeListToken?.query]);
 
   const mutation = useMutation({
     mutationFn: async (draftSnapshot: MagicBoxDraft) => {
@@ -182,6 +201,14 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     },
     [dispatch, state.rawText, state.caret],
   );
+
+  const acceptList = useCallback((selected: { id: string; name: string }) => {
+    const token = findActiveListToken(state.rawText, state.caret);
+    if (!token) return;
+    const replaced = replaceListToken(state.rawText, token, selected);
+    dispatch({ type: "LIST_SELECTED", listId: selected.id, listName: selected.name, ...replaced });
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  }, [dispatch, state.rawText, state.caret]);
 
   const toss = useCallback(async () => {
     const reason = tossBlockReason(draft, submissionBlocksCreate(guardRef.current.getState()));
@@ -255,28 +282,34 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
   const onKeyDown = useCallback(
     (event: { key: string; preventDefault: () => void }) => {
       const result = resolveComposerKey(event.key, {
-        mentionMenuOpen,
+        mentionMenuOpen: mentionMenuOpen || listMenuOpen,
         chipEditorOpen: chipEditor !== null,
         canToss,
       });
       if (result.type === "none") return;
       event.preventDefault();
       if (result.type === "mention-move") {
-        setHighlight((i) => wrapIndex(i, result.delta, ranked.length));
+        setHighlight((i) => wrapIndex(i, result.delta, listMenuOpen ? rankedLists.length : ranked.length));
         return;
       }
       if (result.type === "mention-accept") {
+        if (listMenuOpen) {
+          const selected = rankedLists[highlight];
+          if (selected) acceptList(selected);
+          return;
+        }
         const person = ranked[highlight];
         if (person) acceptPerson(person, event.key === "Tab" ? "tab" : "enter", person.rank);
         return;
       }
       if (result.type === "mention-close") {
-        setMentionMenuForcedClosed(true);
+        if (listMenuOpen) setListMenuForcedClosed(true);
+        else setMentionMenuForcedClosed(true);
         return;
       }
       if (result.type === "toss") void toss();
     },
-    [mentionMenuOpen, chipEditor, canToss, ranked, highlight, acceptPerson, toss],
+    [mentionMenuOpen, listMenuOpen, chipEditor, canToss, ranked, rankedLists, highlight, acceptPerson, acceptList, toss],
   );
 
   const onTextChange = useCallback(
@@ -434,6 +467,9 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     ranked,
     highlight,
     mentionMenuOpen,
+    listMenuOpen,
+    activeListToken,
+    rankedLists,
     activeMention,
     chipEditor,
     setChipEditor,
@@ -445,6 +481,7 @@ export function useMagicBoxController(options: { listId?: string; listName?: str
     toss,
     dispatch,
     acceptPerson,
+    acceptList,
     addFiles,
     removeAttachment,
     retryAttachment,

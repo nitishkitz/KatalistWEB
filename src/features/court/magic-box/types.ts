@@ -1,4 +1,5 @@
 import type { ContextKind, Importance, Person } from "@/domain/thing";
+import type { ListTokenBinding } from "./list-token";
 
 export type MagicBoxFieldSource = "default" | "parser" | "mention" | "manual" | "ai-suggestion";
 
@@ -58,6 +59,8 @@ export type MagicBoxDraft = {
   due: DueResolution;
   listId?: string;
   listName?: string;
+  listResolution: "none" | "resolved" | "unresolved";
+  rawListToken?: string;
   context: ContextKind;
   attachments: DraftAttachment[];
   aiCorrection?: { requestId: string; text: string } | null;
@@ -85,6 +88,7 @@ export type MagicBoxAction =
   | { type: "TEXT_CHANGED"; text: string; caret: number }
   | { type: "ASSIGNEE_SELECTED"; person: Person; source: "mention" | "manual"; binding?: ResolvedMention; text?: string; caret?: number }
   | { type: "ASSIGNEE_CLEARED" }
+  | { type: "LIST_SELECTED"; listId: string; listName: string; binding: ListTokenBinding; text: string; caret: number }
   | { type: "DUE_SET"; dueAt: string; dueHasTime: boolean; label: string }
   | { type: "DUE_CLEARED" }
   | { type: "IMPORTANCE_SET"; importance: Importance }
@@ -112,6 +116,7 @@ export type MagicBoxInternalState = {
   rawText: string;
   caret: number;
   mentionBinding: ResolvedMention | null;
+  listBinding: ListTokenBinding | null;
   assigneeOverride: AssigneeOverride;
   dueOverride: DueOverride;
   importanceOverride: Importance | null;
@@ -123,6 +128,7 @@ export type MagicBoxReduceContext = {
   now: Date;
   timeZone: string;
   people: Person[];
+  lists?: Array<{ id: string; name: string }>;
   listId?: string;
   listName?: string;
   context: ContextKind;

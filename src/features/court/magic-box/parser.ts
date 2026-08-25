@@ -38,7 +38,7 @@ function pushSpan(spans: Span[], start: number, end: number) {
 }
 
 function stripSpans(text: string, spans: Span[]): string {
-  if (spans.length === 0) return text;
+  if (spans.length === 0) return text.replace(/\s+/g, " ").trim();
   const sorted = [...spans].sort((a, b) => a.start - b.start);
   const merged: Span[] = [];
   for (const span of sorted) {

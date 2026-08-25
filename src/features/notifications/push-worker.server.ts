@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
 import { FirebaseAdminConfigError, getFirebaseMessaging } from "@/features/notifications/firebase-admin.server";
-import { classifyFirebaseError, notificationPath, retryDelayMs } from "@/features/notifications/push-delivery";
+import { classifyFirebaseError, notificationPath, retryDelayMs, trustedNotificationPath } from "@/features/notifications/push-delivery";
 import { jsonNoStore } from "@/lib/supabase-user.server";
 
 export type ClaimedPushDelivery = {
@@ -15,6 +15,7 @@ export type ClaimedPushDelivery = {
   body: string | null;
   thing_id: string | null;
   list_id: string | null;
+  path?: string | null;
 };
 
 export type DrainSummary = { claimed: number; sent: number; retry: number; dead: number };
@@ -64,7 +65,9 @@ export async function drainPushDeliveries(deps: DrainDeps, limit = 25): Promise<
     const data = {
       notificationId: delivery.notification_id,
       kind: delivery.kind,
-      path: notificationPath({ thingId: delivery.thing_id, listId: delivery.list_id }),
+      path: delivery.path
+        ? trustedNotificationPath(delivery.path)
+        : notificationPath({ thingId: delivery.thing_id, listId: delivery.list_id }),
       title: delivery.title,
       body: delivery.body ?? "",
     };

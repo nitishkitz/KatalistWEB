@@ -45,6 +45,7 @@ export function useRealtimeInvalidation() {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => {
         void qc.invalidateQueries({ queryKey: ["notifications"] });
+        void qc.invalidateQueries({ queryKey: ["notifications-unread"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "list_messages" }, () => {
         void qc.invalidateQueries({ queryKey: ["list-messages"] });
@@ -59,6 +60,9 @@ export function useRealtimeInvalidation() {
       .on("postgres_changes", { event: "*", schema: "public", table: "list_members" }, () => {
         void qc.invalidateQueries({ queryKey: ["list"] });
         void qc.invalidateQueries({ queryKey: ["lists"] });
+        void qc.invalidateQueries({ queryKey: ["assignable-people"] });
+        void qc.invalidateQueries({ queryKey: ["notifications"] });
+        void qc.invalidateQueries({ queryKey: ["notifications-unread"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "profile_object_state" }, () => {
         void invalidatePersonalSurfaces(qc);

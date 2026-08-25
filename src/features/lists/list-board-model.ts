@@ -1,6 +1,6 @@
 import { isActiveThing, laneOf, type Person, type Thing } from "@/domain/thing";
 
-export type ListStatusFilter = "all" | "due" | "waiting" | "progress" | "completed";
+export type ListStatusFilter = "all" | "due" | "waiting" | "not_started" | "progress" | "sorted" | "cancelled";
 
 type Input = {
   things: Thing[];
@@ -13,8 +13,10 @@ type Input = {
 function matchesStatus(thing: Thing, status: ListStatusFilter, now: Date) {
   if (status === "all") return true;
   if (status === "waiting") return thing.acknowledgement === "waiting_for_catch";
+  if (status === "not_started") return thing.acknowledgement === "caught" && thing.workStatus === "not_started";
   if (status === "progress") return thing.workStatus === "under_progress";
-  if (status === "completed") return thing.workStatus === "sorted";
+  if (status === "sorted") return thing.workStatus === "sorted";
+  if (status === "cancelled") return thing.workStatus === "cancelled";
   return Boolean(
     thing.dueAt && new Date(thing.dueAt).getTime() < now.getTime() && isActiveThing(thing),
   );

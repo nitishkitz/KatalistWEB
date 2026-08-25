@@ -204,6 +204,7 @@ export function tossLocalThing(input: {
     title: input.title,
     creator: me,
     owner: me,
+    assignedBy: me,
     assignee,
     acknowledgement: "waiting_for_catch",
     workStatus: "not_started",
@@ -243,6 +244,7 @@ export function reassignLocal(id: string, assigneeId: string) {
   patchThing(
     id,
     {
+      assignedBy: currentDemoPerson(),
       assignee: personById(assigneeId),
       acknowledgement: "waiting_for_catch",
       personalPace: null,

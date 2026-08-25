@@ -9,7 +9,7 @@ import {
   DEFAULT_COURT_FILTERS,
   applyCourtView,
   cardDensityForLane,
-  courtAssignees,
+  courtPeople,
   toggleLaneFocus,
   toggleTheirsFocus,
   type CourtAcknowledgementFilter,
@@ -299,8 +299,8 @@ export function CourtDesktop({
     () => applyCourtView({ now, next, later, theirs }, filters, query, sort),
     [now, next, later, theirs, filters, query, sort],
   );
-  const assignees = useMemo(
-    () => courtAssignees({ now, next, later, theirs }),
+  const involvedPeople = useMemo(
+    () => courtPeople({ now, next, later, theirs }),
     [now, next, later, theirs],
   );
 
@@ -332,7 +332,7 @@ export function CourtDesktop({
     Number(filters.acknowledgement !== "any") +
     Number(filters.workStatus !== "any") +
     Number(filters.starredOnly) +
-    Number(Boolean(filters.assigneeId));
+    Number(Boolean(filters.personId));
 
   const gridTemplateColumns = !laneFocus
     ? "repeat(3, minmax(0, 1fr))"
@@ -415,17 +415,17 @@ export function CourtDesktop({
             </button>
           ))}
           <span className="mx-1 h-5 w-px bg-border" />
-          {assignees.map((person) => (
+          {involvedPeople.map((person) => (
             <button
               key={person.id}
               type="button"
-              aria-pressed={filters.assigneeId === person.id}
-              aria-label={`Filter by ${person.name}`}
+              aria-pressed={filters.personId === person.id}
+              aria-label={`Show Things involving ${person.name}`}
               title={person.name}
-              onClick={() => setDetailedFilter("assigneeId", filters.assigneeId === person.id ? null : person.id)}
+              onClick={() => setDetailedFilter("personId", filters.personId === person.id ? null : person.id)}
               className={cn(
                 "rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                filters.assigneeId === person.id && "ring-2 ring-primary ring-offset-1",
+                filters.personId === person.id && "ring-2 ring-primary ring-offset-1",
               )}
             >
               <PersonAvatar name={person.name} initials={person.initials} src={person.avatarUrl} size={24} />

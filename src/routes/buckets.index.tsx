@@ -7,6 +7,8 @@ import {
   Filter,
   Lock,
   MoreHorizontal,
+  Pin,
+  PinOff,
   Plus,
   Search,
 } from "lucide-react";
@@ -28,7 +30,7 @@ export const Route = createFileRoute("/buckets/")({
   component: BucketsPage,
 });
 
-function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean }) {
+function BucketCardView({ bucket, large, onPin }: { bucket: BucketCard; large?: boolean; onPin: () => void }) {
   const navigate = useNavigate();
   return (
     <article
@@ -69,14 +71,17 @@ function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          data-stop-nav
-          className="relative z-10 rounded p-1 text-muted-foreground hover:bg-muted"
-          aria-label="Bucket actions"
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
+        <details data-stop-nav className="relative z-10">
+          <summary className="cursor-pointer list-none rounded p-1 text-muted-foreground hover:bg-muted" aria-label="Bucket actions">
+            <MoreHorizontal className="h-4 w-4" />
+          </summary>
+          <div className="absolute right-0 mt-1 w-32 rounded-lg border border-border bg-card p-1 shadow-md">
+            <button type="button" className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12px] hover:bg-muted" onClick={(event) => { event.stopPropagation(); onPin(); }}>
+              {bucket.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+              {bucket.pinned ? "Unpin" : "Pin"}
+            </button>
+          </div>
+        </details>
       </div>
 
       <p className="mb-3 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
@@ -117,7 +122,7 @@ function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean
 
 function BucketsPage() {
   useLocalVersion();
-  const { buckets, create } = useBuckets();
+  const { buckets, create, pin } = useBuckets();
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -191,7 +196,7 @@ function BucketsPage() {
           <h2 className="mb-3 katalist-section-title">Pinned Buckets</h2>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {pinned.map((b) => (
-              <BucketCardView key={b.id} bucket={b} large />
+              <BucketCardView key={b.id} bucket={b} large onPin={() => void pin.mutateAsync({ bucketId: b.id, pinned: !b.pinned }).then(() => toast.success(b.pinned ? "Bucket unpinned." : "Bucket pinned."), (error) => toast.error(domainErrorMessage(error)))} />
             ))}
           </div>
         </section>
@@ -201,7 +206,7 @@ function BucketsPage() {
         <h2 className="mb-3 katalist-section-title">All Buckets</h2>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {rest.map((b) => (
-            <BucketCardView key={b.id} bucket={b} />
+            <BucketCardView key={b.id} bucket={b} onPin={() => void pin.mutateAsync({ bucketId: b.id, pinned: !b.pinned }).then(() => toast.success(b.pinned ? "Bucket unpinned." : "Bucket pinned."), (error) => toast.error(domainErrorMessage(error)))} />
           ))}
         </div>
       </section>

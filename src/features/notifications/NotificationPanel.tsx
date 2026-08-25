@@ -44,6 +44,10 @@ export function NotificationBell() {
                         await navigate({ to: "/lists/$listId", params: { listId: path.slice("/lists/".length) } });
                         return;
                       }
+                      if (path === "/team") {
+                        await navigate({ to: "/team" });
+                        return;
+                      }
                       const thingMatch = /^\?thing=/.test(path.slice(1)) || path.startsWith("/?thing=");
                       if (thingMatch) {
                         const thing = path.replace(/^\/\?thing=/, "");

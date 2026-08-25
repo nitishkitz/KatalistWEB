@@ -17,6 +17,7 @@ export type CourtFilterState = {
   workStatus: CourtWorkStatusFilter;
   starredOnly: boolean;
   assigneeId: string | null;
+  personId: string | null;
 };
 
 export const DEFAULT_COURT_FILTERS: CourtFilterState = {
@@ -26,6 +27,7 @@ export const DEFAULT_COURT_FILTERS: CourtFilterState = {
   workStatus: "any",
   starredOnly: false,
   assigneeId: null,
+  personId: null,
 };
 
 function searchableText(thing: Thing) {
@@ -82,6 +84,10 @@ export function filterCourtThings(
     if (filters.workStatus !== "any" && thing.workStatus !== filters.workStatus) return false;
     if (filters.starredOnly && !thing.starred) return false;
     if (filters.assigneeId && thing.assignee.id !== filters.assigneeId) return false;
+    if (filters.personId) {
+      const involved = [thing.creator.id, thing.owner.id, thing.assignedBy?.id, thing.assignee.id];
+      if (!involved.includes(filters.personId)) return false;
+    }
     return true;
   });
 }
@@ -113,6 +119,18 @@ export function courtAssignees(lanes: {
     [...lanes.now, ...lanes.next, ...lanes.later, ...lanes.theirs]
       .map((thing) => [thing.assignee.id, thing.assignee] as const),
   ).values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+export function courtPeople(lanes: {
+  now: readonly Thing[];
+  next: readonly Thing[];
+  later: readonly Thing[];
+  theirs: readonly Thing[];
+}): Person[] {
+  const people = [...lanes.now, ...lanes.next, ...lanes.later, ...lanes.theirs]
+    .flatMap((thing) => [thing.creator, thing.owner, thing.assignedBy ?? thing.owner, thing.assignee]);
+  return [...new Map(people.map((person) => [person.id, person])).values()]
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
 export function applyCourtView(

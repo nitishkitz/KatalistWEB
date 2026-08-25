@@ -13,11 +13,11 @@ export function AcknowledgementBadge({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1 text-[12px] text-muted-foreground",
+          "inline-flex items-center gap-1 rounded-full bg-status-caught-bg px-2 py-0.5 text-[11px] font-medium text-status-caught",
           className,
         )}
       >
-        <Check className="h-3.5 w-3.5 text-emerald-600" strokeWidth={2.4} />
+        <Check className="h-3.5 w-3.5" strokeWidth={2.4} />
         Caught
       </span>
     );
@@ -25,7 +25,7 @@ export function AcknowledgementBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 text-[12px] font-medium text-status-waiting",
+        "inline-flex items-center gap-1 rounded-full bg-status-waiting-bg px-2 py-0.5 text-[11px] font-medium text-status-waiting",
         className,
       )}
     >
