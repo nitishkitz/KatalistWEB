@@ -40,14 +40,22 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
   ];
   const unique = [...new Set(profileIds.filter(Boolean))];
   const identities = new Map<string, { display_name: string; avatar_url: string | null }>();
+  const actorIds = new Map<string, string>();
   if (unique.length) {
-    const { data } = await supabase.rpc("resolve_profile_identities", { p_profile_ids: unique });
+    const [{ data }, { data: actors, error: actorError }] = await Promise.all([
+      supabase.rpc("resolve_profile_identities", { p_profile_ids: unique }),
+      supabase.from("actors").select("id,profile_id").eq("kind", "user").in("profile_id", unique),
+    ]);
+    if (actorError) throw actorError;
     for (const row of data ?? []) {
       if (!row.id) continue;
       identities.set(row.id, {
         display_name: row.display_name || "Someone",
         avatar_url: row.avatar_url ?? null,
       });
+    }
+    for (const actor of actors ?? []) {
+      if (actor.profile_id) actorIds.set(actor.profile_id, actor.id);
     }
   }
 
@@ -70,15 +78,17 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
       members: [{
         name: ownerName ?? "Someone",
         profileId: l.owner_profile_id,
+        actorId: actorIds.get(l.owner_profile_id),
         role: "owner" as const,
         initials: initialsFrom(ownerName ?? "Someone"),
         avatarUrl: identities.get(l.owner_profile_id)?.avatar_url ?? null,
-      }, ...listMembers.slice(0, 4).map((m) => {
+      }, ...listMembers.map((m) => {
         const ident = identities.get(m.profile_id);
         const name = ident?.display_name ?? "Someone";
         return {
           name,
           profileId: m.profile_id,
+          actorId: actorIds.get(m.profile_id),
           role: (m.role ?? "collaborator") as ListRow["role"],
           initials: initialsFrom(name),
           avatarUrl: ident?.avatar_url ?? null,

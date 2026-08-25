@@ -25,9 +25,17 @@ function TeamPage() {
   const [phone, setPhone] = useState("");
   const requests = useQuery({ queryKey: ["team-requests"], queryFn: async () => { const { data, error } = await supabase.rpc("list_team_requests"); if (error) throw error; return data ?? []; } });
   const invitations = useQuery({ queryKey: ["team-invitations"], queryFn: async () => { const { data, error } = await supabase.rpc("list_team_invitations"); if (error) throw error; return data ?? []; } });
+  const invalidateIdentityCaches = async () => {
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["team-directory"] }),
+      qc.invalidateQueries({ queryKey: ["team-requests"] }),
+      qc.invalidateQueries({ queryKey: ["assignable-people"] }),
+      qc.invalidateQueries({ queryKey: ["profile-directory"] }),
+    ]);
+  };
   const add = useMutation({ mutationFn: postPhone, onSuccess: async (result) => { await Promise.all([qc.invalidateQueries({ queryKey: ["team-requests"] }), qc.invalidateQueries({ queryKey: ["team-invitations"] })]); if (result.shareUrl) { await navigator.clipboard?.writeText(result.shareUrl).catch(() => undefined); toast.success("Invite link copied. Share it through WhatsApp or SMS."); } else toast.success("Team request sent."); setPhone(""); }, onError: (error) => toast.error(domainErrorMessage(error)) });
-  const accept = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.rpc("accept_team_request", { p_request_id: id }); if (error) throw error; }, onSuccess: async () => { await Promise.all([qc.invalidateQueries({ queryKey: ["team-directory"] }), qc.invalidateQueries({ queryKey: ["team-requests"] })]); toast.success("Added to each other’s Team."); } });
-  const remove = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.rpc("remove_team_connection", { p_profile_id: id }); if (error) throw error; }, onSuccess: () => qc.invalidateQueries({ queryKey: ["team-directory"] }) });
+  const accept = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.rpc("accept_team_request", { p_request_id: id }); if (error) throw error; }, onSuccess: async () => { await invalidateIdentityCaches(); toast.success("Added to each other’s Team."); } });
+  const remove = useMutation({ mutationFn: async (id: string) => { const { error } = await supabase.rpc("remove_team_connection", { p_profile_id: id }); if (error) throw error; }, onSuccess: invalidateIdentityCaches });
   const syncSelected = async () => {
     const picker = (navigator as Navigator & { contacts?: { select: (properties: string[], options: { multiple: boolean }) => Promise<Array<{ tel?: string[] }>> } }).contacts;
     if (!picker) return toast.error("Selected-contact sync is not supported in this browser. Add the number manually.");

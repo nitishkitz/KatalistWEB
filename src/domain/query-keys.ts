@@ -1,4 +1,6 @@
 export const keys = {
+  currentActor: (profileId: string | undefined) =>
+    ["current-actor", profileId] as const,
   court: (profileId: string | undefined, context: string) =>
     ["court", profileId, context] as const,
   thing: (thingId: string) => ["thing", thingId] as const,

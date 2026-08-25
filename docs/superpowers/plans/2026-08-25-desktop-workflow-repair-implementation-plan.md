@@ -599,5 +599,5 @@ Do not label pilot-ready unless the live matrix passes. If the client release fa
 
 ## Deferred work
 
-- Full  px List visual redesign, touch drag/move alterna320/390tives, and mobile-specific Members layout remain a separate phase.
+- Full 320/390 px List visual redesign, touch drag/move alternatives, and mobile-specific Members layout remain a separate phase.
 - This plan does not change production, paid Sarvam behavior, Magic Box attachment flags, or unrelated notification infrastructure.

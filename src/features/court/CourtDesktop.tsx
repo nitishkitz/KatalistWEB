@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Thing } from "@/domain/thing";
 import { theirStateFor } from "@/domain/thing";
 import { cn } from "@/lib/utils";
-import { MagicBox } from "./MagicBox";
 import { CourtThingCard } from "./CourtThingCard";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import {
   DEFAULT_COURT_FILTERS,
   applyCourtView,
   cardDensityForLane,
+  courtAssignees,
   toggleLaneFocus,
   toggleTheirsFocus,
   type CourtAcknowledgementFilter,
@@ -81,8 +82,6 @@ const quickFilters: Array<[CourtQuickFilter, string]> = [
 const sortLabels: Record<CourtSort, string> = {
   due: "Due soon",
   updated: "Recently updated",
-  importance: "Owner importance",
-  pace: "My pace",
 };
 
 function FilterRadioSection<T extends string>({
@@ -300,6 +299,10 @@ export function CourtDesktop({
     () => applyCourtView({ now, next, later, theirs }, filters, query, sort),
     [now, next, later, theirs, filters, query, sort],
   );
+  const assignees = useMemo(
+    () => courtAssignees({ now, next, later, theirs }),
+    [now, next, later, theirs],
+  );
 
   const theirGroups = useMemo(
     () => ({
@@ -328,7 +331,8 @@ export function CourtDesktop({
     Number(filters.due !== "any") +
     Number(filters.acknowledgement !== "any") +
     Number(filters.workStatus !== "any") +
-    Number(filters.starredOnly);
+    Number(filters.starredOnly) +
+    Number(Boolean(filters.assigneeId));
 
   const gridTemplateColumns = !laneFocus
     ? "repeat(3, minmax(0, 1fr))"
@@ -366,7 +370,6 @@ export function CourtDesktop({
   if (error) {
     return (
       <div className="hidden lg:block">
-        <MagicBox desktop />
         <section className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-border bg-white px-8 text-center">
           <KatalistIcon name="stuck" className="h-7 w-7 text-status-now" />
           <h2 className="mt-3 text-sm font-semibold">The Court could not be loaded.</h2>
@@ -387,8 +390,6 @@ export function CourtDesktop({
 
   return (
     <div className="hidden lg:block">
-      <MagicBox desktop />
-
       {isLoading ? (
         <p className="mb-3 text-[11px] text-muted-foreground" aria-live="polite">
           Loading your Court…
@@ -411,6 +412,23 @@ export function CourtDesktop({
               )}
             >
               {label}
+            </button>
+          ))}
+          <span className="mx-1 h-5 w-px bg-border" />
+          {assignees.map((person) => (
+            <button
+              key={person.id}
+              type="button"
+              aria-pressed={filters.assigneeId === person.id}
+              aria-label={`Filter by ${person.name}`}
+              title={person.name}
+              onClick={() => setDetailedFilter("assigneeId", filters.assigneeId === person.id ? null : person.id)}
+              className={cn(
+                "rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                filters.assigneeId === person.id && "ring-2 ring-primary ring-offset-1",
+              )}
+            >
+              <PersonAvatar name={person.name} initials={person.initials} src={person.avatarUrl} size={24} />
             </button>
           ))}
           {laneFocus ? (
@@ -516,7 +534,7 @@ export function CourtDesktop({
                   ["overdue", "Overdue"],
                   ["today", "Today"],
                   ["this_week", "This week"],
-                  ["no_due", "No due date"],
+                  ["no_due", "Without due date"],
                 ]}
                 onChange={(value) => setDetailedFilter("due", value)}
               />

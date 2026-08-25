@@ -1,4 +1,4 @@
-import { useId, useRef } from "react";
+import { useId, useRef, useState } from "react";
 import { Mic, Paperclip, Sparkles, Square, WandSparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KatalistIcon } from "../KatalistIcon";
@@ -13,10 +13,12 @@ export function MagicBoxComposer({
   listId,
   listName,
   desktop = false,
+  floating = false,
 }: {
   listId?: string;
   listName?: string;
   desktop?: boolean;
+  floating?: boolean;
 }) {
   const composerId = useId();
   const box = useMagicBoxController({
@@ -25,6 +27,7 @@ export function MagicBoxComposer({
     surface: listId ? "list" : "court",
   });
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const [focused, setFocused] = useState(false);
   const highlighted = box.mentionMenuOpen ? box.ranked[box.highlight] : undefined;
   const ghost =
     box.mentionMenuOpen && box.activeMention && highlighted
@@ -33,6 +36,14 @@ export function MagicBoxComposer({
   const recording = box.voice.state === "recording";
   const transcribing = box.voice.state === "transcribing";
   const recovering = box.draft.attachments.some((item) => item.status === "recovery-failed" || item.createdThingId);
+  const attachmentBusy = box.draft.attachments.some((item) => item.status === "uploading" || item.status === "finalizing");
+  const visualState = recovering
+    ? "recovery"
+    : box.pending || recording || transcribing || box.assist.busy || attachmentBusy
+      ? "busy"
+      : focused || Boolean(box.draft.rawText.trim())
+        ? "engaged"
+        : "idle";
   const canPolish =
     Boolean(box.assist) &&
     !box.pending &&
@@ -41,7 +52,7 @@ export function MagicBoxComposer({
     box.draft.rawText.trim().length >= 8;
 
   return (
-    <div className={cn("mb-3", box.motionClass)}>
+    <div className={cn(floating ? "mb-0" : "mb-3", box.motionClass)} data-magic-box-state={visualState}>
       <div className="sr-only" aria-live="polite">
         {box.announce}
       </div>
@@ -56,6 +67,9 @@ export function MagicBoxComposer({
           desktop
             ? "rounded-xl border border-border bg-white px-3 shadow-[0_0_18px_rgba(88,71,255,0.12)]"
             : "rounded-xl border border-border bg-card px-1.5",
+          visualState === "engaged" && "border-primary/50 shadow-[0_0_26px_rgba(88,71,255,0.28)]",
+          visualState === "busy" && "animate-pulse border-primary shadow-[0_0_30px_rgba(88,71,255,0.34)] motion-reduce:animate-none",
+          visualState === "recovery" && "animate-pulse border-status-waiting shadow-[0_0_30px_rgba(245,158,11,0.28)] motion-reduce:animate-none",
         )}
       >
         {desktop ? (
@@ -85,6 +99,8 @@ export function MagicBoxComposer({
               box.onTextChange(el.value, el.selectionStart ?? el.value.length);
             }}
             onKeyDown={(event) => box.onKeyDown(event)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             placeholder={listName ? `Toss into ${listName}…` : "Toss a thought..."}
             className="relative z-10 h-full w-full bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground"
             aria-label="Magic Box"
@@ -101,6 +117,7 @@ export function MagicBoxComposer({
               people={box.ranked}
               highlight={box.highlight}
               query={box.activeMention?.query ?? ""}
+              floating={floating}
               onPick={(person, index) => box.acceptPerson(person, "click", index)}
             />
           ) : null}
@@ -229,6 +246,7 @@ export function MagicBoxComposer({
       <ConfirmationChips
         draft={box.draft}
         desktop={desktop}
+        floating={floating}
         people={box.people}
         chipEditor={box.chipEditor}
         setChipEditor={box.setChipEditor}

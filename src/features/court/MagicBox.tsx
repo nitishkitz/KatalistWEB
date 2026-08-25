@@ -5,10 +5,12 @@ export function MagicBox({
   listId,
   listName,
   desktop = false,
+  floating = false,
 }: {
   listId?: string;
   listName?: string;
   desktop?: boolean;
+  floating?: boolean;
 }) {
-  return <MagicBoxComposer listId={listId} listName={listName} desktop={desktop} />;
+  return <MagicBoxComposer listId={listId} listName={listName} desktop={desktop} floating={floating} />;
 }

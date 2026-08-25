@@ -1,12 +1,19 @@
 import { expect, test, type Page } from "playwright/test";
 
 async function enterDemoCourt(page: Page) {
-  await page.goto("/auth", { waitUntil: "load" });
-  await page.getByRole("button", { name: /Priya Sharma/ }).click();
+  await page.addInitScript((persona) => {
+    localStorage.setItem("katalist_demo_session", JSON.stringify(persona));
+  }, {
+    key: "priya",
+    name: "Priya Sharma",
+    role: "Operations Manager",
+    phone: "+919000000001",
+    email: "priya.sharma@katalist-demo.test",
+    initials: "PS",
+    color: "bg-purple-100 text-purple-700",
+  });
+  await page.goto("/", { waitUntil: "load" });
   const box = page.getByRole("combobox", { name: "Magic Box" });
-  if (!(await box.isVisible().catch(() => false))) {
-    await page.goto("/", { waitUntil: "load" });
-  }
   await expect(box).toBeVisible({ timeout: 30_000 });
 }
 
@@ -15,8 +22,26 @@ function composer(page: Page) {
 }
 
 function composerRoot(page: Page) {
-  return composer(page).locator('xpath=ancestor::div[contains(@class,"mb-3")][1]');
+  return composer(page).locator('xpath=ancestor::div[@data-magic-box-state][1]');
 }
+
+test("authenticated pages own one floating composer and Lists open in Table", async ({ page }) => {
+  await enterDemoCourt(page);
+  await expect(composer(page)).toHaveCount(1);
+  const root = composerRoot(page);
+  await expect(root).toHaveAttribute("data-magic-box-state", "idle");
+  await composer(page).fill("Glow check");
+  await expect(root).toHaveAttribute("data-magic-box-state", "engaged");
+  await page.getByRole("button", { name: "Clear Magic Box" }).click();
+
+  await page.goto("/lists/l1", { waitUntil: "load" });
+  await expect(composer(page)).toHaveCount(1);
+  for (const header of ["Thing", "Assignee", "State", "Pace", "Due", "Updated", "Actions"]) {
+    await expect(page.getByRole("columnheader", { name: header })).toBeVisible();
+  }
+  await expect(page.getByText("MINE", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("THEIRS", { exact: true })).toHaveCount(0);
+});
 
 function courtThingByTitle(page: Page, title: string) {
   const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

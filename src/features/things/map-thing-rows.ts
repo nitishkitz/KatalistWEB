@@ -57,7 +57,7 @@ export async function mapDbThingRows(rows: DbThingRow[]): Promise<Thing[]> {
     dueHasTime: r.due_has_time,
     context: r.context,
     listId: r.list_id,
-    listName: r.list_id ? (listNames.get(r.list_id) ?? "List") : "Standalone",
+    listName: r.list_id ? (listNames.get(r.list_id) ?? "List") : null,
     cancelledAt: r.cancelled_at,
     sortedAt: r.sorted_at,
     caughtAt: r.caught_at,

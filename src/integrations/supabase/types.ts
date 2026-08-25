@@ -1248,7 +1248,7 @@ export type Database = {
         Returns: Database["public"]["Tables"]["lists"]["Row"]
       }
       create_list_invitation_server: {
-        Args: { p_requester_profile_id: string; p_list_id: string; p_invitee_profile_id: string | null; p_phone_hash: string; p_token_hash: string; p_role: Database["public"]["Enums"]["list_role"]; p_expires_at: string }
+        Args: { p_requester_profile_id: string; p_list_id: string; p_invitee_profile_id: string | null; p_phone_hash: string; p_phone_last4: string; p_token_hash: string; p_role: Database["public"]["Enums"]["list_role"]; p_expires_at: string }
         Returns: string
       }
       accept_list_invitation_server: {
@@ -1282,6 +1282,18 @@ export type Database = {
       list_team_invitations: {
         Args: Record<PropertyKey, never>
         Returns: { invitation_id: string; phone_last4: string; created_at: string; expires_at: string }[]
+      }
+      list_pending_list_invitations: {
+        Args: { p_list_id: string }
+        Returns: { invitation_id: string; phone_last4: string | null; role: string; created_at: string; expires_at: string }[]
+      }
+      revoke_list_invitation: {
+        Args: { p_list_id: string; p_invitation_id: string }
+        Returns: boolean
+      }
+      replace_list_invitation_server: {
+        Args: { p_requester_profile_id: string; p_list_id: string; p_invitation_id: string; p_token_hash: string; p_expires_at: string }
+        Returns: string
       }
       create_team_invitation_server: {
         Args: { p_requester_profile_id: string; p_phone_hash: string; p_phone_last4: string; p_token_hash: string; p_expires_at: string }

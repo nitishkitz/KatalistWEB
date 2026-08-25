@@ -257,6 +257,25 @@ export async function rpcAddConnectedListMember(
   return liveRpc(() => supabase.rpc("add_connected_list_member", { p_list_id: listId, p_profile_id: profileId, p_role: role }));
 }
 
+export async function rpcChangeListRole(
+  listId: string,
+  profileId: string,
+  role: "collaborator" | "view_only",
+) {
+  return liveRpc(() => supabase.rpc("change_list_role", {
+    p_list_id: listId,
+    p_profile_id: profileId,
+    p_role: role,
+  }));
+}
+
+export async function rpcRemoveListMember(listId: string, profileId: string) {
+  return liveRpc(() => supabase.rpc("remove_list_member", {
+    p_list_id: listId,
+    p_profile_id: profileId,
+  }));
+}
+
 export async function rpcCreateBucket(name: string, context: "work" | "home") {
   return runDomainMutation({
     live: () => liveRpc(() => supabase.rpc("create_bucket", { p_name: name, p_context: context })),

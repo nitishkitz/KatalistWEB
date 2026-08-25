@@ -1,4 +1,4 @@
-import type { Acknowledgement, Thing, WorkStatus } from "@/domain/thing";
+import type { Acknowledgement, Person, Thing, WorkStatus } from "@/domain/thing";
 
 export type CourtLaneId = "now" | "next" | "later";
 export type CourtViewMode = CourtLaneId | null;
@@ -6,7 +6,7 @@ export type CourtQuickFilter = "all" | "due" | "waiting" | "progress";
 export type CourtDueFilter = "any" | "overdue" | "today" | "this_week" | "no_due";
 export type CourtAcknowledgementFilter = "any" | Acknowledgement;
 export type CourtWorkStatusFilter = "any" | Extract<WorkStatus, "not_started" | "under_progress">;
-export type CourtSort = "due" | "updated" | "importance" | "pace";
+export type CourtSort = "due" | "updated";
 export type CourtCardDensity = "overview" | "focused" | "peek";
 export type TheirsFocus = "waiting_for_catch" | "moving" | "needs_attention";
 
@@ -16,6 +16,7 @@ export type CourtFilterState = {
   acknowledgement: CourtAcknowledgementFilter;
   workStatus: CourtWorkStatusFilter;
   starredOnly: boolean;
+  assigneeId: string | null;
 };
 
 export const DEFAULT_COURT_FILTERS: CourtFilterState = {
@@ -24,6 +25,7 @@ export const DEFAULT_COURT_FILTERS: CourtFilterState = {
   acknowledgement: "any",
   workStatus: "any",
   starredOnly: false,
+  assigneeId: null,
 };
 
 function searchableText(thing: Thing) {
@@ -79,11 +81,10 @@ export function filterCourtThings(
       return false;
     if (filters.workStatus !== "any" && thing.workStatus !== filters.workStatus) return false;
     if (filters.starredOnly && !thing.starred) return false;
+    if (filters.assigneeId && thing.assignee.id !== filters.assigneeId) return false;
     return true;
   });
 }
-
-const priority = { now: 0, next: 1, later: 2 } as const;
 
 export function sortCourtThings(things: readonly Thing[], sort: CourtSort) {
   return things
@@ -94,18 +95,24 @@ export function sortCourtThings(things: readonly Thing[], sort: CourtSort) {
         difference =
           (a.thing.dueAt ? new Date(a.thing.dueAt).getTime() : Number.POSITIVE_INFINITY) -
           (b.thing.dueAt ? new Date(b.thing.dueAt).getTime() : Number.POSITIVE_INFINITY);
-      } else if (sort === "updated") {
-        difference = new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime();
-      } else if (sort === "importance") {
-        difference = priority[a.thing.ownerImportance] - priority[b.thing.ownerImportance];
       } else {
-        difference =
-          (a.thing.personalPace ? priority[a.thing.personalPace] : Number.POSITIVE_INFINITY) -
-          (b.thing.personalPace ? priority[b.thing.personalPace] : Number.POSITIVE_INFINITY);
+        difference = new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime();
       }
       return difference || a.index - b.index;
     })
     .map(({ thing }) => thing);
+}
+
+export function courtAssignees(lanes: {
+  now: readonly Thing[];
+  next: readonly Thing[];
+  later: readonly Thing[];
+  theirs: readonly Thing[];
+}): Person[] {
+  return [...new Map(
+    [...lanes.now, ...lanes.next, ...lanes.later, ...lanes.theirs]
+      .map((thing) => [thing.assignee.id, thing.assignee] as const),
+  ).values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
 export function applyCourtView(
@@ -153,7 +160,7 @@ export function cardDensityForLane(focus: CourtViewMode, lane: CourtLaneId): Cou
 }
 
 export function formatCourtDue(thing: Thing, now = new Date()) {
-  if (!thing.dueAt) return { label: "No due date", urgent: false };
+  if (!thing.dueAt) return null;
   const due = new Date(thing.dueAt);
   if (isSameLocalDay(due, now)) {
     const time = thing.dueHasTime

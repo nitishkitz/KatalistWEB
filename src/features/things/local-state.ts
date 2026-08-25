@@ -184,7 +184,7 @@ export function tossLocalThing(input: {
   const people = directoryPeople();
   const me = currentDemoPerson();
   let listId: string | null = null;
-  let listName = "Standalone";
+  let listName: string | null = null;
   let context = input.context;
   if (input.listId) {
     const list = getListsRaw().find((l) => l.id === input.listId);

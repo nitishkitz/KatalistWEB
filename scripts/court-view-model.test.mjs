@@ -4,6 +4,7 @@ import {
   DEFAULT_COURT_FILTERS,
   applyCourtView,
   cardDensityForLane,
+  courtAssignees,
   filterCourtThings,
   formatCourtDue,
   sortCourtThings,
@@ -104,7 +105,29 @@ test("quick and detailed filters compose", () => {
   );
 });
 
-test("sorting is stable and puts missing due dates last", () => {
+test("assignee avatar filter composes across every Court lane", () => {
+  const arjun = person("arjun", "Arjun");
+  const priya = person("priya", "Priya");
+  const lanes = {
+    now: [thing({ id: "now-arjun", assignee: arjun })],
+    next: [thing({ id: "next-priya", assignee: priya })],
+    later: [thing({ id: "later-arjun", assignee: arjun })],
+    theirs: [thing({ id: "their-priya", assignee: priya })],
+  };
+  assert.deepEqual(courtAssignees(lanes).map((candidate) => candidate.id), ["arjun", "priya"]);
+  const view = applyCourtView(
+    lanes,
+    { ...DEFAULT_COURT_FILTERS, assigneeId: "arjun" },
+    "",
+    "due",
+  );
+  assert.deepEqual(view.now.map((item) => item.id), ["now-arjun"]);
+  assert.deepEqual(view.next, []);
+  assert.deepEqual(view.later.map((item) => item.id), ["later-arjun"]);
+  assert.deepEqual(view.theirs, []);
+});
+
+test("sorting is stable and offers only due or recently updated", () => {
   const source = [
     thing({ id: "none", dueAt: null, updatedAt: "2026-08-20T10:00:00.000Z" }),
     thing({ id: "later", dueAt: "2026-08-22T10:00:00.000Z", ownerImportance: "later" }),
@@ -115,10 +138,7 @@ test("sorting is stable and puts missing due dates last", () => {
     sortCourtThings(source, "due").map((item) => item.id),
     ["soon", "later", "none"],
   );
-  assert.deepEqual(
-    sortCourtThings(source, "importance").map((item) => item.id),
-    ["soon", "none", "later"],
-  );
+  assert.deepEqual(sortCourtThings(source, "updated").map((item) => item.id), ["none", "later", "soon"]);
   assert.deepEqual(
     source.map((item) => item.id),
     ["none", "later", "soon"],
@@ -135,11 +155,11 @@ test("applying a Court view returns filtered counts and sorted lane items", () =
     later: [],
     theirs: [thing({ id: "their-a", title: "Review external copy" })],
   };
-  const view = applyCourtView(lanes, DEFAULT_COURT_FILTERS, "review", "importance");
+  const view = applyCourtView(lanes, DEFAULT_COURT_FILTERS, "review", "due");
 
   assert.deepEqual(
     view.now.map((item) => item.id),
-    ["now-b", "now-a"],
+    ["now-a", "now-b"],
   );
   assert.deepEqual(view.next, []);
   assert.deepEqual(
@@ -179,8 +199,5 @@ test("due labels include exact time only when the Thing has one", () => {
     ),
     { label: "Tomorrow", urgent: true },
   );
-  assert.deepEqual(formatCourtDue(thing({ dueAt: null }), now), {
-    label: "No due date",
-    urgent: false,
-  });
+  assert.equal(formatCourtDue(thing({ dueAt: null }), now), null);
 });

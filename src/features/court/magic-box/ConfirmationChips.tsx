@@ -42,6 +42,7 @@ const ChipButton = forwardRef<
 export function ConfirmationChips({
   draft,
   desktop,
+  floating,
   people,
   chipEditor,
   setChipEditor,
@@ -53,6 +54,7 @@ export function ConfirmationChips({
 }: {
   draft: MagicBoxDraft;
   desktop?: boolean;
+  floating?: boolean;
   people: RankedPerson[] | Person[];
   chipEditor: null | "assignee" | "due" | "importance";
   setChipEditor: (next: null | "assignee" | "due" | "importance") => void;
@@ -84,7 +86,7 @@ export function ConfirmationChips({
             {draft.assignee.status === "resolved" ? `@${assigneeLabel}` : assigneeLabel}
           </ChipButton>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-64 p-2">
+        <PopoverContent side={floating ? "top" : "bottom"} align="start" className="w-64 p-2">
           <button
             type="button"
             className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-muted"
@@ -121,7 +123,7 @@ export function ConfirmationChips({
             {dueLabel}
           </ChipButton>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-auto p-3">
+        <PopoverContent side={floating ? "top" : "bottom"} align="start" className="w-auto p-3">
           <DueChipEditor
             draft={draft}
             onSet={(dueAt, dueHasTime, label) => {
@@ -143,7 +145,7 @@ export function ConfirmationChips({
             {draft.ownerImportance.toUpperCase()}
           </ChipButton>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-auto p-2">
+        <PopoverContent side={floating ? "top" : "bottom"} align="start" className="w-auto p-2">
           <ImportanceChipEditor
             value={draft.ownerImportance}
             onSet={(importance) => {

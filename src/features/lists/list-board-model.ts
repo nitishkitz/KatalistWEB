@@ -1,12 +1,9 @@
 import { isActiveThing, laneOf, type Person, type Thing } from "@/domain/thing";
 
-export type ListScope = "mine" | "theirs";
 export type ListStatusFilter = "all" | "due" | "waiting" | "progress" | "completed";
 
 type Input = {
   things: Thing[];
-  myActorId: string | null;
-  scope: ListScope;
   status: ListStatusFilter;
   assigneeId: string | null;
   query: string;
@@ -31,16 +28,11 @@ function compareThings(a: Thing, b: Thing) {
   return updated || a.title.localeCompare(b.title) || a.id.localeCompare(b.id);
 }
 
-export function deriveListBoard(input: Input) {
+export function deriveListView(input: Input) {
   const query = input.query.trim().toLocaleLowerCase();
-  const scoped = input.things.filter((thing) =>
-    input.scope === "mine"
-      ? thing.assignee.id === input.myActorId
-      : thing.assignee.id !== input.myActorId,
-  );
-  const assignees = [...new Map(scoped.map((thing) => [thing.assignee.id, thing.assignee])).values()]
+  const assignees = [...new Map(input.things.map((thing) => [thing.assignee.id, thing.assignee])).values()]
     .sort((a, b) => a.name.localeCompare(b.name));
-  const flat = scoped
+  const flat = input.things
     .filter((thing) => matchesStatus(thing, input.status, input.now))
     .filter((thing) => !input.assigneeId || thing.assignee.id === input.assigneeId)
     .filter((thing) => !query || thing.title.toLocaleLowerCase().includes(query))

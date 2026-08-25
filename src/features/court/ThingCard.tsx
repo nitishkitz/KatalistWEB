@@ -24,7 +24,7 @@ export function ThingCard({ thing, onSelect }: { thing: Thing; onSelect?: (t: Th
       <div className="flex items-center justify-between gap-2">
         <PersonCell person={thing.assignee} />
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-muted-foreground">{thing.listName ?? "Standalone"}</span>
+          {thing.listName ? <span className="text-[11px] text-muted-foreground">{thing.listName}</span> : null}
           <CatchActionButton
             thing={thing}
             className="inline-flex h-7 items-center rounded-md border border-primary bg-white px-2 text-[11px] font-medium text-primary"

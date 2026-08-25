@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { Thing } from "@/domain/thing";
 import { getThingCapabilities } from "@/domain/capabilities";
-import { useCourt } from "@/features/court/use-court";
+import { useCurrentActor } from "@/features/people/use-current-actor";
 import { rpcCatchThing } from "@/features/things/rpc";
 import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -39,10 +39,10 @@ function CatchActionButtonReady({
   className?: string;
   children?: ReactNode;
 }) {
-  const { myActorId } = useCourt();
+  const { actorId } = useCurrentActor();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
-  const caps = getThingCapabilities(thing, myActorId);
+  const caps = getThingCapabilities(thing, actorId);
   if (!caps.canCatch) return null;
 
   async function onCatch(event: MouseEvent<HTMLButtonElement>) {

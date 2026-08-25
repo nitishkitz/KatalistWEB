@@ -1,7 +1,6 @@
 import { Calendar, MoreHorizontal, Star } from "lucide-react";
 import { format, isToday, isTomorrow, isThisWeek } from "date-fns";
 import type { Thing } from "@/domain/thing";
-import { ImportanceBadge, PaceBadge } from "./ImportanceBadge";
 import { AcknowledgementBadge } from "./AcknowledgementBadge";
 import { WorkStatusBadge } from "./WorkStatusBadge";
 import { PersonCell } from "./PersonCell";
@@ -10,11 +9,11 @@ import { rpcNudgeThing, rpcSortThing } from "@/features/things/rpc";
 import { CatchActionButton } from "@/features/things/CatchActionButton";
 import { toast } from "sonner";
 import { getThingCapabilities } from "@/domain/capabilities";
-import { useCourt } from "@/features/court/use-court";
+import { useCurrentActor } from "@/features/people/use-current-actor";
 import { domainErrorMessage } from "@/lib/domain-error";
 
-function formatDue(thing: Thing): { label: string; urgent: boolean } {
-  if (!thing.dueAt) return { label: "—", urgent: false };
+function formatDue(thing: Thing): { label: string; urgent: boolean } | null {
+  if (!thing.dueAt) return null;
   const d = new Date(thing.dueAt);
   if (isToday(d)) {
     return {
@@ -34,9 +33,9 @@ export function ThingRow({
   thing: Thing;
   onSelect?: (thing: Thing) => void;
 }) {
-  const { myActorId } = useCourt();
+  const { actorId } = useCurrentActor();
   const due = formatDue(thing);
-  const caps = getThingCapabilities(thing, myActorId);
+  const caps = getThingCapabilities(thing, actorId);
   const terminal = caps.terminal;
 
   return (
@@ -51,12 +50,6 @@ export function ThingRow({
         </div>
       </td>
       <td className="px-2">
-        <ImportanceBadge value={thing.ownerImportance} />
-      </td>
-      <td className="px-2">
-        <PaceBadge value={thing.personalPace} />
-      </td>
-      <td className="px-2">
         <PersonCell person={thing.assignee} />
       </td>
       <td className="px-2">
@@ -66,7 +59,7 @@ export function ThingRow({
         <WorkStatusBadge value={thing.workStatus} />
       </td>
       <td className="px-2">
-        <span
+        {due ? <span
           className={cn(
             "inline-flex items-center gap-1.5 text-[12px]",
             due.urgent ? "font-medium text-status-now" : "text-muted-foreground",
@@ -74,9 +67,9 @@ export function ThingRow({
         >
           <Calendar className="h-3.5 w-3.5 opacity-70" />
           {due.label}
-        </span>
+        </span> : null}
       </td>
-      <td className="px-2 text-[12px] text-muted-foreground">{thing.listName ?? "Standalone"}</td>
+      <td className="px-2 text-[12px] text-muted-foreground">{thing.listName ?? null}</td>
       <td className="pr-2 text-right">
         <details className="relative" onClick={(e) => e.stopPropagation()}>
           <summary className="list-none rounded p-1 text-muted-foreground hover:bg-muted [&::-webkit-details-marker]:hidden">
@@ -135,8 +128,6 @@ export function ThingTableHeader() {
     <thead>
       <tr className="text-left text-[11px] font-medium text-muted-foreground">
         <th className="pb-2 pl-3 font-medium">Thing</th>
-        <th className="px-2 pb-2 font-medium">Owner Importance</th>
-        <th className="px-2 pb-2 font-medium">My Pace</th>
         <th className="px-2 pb-2 font-medium">With</th>
         <th className="px-2 pb-2 font-medium">Ack</th>
         <th className="px-2 pb-2 font-medium">Status</th>

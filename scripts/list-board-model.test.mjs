@@ -26,20 +26,19 @@ const thing = (overrides = {}) => ({
   ...overrides,
 });
 
-test("Mine and THEIRS separate assignee ownership", () => {
-  assert.equal(typeof model.deriveListBoard, "function");
+test("List view includes all authorized assignees without ownership scope", () => {
+  assert.equal(typeof model.deriveListView, "function");
   const input = [thing({ id: "mine" }), thing({ id: "theirs", assignee: person("sam") })];
-  assert.deepEqual(model.deriveListBoard({ things: input, myActorId: "me", scope: "mine", status: "all", assigneeId: null, query: "", now: new Date() }).flat.map((t) => t.id), ["mine"]);
-  assert.deepEqual(model.deriveListBoard({ things: input, myActorId: "me", scope: "theirs", status: "all", assigneeId: null, query: "", now: new Date() }).flat.map((t) => t.id), ["theirs"]);
+  assert.deepEqual(model.deriveListView({ things: input, status: "all", assigneeId: null, query: "", now: new Date() }).flat.map((t) => t.id).sort(), ["mine", "theirs"]);
 });
 
 test("Waiting uses Owner Importance while Caught uses My Pace", () => {
-  const board = model.deriveListBoard({
+  const board = model.deriveListView({
     things: [
       thing({ id: "waiting", acknowledgement: "waiting_for_catch", personalPace: null, ownerImportance: "later" }),
       thing({ id: "caught", personalPace: "now" }),
     ],
-    myActorId: "me", scope: "mine", status: "all", assigneeId: null, query: "", now: new Date(),
+    status: "all", assigneeId: null, query: "", now: new Date(),
   });
   assert.deepEqual(board.now.map((t) => t.id), ["caught"]);
   assert.deepEqual(board.later.map((t) => t.id), ["waiting"]);
@@ -47,9 +46,9 @@ test("Waiting uses Owner Importance while Caught uses My Pace", () => {
 
 test("filters compose and expose involved assignees", () => {
   const sam = person("sam");
-  const board = model.deriveListBoard({
+  const board = model.deriveListView({
     things: [thing({ id: "due-sam", title: "Due item", assignee: sam, dueAt: "2026-08-24T00:00:00Z" }), thing({ id: "other", title: "Unrelated", assignee: sam })],
-    myActorId: "me", scope: "theirs", status: "due", assigneeId: "sam", query: "due", now: new Date("2026-08-25T00:00:00Z"),
+    status: "due", assigneeId: "sam", query: "due", now: new Date("2026-08-25T00:00:00Z"),
   });
   assert.deepEqual(board.flat.map((t) => t.id), ["due-sam"]);
   assert.deepEqual(board.assignees.map((p) => p.id), ["sam"]);

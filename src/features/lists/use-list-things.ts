@@ -5,7 +5,7 @@ import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { getListById, getMergedThings } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { useCourt } from "@/features/court/use-court";
+import { useCurrentActor } from "@/features/people/use-current-actor";
 import type { Thing } from "@/domain/thing";
 import { keys } from "@/domain/query-keys";
 import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
@@ -19,7 +19,7 @@ export function useListThings(listId: string | undefined) {
   const { session } = useSession();
   const preview = isPreviewSession(session);
   const version = useLocalVersion();
-  const court = useCourt();
+  const currentActor = useCurrentActor();
   const shred = usePersonalShred();
   const hidden = isPersonallyShreddedList(listId, shred);
 
@@ -83,5 +83,5 @@ export function useListThings(listId: string | undefined) {
     return excludePersonallyShreddedThings(query.data ?? [], shred);
   }, [preview, query.data, listId, version, shred, hidden]);
 
-  return { things, isLoading: !preview && !hidden && query.isLoading, myActorId: court.myActorId };
+  return { things, isLoading: !preview && !hidden && query.isLoading, myActorId: currentActor.actorId };
 }

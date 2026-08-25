@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
+import { readFileSync } from "node:fs";
 import { isActiveThing, partitionCourt } from "@/domain/thing";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { setDemoActorForTests } from "@/features/demo/identities";
@@ -174,4 +175,18 @@ test("SCENARIO H — duplicate add does not create a second reference", () => {
   addBucketRef(bucket.id, { thingId: thing.id, title: thing.title, kind: "thing" });
   const thingRefs = getBucketRefs(bucket.id).filter((r) => r.thingId === thing.id);
   assert.equal(thingRefs.length, 1);
+});
+
+test("Thing Detail uses a persistent multi-select Add to Bucket dropdown", () => {
+  const source = readFileSync(new URL("../src/features/things/ThingDetailSheet.tsx", import.meta.url), "utf8");
+  assert.match(source, /DropdownMenuCheckboxItem/);
+  assert.match(source, /selectedBuckets\.size/);
+  assert.match(source, /onSelect=\{\(event\) => event\.preventDefault\(\)\}/);
+  assert.match(source, /action: checked \? "remove" : "add"/);
+});
+
+test("Bucket membership fetch errors fail closed instead of clearing selections", () => {
+  const source = readFileSync(new URL("../src/features/buckets/use-buckets.ts", import.meta.url), "utf8");
+  assert.match(source, /itemsError/);
+  assert.match(source, /if \(itemsError\) throw itemsError/);
 });

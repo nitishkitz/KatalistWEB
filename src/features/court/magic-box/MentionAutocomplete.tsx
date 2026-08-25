@@ -9,19 +9,24 @@ export function MentionAutocomplete({
   highlight,
   query,
   onPick,
+  floating = false,
 }: {
   composerId: string;
   people: RankedPerson[];
   highlight: number;
   query: string;
   onPick: (person: RankedPerson, index: number) => void;
+  floating?: boolean;
 }) {
   return (
     <ul
       role="listbox"
       id={`${composerId}-listbox`}
       aria-label="People"
-      className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-56 overflow-auto rounded-lg border border-border bg-popover py-1 shadow-md"
+      className={cn(
+        "absolute left-0 right-0 z-30 max-h-56 overflow-auto rounded-lg border border-border bg-popover py-1 shadow-md",
+        floating ? "bottom-[calc(100%+4px)]" : "top-[calc(100%+4px)]",
+      )}
     >
       {people.length === 0 ? (
         <li className="px-3 py-2 text-[12px] text-muted-foreground">No matching person.</li>

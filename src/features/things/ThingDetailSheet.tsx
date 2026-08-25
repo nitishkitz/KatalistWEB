@@ -5,6 +5,7 @@ import {
   Bell,
   Calendar,
   Check,
+  ChevronDown,
   Hand,
   List as ListIcon,
   Lock,
@@ -21,6 +22,13 @@ import { WorkStatusBadge } from "@/components/katalist/WorkStatusBadge";
 import { PersonCell } from "@/components/katalist/PersonCell";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   rpcAddToBucket,
@@ -37,7 +45,7 @@ import {
 } from "./rpc";
 import { invalidatePersonalSurfaces } from "./personal-shred";
 import { getThingCapabilities } from "@/domain/capabilities";
-import { useCourt } from "@/features/court/use-court";
+import { useCurrentActor } from "@/features/people/use-current-actor";
 import { useThing } from "./use-thing";
 import { useThingComments } from "./use-thing-comments";
 import { useAssignablePeople } from "@/features/people/use-assignable";
@@ -213,10 +221,10 @@ function AssignOutsideBlock({
 
 export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) {
   const qc = useQueryClient();
-  const court = useCourt();
+  const currentActor = useCurrentActor();
   const live = useThing(initial?.id ?? null);
   const thing = live.thing ?? initial;
-  const caps = thing ? getThingCapabilities(thing, court.myActorId) : null;
+  const caps = thing ? getThingCapabilities(thing, currentActor.actorId) : null;
   const thread = useThingComments(thing?.id ?? null);
   const people = useAssignablePeople();
   const { buckets } = useBuckets();
@@ -292,7 +300,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
   const selectedBuckets = selectedBucketIds(buckets, thing.id);
   const dueLabel = thing.dueAt
     ? format(new Date(thing.dueAt), thing.dueHasTime ? "EEE, MMM d · h:mm a" : "EEE, MMM d")
-    : "No due date";
+    : null;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -308,7 +316,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
               </SheetTitle>
             </div>
             <p className="text-[12px] text-muted-foreground">
-              {thing.listName ?? "Standalone"} · {thing.context}
+              {thing.listName ? `${thing.listName} · ` : ""}{thing.context}
             </p>
             <p
               className={cn("text-[11px] font-medium", importanceTone[thing.ownerImportance].text)}
@@ -363,38 +371,37 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
             {caps?.canAddToBucket ? (
               <section className="space-y-1.5">
                 <h3 className="katalist-section-title">Add to Bucket</h3>
-                <div className="divide-y divide-border/70 rounded-lg border border-border/70 bg-white">
-                  {buckets.length === 0 ? (
-                    <p className="px-3 py-2 text-[11px] text-muted-foreground">
-                      Create a Bucket first, then add this Thing here.
-                    </p>
-                  ) : (
-                    buckets.map((bucket) => {
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-white px-3 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <ListIcon className="h-3.5 w-3.5 text-primary" />
+                      <span className="min-w-0 flex-1 truncate text-left">
+                        {selectedBuckets.size === 0 ? "Choose Buckets…" : `${selectedBuckets.size} Bucket${selectedBuckets.size === 1 ? "" : "s"} selected`}
+                      </span>
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-[320px] max-w-[calc(100vw-4rem)] bg-white">
+                    <DropdownMenuLabel className="text-[11px] text-muted-foreground">Add to one or more Buckets</DropdownMenuLabel>
+                    {buckets.length === 0 ? (
+                      <p className="px-2 py-2 text-[11px] text-muted-foreground">Create a Bucket first, then add this Thing here.</p>
+                    ) : buckets.map((bucket) => {
                       const checked = selectedBuckets.has(bucket.id);
                       return (
-                        <label
+                        <DropdownMenuCheckboxItem
                           key={bucket.id}
-                          className="flex min-h-9 cursor-pointer items-center gap-2 px-3 text-[11px] text-foreground"
+                          checked={checked}
+                          disabled={bucketRun.isPending}
+                          onSelect={(event) => event.preventDefault()}
+                          onCheckedChange={() => bucketRun.mutate({ bucketId: bucket.id, action: checked ? "remove" : "add" })}
+                          className="text-[12px]"
                         >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={bucketRun.isPending}
-                            onChange={(event) =>
-                              bucketRun.mutate({
-                                bucketId: bucket.id,
-                                action: event.target.checked ? "add" : "remove",
-                              })
-                            }
-                            className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-ring"
-                          />
                           <span className="min-w-0 flex-1 truncate">{bucket.name}</span>
-                          {checked ? <Check className="h-3.5 w-3.5 text-primary" /> : null}
-                        </label>
+                        </DropdownMenuCheckboxItem>
                       );
-                    })
-                  )}
-                </div>
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </section>
             ) : null}
 
@@ -424,7 +431,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
 
             <section className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <h3 className="katalist-section-title">My Pace</h3>
+                <h3 className="katalist-section-title">Pace</h3>
                 {!caps?.canSetPace ? <Lock className="h-3.5 w-3.5 text-muted-foreground" /> : null}
               </div>
               <div className="relative pt-1">
@@ -515,7 +522,7 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
             </section>
 
             <div className="grid grid-cols-2 gap-3 border-t border-border/70 pt-3">
-              <section className="space-y-1.5">
+              {thing.dueAt && dueLabel ? <section className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <h3 className="katalist-section-title">Due Date</h3>
                 </div>
@@ -523,25 +530,23 @@ export function ThingDetailSheet({ thing: initial, open, onOpenChange }: Props) 
                   <Calendar className="mt-0.5 h-3.5 w-3.5 text-primary" />
                   <span>
                     {dueLabel}
-                    {thing.dueAt ? (
-                      <span className="block text-[10px] text-muted-foreground">
-                        {format(new Date(thing.dueAt), "dd MMM yyyy")}
-                      </span>
-                    ) : null}
+                    <span className="block text-[10px] text-muted-foreground">
+                      {format(new Date(thing.dueAt), "dd MMM yyyy")}
+                    </span>
                   </span>
                 </p>
-              </section>
+              </section> : null}
 
-              <section className="space-y-2">
+              {thing.listName ? <section className="space-y-2">
                 <h3 className="katalist-section-title">Source</h3>
                 <p className="flex items-start gap-1.5 text-[11px] text-foreground">
                   <ListIcon className="mt-0.5 h-3.5 w-3.5 text-primary" />
                   <span>
-                    {thing.listName ?? "Standalone"}
+                    {thing.listName}
                     <span className="block text-[10px] text-muted-foreground">List</span>
                   </span>
                 </p>
-              </section>
+              </section> : null}
             </div>
             <div className="grid grid-cols-2 gap-3 border-t border-border/70 pt-3 text-[11px]">
               <div><h3 className="katalist-section-title">Created</h3><p className="mt-1 text-muted-foreground">{format(new Date(thing.createdAt ?? thing.updatedAt), "MMM d, yyyy · h:mm a")}</p></div>

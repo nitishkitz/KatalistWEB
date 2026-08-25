@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -10,7 +10,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
-import { MagicBox } from "@/features/court/MagicBox";
 import { CourtDesktop } from "@/features/court/CourtDesktop";
 import { useCourt } from "@/features/court/use-court";
 import { ThingRow, ThingTableHeader } from "@/components/katalist/ThingRow";
@@ -101,14 +100,13 @@ function Lane({
           </div>
           <table className="hidden w-full table-fixed md:table">
             <colgroup>
-              <col className="w-[26%]" />
+              <col className="w-[30%]" />
+              <col className="w-[14%]" />
               <col className="w-[12%]" />
-              <col className="w-[10%]" />
-              <col className="w-[10%]" />
+              <col className="w-[13%]" />
               <col className="w-[13%]" />
               <col className="w-[12%]" />
-              <col className="w-[10%]" />
-              <col className="w-[7%]" />
+              <col className="w-[6%]" />
             </colgroup>
             <ThingTableHeader />
             <tbody>
@@ -164,7 +162,7 @@ function CourtPage() {
   const [selectedId, setSelectedId] = useState<string | null>(thing ?? null);
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<"due" | "updated" | "importance" | "pace">("due");
+  const [sort, setSort] = useState<"due" | "updated">("due");
   const [theirFocus, setTheirFocus] = useState<
     "waiting_for_catch" | "moving" | "needs_attention" | null
   >(null);
@@ -185,34 +183,28 @@ function CourtPage() {
     });
   }
 
-  function sortThings(list: Thing[]) {
+  const sortThings = useCallback((list: Thing[]) => {
     return [...list].sort((a, b) => {
       if (sort === "due")
         return (
           (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) -
           (b.dueAt ? new Date(b.dueAt).getTime() : Infinity)
         );
-      if (sort === "updated")
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      if (sort === "importance")
-        return Number(a.ownerImportance === "now") > Number(b.ownerImportance === "now")
-          ? -1
-          : a.ownerImportance.localeCompare(b.ownerImportance);
-      return (a.personalPace ?? "next").localeCompare(b.personalPace ?? "next");
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
-  }
+  }, [sort]);
 
   const fNow = useMemo(
     () => sortThings(now.filter((t) => matchesFilter(t, filter, query))),
-    [now, filter, query, sort],
+    [now, filter, query, sortThings],
   );
   const fNext = useMemo(
     () => sortThings(next.filter((t) => matchesFilter(t, filter, query))),
-    [next, filter, query, sort],
+    [next, filter, query, sortThings],
   );
   const fLater = useMemo(
     () => sortThings(later.filter((t) => matchesFilter(t, filter, query))),
-    [later, filter, query, sort],
+    [later, filter, query, sortThings],
   );
 
   const dueToday = now.filter(
@@ -237,8 +229,6 @@ function CourtPage() {
       />
 
       <div className="lg:hidden">
-        <MagicBox />
-
         <p className="mb-3 flex items-center gap-2 text-[13px] text-muted-foreground">
           <img src="/katalist-mark-app.png" alt="" className="h-4 w-4 opacity-70" />
           {emptyCourt && !isLoading
@@ -288,28 +278,12 @@ function CourtPage() {
             </label>
             <button
               type="button"
-              onClick={() =>
-                setSort((s) =>
-                  s === "due"
-                    ? "updated"
-                    : s === "updated"
-                      ? "importance"
-                      : s === "importance"
-                        ? "pace"
-                        : "due",
-                )
-              }
+              onClick={() => setSort((current) => current === "due" ? "updated" : "due")}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] text-foreground"
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Sort:{" "}
-              {sort === "due"
-                ? "Due soon"
-                : sort === "updated"
-                  ? "Recently updated"
-                  : sort === "importance"
-                    ? "Importance"
-                    : "Pace"}
+              {sort === "due" ? "Due soon" : "Recently updated"}
             </button>
             <button
               type="button"

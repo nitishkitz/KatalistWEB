@@ -1,7 +1,7 @@
 import { LayoutGrid, List, Search, X } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import type { Person } from "@/domain/thing";
-import type { ListScope, ListStatusFilter } from "./list-board-model";
+import type { ListStatusFilter } from "./list-board-model";
 import { cn } from "@/lib/utils";
 
 export type ListView = "board" | "table";
@@ -9,8 +9,6 @@ export type ListView = "board" | "table";
 type Props = {
   view: ListView;
   onView: (view: ListView) => void;
-  scope: ListScope;
-  onScope: (scope: ListScope) => void;
   status: ListStatusFilter;
   onStatus: (status: ListStatusFilter) => void;
   query: string;
@@ -25,13 +23,6 @@ export function ListThingsToolbar(props: Props) {
   return (
     <div className="mb-4 space-y-3 rounded-xl border border-border bg-card p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex rounded-lg border border-border p-0.5" aria-label="Thing ownership">
-          {(["mine", "theirs"] as const).map((scope) => (
-            <button key={scope} type="button" onClick={() => props.onScope(scope)} className={cn("rounded-md px-3 py-1.5 text-[12px] font-semibold", props.scope === scope ? "bg-primary text-primary-foreground" : "text-muted-foreground")}>
-              {scope === "mine" ? "MINE" : "THEIRS"}
-            </button>
-          ))}
-        </div>
         <label className="flex h-8 min-w-52 flex-1 items-center gap-2 rounded-lg border border-border px-2.5">
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
           <input value={props.query} onChange={(event) => props.onQuery(event.target.value)} placeholder="Search Things" className="w-full bg-transparent text-[12px] outline-none" />

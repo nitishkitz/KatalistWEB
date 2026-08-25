@@ -20,9 +20,10 @@ async function fetchBuckets(context: "work" | "home"): Promise<BucketCard[]> {
     .is("archived_at", null);
   if (error) throw error;
   const ids = (buckets ?? []).map((b) => b.id);
-  const { data: items } = ids.length
+  const { data: items, error: itemsError } = ids.length
     ? await supabase.from("bucket_items").select("bucket_id,thing_id,list_id").in("bucket_id", ids)
-    : { data: [] };
+    : { data: [], error: null };
+  if (itemsError) throw itemsError;
 
   return (buckets ?? []).map((b, i) => {
     const refs = (items ?? []).filter((it) => it.bucket_id === b.id);

@@ -14,13 +14,25 @@ export async function createListInvitation(request: Request, listId: string) {
   if (!listCollaborationServerEnabled()) return jsonNoStore({ error: "not_found" }, 404);
   try {
     const user = await requireSupabaseUser(request, defaultGetUser);
-    const body = await request.json() as { phone?: string; role?: string };
+    const body = await request.json() as { phone?: string; role?: string; invitationId?: string };
+    const token = randomBytes(32).toString("base64url");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (body.invitationId) {
+      const { error } = await supabaseAdmin.rpc("replace_list_invitation_server", {
+        p_requester_profile_id: user.id,
+        p_list_id: listId,
+        p_invitation_id: body.invitationId,
+        p_token_hash: sha256(token),
+        p_expires_at: new Date(Date.now() + 14 * 86_400_000).toISOString(),
+      });
+      if (error) throw error;
+      const origin = new URL(request.url).origin;
+      return jsonNoStore({ shareUrl: `${origin}/list-invitations/accept?token=${encodeURIComponent(token)}` }, 201);
+    }
     const phone = normalizeIndianPhone(body.phone ?? "");
     const role = body.role === "view_only" ? "view_only" : "collaborator";
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: profile } = await supabaseAdmin.from("profiles").select("id").eq("phone_e164", phone).maybeSingle();
     if (profile?.id === user.id) return jsonNoStore({ error: "invalid_request", message: "You are already the Owner." }, 400);
-    const token = randomBytes(32).toString("base64url");
     const pepper = process.env.KATALIST_UAT_AUTH_PEPPER ?? process.env.LIST_INVITE_PEPPER ?? "";
     if (!pepper) return jsonNoStore({ error: "unavailable" }, 503);
     const { error } = await supabaseAdmin.rpc("create_list_invitation_server", {
@@ -28,6 +40,7 @@ export async function createListInvitation(request: Request, listId: string) {
       p_list_id: listId,
       p_invitee_profile_id: profile?.id ?? null,
       p_phone_hash: sha256(`${pepper}:${phone}`),
+      p_phone_last4: phone.slice(-4),
       p_token_hash: sha256(token),
       p_role: role,
       p_expires_at: new Date(Date.now() + 14 * 86_400_000).toISOString(),

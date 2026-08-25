@@ -56,7 +56,7 @@ function BucketThingRow({ thing, onOpen, onRemove }: { thing: Thing; onOpen: () 
               {format(new Date(thing.dueAt), thing.dueHasTime ? "MMM d · h:mm a" : "MMM d")}
             </span>
           ) : null}
-          <span className="text-[11px] text-muted-foreground">{thing.listName ?? "Standalone"}</span>
+          {thing.listName ? <span className="text-[11px] text-muted-foreground">{thing.listName}</span> : null}
         </div>
       </button>
       <button

@@ -7,7 +7,6 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
 import { CatchActionButton } from "@/features/things/CatchActionButton";
 
-const importanceLabel = { now: "NOW", next: "NEXT", later: "LATER" } as const;
 const workLabel = {
   not_started: "Not Started",
   under_progress: "Under Progress",
@@ -26,12 +25,6 @@ const laneTone: Record<CourtLaneId, { edge: string; border: string; text: string
   now: { edge: "bg-status-now", border: "border-l-status-now", text: "text-status-now" },
   next: { edge: "bg-status-next", border: "border-l-status-next", text: "text-status-next" },
   later: { edge: "bg-status-later", border: "border-l-status-later", text: "text-status-later" },
-};
-
-const importanceTone: Record<Thing["ownerImportance"], string> = {
-  now: "text-status-now",
-  next: "text-status-next",
-  later: "text-status-later",
 };
 
 function relativeTime(value: string | null, now = new Date()) {
@@ -138,8 +131,7 @@ export function CourtThingCard({
                   ? "Waiting for Catch"
                   : workLabel[thing.workStatus]}
               </span>
-              <span aria-hidden="true">·</span>
-              <span className={cn("truncate", due.urgent && "text-status-now")}>{due.label}</span>
+              {due ? <><span aria-hidden="true">·</span><span className={cn("truncate", due.urgent && "text-status-now")}>{due.label}</span></> : null}
             </span>
           </span>
         </button>
@@ -154,7 +146,7 @@ export function CourtThingCard({
         type="button"
         onClick={open}
         className={cn(
-          "w-full cursor-pointer border-l-2 bg-white px-3 py-2.5 pr-52 text-left outline-none transition-colors duration-200 hover:bg-white focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+          "w-full cursor-pointer border-l-2 bg-white px-3 py-2.5 pr-20 text-left outline-none transition-colors duration-200 hover:bg-white focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           density === "focused" ? "min-h-[104px]" : "min-h-[72px]",
           muted && "text-muted-foreground",
           tone.border,
@@ -175,7 +167,7 @@ export function CourtThingCard({
             <span className="truncate font-medium text-foreground">{thing.assignee.name}</span>
           </span>
           <StatusMark thing={thing} />
-          <span
+          {due ? <span
             className={cn(
               "inline-flex items-center gap-1",
               due.urgent && "font-medium text-status-now",
@@ -183,11 +175,11 @@ export function CourtThingCard({
           >
             <KatalistIcon name="calendar" className="h-3 w-3" />
             {due.label}
-          </span>
-          <span className="inline-flex min-w-0 items-center gap-1 truncate">
+          </span> : null}
+          {thing.listName ? <span className="inline-flex min-w-0 items-center gap-1 truncate">
             <KatalistIcon name="list" className="h-3 w-3 shrink-0" />
-            <span className="truncate">{thing.listName ?? "Standalone"}</span>
-          </span>
+            <span className="truncate">{thing.listName}</span>
+          </span> : null}
         </span>
 
         {density === "focused" ? (
@@ -199,25 +191,6 @@ export function CourtThingCard({
 
       <span className="absolute right-1.5 top-2 flex items-center gap-1">
         <CardCatchButton thing={thing} />
-        <span className="hidden min-w-[44px] text-right sm:block">
-          <span
-            className={cn("block text-[10px] font-semibold", importanceTone[thing.ownerImportance])}
-          >
-            {importanceLabel[thing.ownerImportance]}
-          </span>
-          <span className="block text-[8px] text-muted-foreground">Owner</span>
-        </span>
-        <span className="hidden min-w-[44px] text-right sm:block">
-          <span
-            className={cn(
-              "block text-[10px] font-semibold",
-              laneTone[lane ?? thing.personalPace ?? "next"].text,
-            )}
-          >
-            {(lane ?? thing.personalPace ?? "next").toUpperCase()}
-          </span>
-          <span className="block text-[8px] text-muted-foreground">My Pace</span>
-        </span>
         {thing.starred ? (
           <span className="text-status-waiting" title="Starred">
             <KatalistIcon name="favourite-star" className="h-3.5 w-3.5 fill-current" />

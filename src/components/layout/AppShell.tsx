@@ -7,15 +7,18 @@ import { useSession } from "@/hooks/useSession";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 import { GhostCard } from "@/features/doorman/GhostCard";
 import { useRealtimeInvalidation } from "@/features/realtime/use-realtime";
+import { FloatingMagicBox, type MagicBoxContext } from "@/features/court/FloatingMagicBox";
 
 interface AppShellProps {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
   children: ReactNode;
+  magicBoxContext?: MagicBoxContext;
+  showMagicBox?: boolean;
 }
 
-export function AppShell({ title, subtitle, actions, children }: AppShellProps) {
+export function AppShell({ title, subtitle, actions, children, magicBoxContext, showMagicBox = true }: AppShellProps) {
   const { session, loading } = useSession();
   const navigate = useNavigate();
   useRealtimeInvalidation();
@@ -38,11 +41,12 @@ export function AppShell({ title, subtitle, actions, children }: AppShellProps) 
     <div className="flex min-h-screen w-full bg-background">
       <AppSidebar />
       <div className="flex min-h-screen flex-1 flex-col pb-16 md:pb-0 md:pl-[220px]">
-        <div className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-10 pt-4 md:px-8 md:pt-6">
+        <div className="mx-auto w-full max-w-[1440px] flex-1 px-4 pb-32 pt-4 md:px-8 md:pb-32 md:pt-6">
           <PageHeader title={title} subtitle={subtitle} actions={actions} />
           {children}
         </div>
       </div>
+      {showMagicBox ? <FloatingMagicBox context={magicBoxContext} /> : null}
       <GhostCard />
     </div>
   );

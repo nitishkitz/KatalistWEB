@@ -5,20 +5,14 @@ import { isActiveThing, partitionCourt, theirStateFor, type Thing } from "@/doma
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
-import { currentDemoActorId } from "@/features/demo/identities";
 import { accessibleDemoThings } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPreviewSession } from "@/lib/session-mode";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { excludePersonallyShreddedThings, usePersonalShred } from "@/features/things/personal-shred";
+import { useCurrentActor } from "@/features/people/use-current-actor";
 
-async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; myActorId: string | null }> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { things: [], myActorId: null };
-
-  const { data: actor } = await supabase.from("actors").select("id").eq("profile_id", auth.user.id).maybeSingle();
-  const myActorId = actor?.id ?? null;
-
+async function fetchCourt(context: "work" | "home"): Promise<Thing[]> {
   const { data: rows, error } = await supabase
     .from("things")
     .select(THING_COLUMNS)
@@ -26,8 +20,7 @@ async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; 
     .is("cancelled_at", null);
 
   if (error) throw error;
-  const things = await mapDbThingRows((rows ?? []) as DbThingRow[]);
-  return { things, myActorId };
+  return mapDbThingRows((rows ?? []) as DbThingRow[]);
 }
 
 export function useCourt() {
@@ -37,6 +30,7 @@ export function useCourt() {
   const { context } = useAppContext();
   const localVersion = useLocalVersion();
   const shred = usePersonalShred();
+  const currentActor = useCurrentActor();
 
   const query = useQuery({
     queryKey: keys.court(user?.id, context),
@@ -48,15 +42,18 @@ export function useCourt() {
   const source = useMemo(() => {
     void localVersion;
     if (preview) {
-      const me = currentDemoActorId();
-      return { things: accessibleDemoThings(context), myActorId: me, live: false as const };
+      return {
+        things: accessibleDemoThings(context),
+        myActorId: currentActor.actorId,
+        live: false as const,
+      };
     }
     return {
-      things: excludePersonallyShreddedThings(query.data?.things ?? [], shred),
-      myActorId: query.data?.myActorId ?? null,
+      things: excludePersonallyShreddedThings(query.data ?? [], shred),
+      myActorId: currentActor.actorId,
       live: true as const,
     };
-  }, [preview, query.data, context, shred, localVersion]);
+  }, [preview, query.data, context, shred, localVersion, currentActor.actorId]);
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");
   const theirs = parts.theirs;
