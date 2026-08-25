@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createClient } from "@supabase/supabase-js";
 import { normalizeIndianPhone } from "@/features/lists/server/list-invitations";
 import { listCollaborationServerEnabled } from "@/features/lists/list-flags";
-import { defaultGetUser, jsonNoStore, requireSupabaseUser } from "@/lib/supabase-user.server";
+import { HttpError, defaultGetUser, jsonNoStore, requireSupabaseUser } from "@/lib/supabase-user.server";
 import type { Database } from "@/integrations/supabase/types";
 import { createHash, randomBytes } from "node:crypto";
 
@@ -34,6 +34,7 @@ export const Route = createFileRoute("/api/team/requests")({
       if (error) throw error;
       return jsonNoStore({ status: "pending" }, 201);
     } catch (error) {
+      if (error instanceof HttpError) return jsonNoStore({ error: "unauthorized" }, error.status);
       const message = error instanceof Error ? error.message : "";
       if (/invalid phone/i.test(message)) return jsonNoStore({ error: "invalid_phone", message: "Enter a valid 10-digit Indian mobile number." }, 400);
       return jsonNoStore({ error: "retryable", message: "Request could not be sent." }, 503);

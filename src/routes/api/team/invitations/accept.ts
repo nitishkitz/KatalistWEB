@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
 import { listCollaborationServerEnabled } from "@/features/lists/list-flags";
-import { defaultGetUser, jsonNoStore, requireSupabaseUser } from "@/lib/supabase-user.server";
+import { HttpError, defaultGetUser, jsonNoStore, requireSupabaseUser } from "@/lib/supabase-user.server";
 
 export const Route = createFileRoute("/api/team/invitations/accept")({ server: { handlers: { POST: async ({ request }) => {
   if (!listCollaborationServerEnabled()) return jsonNoStore({ error: "not_found" }, 404);
@@ -14,5 +14,8 @@ export const Route = createFileRoute("/api/team/invitations/accept")({ server: {
     const { error } = await supabaseAdmin.rpc("accept_team_invitation_server", { p_token_hash: hash, p_accepting_profile_id: user.id });
     if (error) throw error;
     return jsonNoStore({ ok: true });
-  } catch { return jsonNoStore({ error: "invalid_invite", message: "This Team invite is unavailable or expired." }, 409); }
+  } catch (error) {
+    if (error instanceof HttpError) return jsonNoStore({ error: "unauthorized" }, error.status);
+    return jsonNoStore({ error: "invalid_invite", message: "This Team invite is unavailable or expired." }, 409);
+  }
 } } } });

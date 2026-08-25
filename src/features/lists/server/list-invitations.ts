@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { defaultGetUser, jsonNoStore, requireSupabaseUser } from "@/lib/supabase-user.server";
+import { HttpError, defaultGetUser, jsonNoStore, requireSupabaseUser } from "@/lib/supabase-user.server";
 import { listCollaborationServerEnabled } from "../list-flags";
 
 export function normalizeIndianPhone(value: string) {
@@ -36,6 +36,7 @@ export async function createListInvitation(request: Request, listId: string) {
     const origin = new URL(request.url).origin;
     return jsonNoStore({ shareUrl: `${origin}/list-invitations/accept?token=${encodeURIComponent(token)}` }, 201);
   } catch (error) {
+    if (error instanceof HttpError) return jsonNoStore({ error: "unauthorized" }, error.status);
     const message = error instanceof Error ? error.message : "";
     if (/unauthorized|bearer|session/i.test(message)) return jsonNoStore({ error: "unauthorized" }, 401);
     if (/invalid phone/i.test(message)) return jsonNoStore({ error: "invalid_phone", message: "Enter a valid Indian mobile number." }, 400);
@@ -55,6 +56,7 @@ export async function acceptListInvitation(request: Request) {
     if (error) throw error;
     return jsonNoStore({ listId: data });
   } catch (error) {
+    if (error instanceof HttpError) return jsonNoStore({ error: "unauthorized" }, error.status);
     const message = error instanceof Error ? error.message : "";
     if (/unauthorized|bearer|session/i.test(message)) return jsonNoStore({ error: "unauthorized" }, 401);
     return jsonNoStore({ error: "invalid_invite", message: "This invite is unavailable or expired." }, 409);

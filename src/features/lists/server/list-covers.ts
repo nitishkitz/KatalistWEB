@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { defaultGetUser, jsonNoStore, requireSupabaseUser } from "@/lib/supabase-user.server";
+import { HttpError, defaultGetUser, jsonNoStore, requireSupabaseUser } from "@/lib/supabase-user.server";
 import { listCollaborationServerEnabled } from "../list-flags";
 
 const allowed = new Map([["image/jpeg", "jpg"], ["image/png", "png"], ["image/webp", "webp"]]);
@@ -28,8 +28,9 @@ export async function uploadListCover(request: Request, listId: string) {
     const updated = await supabaseAdmin.from("lists").update({ cover_storage_path: uploadedPath }).eq("id", listId).eq("owner_profile_id", user.id);
     if (updated.error) throw updated.error;
     return jsonNoStore({ ok: true });
-  } catch {
+  } catch (error) {
     if (uploadedPath) { const { supabaseAdmin } = await import("@/integrations/supabase/client.server"); await supabaseAdmin.storage.from("list-covers").remove([uploadedPath]).catch(() => undefined); }
+    if (error instanceof HttpError) return jsonNoStore({ error: "unauthorized" }, error.status);
     return jsonNoStore({ error: "retryable", message: "Cover image could not be uploaded." }, 503);
   }
 }
