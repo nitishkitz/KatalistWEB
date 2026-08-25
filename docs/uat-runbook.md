@@ -93,10 +93,10 @@ The attachment saga SQL does **not** create the Storage bucket. Before applying
    migrations below succeed:
    - `VITE_MAGIC_BOX_ATTACHMENTS_ENABLED=false`
    - `MAGIC_BOX_ATTACHMENTS_ENABLED=false`
-3. Apply these two unapplied files to UAT only, never production, never from
-   a Netlify build:
-   - `supabase/migrations/20260824124500_magic_box_ai_rate_limits.sql`
+3. Apply these two unapplied files to UAT only, in timestamp order, never
+   production, never from a Netlify build:
    - `supabase/migrations/20260824122123_magic_box_attachment_saga.sql`
+   - `supabase/migrations/20260824124500_magic_box_ai_rate_limits.sql`
 4. Flip the two attachment flags to `true` in the Netlify dashboard only after
    both migrations succeed. Leave Coey (`MAGIC_BOX_AI_COEY_ENABLED`) off unless
    product asks otherwise.
