@@ -1,6 +1,9 @@
 -- Magic Box v2 attachment saga.
 -- Bytes move only through the Storage API. These functions read storage.objects
--- metadata and write public.thing_attachments; they never mutate storage.objects.
+-- metadata and write public.thing_attachments; they never mutate storage.objects
+-- or storage.buckets.
+-- Provision the private `thing-attachments` bucket (public=false, 20 MiB limit)
+-- through the Supabase Storage API or Dashboard before applying this file.
 
 CREATE TABLE IF NOT EXISTS public.thing_attachments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -31,10 +34,6 @@ DROP POLICY IF EXISTS "thing attachments visible to thing viewers" ON public.thi
 CREATE POLICY "thing attachments visible to thing viewers"
   ON public.thing_attachments FOR SELECT TO authenticated
   USING (katalist_priv.can_view_thing(thing_id) AND status = 'ready');
-
-INSERT INTO storage.buckets (id, name, public, file_size_limit)
-VALUES ('thing-attachments', 'thing-attachments', false, 20971520)
-ON CONFLICT (id) DO UPDATE SET public = false, file_size_limit = 20971520;
 
 DROP POLICY IF EXISTS "thing-attachments staging insert" ON storage.objects;
 CREATE POLICY "thing-attachments staging insert"

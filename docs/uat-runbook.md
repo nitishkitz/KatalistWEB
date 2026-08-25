@@ -80,6 +80,31 @@ node scripts/firebase-push-smoke.mjs
 
 Required names if the script exits before requests: `UAT_BASE_URL`, `UAT_ACCESS_TOKEN`, `UAT_FCM_TOKEN`, `PUSH_DRAIN_URL`, `PUSH_DRAIN_SECRET`, plus the UAT Supabase service-role connection used to inspect delivery rows.
 
+## Magic Box attachments (UAT)
+
+The attachment saga SQL does **not** create the Storage bucket. Before applying
+`supabase/migrations/20260824122123_magic_box_attachment_saga.sql` to UAT:
+
+1. In the **UAT** Supabase project only, create or update the private bucket
+   `thing-attachments` through the **Storage API or Dashboard** (not SQL):
+   - **public:** `false`
+   - **file size limit:** 20 MiB (`20971520` bytes)
+2. Confirm both attachment flags are still `false` in Netlify until the
+   migrations below succeed:
+   - `VITE_MAGIC_BOX_ATTACHMENTS_ENABLED=false`
+   - `MAGIC_BOX_ATTACHMENTS_ENABLED=false`
+3. Apply these two unapplied files to UAT only, never production, never from
+   a Netlify build:
+   - `supabase/migrations/20260824124500_magic_box_ai_rate_limits.sql`
+   - `supabase/migrations/20260824122123_magic_box_attachment_saga.sql`
+4. Flip the two attachment flags to `true` in the Netlify dashboard only after
+   both migrations succeed. Leave Coey (`MAGIC_BOX_AI_COEY_ENABLED`) off unless
+   product asks otherwise.
+
+Do not `INSERT`/`UPDATE`/`DELETE` `storage.buckets` or `storage.objects` from
+SQL. Bytes move only through the Storage API; SQL may read `storage.objects`
+metadata and may attach RLS policies on `storage.objects`.
+
 ## Safety
 
 - Service-role keys, the auth pepper, derived passwords, access tokens, refresh tokens, Firebase Admin private keys, and `PUSH_DRAIN_SECRET` must never enter logs or client bundles.

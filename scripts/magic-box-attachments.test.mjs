@@ -197,8 +197,15 @@ test("attachment saga: sixth attachment is 409", async () => {
   assert.equal(res.status, 409);
 });
 
+function readMigration(name) {
+  return readFileSync(new URL(`../supabase/migrations/${name}`, import.meta.url), "utf8");
+}
+
+const STORAGE_DML =
+  /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+storage\.(?:buckets|objects)\b/i;
+
 test("SQL saga never writes storage.objects", () => {
-  const sql = readFileSync(new URL("../supabase/migrations/20260824122123_magic_box_attachment_saga.sql", import.meta.url), "utf8");
+  const sql = readMigration("20260824122123_magic_box_attachment_saga.sql");
   assert.equal(/INSERT\s+INTO\s+storage\.objects/i.test(sql), false);
   assert.equal(/UPDATE\s+storage\.objects/i.test(sql), false);
   assert.equal(/DELETE\s+FROM\s+storage\.objects/i.test(sql), false);
@@ -210,6 +217,22 @@ test("SQL saga never writes storage.objects", () => {
   assert.match(sql, /p_thing_id uuid/);
   assert.match(sql, /p_client_id uuid/);
   assert.match(sql, /p_staging_key text/);
+});
+
+test("UAT Magic Box migrations never write storage.buckets or storage.objects", () => {
+  const saga = readMigration("20260824122123_magic_box_attachment_saga.sql");
+  const budgets = readMigration("20260824124500_magic_box_ai_rate_limits.sql");
+  assert.equal(STORAGE_DML.test(saga), false);
+  assert.equal(STORAGE_DML.test(budgets), false);
+  assert.equal(/INSERT\s+INTO\s+storage\.buckets/i.test(saga), false);
+  assert.equal(/ON CONFLICT \(id\) DO UPDATE/i.test(saga), false);
+  assert.match(saga, /ON storage\.objects FOR INSERT/);
+  assert.match(saga, /ON storage\.objects FOR UPDATE/);
+  assert.match(saga, /ON storage\.objects FOR DELETE/);
+  assert.match(saga, /ON storage\.objects FOR SELECT/);
+  assert.match(saga, /FROM storage\.objects o/);
+  assert.match(saga, /bucket_id = 'thing-attachments'/);
+  assert.match(saga, /Supabase Storage API or Dashboard/);
 });
 
 test("unsafe unapplied attachment migration was replaced", () => {
@@ -305,7 +328,7 @@ test("five-file capacity is restored immediately after Remove", () => {
 });
 
 test("SQL complete verifies the final storage object before ready", () => {
-  const sql = readFileSync(new URL("../supabase/migrations/20260824122123_magic_box_attachment_saga.sql", import.meta.url), "utf8");
+  const sql = readMigration("20260824122123_magic_box_attachment_saga.sql");
   assert.match(sql, /bucket_id = 'thing-attachments'/);
   assert.match(sql, /RAISE EXCEPTION 'attachment missing'/);
   assert.equal(sql.includes("INSERT INTO storage.objects"), false);
