@@ -24,6 +24,10 @@ test("collaboration events create recipient-owned notifications with trusted pat
   assert.match(sql, /'\/lists\/'\s*\|\|\s*p_list_id::text/i);
   assert.match(sql, /new\.author_profile_id/i);
   assert.match(sql, /left\(new\.body,\s*160\)/i);
+  assert.match(sql, /create_list_invitation_server\(\s*p_requester_profile_id uuid, p_list_id uuid, p_invitee_profile_id uuid,\s*p_phone_hash bytea, p_phone_last4 text, p_token_hash bytea/i);
+  assert.match(sql, /p_phone_last4\s*!~\s*'\^\\d\{4\}\$'/i);
+  assert.match(sql, /where list_id=p_list_id and phone_hash=p_phone_hash/i);
+  assert.doesNotMatch(sql, /create_list_invitation_server\(uuid,uuid,uuid,bytea,bytea,public\.list_role/i);
   assert.doesNotMatch(sql, /grant\s+[^;]*notifications[^;]*\s+to\s+anon/i);
 });
 

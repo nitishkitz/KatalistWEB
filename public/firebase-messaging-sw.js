@@ -23,7 +23,7 @@ function trustedPath(path) {
   if (!path.startsWith("/") || path.startsWith("//") || path.indexOf("://") !== -1 || path.indexOf("\\") !== -1) {
     return "/";
   }
-  if (path === "/" || THING_PATH.test(path) || LIST_PATH.test(path)) return path;
+  if (path === "/" || path === "/team" || THING_PATH.test(path) || LIST_PATH.test(path)) return path;
   return "/";
 }
 

@@ -126,11 +126,15 @@ export function courtPeople(lanes: {
   next: readonly Thing[];
   later: readonly Thing[];
   theirs: readonly Thing[];
-}): Person[] {
+}, currentActorId?: string | null): Person[] {
   const people = [...lanes.now, ...lanes.next, ...lanes.later, ...lanes.theirs]
     .flatMap((thing) => [thing.creator, thing.owner, thing.assignedBy ?? thing.owner, thing.assignee]);
   return [...new Map(people.map((person) => [person.id, person])).values()]
-    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    .sort((a, b) => {
+      if (currentActorId && a.id === currentActorId) return -1;
+      if (currentActorId && b.id === currentActorId) return 1;
+      return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+    });
 }
 
 export function applyCourtView(

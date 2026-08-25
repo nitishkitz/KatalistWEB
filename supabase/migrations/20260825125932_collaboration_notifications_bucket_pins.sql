@@ -213,16 +213,35 @@ $$;
 
 create or replace function public.create_list_invitation_server(
   p_requester_profile_id uuid, p_list_id uuid, p_invitee_profile_id uuid,
-  p_phone_hash bytea, p_token_hash bytea, p_role public.list_role, p_expires_at timestamptz
+  p_phone_hash bytea, p_phone_last4 text, p_token_hash bytea,
+  p_role public.list_role, p_expires_at timestamptz
 ) returns uuid language plpgsql security definer
 set search_path = 'pg_catalog','public','katalist_priv' as $$
 declare v_id uuid; v_name text;
 begin
   if auth.role() <> 'service_role' then raise exception 'server only'; end if;
+  if p_phone_last4 !~ '^\d{4}$' then raise exception 'invalid phone suffix'; end if;
   select name into v_name from public.lists where id=p_list_id and owner_profile_id=p_requester_profile_id;
   if not found then raise exception 'only the List Owner can invite'; end if;
-  insert into katalist_priv.list_invitations(list_id,inviter_profile_id,invitee_profile_id,phone_hash,token_hash,role,expires_at)
-  values(p_list_id,p_requester_profile_id,p_invitee_profile_id,p_phone_hash,p_token_hash,p_role,p_expires_at) returning id into v_id;
+  with existing as (
+    select id from katalist_priv.list_invitations
+     where list_id=p_list_id and phone_hash=p_phone_hash
+       and accepted_at is null and revoked_at is null
+     order by created_at desc limit 1 for update
+  )
+  update katalist_priv.list_invitations i
+     set invitee_profile_id=p_invitee_profile_id, phone_last4=p_phone_last4,
+         token_hash=p_token_hash, role=p_role, expires_at=p_expires_at,
+         created_at=clock_timestamp()
+    from existing where i.id=existing.id
+  returning i.id into v_id;
+  if v_id is null then
+    insert into katalist_priv.list_invitations(
+      list_id,inviter_profile_id,invitee_profile_id,phone_hash,phone_last4,token_hash,role,expires_at
+    ) values(
+      p_list_id,p_requester_profile_id,p_invitee_profile_id,p_phone_hash,p_phone_last4,p_token_hash,p_role,p_expires_at
+    ) returning id into v_id;
+  end if;
   if p_invitee_profile_id is not null then
     perform katalist_priv.notify_profile(p_invitee_profile_id, 'list_invitation', 'Invitation to ' || v_name,
       'Accept to join this List', p_requester_profile_id, null, p_list_id,
@@ -296,6 +315,9 @@ begin
 end;
 $$;
 
+revoke all on function public.notify_on_list_message() from public, anon, authenticated;
+grant execute on function public.notify_on_list_message() to service_role;
+
 drop function if exists public.claim_notification_deliveries(integer, integer);
 create function public.claim_notification_deliveries(p_limit integer, p_lease_seconds integer)
 returns table (
@@ -338,10 +360,10 @@ $$;
 revoke execute on function public.claim_notification_deliveries(integer,integer) from public, anon, authenticated;
 grant execute on function public.claim_notification_deliveries(integer,integer) to service_role;
 
-revoke execute on function public.create_list_invitation_server(uuid,uuid,uuid,bytea,bytea,public.list_role,timestamptz) from public, anon, authenticated;
+revoke execute on function public.create_list_invitation_server(uuid,uuid,uuid,bytea,text,bytea,public.list_role,timestamptz) from public, anon, authenticated;
 revoke execute on function public.accept_list_invitation_server(bytea,uuid) from public, anon, authenticated;
 revoke execute on function public.accept_team_invitation_server(bytea,uuid) from public, anon, authenticated;
-grant execute on function public.create_list_invitation_server(uuid,uuid,uuid,bytea,bytea,public.list_role,timestamptz) to service_role;
+grant execute on function public.create_list_invitation_server(uuid,uuid,uuid,bytea,text,bytea,public.list_role,timestamptz) to service_role;
 grant execute on function public.accept_list_invitation_server(bytea,uuid) to service_role;
 grant execute on function public.accept_team_invitation_server(bytea,uuid) to service_role;
 

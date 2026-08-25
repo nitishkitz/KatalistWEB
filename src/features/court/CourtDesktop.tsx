@@ -43,6 +43,7 @@ type CourtDesktopProps = {
   error: Error | null;
   refetch: () => unknown;
   onSelect: (thing: Thing) => void;
+  myActorId: string | null;
 };
 
 const laneContent: Record<
@@ -286,6 +287,7 @@ export function CourtDesktop({
   error,
   refetch,
   onSelect,
+  myActorId,
 }: CourtDesktopProps) {
   const [filters, setFilters] = useState<CourtFilterState>(DEFAULT_COURT_FILTERS);
   const [query, setQuery] = useState("");
@@ -300,8 +302,8 @@ export function CourtDesktop({
     [now, next, later, theirs, filters, query, sort],
   );
   const involvedPeople = useMemo(
-    () => courtPeople({ now, next, later, theirs }),
-    [now, next, later, theirs],
+    () => courtPeople({ now, next, later, theirs }, myActorId),
+    [now, next, later, theirs, myActorId],
   );
 
   const theirGroups = useMemo(

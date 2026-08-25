@@ -24,5 +24,6 @@ test("service worker uses pinned Firebase compat 12.18.0 and trusted paths", () 
   assert.match(source, /notificationclick/);
   assert.match(source, /clients\.openWindow/);
   assert.match(source, /trustedPath/);
+  assert.match(source, /path === "\/team"/);
   assert.match(source, /return "\/"/);
 });

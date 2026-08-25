@@ -156,7 +156,7 @@ function TheirCard({
 }
 
 function CourtPage() {
-  const { now, next, later, theirs, theirGroups, isLoading, all, error, refetch } = useCourt();
+  const { now, next, later, theirs, theirGroups, isLoading, all, error, refetch, myActorId } = useCourt();
   const navigate = useNavigate({ from: "/" });
   const { thing } = Route.useSearch();
   const [selectedId, setSelectedId] = useState<string | null>(thing ?? null);
@@ -225,6 +225,7 @@ function CourtPage() {
         isLoading={isLoading}
         error={error}
         refetch={refetch}
+        myActorId={myActorId}
         onSelect={(thing) => selectThing(thing.id)}
       />
 
