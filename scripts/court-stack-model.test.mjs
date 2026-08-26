@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  focusCourtWorkspaceOnEntry,
   getStackPreviewIndices,
   lockGestureAxis,
   reconcileStackIndex,
@@ -42,6 +43,19 @@ test("lane presentation exposes the next two queued Things in wrapped order", ()
   assert.deepEqual(getStackPreviewIndices(4, 5, 2), [0, 1]);
   assert.deepEqual(getStackPreviewIndices(0, 2, 2), [1]);
   assert.deepEqual(getStackPreviewIndices(0, 1, 2), []);
+});
+
+test("focus workspace entry moves keyboard focus without scrolling the page", () => {
+  let receivedOptions;
+  const moved = focusCourtWorkspaceOnEntry({
+    focus(options) {
+      receivedOptions = options;
+    },
+  });
+
+  assert.equal(moved, true);
+  assert.deepEqual(receivedOptions, { preventScroll: true });
+  assert.equal(focusCourtWorkspaceOnEntry(null), false);
 });
 
 test("actions honor capability, direction, threshold, and LATER resistance", () => {

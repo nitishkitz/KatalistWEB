@@ -1,7 +1,10 @@
+import { useEffect, useRef } from "react";
+
 import type { Thing } from "@/domain/thing";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { cn } from "@/lib/utils";
 import { courtLaneContent } from "./CourtLaneStack";
+import { focusCourtWorkspaceOnEntry } from "./court-stack-model";
 import type { CourtLaneId } from "./court-view-model";
 import { KatalistIcon } from "./KatalistIcon";
 import { ThingNavigator } from "./ThingNavigator";
@@ -21,9 +24,15 @@ export type CourtFocusViewProps = {
 const laneOrder: CourtLaneId[] = ["now", "next", "later"];
 
 export function CourtFocusView({ selection, lanes, onSelectThing, onClose }: CourtFocusViewProps) {
+  const workspaceRef = useRef<HTMLElement | null>(null);
   const selectedThing =
     lanes[selection.lane].find((thing) => thing.id === selection.thingId) ?? null;
   const rails = laneOrder.filter((lane) => lane !== selection.lane);
+
+  useEffect(() => {
+    focusCourtWorkspaceOnEntry(workspaceRef.current);
+  }, []);
+
   const closeButton = (
     <button
       type="button"
@@ -38,7 +47,9 @@ export function CourtFocusView({ selection, lanes, onSelectThing, onClose }: Cou
 
   return (
     <section
-      className="grid min-h-[620px] min-w-0 grid-cols-[minmax(210px,252px)_minmax(0,1fr)_repeat(2,minmax(54px,62px))] items-stretch gap-3 overflow-hidden rounded-[24px] bg-[radial-gradient(circle_at_45%_0%,rgba(109,94,252,0.08),transparent_42%)]"
+      ref={workspaceRef}
+      tabIndex={-1}
+      className="grid min-h-[620px] min-w-0 grid-cols-[minmax(210px,252px)_minmax(0,1fr)_repeat(2,minmax(54px,62px))] items-stretch gap-3 overflow-hidden rounded-[24px] bg-[radial-gradient(circle_at_45%_0%,rgba(109,94,252,0.08),transparent_42%)] outline-none focus-visible:ring-2 focus-visible:ring-ring"
       aria-label="Focused Court Thing"
     >
       <ThingNavigator

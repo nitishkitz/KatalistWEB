@@ -50,6 +50,12 @@ export function getStackPreviewIndices(activeIndex: number, count: number, limit
   return Array.from({ length: previewCount }, (_, offset) => (activeIndex + offset + 1) % count);
 }
 
+export function focusCourtWorkspaceOnEntry(element: Pick<HTMLElement, "focus"> | null): boolean {
+  if (!element) return false;
+  element.focus({ preventScroll: true });
+  return true;
+}
+
 export function resolveHorizontalAction({
   deltaX,
   threshold,
