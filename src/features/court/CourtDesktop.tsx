@@ -315,7 +315,7 @@ export function CourtDesktop({
   }
 
   return (
-    <div className="hidden lg:block">
+    <div className="hidden w-full lg:mx-auto lg:block lg:max-w-[1260px]">
       {isLoading ? (
         <p className="mb-3 text-[11px] text-muted-foreground" aria-live="polite">
           Loading your Court…

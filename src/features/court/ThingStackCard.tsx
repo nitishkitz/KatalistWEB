@@ -155,7 +155,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
 
         <div
           className={cn(
-            "grid min-h-[76px] items-stretch gap-2 border-t border-slate-100 bg-slate-50/55 p-2.5",
+            "grid min-h-[76px] items-stretch gap-0 border-t border-slate-100 bg-slate-50/55",
             capabilities.canCatch
               ? "grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]"
               : capabilities.canSetPace && lane !== "later"
@@ -170,7 +170,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               event.stopPropagation();
               if (!suppressClickRef.current) onOpen(thing, event.currentTarget);
             }}
-            className="group inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-transparent text-[10px] font-medium text-slate-500 outline-none transition-all hover:border-slate-200 hover:bg-white hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+            className="group inline-flex min-w-0 flex-col items-center justify-center gap-1 text-[10px] font-medium text-slate-500 outline-none transition-colors hover:bg-white/80 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-60"
           >
             <KatalistIcon
               name="details"
@@ -183,7 +183,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               type="button"
               disabled={disabled}
               onClick={(event) => run(event, "catch")}
-              className="inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[10px] font-semibold text-primary-foreground shadow-[0_12px_25px_-14px_rgba(109,94,252,0.9)] outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className="m-2 inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[10px] font-semibold text-primary-foreground shadow-[0_12px_25px_-14px_rgba(109,94,252,0.9)] outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               <KatalistIcon name="catch" className="h-4 w-4" />
               Caught It
@@ -195,7 +195,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   type="button"
                   disabled={disabled}
                   onClick={(event) => run(event, "later")}
-                  className="inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-violet-100 bg-violet-50/70 px-2 text-[10px] font-semibold text-violet-700 outline-none transition-transform hover:-translate-y-0.5 hover:bg-violet-100/70 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-w-0 flex-col items-center justify-center gap-1 border-l border-slate-100 px-2 text-[10px] font-semibold text-violet-700 outline-none transition-colors hover:bg-violet-50/70 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <KatalistIcon name="later-lob" className="h-4 w-4" />
                   Later
@@ -206,7 +206,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   type="button"
                   disabled={disabled}
                   onClick={(event) => run(event, "sort")}
-                  className="inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl border border-emerald-100 bg-emerald-50/70 px-2 text-[10px] font-semibold text-emerald-700 outline-none transition-transform hover:-translate-y-0.5 hover:bg-emerald-100/70 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-w-0 flex-col items-center justify-center gap-1 border-l border-slate-100 px-2 text-[10px] font-semibold text-emerald-700 outline-none transition-colors hover:bg-emerald-50/70 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <KatalistIcon name="sorted" className="h-4 w-4" />
                   Sorted

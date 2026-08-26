@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {
+import * as stackModel from "@/features/court/court-stack-model";
+
+const {
   focusCourtWorkspaceOnEntry,
   getStackPreviewIndices,
   lockGestureAxis,
@@ -9,7 +11,7 @@ import {
   resolveHorizontalAction,
   shouldCaptureStackPointer,
   stepStackIndex,
-} from "@/features/court/court-stack-model";
+} = stackModel;
 
 const items = (...ids) => ids.map((id) => ({ id }));
 
@@ -81,4 +83,13 @@ test("actions honor capability, direction, threshold, and LATER resistance", () 
 test("permitted horizontal drags ease into a soft swipe surface", () => {
   assert.equal(resistedDragOffset(240, true, true), 144);
   assert.equal(resistedDragOffset(-240, true, true), -144);
+});
+
+test("vertical wheel intent belongs to the active stack before its navigation threshold", () => {
+  assert.equal(typeof stackModel.shouldCaptureVerticalWheel, "function");
+  if (typeof stackModel.shouldCaptureVerticalWheel !== "function") return;
+  const { shouldCaptureVerticalWheel } = stackModel;
+  assert.equal(shouldCaptureVerticalWheel(0, 3, false), true);
+  assert.equal(shouldCaptureVerticalWheel(12, 4, false), false);
+  assert.equal(shouldCaptureVerticalWheel(0, -18, true), false);
 });

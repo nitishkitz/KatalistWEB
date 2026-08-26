@@ -98,7 +98,7 @@ function LanePreviewRow({
     <button
       type="button"
       onClick={(event) => onOpen(thing, event.currentTarget)}
-      className="group flex min-h-[68px] w-full items-center gap-3 border-t border-slate-100 px-4 py-2.5 text-left outline-none first:border-t-0 hover:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className="group mb-2 flex min-h-[64px] w-full items-center gap-3 rounded-2xl border border-white/90 bg-white/74 px-4 py-2.5 text-left shadow-[0_12px_28px_-24px_rgba(15,23,42,0.42)] outline-none last:mb-0 hover:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       aria-label={`Open ${thing.title}`}
     >
       <PersonAvatar
@@ -383,6 +383,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               ) : null}
 
               <div
+                ref={gesture.gestureRef}
                 {...gesture.gestureProps}
                 className={cn(
                   "relative z-20 touch-pan-y select-none transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none",
@@ -409,7 +410,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             </div>
 
             {previewThings.length ? (
-              <div className="relative z-30 mt-3 overflow-hidden rounded-2xl border border-white/90 bg-white/75 shadow-[0_14px_35px_-28px_rgba(15,23,42,0.45)] backdrop-blur-sm">
+              <div className="relative z-30 mt-3 px-1.5">
                 {previewThings.map((thing) => (
                   <LanePreviewRow key={thing.id} thing={thing} onOpen={onOpen} />
                 ))}

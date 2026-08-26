@@ -5,6 +5,7 @@ import {
   resolveHorizontalAction,
   resistedDragOffset,
   shouldCaptureStackPointer,
+  shouldCaptureVerticalWheel,
   type GestureAxis,
 } from "./court-stack-model";
 
@@ -30,14 +31,16 @@ export function useStackGesture(options: StackGestureOptions): {
   offset: Offset;
   dragging: boolean;
   suppressClickRef: React.MutableRefObject<boolean>;
+  gestureRef: React.RefCallback<HTMLDivElement>;
   gestureProps: Pick<
     React.HTMLAttributes<HTMLElement>,
-    "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel" | "onWheel"
+    "onPointerDown" | "onPointerMove" | "onPointerUp" | "onPointerCancel"
   >;
 } {
   const [offset, setOffset] = React.useState<Offset>({ x: 0, y: 0 });
   const [dragging, setDragging] = React.useState(false);
   const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
+  const [gestureElement, setGestureElement] = React.useState<HTMLDivElement | null>(null);
   const pointerStartRef = React.useRef<Offset | null>(null);
   const pointerIdRef = React.useRef<number | null>(null);
   const axisRef = React.useRef<GestureAxis>(null);
@@ -211,13 +214,16 @@ export function useStackGesture(options: StackGestureOptions): {
     [resetGesture],
   );
 
-  const onWheel = React.useCallback(
-    (event: React.WheelEvent<HTMLElement>) => {
-      if (options.interactionDisabled || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) {
-        return;
-      }
+  const handleWheel = React.useCallback(
+    (deltaX: number, deltaY: number, preventDefault: () => void) => {
+      if (!shouldCaptureVerticalWheel(deltaX, deltaY, Boolean(options.interactionDisabled))) return;
 
-      wheelDeltaRef.current += event.deltaY;
+      // The lane owns an intentional vertical wheel gesture immediately. Waiting
+      // until the navigation threshold lets the browser scroll the full Court
+      // underneath the active stack before it can advance.
+      preventDefault();
+
+      wheelDeltaRef.current += deltaY;
       if (Math.abs(wheelDeltaRef.current) < WHEEL_THRESHOLD) return;
 
       const now = Date.now();
@@ -226,7 +232,6 @@ export function useStackGesture(options: StackGestureOptions): {
         return;
       }
 
-      event.preventDefault();
       options.onStep(wheelDeltaRef.current < 0 ? 1 : -1);
       lastWheelTimeRef.current = now;
       wheelDeltaRef.current = 0;
@@ -236,10 +241,22 @@ export function useStackGesture(options: StackGestureOptions): {
     [options.interactionDisabled, options.onStep, scheduleSuppressClickClear],
   );
 
+  React.useEffect(() => {
+    if (!gestureElement) return;
+    const onNativeWheel = (event: WheelEvent) =>
+      handleWheel(event.deltaX, event.deltaY, () => event.preventDefault());
+    gestureElement.addEventListener("wheel", onNativeWheel, { passive: false });
+    return () => gestureElement.removeEventListener("wheel", onNativeWheel);
+  }, [gestureElement, handleWheel]);
+
+  const gestureRef = React.useCallback((node: HTMLDivElement | null) => {
+    setGestureElement(node);
+  }, []);
+
   const gestureProps = React.useMemo(
-    () => ({ onPointerDown, onPointerMove, onPointerUp, onPointerCancel, onWheel }),
-    [onPointerCancel, onPointerDown, onPointerMove, onPointerUp, onWheel],
+    () => ({ onPointerDown, onPointerMove, onPointerUp, onPointerCancel }),
+    [onPointerCancel, onPointerDown, onPointerMove, onPointerUp],
   );
 
-  return { offset, dragging, suppressClickRef, gestureProps };
+  return { offset, dragging, suppressClickRef, gestureRef, gestureProps };
 }

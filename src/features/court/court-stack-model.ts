@@ -44,6 +44,14 @@ export function shouldCaptureStackPointer(axis: GestureAxis): boolean {
   return axis !== null;
 }
 
+export function shouldCaptureVerticalWheel(
+  deltaX: number,
+  deltaY: number,
+  interactionDisabled: boolean,
+): boolean {
+  return !interactionDisabled && Math.abs(deltaY) > Math.abs(deltaX) && deltaY !== 0;
+}
+
 export function getStackPreviewIndices(activeIndex: number, count: number, limit = 2): number[] {
   if (count <= 1 || limit <= 0) return [];
   const previewCount = Math.min(limit, count - 1);
