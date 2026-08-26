@@ -1,8 +1,11 @@
 # Court Card Stacks and In-Place Focus Design
 
-**Status:** Approved product design; ready for implementation planning after specification review  
-**Date:** 2026-08-26  
-**Target implementation baseline:** `dev` at `9ff8ec4`  
+**Status:** Approved product design; ready for implementation planning after specification review
+
+**Date:** 2026-08-26
+
+**Target implementation baseline:** `dev` at `9ff8ec4`
+
 **Primary viewport:** Existing desktop Court at the `lg` breakpoint and above
 
 ## Objective
