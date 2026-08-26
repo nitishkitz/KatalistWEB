@@ -22,6 +22,14 @@ const laneStack = readFileSync(
   new URL("../src/features/court/CourtLaneStack.tsx", import.meta.url),
   "utf8",
 );
+const thingNavigator = readFileSync(
+  new URL("../src/features/court/ThingNavigator.tsx", import.meta.url),
+  "utf8",
+);
+const focusView = readFileSync(
+  new URL("../src/features/court/CourtFocusView.tsx", import.meta.url),
+  "utf8",
+);
 const packageJson = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 
 test("Thing detail sheet delegates to one shared content implementation", () => {
@@ -75,4 +83,28 @@ test("Court stack actions are capability-gated and route to canonical RPCs", () 
 test("Court stacks never use Doorman snooze and LATER cannot move farther left", () => {
   assert.doesNotMatch(`${stackCard}\n${laneStack}`, /snooze_breakthrough|snoozed_until/);
   assert.match(laneStack, /canMoveLater: capabilities\.canSetPace && lane !== "later"/);
+});
+
+test("Court focus navigator selects stable Thing identities with accessible buttons", () => {
+  assert.match(thingNavigator, /key=\{thing\.id\}/);
+  assert.match(thingNavigator, /selectedThingId === thing\.id/);
+  assert.match(thingNavigator, /<button[\s\S]*aria-current=\{selected\}/);
+  assert.match(thingNavigator, /onSelect\(thing\.id\)/);
+});
+
+test("Court focus is inline detail with two contextual non-selected rails", () => {
+  assert.match(focusView, /<ThingDetailContent/);
+  assert.doesNotMatch(focusView, /ThingDetailSheet/);
+  assert.match(focusView, /laneOrder\.filter\(\(lane\) => lane !== selection\.lane\)/);
+  assert.match(focusView, /rails\.map\(\(lane\)/);
+  assert.match(focusView, /courtLaneContent\[lane\]\.label/);
+  assert.match(focusView, /lanes\[lane\]\.length/);
+});
+
+test("Court focus has a real close control and identity-keyed restrained detail transition", () => {
+  assert.match(focusView, /<button[\s\S]*onClick=\{onClose\}/);
+  assert.match(focusView, /aria-label="Back to Court stacks"/);
+  assert.match(focusView, /key=\{selection\.thingId\}/);
+  assert.match(focusView, /duration-\[220ms\]/);
+  assert.match(focusView, /motion-reduce:transition-none/);
 });
