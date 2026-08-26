@@ -153,7 +153,8 @@ function TheirCard({
 }
 
 function CourtPage() {
-  const { now, next, later, theirs, theirGroups, isLoading, all, error, refetch } = useCourt();
+  const { now, next, later, theirs, theirGroups, isLoading, all, error, refetch, myActorId } =
+    useCourt();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [query, setQuery] = useState("");
@@ -214,6 +215,7 @@ function CourtPage() {
         isLoading={isLoading}
         error={error}
         refetch={refetch}
+        myActorId={myActorId}
         onSelect={(thing) => setSelectedId(thing.id)}
       />
 

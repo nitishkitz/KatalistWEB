@@ -256,7 +256,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   aria-hidden="true"
                   className="pointer-events-none absolute inset-x-3 top-3 min-h-[190px] rounded-xl border border-border/70 bg-white shadow-sm"
                   style={{
-                    transform: `translateY(${4 + depth * 2}px) scale(${1 - depth * 0.008})`,
+                    transform: `translateY(${2 + depth * 2}px) scale(${1 - depth * 0.008})`,
                   }}
                 />
               );
@@ -265,7 +265,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             {animation ? (
               <div
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-x-3 top-3 z-10 transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:transition-none"
+                className="pointer-events-none absolute inset-x-3 top-3 z-10 transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none"
                 style={
                   animation.phase === "moving"
                     ? {
@@ -286,7 +286,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             <div
               {...gesture.gestureProps}
               className={cn(
-                "relative z-20 touch-pan-y select-none transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:transform-none motion-reduce:transition-none",
+                "relative z-20 touch-pan-y select-none transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none",
                 gesture.dragging && "transition-none",
               )}
               style={incomingStyle(animation, gesture.offset)}
