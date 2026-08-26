@@ -3,6 +3,26 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { normalizePhone, validateRequiredProfile, type RequiredProfile } from "@/lib/auth/profile-validation";
 import type { UatVerifyRequest, UatVerifyResponse } from "@/lib/auth/uat-contract";
 
+type ServerEnv = Record<string, string | undefined>;
+type PublicSupabaseEnv = Pick<ServerEnv, "SUPABASE_URL" | "SUPABASE_PUBLISHABLE_KEY">;
+
+const bundledPublicSupabaseEnv: PublicSupabaseEnv = {
+  SUPABASE_URL: import.meta.env?.VITE_SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY: import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY,
+};
+
+export function resolveUatServerEnv(
+  runtimeEnv: ServerEnv,
+  bundledEnv: PublicSupabaseEnv = bundledPublicSupabaseEnv,
+): ServerEnv {
+  return {
+    ...runtimeEnv,
+    SUPABASE_URL: runtimeEnv.SUPABASE_URL || bundledEnv.SUPABASE_URL,
+    SUPABASE_PUBLISHABLE_KEY:
+      runtimeEnv.SUPABASE_PUBLISHABLE_KEY || bundledEnv.SUPABASE_PUBLISHABLE_KEY,
+  };
+}
+
 const MAX_JSON_BYTES = 4096;
 const REQUEST_PHONE_LIMIT = 8;
 const VERIFY_PHONE_LIMIT = 10;
@@ -289,7 +309,7 @@ export function createUatRequestHandler(options?: { env?: UatAuthEnv; deps?: Uat
   return async (request: Request) => {
     const requestId = request.headers.get("x-request-id")?.trim() || randomUUID();
     try {
-      const env = options?.env ?? process.env;
+      const env = options?.env ?? resolveUatServerEnv(process.env);
       if (env.KATALIST_ENV !== "uat") return jsonResponse({ error: "not_found" }, 404);
       const body = await readJsonObject(request);
       const deps = options?.deps ?? (await createDefaultUatDeps());
@@ -309,7 +329,7 @@ export function createUatVerifyHandler(options?: { env?: UatAuthEnv; deps?: UatA
   return async (request: Request) => {
     const requestId = request.headers.get("x-request-id")?.trim() || randomUUID();
     try {
-      const env = options?.env ?? process.env;
+      const env = options?.env ?? resolveUatServerEnv(process.env);
       if (env.KATALIST_ENV !== "uat") return jsonResponse({ error: "not_found" }, 404);
       const body = await readJsonObject(request);
       const profileRaw = body.profile;
