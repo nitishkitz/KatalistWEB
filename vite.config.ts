@@ -146,7 +146,7 @@ export default defineConfig(({ command }) => ({
     ...(command === "build"
       ? [
           nitro({
-            preset: process.env.NITRO_PRESET || "vercel",
+            preset: process.env.NITRO_PRESET || (process.env.NETLIFY ? "netlify" : "vercel"),
             // Auto-registers server/middleware/* (the PWA install page +
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.

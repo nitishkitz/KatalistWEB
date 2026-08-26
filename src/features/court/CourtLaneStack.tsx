@@ -10,13 +10,15 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
+import { useAvatarUrl } from "@/features/people/directory";
 import { rpcCatchThing, rpcSetPersonalPace, rpcSortThing } from "@/features/things/rpc";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
-import { reconcileStackIndex, stepStackIndex } from "./court-stack-model";
-import type { CourtLaneId } from "./court-view-model";
+import { getStackPreviewIndices, reconcileStackIndex, stepStackIndex } from "./court-stack-model";
+import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
@@ -67,6 +69,64 @@ type NavigationAnimation = {
   direction: 1 | -1;
   phase: "prepare" | "moving";
 };
+
+const lanePanelTone: Record<CourtLaneId, string> = {
+  now: "border-status-now/15 bg-[linear-gradient(180deg,rgba(254,242,242,0.82)_0%,rgba(255,255,255,0.96)_42%)]",
+  next: "border-status-next/15 bg-[linear-gradient(180deg,rgba(239,246,255,0.9)_0%,rgba(255,255,255,0.96)_42%)]",
+  later:
+    "border-status-later/15 bg-[linear-gradient(180deg,rgba(245,243,255,0.92)_0%,rgba(255,255,255,0.96)_42%)]",
+};
+
+const previewWorkLabel: Record<Thing["workStatus"], string> = {
+  not_started: "Not Started",
+  under_progress: "Under Progress",
+  sorted: "Sorted",
+  cancelled: "Cancelled",
+};
+
+function LanePreviewRow({
+  thing,
+  onOpen,
+}: {
+  thing: Thing;
+  onOpen: (thing: Thing, origin: HTMLElement) => void;
+}) {
+  const due = formatCourtDue(thing);
+  const avatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
+
+  return (
+    <button
+      type="button"
+      onClick={(event) => onOpen(thing, event.currentTarget)}
+      className="group flex min-h-[68px] w-full items-center gap-3 border-t border-slate-100 px-4 py-2.5 text-left outline-none first:border-t-0 hover:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      aria-label={`Open ${thing.title}`}
+    >
+      <PersonAvatar
+        name={thing.assignee.name}
+        initials={thing.assignee.initials}
+        src={avatar}
+        size={30}
+        className="shadow-sm ring-2 ring-white"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[12px] font-semibold text-slate-800 transition-colors group-hover:text-primary">
+          {thing.title}
+        </span>
+        <span className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
+          <span>{previewWorkLabel[thing.workStatus]}</span>
+          <span aria-hidden="true">·</span>
+          <span className={cn("truncate", due.urgent && "font-medium text-status-now")}>
+            {due.label}
+          </span>
+        </span>
+      </span>
+      <KatalistIcon
+        name="chevron-right"
+        className="h-4 w-4 shrink-0 text-slate-300 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
+      />
+    </button>
+  );
+}
 
 function incomingStyle(
   animation: NavigationAnimation | null,
@@ -208,25 +268,33 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     };
 
     const depthCount = Math.min(3, Math.max(0, things.length - 1));
+    const previewThings = getStackPreviewIndices(renderIndex, things.length, 2).map(
+      (index) => things[index],
+    );
 
     return (
       <section
-        className="flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-white"
+        className={cn(
+          "flex min-w-0 flex-col overflow-hidden rounded-[24px] border shadow-[0_24px_60px_-48px_rgba(15,23,42,0.35)]",
+          lanePanelTone[lane],
+        )}
         aria-labelledby={`court-${lane}-title`}
       >
         <div
           className={cn(
-            "flex min-h-[54px] items-center gap-2 border-b border-border/70 px-4",
+            "flex min-h-[74px] items-center gap-2.5 border-b border-white/75 px-5",
             content.headerTone,
           )}
         >
-          <KatalistIcon name={content.icon} className={cn("h-4 w-4", content.tone)} />
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 shadow-sm ring-1 ring-slate-900/5">
+            <KatalistIcon name={content.icon} className={cn("h-[18px] w-[18px]", content.tone)} />
+          </span>
           <h2
             ref={headingRef}
             id={`court-${lane}-title`}
             tabIndex={-1}
             className={cn(
-              "text-[12px] font-semibold tracking-[0.08em] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "text-[14px] font-bold tracking-[0.06em] outline-none focus-visible:ring-2 focus-visible:ring-ring",
               content.tone,
             )}
           >
@@ -234,86 +302,101 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           </h2>
           <span
             className={cn(
-              "rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold",
+              "rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold shadow-sm",
               content.tone,
             )}
           >
             {things.length}
           </span>
-          <span className="truncate text-[11px] text-muted-foreground">{content.descriptor}</span>
+          <span className="ml-auto truncate text-[11px] text-muted-foreground">
+            {content.descriptor}
+          </span>
         </div>
 
         {activeThing ? (
-          <div
-            className="relative min-h-[220px] overflow-hidden px-3 pb-5 pt-3"
-            onKeyDown={onKeyDown}
-          >
-            {Array.from({ length: depthCount }, (_, index) => {
-              const depth = depthCount - index;
-              return (
-                <div
-                  key={depth}
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-3 top-3 min-h-[190px] rounded-xl border border-border/70 bg-white shadow-sm"
-                  style={{
-                    transform: `translateY(${2 + depth * 2}px) scale(${1 - depth * 0.008})`,
-                  }}
-                />
-              );
-            })}
+          <div className="relative min-h-[486px] px-4 pb-4 pt-1" onKeyDown={onKeyDown}>
+            <div className="relative pt-4">
+              {Array.from({ length: depthCount }, (_, index) => {
+                const depth = depthCount - index;
+                return (
+                  <div
+                    key={depth}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-x-3 min-h-[286px] rounded-[20px] border border-white/90 bg-white/82 shadow-[0_10px_30px_-22px_rgba(15,23,42,0.32)] backdrop-blur-sm"
+                    style={{
+                      top: `${2 + (depthCount - depth) * 5}px`,
+                      transform: `scale(${1 - depth * 0.022})`,
+                    }}
+                  />
+                );
+              })}
 
-            {animation ? (
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-3 top-3 z-10 transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none"
-                style={
-                  animation.phase === "moving"
-                    ? {
-                        opacity: 0,
-                        transform: `translate3d(0, ${animation.direction * -28}px, 0)`,
-                      }
-                    : { opacity: 1, transform: "translate3d(0, 0, 0)" }
-                }
-              >
-                <div className="min-h-[190px] rounded-xl border border-border bg-white px-4 pt-4 shadow-sm">
-                  <span className="block line-clamp-2 text-[14px] font-semibold leading-5 text-foreground">
-                    {animation.outgoing.title}
-                  </span>
+              {animation ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-4 z-10 transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none"
+                  style={
+                    animation.phase === "moving"
+                      ? {
+                          opacity: 0,
+                          transform: `translate3d(0, ${animation.direction * -38}px, 0)`,
+                        }
+                      : { opacity: 1, transform: "translate3d(0, 0, 0)" }
+                  }
+                >
+                  <div className="min-h-[286px] rounded-[20px] border border-border bg-white px-5 pt-5 shadow-lg">
+                    <span className="block line-clamp-2 text-[18px] font-semibold leading-6 text-foreground">
+                      {animation.outgoing.title}
+                    </span>
+                  </div>
                 </div>
+              ) : null}
+
+              <div
+                {...gesture.gestureProps}
+                className={cn(
+                  "relative z-20 touch-pan-y select-none transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none",
+                  gesture.dragging && "transition-none",
+                )}
+                style={incomingStyle(animation, gesture.offset)}
+                onTransitionEnd={(event) => {
+                  if (event.target === event.currentTarget && animation?.phase === "moving") {
+                    setAnimation(null);
+                  }
+                }}
+              >
+                <ThingStackCard
+                  ref={activeButtonRef}
+                  thing={activeThing}
+                  lane={lane}
+                  myActorId={myActorId}
+                  pendingAction={pendingAction}
+                  suppressClickRef={gesture.suppressClickRef}
+                  onOpen={onOpen}
+                  onAction={(action) => void runAction(action)}
+                />
+              </div>
+            </div>
+
+            {previewThings.length ? (
+              <div className="relative z-30 mt-3 overflow-hidden rounded-2xl border border-white/90 bg-white/75 shadow-[0_14px_35px_-28px_rgba(15,23,42,0.45)] backdrop-blur-sm">
+                {previewThings.map((thing) => (
+                  <LanePreviewRow key={thing.id} thing={thing} onOpen={onOpen} />
+                ))}
               </div>
             ) : null}
 
-            <div
-              {...gesture.gestureProps}
-              className={cn(
-                "relative z-20 touch-pan-y select-none transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none",
-                gesture.dragging && "transition-none",
-              )}
-              style={incomingStyle(animation, gesture.offset)}
-              onTransitionEnd={(event) => {
-                if (event.target === event.currentTarget && animation?.phase === "moving") {
-                  setAnimation(null);
-                }
-              }}
-            >
-              <ThingStackCard
-                ref={activeButtonRef}
-                thing={activeThing}
-                lane={lane}
-                myActorId={myActorId}
-                pendingAction={pendingAction}
-                suppressClickRef={gesture.suppressClickRef}
-                onOpen={onOpen}
-                onAction={(action) => void runAction(action)}
-              />
-            </div>
-
-            <div className="absolute inset-x-0 bottom-1 z-30 text-center text-[10px] tabular-nums text-muted-foreground">
-              {renderIndex + 1} / {things.length}
+            <div className="relative z-30 mt-3 flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
+              <KatalistIcon name="chevron-down" className="h-3.5 w-3.5" />
+              <span>{things.length > 1 ? "Scroll or swipe for more" : "All clear after this"}</span>
+              <span aria-hidden="true">·</span>
+              <span className="tabular-nums">
+                {renderIndex + 1} / {things.length}
+              </span>
             </div>
           </div>
         ) : (
-          <div className="flex min-h-[220px] items-center justify-center px-3 text-center text-[11px] text-muted-foreground">
+          <div className="flex min-h-[486px] items-center justify-center px-6 text-center text-[12px] text-muted-foreground">
             No Things match this view.
           </div>
         )}

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  getStackPreviewIndices,
   lockGestureAxis,
   reconcileStackIndex,
   resistedDragOffset,
   resolveHorizontalAction,
+  shouldCaptureStackPointer,
   stepStackIndex,
 } from "@/features/court/court-stack-model";
 
@@ -27,6 +29,19 @@ test("gesture intent locks to the first dominant axis after ten pixels", () => {
   assert.equal(lockGestureAxis(null, 12, 7), "horizontal");
   assert.equal(lockGestureAxis("horizontal", 13, 40), "horizontal");
   assert.equal(lockGestureAxis(null, 8, -14), "vertical");
+});
+
+test("a tap remains a card click while an intentional drag captures the pointer", () => {
+  assert.equal(shouldCaptureStackPointer(null), false);
+  assert.equal(shouldCaptureStackPointer("horizontal"), true);
+  assert.equal(shouldCaptureStackPointer("vertical"), true);
+});
+
+test("lane presentation exposes the next two queued Things in wrapped order", () => {
+  assert.deepEqual(getStackPreviewIndices(0, 5, 2), [1, 2]);
+  assert.deepEqual(getStackPreviewIndices(4, 5, 2), [0, 1]);
+  assert.deepEqual(getStackPreviewIndices(0, 2, 2), [1]);
+  assert.deepEqual(getStackPreviewIndices(0, 1, 2), []);
 });
 
 test("actions honor capability, direction, threshold, and LATER resistance", () => {

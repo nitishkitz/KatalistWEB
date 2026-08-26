@@ -475,7 +475,7 @@ export function CourtDesktop({
           onClose={closeFocus}
         />
       ) : (
-        <div className="grid min-w-0 grid-cols-3 items-start gap-3 overflow-hidden">
+        <div className="grid min-w-0 grid-cols-3 items-start gap-4 overflow-visible">
           {(["now", "next", "later"] as const).map((lane) => (
             <CourtLaneStack
               key={lane}

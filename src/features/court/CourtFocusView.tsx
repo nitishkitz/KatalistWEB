@@ -28,7 +28,7 @@ export function CourtFocusView({ selection, lanes, onSelectThing, onClose }: Cou
     <button
       type="button"
       onClick={onClose}
-      className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-[10.5px] font-medium text-muted-foreground outline-none hover:border-primary/45 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-violet-100 bg-violet-50/70 px-3 text-[11px] font-semibold text-violet-700 outline-none transition-all hover:-translate-y-0.5 hover:bg-violet-100/70 focus-visible:ring-2 focus-visible:ring-ring"
       aria-label="Back to Court stacks"
     >
       <KatalistIcon name="chevron-right" className="h-3.5 w-3.5 rotate-180" />
@@ -38,7 +38,7 @@ export function CourtFocusView({ selection, lanes, onSelectThing, onClose }: Cou
 
   return (
     <section
-      className="grid min-w-0 grid-cols-[minmax(176px,224px)_minmax(0,1fr)_repeat(2,minmax(52px,64px))] items-stretch gap-2 overflow-hidden"
+      className="grid min-h-[620px] min-w-0 grid-cols-[minmax(210px,252px)_minmax(0,1fr)_repeat(2,minmax(54px,62px))] items-stretch gap-3 overflow-hidden rounded-[24px] bg-[radial-gradient(circle_at_45%_0%,rgba(109,94,252,0.08),transparent_42%)]"
       aria-label="Focused Court Thing"
     >
       <ThingNavigator
@@ -48,10 +48,10 @@ export function CourtFocusView({ selection, lanes, onSelectThing, onClose }: Cou
         onSelect={onSelectThing}
       />
 
-      <div className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-white">
+      <div className="min-w-0 overflow-hidden rounded-[20px] border border-violet-100/80 bg-white shadow-[0_24px_60px_-40px_rgba(76,29,149,0.42)]">
         <div
           key={selection.thingId}
-          className="h-full max-h-[calc(100vh-14rem)] min-w-0 overflow-y-auto overscroll-contain transition-[opacity,transform] duration-[220ms] ease-out motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-reduce:animate-none motion-reduce:transition-none"
+          className="h-full min-h-[620px] max-h-[calc(100vh-11rem)] min-w-0 overflow-y-auto overscroll-contain transition-[opacity,transform] duration-[220ms] ease-out motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-reduce:animate-none motion-reduce:transition-none"
         >
           {selectedThing ? (
             <ThingDetailContent initialThing={selectedThing} headerAction={closeButton} />
@@ -68,7 +68,7 @@ export function CourtFocusView({ selection, lanes, onSelectThing, onClose }: Cou
         <aside
           key={lane}
           className={cn(
-            "flex min-w-0 flex-col items-center justify-between overflow-hidden rounded-xl border border-border/70 px-2 py-3",
+            "flex min-w-0 flex-col items-center justify-between overflow-hidden rounded-[20px] border border-white/80 px-2 py-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.4)]",
             courtLaneContent[lane].headerTone,
           )}
           aria-label={`${courtLaneContent[lane].label} lane, ${lanes[lane].length} Things`}

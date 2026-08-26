@@ -65,11 +65,12 @@ test("Court stack gestures use native pointer and wheel intent handling without 
   assert.doesNotMatch(packageJson, /framer-motion|@use-gesture|react-swipeable/i);
 });
 
-test("Court lane stacks render one active Thing over a capped, hidden decorative deck", () => {
+test("Court lane stacks render one active Thing over a capped deck with queued previews", () => {
   assert.match(laneStack, /<ThingStackCard[\s\S]*thing=\{activeThing\}/);
   assert.match(laneStack, /Math\.min\(3, Math\.max\(0, things\.length - 1\)\)/);
   assert.match(laneStack, /aria-hidden="true"/);
-  assert.match(laneStack, /2 \+ depth \* 2/);
+  assert.match(laneStack, /getStackPreviewIndices\(renderIndex, things\.length, 2\)/);
+  assert.match(laneStack, /<LanePreviewRow/);
   assert.match(laneStack, /motion-reduce:!transform-none/);
   assert.match(laneStack, /\{renderIndex \+ 1\} \/ \{things\.length\}/);
 });

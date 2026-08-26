@@ -15,6 +15,7 @@ import {
   Clock3,
   Filter,
   Hash,
+  Info,
   List,
   MoreHorizontal,
   MousePointerClick,
@@ -59,6 +60,7 @@ export type KatalistIconName =
   | "time-detection"
   | "ai-intelligence"
   | "list"
+  | "details"
   | "chevron-down"
   | "chevron-right";
 
@@ -96,6 +98,7 @@ const fallbackIcons: Record<KatalistIconName, LucideIcon> = {
   "time-detection": Clock3,
   "ai-intelligence": Sparkles,
   list: List,
+  details: Info,
   "chevron-down": ChevronDown,
   "chevron-right": ChevronRight,
 };

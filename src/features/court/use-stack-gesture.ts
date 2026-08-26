@@ -4,6 +4,7 @@ import {
   lockGestureAxis,
   resolveHorizontalAction,
   resistedDragOffset,
+  shouldCaptureStackPointer,
   type GestureAxis,
 } from "./court-stack-model";
 
@@ -44,9 +45,7 @@ export function useStackGesture(options: StackGestureOptions): {
   const lastWheelTimeRef = React.useRef(0);
   const dragStartTimeRef = React.useRef(0);
   const suppressClickRef = React.useRef(false);
-  const suppressClearRef = React.useRef<
-    { id: number; kind: "frame" | "timeout" } | null
-  >(null);
+  const suppressClearRef = React.useRef<{ id: number; kind: "frame" | "timeout" } | null>(null);
 
   const resetGesture = React.useCallback(() => {
     pointerStartRef.current = null;
@@ -103,7 +102,6 @@ export function useStackGesture(options: StackGestureOptions): {
       if (options.interactionDisabled || !event.isPrimary) return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
 
-      event.currentTarget.setPointerCapture(event.pointerId);
       pointerStartRef.current = { x: event.clientX, y: event.clientY };
       pointerIdRef.current = event.pointerId;
       axisRef.current = null;
@@ -116,11 +114,7 @@ export function useStackGesture(options: StackGestureOptions): {
   const onPointerMove = React.useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
       const start = pointerStartRef.current;
-      if (
-        options.interactionDisabled ||
-        !start ||
-        pointerIdRef.current !== event.pointerId
-      ) {
+      if (options.interactionDisabled || !start || pointerIdRef.current !== event.pointerId) {
         return;
       }
 
@@ -129,6 +123,13 @@ export function useStackGesture(options: StackGestureOptions): {
       const axis = lockGestureAxis(axisRef.current, deltaX, deltaY, INTENT_THRESHOLD);
       axisRef.current = axis;
       if (!axis) return;
+
+      if (
+        shouldCaptureStackPointer(axis) &&
+        !event.currentTarget.hasPointerCapture(event.pointerId)
+      ) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
 
       setDragging(true);
       event.preventDefault();
@@ -147,7 +148,12 @@ export function useStackGesture(options: StackGestureOptions): {
 
       setOffset({ x: 0, y: Math.max(-96, Math.min(96, deltaY * 0.35)) });
     },
-    [options.canMoveLater, options.canSort, options.horizontalDisabled, options.interactionDisabled],
+    [
+      options.canMoveLater,
+      options.canSort,
+      options.horizontalDisabled,
+      options.interactionDisabled,
+    ],
   );
 
   const onPointerUp = React.useCallback(
@@ -189,11 +195,7 @@ export function useStackGesture(options: StackGestureOptions): {
 
       resetGesture();
     },
-    [
-      options,
-      resetGesture,
-      scheduleSuppressClickClear,
-    ],
+    [options, resetGesture, scheduleSuppressClickClear],
   );
 
   const onPointerCancel = React.useCallback(
