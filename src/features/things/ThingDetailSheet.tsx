@@ -13,6 +13,7 @@ export function ThingDetailSheet({ thing, open, onOpenChange }: Props) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
+        aria-label="Thing details"
         className="w-full overflow-y-auto border-l border-border bg-white p-0 shadow-none sm:max-w-[440px]"
       >
         <ThingDetailContent
