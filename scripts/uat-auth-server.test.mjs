@@ -143,3 +143,26 @@ test("request OTP validates the phone and does not create a user", async () => {
   assert.deepEqual(result, { ok: true });
   assert.equal(deps.createUserCalls.length, 0);
 });
+
+test("default broker dependencies use the resolved request environment", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    assert.match(String(input), /\/rest\/v1\/rpc\/consume_uat_auth_rate_limit$/);
+    return new Response("true", {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+
+  try {
+    assert.deepEqual(
+      await requestUatOtp(
+        { phone: "+919876543210" },
+        { env, ip: "203.0.113.8" },
+      ),
+      { ok: true },
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -247,12 +247,13 @@ export function mapUatError(error: unknown): Response {
   return jsonResponse({ error: "unavailable", message: "Sign-in is temporarily unavailable." }, 503);
 }
 
-export async function createDefaultUatDeps(): Promise<UatAuthDeps> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+export async function createDefaultUatDeps(env: UatAuthEnv = resolveUatServerEnv(process.env)): Promise<UatAuthDeps> {
+  const { createSupabaseAdminClient } = await import("@/integrations/supabase/client.server");
   const { createSupabasePasswordClient } = await import("@/integrations/supabase/auth-client.server");
+  const adminClient = createSupabaseAdminClient(env);
   return {
     async consumeRateLimit(scopeHash, limit, windowSeconds) {
-      const { data, error } = await supabaseAdmin.rpc("consume_uat_auth_rate_limit", {
+      const { data, error } = await adminClient.rpc("consume_uat_auth_rate_limit", {
         p_scope_hash: scopeHash,
         p_limit: limit,
         p_window_seconds: windowSeconds,
@@ -261,12 +262,12 @@ export async function createDefaultUatDeps(): Promise<UatAuthDeps> {
       return Boolean(data);
     },
     async findProfileByPhone(phone) {
-      const { data, error } = await supabaseAdmin.from("profiles").select("id").eq("phone_e164", phone).maybeSingle();
+      const { data, error } = await adminClient.from("profiles").select("id").eq("phone_e164", phone).maybeSingle();
       if (error) throw new UatAuthError(503, "Sign-in is temporarily unavailable.", "unavailable");
       return data;
     },
     async createUser({ phone, password, profile }) {
-      const { data, error } = await supabaseAdmin.auth.admin.createUser({
+      const { data, error } = await adminClient.auth.admin.createUser({
         email: internalUatEmail(password),
         password,
         email_confirm: true,
@@ -281,14 +282,14 @@ export async function createDefaultUatDeps(): Promise<UatAuthDeps> {
         },
       });
       if (error) throw error;
-      const { error: profileError } = await supabaseAdmin
+      const { error: profileError } = await adminClient
         .from("profiles")
         .update({ email: null })
         .eq("id", data.user.id);
       if (profileError) throw profileError;
     },
     async signIn(_phone, password) {
-      const client = createSupabasePasswordClient();
+      const client = createSupabasePasswordClient(env);
       const { data, error } = await client.auth.signInWithPassword({
         email: internalUatEmail(password),
         password,
@@ -312,7 +313,7 @@ export function createUatRequestHandler(options?: { env?: UatAuthEnv; deps?: Uat
       const env = options?.env ?? resolveUatServerEnv(process.env);
       if (env.KATALIST_ENV !== "uat") return jsonResponse({ error: "not_found" }, 404);
       const body = await readJsonObject(request);
-      const deps = options?.deps ?? (await createDefaultUatDeps());
+      const deps = options?.deps ?? (await createDefaultUatDeps(env));
       const result = await requestUatOtp(
         { phone: typeof body.phone === "string" ? body.phone : "" },
         { ip: clientIp(request), env, requestId },
@@ -341,7 +342,7 @@ export function createUatVerifyHandler(options?: { env?: UatAuthEnv; deps?: UatA
               occupation: String((profileRaw as { occupation?: unknown }).occupation ?? ""),
             }
           : undefined;
-      const deps = options?.deps ?? (await createDefaultUatDeps());
+      const deps = options?.deps ?? (await createDefaultUatDeps(env));
       const result = await verifyUatOtp(
         {
           phone: typeof body.phone === "string" ? body.phone : "",
