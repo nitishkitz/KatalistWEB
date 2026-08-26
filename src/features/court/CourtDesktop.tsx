@@ -1,16 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Thing } from "@/domain/thing";
 import { theirStateFor } from "@/domain/thing";
 import { cn } from "@/lib/utils";
+import { CourtFocusView, type CourtFocusSelection } from "./CourtFocusView";
+import { CourtLaneStack, type CourtLaneStackHandle } from "./CourtLaneStack";
 import { CourtThingCard } from "./CourtThingCard";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import {
   DEFAULT_COURT_FILTERS,
   applyCourtView,
-  cardDensityForLane,
   courtPeople,
-  toggleLaneFocus,
   toggleTheirsFocus,
   type CourtAcknowledgementFilter,
   type CourtDueFilter,
@@ -18,7 +18,6 @@ import {
   type CourtLaneId,
   type CourtQuickFilter,
   type CourtSort,
-  type CourtViewMode,
   type CourtWorkStatusFilter,
   type TheirsFocus,
 } from "./court-view-model";
@@ -42,35 +41,8 @@ type CourtDesktopProps = {
   isLoading: boolean;
   error: Error | null;
   refetch: () => unknown;
-  onSelect: (thing: Thing) => void;
   myActorId: string | null;
-};
-
-const laneContent: Record<
-  CourtLaneId,
-  { label: string; descriptor: string; icon: KatalistIconName; tone: string; headerTone: string }
-> = {
-  now: {
-    label: "NOW",
-    descriptor: "Needs you now",
-    icon: "now-smash",
-    tone: "text-status-now",
-    headerTone: "bg-status-now/5",
-  },
-  next: {
-    label: "NEXT",
-    descriptor: "On deck soon",
-    icon: "next-rally",
-    tone: "text-status-next",
-    headerTone: "bg-status-next/5",
-  },
-  later: {
-    label: "LATER",
-    descriptor: "When time opens up",
-    icon: "later-lob",
-    tone: "text-status-later",
-    headerTone: "bg-status-later/5",
-  },
+  onSelect: (thing: Thing) => void;
 };
 
 const quickFilters: Array<[CourtQuickFilter, string]> = [
@@ -166,118 +138,6 @@ function TheirSummaryCard({
   );
 }
 
-function CourtLane({
-  lane,
-  things,
-  focus,
-  showAll,
-  buttonRef,
-  onToggleFocus,
-  onViewAll,
-  onSelect,
-}: {
-  lane: CourtLaneId;
-  things: Thing[];
-  focus: CourtViewMode;
-  showAll: boolean;
-  buttonRef: (node: HTMLButtonElement | null) => void;
-  onToggleFocus: () => void;
-  onViewAll: () => void;
-  onSelect: (thing: Thing) => void;
-}) {
-  const density = cardDensityForLane(focus, lane);
-  const visible = showAll ? things : things.slice(0, 6);
-  const content = laneContent[lane];
-  return (
-    <section
-      className={cn(
-        "flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-white transition-[opacity,border-color] duration-[220ms] ease-out motion-reduce:transition-none",
-        focus === lane && "border-primary/60",
-        focus && focus !== lane && "opacity-80",
-      )}
-      aria-label={`${content.label} lane`}
-    >
-      <div
-        className={cn(
-          "flex min-h-[54px] items-center gap-2 border-b border-border/70 px-4",
-          content.headerTone,
-        )}
-      >
-        <button
-          ref={buttonRef}
-          type="button"
-          aria-pressed={focus === lane}
-          onClick={onToggleFocus}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <KatalistIcon name={content.icon} className={cn("h-4 w-4 shrink-0", content.tone)} />
-          <span className={cn("text-[12px] font-semibold tracking-[0.08em]", content.tone)}>
-            {content.label}
-          </span>
-          <span
-            className={cn(
-              "rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] font-semibold",
-              content.tone,
-            )}
-          >
-            {things.length}
-          </span>
-          {density !== "peek" ? (
-            <span className="truncate text-[11px] text-muted-foreground">{content.descriptor}</span>
-          ) : null}
-        </button>
-        <button
-          type="button"
-          onClick={onViewAll}
-          className="inline-flex h-9 shrink-0 items-center gap-1 rounded-md px-1.5 text-[10px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`View all ${content.label} Things`}
-        >
-          {showAll ? "Collapse" : "View all"}
-          <KatalistIcon
-            name={showAll ? "chevron-down" : "chevron-right"}
-            className={cn("h-3.5 w-3.5", showAll && "rotate-180")}
-          />
-        </button>
-      </div>
-
-      <div
-        className={cn(
-          "space-y-0 px-0",
-          showAll && "max-h-[calc(100vh-20rem)] overflow-y-auto overscroll-contain",
-        )}
-      >
-        {visible.length ? (
-          visible.map((thing) => (
-            <CourtThingCard
-              key={thing.id}
-              thing={thing}
-              density={density}
-              lane={lane}
-              muted={lane === "later"}
-              onSelect={onSelect}
-            />
-          ))
-        ) : (
-          <div className="flex min-h-[96px] items-center justify-center bg-white px-3 text-center text-[11px] text-muted-foreground">
-            No Things match this view.
-          </div>
-        )}
-      </div>
-
-      {!showAll && things.length > 6 ? (
-        <button
-          type="button"
-          onClick={onViewAll}
-          className="mt-auto flex h-9 items-center justify-center gap-1 border-b border-border/70 text-[10.5px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-        >
-          View all {things.length}
-          <KatalistIcon name="chevron-right" className="h-3.5 w-3.5" />
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
 export function CourtDesktop({
   now,
   next,
@@ -286,16 +146,24 @@ export function CourtDesktop({
   theirs,
   error,
   refetch,
-  onSelect,
   myActorId,
+  onSelect,
 }: CourtDesktopProps) {
   const [filters, setFilters] = useState<CourtFilterState>(DEFAULT_COURT_FILTERS);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<CourtSort>("due");
-  const [laneFocus, setLaneFocus] = useState<CourtViewMode>(null);
-  const [showAllLane, setShowAllLane] = useState<CourtLaneId | null>(null);
+  const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
-  const laneButtons = useRef<Partial<Record<CourtLaneId, HTMLButtonElement | null>>>({});
+  const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
+  const originRef = useRef<{
+    lane: CourtLaneId;
+    thingId: string;
+    element: HTMLElement;
+  } | null>(null);
+  const savedPositionsRef = useRef<
+    Partial<Record<CourtLaneId, { activeIndex: number; activeThingId: string | null }>>
+  >({});
+  const focusIndexRef = useRef(0);
 
   const view = useMemo(
     () => applyCourtView({ now, next, later, theirs }, filters, query, sort),
@@ -317,17 +185,57 @@ export function CourtDesktop({
     [view.theirs],
   );
 
+  const closeFocus = useCallback(() => {
+    const origin = originRef.current;
+    setFocusSelection(null);
+    if (!origin) return;
+
+    window.requestAnimationFrame(() => {
+      laneRefs.current[origin.lane]?.focusThing(origin.thingId);
+      window.requestAnimationFrame(() => {
+        if (origin.element.isConnected) {
+          origin.element.focus();
+          return;
+        }
+        laneRefs.current[origin.lane]?.focusThing(origin.thingId);
+      });
+    });
+  }, []);
+
+  const selectedLaneThings = focusSelection ? view[focusSelection.lane] : null;
+
+  useEffect(() => {
+    if (!focusSelection || !selectedLaneThings) return;
+    const identityIndex = selectedLaneThings.findIndex(
+      (thing) => thing.id === focusSelection.thingId,
+    );
+    if (identityIndex >= 0) {
+      focusIndexRef.current = identityIndex;
+      return;
+    }
+    if (selectedLaneThings.length === 0) {
+      closeFocus();
+      return;
+    }
+
+    const nextIndex = Math.max(0, Math.min(focusIndexRef.current, selectedLaneThings.length - 1));
+    focusIndexRef.current = nextIndex;
+    const nextThingId = selectedLaneThings[nextIndex].id;
+    setFocusSelection((current) =>
+      current && current.lane === focusSelection.lane
+        ? { lane: current.lane, thingId: nextThingId }
+        : current,
+    );
+  }, [closeFocus, focusSelection, selectedLaneThings]);
+
   useEffect(() => {
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape" || !laneFocus) return;
-      const previous = laneFocus;
-      setLaneFocus(null);
-      setShowAllLane(null);
-      window.requestAnimationFrame(() => laneButtons.current[previous]?.focus());
+      if (event.key !== "Escape" || event.defaultPrevented || !focusSelection) return;
+      closeFocus();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [laneFocus]);
+  }, [closeFocus, focusSelection]);
 
   const detailedFilterCount =
     Number(filters.due !== "any") +
@@ -336,14 +244,6 @@ export function CourtDesktop({
     Number(filters.starredOnly) +
     Number(Boolean(filters.personId));
 
-  const gridTemplateColumns = !laneFocus
-    ? "repeat(3, minmax(0, 1fr))"
-    : laneFocus === "now"
-      ? "minmax(0, 7fr) minmax(120px, 1.5fr) minmax(120px, 1.5fr)"
-      : laneFocus === "next"
-        ? "minmax(120px, 1.5fr) minmax(0, 7fr) minmax(120px, 1.5fr)"
-        : "minmax(120px, 1.5fr) minmax(120px, 1.5fr) minmax(0, 7fr)";
-
   const setDetailedFilter = <K extends keyof CourtFilterState>(
     key: K,
     value: CourtFilterState[K],
@@ -351,22 +251,18 @@ export function CourtDesktop({
     setFilters((current) => ({ ...current, [key]: value }));
   };
 
-  const handleLaneFocus = (lane: CourtLaneId) => {
-    setLaneFocus((current) => {
-      const nextFocus = toggleLaneFocus(current, lane);
-      if (!nextFocus) setShowAllLane(null);
-      return nextFocus;
-    });
-  };
-
-  const handleViewAll = (lane: CourtLaneId) => {
-    if (showAllLane === lane) {
-      setShowAllLane(null);
-      return;
+  const handleOpen = (lane: CourtLaneId, thing: Thing, element: HTMLElement) => {
+    const savedPositions: Partial<
+      Record<CourtLaneId, { activeIndex: number; activeThingId: string | null }>
+    > = {};
+    for (const laneId of ["now", "next", "later"] as const) {
+      const position = laneRefs.current[laneId]?.getPosition();
+      if (position) savedPositions[laneId] = position;
     }
-    setLaneFocus(lane);
-    setShowAllLane(lane);
-    window.requestAnimationFrame(() => laneButtons.current[lane]?.focus());
+    savedPositionsRef.current = savedPositions;
+    originRef.current = { lane, thingId: thing.id, element };
+    focusIndexRef.current = view[lane].findIndex((candidate) => candidate.id === thing.id);
+    setFocusSelection({ lane, thingId: thing.id });
   };
 
   if (error) {
@@ -433,21 +329,6 @@ export function CourtDesktop({
               <PersonAvatar name={person.name} initials={person.initials} src={person.avatarUrl} size={24} />
             </button>
           ))}
-          {laneFocus ? (
-            <button
-              type="button"
-              onClick={() => {
-                const previous = laneFocus;
-                setLaneFocus(null);
-                setShowAllLane(null);
-                if (previous)
-                  window.requestAnimationFrame(() => laneButtons.current[previous]?.focus());
-              }}
-              className="inline-flex h-8 items-center rounded-full border border-border bg-white px-3 text-[11px] font-medium text-muted-foreground outline-none hover:border-primary/45 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              All lanes
-            </button>
-          ) : null}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -584,26 +465,33 @@ export function CourtDesktop({
         </div>
       </div>
 
-      <div
-        className="grid items-start gap-3 transition-[grid-template-columns] duration-[220ms] ease-out motion-reduce:transition-none"
-        style={{ gridTemplateColumns }}
-      >
-        {(["now", "next", "later"] as const).map((lane) => (
-          <CourtLane
-            key={lane}
-            lane={lane}
-            things={view[lane]}
-            focus={laneFocus}
-            showAll={showAllLane === lane}
-            buttonRef={(node) => {
-              laneButtons.current[lane] = node;
-            }}
-            onToggleFocus={() => handleLaneFocus(lane)}
-            onViewAll={() => handleViewAll(lane)}
-            onSelect={onSelect}
-          />
-        ))}
-      </div>
+      {focusSelection ? (
+        <CourtFocusView
+          selection={focusSelection}
+          lanes={{ now: view.now, next: view.next, later: view.later }}
+          onSelectThing={(thingId) =>
+            setFocusSelection((current) => (current ? { lane: current.lane, thingId } : current))
+          }
+          onClose={closeFocus}
+        />
+      ) : (
+        <div className="grid min-w-0 grid-cols-3 items-start gap-3 overflow-hidden">
+          {(["now", "next", "later"] as const).map((lane) => (
+            <CourtLaneStack
+              key={lane}
+              ref={(handle) => {
+                laneRefs.current[lane] = handle;
+              }}
+              lane={lane}
+              things={view[lane]}
+              myActorId={myActorId}
+              initialPosition={savedPositionsRef.current[lane]}
+              onOpen={(thing, origin) => handleOpen(lane, thing, origin)}
+              onRefresh={refetch}
+            />
+          ))}
+        </div>
+      )}
 
       <section
         className="mt-8 border-t border-border/70 bg-white pt-4"

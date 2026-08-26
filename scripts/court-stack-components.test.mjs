@@ -30,6 +30,11 @@ const focusView = readFileSync(
   new URL("../src/features/court/CourtFocusView.tsx", import.meta.url),
   "utf8",
 );
+const courtDesktop = readFileSync(
+  new URL("../src/features/court/CourtDesktop.tsx", import.meta.url),
+  "utf8",
+);
+const courtRoute = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
 const packageJson = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 
 test("Thing detail sheet delegates to one shared content implementation", () => {
@@ -64,6 +69,8 @@ test("Court lane stacks render one active Thing over a capped, hidden decorative
   assert.match(laneStack, /<ThingStackCard[\s\S]*thing=\{activeThing\}/);
   assert.match(laneStack, /Math\.min\(3, Math\.max\(0, things\.length - 1\)\)/);
   assert.match(laneStack, /aria-hidden="true"/);
+  assert.match(laneStack, /2 \+ depth \* 2/);
+  assert.match(laneStack, /motion-reduce:!transform-none/);
   assert.match(laneStack, /\{renderIndex \+ 1\} \/ \{things\.length\}/);
 });
 
@@ -107,4 +114,33 @@ test("Court focus has a real close control and identity-keyed restrained detail 
   assert.match(focusView, /key=\{selection\.thingId\}/);
   assert.match(focusView, /duration-\[220ms\]/);
   assert.match(focusView, /motion-reduce:transition-none/);
+});
+
+test("Court desktop switches only the three personal lanes between stacks and inline focus", () => {
+  assert.match(courtDesktop, /focusSelection \?/);
+  assert.match(courtDesktop, /<CourtFocusView/);
+  assert.match(courtDesktop, /<CourtLaneStack/);
+  assert.match(courtDesktop, /type CourtFocusSelection/);
+  assert.match(courtDesktop, /useState<CourtFocusSelection \| null>/);
+  assert.match(courtDesktop, /setFocusSelection\(\{ lane, thingId: thing\.id \}\)/);
+  assert.doesNotMatch(courtDesktop, /focusIndex:\s*number/);
+});
+
+test("Court desktop retains Magic Box, controls, quick filters, and With Others", () => {
+  assert.match(courtDesktop, /<MagicBox desktop/);
+  for (const label of ["All", "Due", "Waiting", "In Progress"]) {
+    assert.ok(courtDesktop.includes(`"${label}"`), `missing ${label} quick filter`);
+  }
+  assert.match(courtDesktop, /aria-label="Search Court"/);
+  assert.match(courtDesktop, /Sort within each lane/);
+  assert.match(courtDesktop, /Clear detailed filters/);
+  assert.match(courtDesktop, /WITH OTHERS/);
+  assert.match(courtDesktop, /onSelect=\{onSelect\}/);
+});
+
+test("Court route provides actor identity while retaining the existing Sheet selection flow", () => {
+  assert.match(courtRoute, /myActorId \} =\s*useCourt\(\)/);
+  assert.match(courtRoute, /<CourtDesktop[\s\S]*myActorId=\{myActorId\}/);
+  assert.match(courtRoute, /<ThingDetailSheet/);
+  assert.doesNotMatch(courtDesktop, /navigate\(|useNavigate|Link to=/);
 });
