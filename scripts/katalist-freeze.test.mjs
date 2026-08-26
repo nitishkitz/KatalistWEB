@@ -303,10 +303,12 @@ test("Nudge projection uses Court THEIRS and skips unmatched recent history", ()
 
 test("Shred UX awaits mutation and omits holder action", () => {
   const sheet = readFileSync(new URL("../src/features/things/ThingDetailSheet.tsx", import.meta.url), "utf8");
-  assert.match(sheet, /caps\?\.canShred/);
-  assert.match(sheet, /await rpcShred\(thing\.id\)/);
-  assert.equal(sheet.includes("void rpcShred"), false);
-  const shredBlock = sheet.slice(sheet.indexOf("rpcShred"));
+  const content = readFileSync(new URL("../src/features/things/ThingDetailContent.tsx", import.meta.url), "utf8");
+  const detail = `${sheet}\n${content}`;
+  assert.match(detail, /caps\?\.canShred/);
+  assert.match(detail, /await rpcShred\(thing\.id\)/);
+  assert.equal(detail.includes("void rpcShred"), false);
+  const shredBlock = detail.slice(detail.indexOf("rpcShred"));
   assert.match(shredBlock, /toast\.success\("Shredded from your surfaces\."\)/);
 });
 
