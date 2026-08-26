@@ -66,6 +66,7 @@ export type UatAuthDeps = {
   consumeRateLimit: (scopeHash: string, limit: number, windowSeconds: number) => Promise<boolean>;
   findProfileByPhone: (phone: string) => Promise<{ id: string } | null>;
   createUser: (input: { phone: string; password: string; profile: RequiredProfile }) => Promise<void>;
+  signInExisting: (profileId: string) => Promise<{ access_token: string; refresh_token: string }>;
   signIn: (phone: string, password: string) => Promise<{ access_token: string; refresh_token: string }>;
   log?: (operation: string, code: string, requestId: string) => void;
 };
@@ -131,13 +132,9 @@ async function enforceRateLimits(
   }
 }
 
-async function signInExisting(
-  config: UatAuthConfig,
-  phone: string,
-  deps: UatAuthDeps,
+async function authenticated(
+  session: { access_token: string; refresh_token: string },
 ): Promise<UatVerifyResponse> {
-  const password = deriveUatPassword(config.pepper, phone);
-  const session = await deps.signIn(phone, password);
   if (!session?.access_token || !session?.refresh_token) {
     throw new UatAuthError(401, "Unable to sign in.", "invalid_code");
   }
@@ -172,7 +169,7 @@ export async function verifyUatOtp(
 
   const existing = await deps.findProfileByPhone(phone);
   if (existing) {
-    return signInExisting(config, phone, deps);
+    return authenticated(await deps.signInExisting(existing.id));
   }
 
   if (!input.profile) {
@@ -197,10 +194,10 @@ export async function verifyUatOtp(
       deps.log?.("uat_verify_create", "race_without_profile", context.requestId ?? "unknown");
       throw new UatAuthError(503, "Sign-in is temporarily unavailable.", "unavailable");
     }
-    return signInExisting(config, phone, deps);
+    return authenticated(await deps.signInExisting(raced.id));
   }
 
-  return signInExisting(config, phone, deps);
+  return authenticated(await deps.signIn(phone, password));
 }
 
 export function clientIp(request: Request): string {
@@ -251,6 +248,7 @@ export async function createDefaultUatDeps(env: UatAuthEnv = resolveUatServerEnv
   const { createSupabaseAdminClient } = await import("@/integrations/supabase/client.server");
   const { createSupabasePasswordClient } = await import("@/integrations/supabase/auth-client.server");
   const adminClient = createSupabaseAdminClient(env);
+  const passwordClient = createSupabasePasswordClient(env);
   return {
     async consumeRateLimit(scopeHash, limit, windowSeconds) {
       const { data, error } = await adminClient.rpc("consume_uat_auth_rate_limit", {
@@ -288,9 +286,36 @@ export async function createDefaultUatDeps(env: UatAuthEnv = resolveUatServerEnv
         .eq("id", data.user.id);
       if (profileError) throw profileError;
     },
+    async signInExisting(profileId) {
+      const { data: userData, error: userError } = await adminClient.auth.admin.getUserById(profileId);
+      const email = userData.user?.email;
+      if (userError || !email) {
+        throw new UatAuthError(503, "Sign-in is temporarily unavailable.", "unavailable");
+      }
+
+      const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+      });
+      const tokenHash = linkData.properties?.hashed_token;
+      if (linkError || !tokenHash) {
+        throw new UatAuthError(503, "Sign-in is temporarily unavailable.", "unavailable");
+      }
+
+      const { data, error } = await passwordClient.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: "magiclink",
+      });
+      if (error || !data.session) {
+        throw new UatAuthError(503, "Sign-in is temporarily unavailable.", "unavailable");
+      }
+      return {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      };
+    },
     async signIn(_phone, password) {
-      const client = createSupabasePasswordClient(env);
-      const { data, error } = await client.auth.signInWithPassword({
+      const { data, error } = await passwordClient.auth.signInWithPassword({
         email: internalUatEmail(password),
         password,
       });

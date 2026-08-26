@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { requestUatOtp, verifyUatOtp } from "@/lib/auth/uat-auth.server";
+import { createDefaultUatDeps, requestUatOtp, verifyUatOtp } from "@/lib/auth/uat-auth.server";
 
 const validUatEnv = {
   KATALIST_ENV: "uat",
@@ -20,6 +20,7 @@ function fakeDeps(overrides = {}) {
     profile: overrides.profile === undefined ? null : overrides.profile,
     consumeCalls: [],
     createUserCalls: [],
+    signInExistingCalls: [],
     signInCalls: [],
     findCalls: [],
     consumeImpl: overrides.consumeImpl,
@@ -28,6 +29,7 @@ function fakeDeps(overrides = {}) {
   return {
     consumeCalls: state.consumeCalls,
     createUserCalls: state.createUserCalls,
+    signInExistingCalls: state.signInExistingCalls,
     signInCalls: state.signInCalls,
     findCalls: state.findCalls,
     async consumeRateLimit(scopeHash, limit, windowSeconds) {
@@ -42,6 +44,10 @@ function fakeDeps(overrides = {}) {
     async createUser(input) {
       state.createUserCalls.push(input);
       if (state.createUserImpl) return state.createUserImpl(input);
+    },
+    async signInExisting(profileId) {
+      state.signInExistingCalls.push(profileId);
+      return { access_token: "access", refresh_token: "refresh" };
     },
     async signIn(phone, password) {
       state.signInCalls.push({ phone, password });
@@ -103,7 +109,8 @@ test("returning phone signs in without creating", async () => {
   const result = await verifyUatOtp(validInput, { ip: "203.0.113.8", env: validUatEnv }, deps);
   assert.equal(result.status, "authenticated");
   assert.equal(deps.createUserCalls.length, 0);
-  assert.equal(deps.signInCalls.length, 1);
+  assert.deepEqual(deps.signInExistingCalls, ["profile-1"]);
+  assert.equal(deps.signInCalls.length, 0);
 });
 
 test("concurrent create conflict re-reads the profile and never overwrites", async () => {
@@ -122,7 +129,8 @@ test("concurrent create conflict re-reads the profile and never overwrites", asy
   );
   assert.equal(result.status, "authenticated");
   assert.equal(deps.createUserCalls.length, 1);
-  assert.equal(deps.signInCalls.length, 1);
+  assert.deepEqual(deps.signInExistingCalls, ["profile-1"]);
+  assert.equal(deps.signInCalls.length, 0);
 });
 
 test("rate limiting stops the broker before create or sign-in", async () => {
@@ -156,11 +164,8 @@ test("default broker dependencies use the resolved request environment", async (
 
   try {
     assert.deepEqual(
-      await requestUatOtp(
-        { phone: "+919876543210" },
-        { env, ip: "203.0.113.8" },
-      ),
-      { ok: true },
+      await (await createDefaultUatDeps(validUatEnv)).consumeRateLimit("scope", 8, 900),
+      true,
     );
   } finally {
     globalThis.fetch = originalFetch;
