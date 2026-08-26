@@ -7,6 +7,7 @@ import path from "node:path";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const rpcSrc = readFileSync(path.join(root, "src/features/things/rpc.ts"), "utf8");
 const sheetSrc = readFileSync(path.join(root, "src/features/things/ThingDetailSheet.tsx"), "utf8");
+const detailSrc = `${sheetSrc}\n${readFileSync(path.join(root, "src/features/things/ThingDetailContent.tsx"), "utf8")}`;
 
 function extractExport(name) {
   const start = rpcSrc.indexOf(`export async function ${name}`);
@@ -45,8 +46,8 @@ test("LIVE Work Status only uses set_work_status for active states", () => {
 });
 
 test("Thing Detail Sort/Cancel buttons do not send terminals through set_work_status", () => {
-  assert.match(sheetSrc, /await rpcSortThing\(thing\.id\)/);
-  assert.match(sheetSrc, /await rpcCancelThing\(thing\.id\)/);
-  assert.equal(/rpcSetWorkStatus\([^)]*"sorted"/.test(sheetSrc), false);
-  assert.equal(/rpcSetWorkStatus\([^)]*"cancelled"/.test(sheetSrc), false);
+  assert.match(detailSrc, /await rpcSortThing\(thing\.id\)/);
+  assert.match(detailSrc, /await rpcCancelThing\(thing\.id\)/);
+  assert.equal(/rpcSetWorkStatus\([^)]*"sorted"/.test(detailSrc), false);
+  assert.equal(/rpcSetWorkStatus\([^)]*"cancelled"/.test(detailSrc), false);
 });

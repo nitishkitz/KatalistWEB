@@ -166,7 +166,7 @@ test("Live personal shred is one reusable lens applied to Court, Lists, Doorman,
   const buckets = readFileSync(new URL("../src/features/buckets/use-bucket-items.ts", import.meta.url), "utf8");
   const realtime = readFileSync(new URL("../src/features/realtime/use-realtime.ts", import.meta.url), "utf8");
   const trophy = readFileSync(new URL("../src/features/me/use-trophy.ts", import.meta.url), "utf8");
-  const sheet = readFileSync(new URL("../src/features/things/ThingDetailSheet.tsx", import.meta.url), "utf8");
+  const detail = readFileSync(new URL("../src/features/things/ThingDetailContent.tsx", import.meta.url), "utf8");
   const lens = readFileSync(new URL("../src/features/things/personal-shred.ts", import.meta.url), "utf8");
   assert.match(court, /excludePersonallyShreddedThings/);
   assert.match(court, /usePersonalShred/);
@@ -183,7 +183,7 @@ test("Live personal shred is one reusable lens applied to Court, Lists, Doorman,
   assert.match(realtime, /profile_object_state/);
   assert.match(realtime, /invalidatePersonalSurfaces/);
   assert.match(trophy, /invalidatePersonalSurfaces/);
-  assert.match(sheet, /invalidatePersonalSurfaces/);
+  assert.match(detail, /invalidatePersonalSurfaces/);
   assert.match(lens, /list-messages/);
   assert.equal(lists.includes("from(\"profile_object_state\")"), false);
   assert.equal(listThings.includes("from(\"profile_object_state\")"), false);
@@ -233,12 +233,12 @@ test("Assign outside Katalist uses one atomic assign_outside_katalist RPC", () =
   assert.match(body, /\/bridge\/\$\{row\.token\}/);
   assert.equal(body.includes("add_list_member"), false);
 
-  const sheet = readFileSync(new URL("../src/features/things/ThingDetailSheet.tsx", import.meta.url), "utf8");
-  assert.match(sheet, /Assign outside Katalist/);
-  assert.match(sheet, /caps\?\.isOwner && !terminal/);
-  assert.match(sheet, /rpcAssignOutsideKatalist/);
-  assert.match(sheet, /Copy link/);
-  assert.equal(sheet.includes("toast.success(\"Bridge opened") && sheet.includes("setBridgePath(result.path)"), true);
+  const detail = readFileSync(new URL("../src/features/things/ThingDetailContent.tsx", import.meta.url), "utf8");
+  assert.match(detail, /Assign outside Katalist/);
+  assert.match(detail, /caps\?\.isOwner && !terminal/);
+  assert.match(detail, /rpcAssignOutsideKatalist/);
+  assert.match(detail, /Copy link/);
+  assert.equal(detail.includes("toast.success(\"Bridge opened") && detail.includes("setBridgePath(result.path)"), true);
 });
 
 test("Demo List shred: getListById hides for A, other members still see, Restore returns", () => {
