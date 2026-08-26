@@ -38,6 +38,7 @@ type CourtDesktopProps = {
   next: Thing[];
   later: Thing[];
   theirs: Thing[];
+  completedCount?: number;
   isLoading: boolean;
   error: Error | null;
   refetch: () => unknown;
@@ -138,12 +139,39 @@ function TheirSummaryCard({
   );
 }
 
+function CourtMetricCard({
+  count,
+  label,
+  description,
+  tone,
+}: {
+  count: number;
+  label: string;
+  description: string;
+  tone: string;
+}) {
+  return (
+    <div className="flex min-h-[76px] min-w-0 items-center gap-3 rounded-2xl border border-slate-200/70 bg-white px-4 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.36)]">
+      <span className={cn("text-[24px] font-bold tabular-nums tracking-[-0.03em]", tone)}>
+        {count}
+      </span>
+      <span className="min-w-0">
+        <span className={cn("block text-[10.5px] font-bold tracking-[0.06em]", tone)}>{label}</span>
+        <span className="mt-0.5 block truncate text-[9.5px] text-muted-foreground">
+          {description}
+        </span>
+      </span>
+    </div>
+  );
+}
+
 export function CourtDesktop({
   now,
   next,
   later,
   isLoading,
   theirs,
+  completedCount = 0,
   error,
   refetch,
   myActorId,
@@ -294,8 +322,41 @@ export function CourtDesktop({
         </p>
       ) : null}
 
+      <div className="mb-4 grid min-w-0 grid-cols-5 gap-3">
+        <CourtMetricCard
+          count={view.counts.now}
+          label="NOW"
+          description="Needs attention"
+          tone="text-status-now"
+        />
+        <CourtMetricCard
+          count={view.counts.next}
+          label="NEXT"
+          description="On deck soon"
+          tone="text-status-next"
+        />
+        <CourtMetricCard
+          count={view.counts.later}
+          label="LATER"
+          description="When time opens"
+          tone="text-status-later"
+        />
+        <CourtMetricCard
+          count={completedCount}
+          label="COMPLETED"
+          description="Today"
+          tone="text-emerald-600"
+        />
+        <CourtMetricCard
+          count={view.counts.theirs}
+          label="WAITING"
+          description="On others"
+          tone="text-amber-600"
+        />
+      </div>
+
       <div className="mb-5 flex items-center gap-3">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {quickFilters.map(([id, label]) => (
             <button
               key={id}

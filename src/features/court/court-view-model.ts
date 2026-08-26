@@ -44,6 +44,13 @@ function isSameLocalDay(value: Date, reference: Date) {
   );
 }
 
+export function countCompletedToday(things: readonly Thing[], now = new Date()): number {
+  return things.filter((thing) => {
+    if (!thing.sortedAt) return false;
+    return isSameLocalDay(new Date(thing.sortedAt), now);
+  }).length;
+}
+
 function endOfLocalWeek(reference: Date) {
   const end = new Date(reference);
   const daysUntilSunday = (7 - end.getDay()) % 7;

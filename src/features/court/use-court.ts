@@ -11,6 +11,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { excludePersonallyShreddedThings, usePersonalShred } from "@/features/things/personal-shred";
 import { useCurrentActor } from "@/features/people/use-current-actor";
+import { countCompletedToday } from "./court-view-model";
 
 async function fetchCourt(context: "work" | "home"): Promise<Thing[]> {
   const { data: rows, error } = await supabase
@@ -57,6 +58,7 @@ export function useCourt() {
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");
   const theirs = parts.theirs;
+  const completedCount = useMemo(() => countCompletedToday(source.things), [source.things]);
 
   return {
     isLoading: liveAuth && query.isLoading,
@@ -67,6 +69,7 @@ export function useCourt() {
     next: parts.next,
     later: parts.later,
     theirs,
+    completedCount,
     all: source.things.filter(isActiveThing),
     myActorId: source.myActorId,
     theirGroups: {

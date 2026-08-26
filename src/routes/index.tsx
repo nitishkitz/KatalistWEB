@@ -156,7 +156,19 @@ function TheirCard({
 }
 
 function CourtPage() {
-  const { now, next, later, theirs, theirGroups, isLoading, all, error, refetch, myActorId } = useCourt();
+  const {
+    now,
+    next,
+    later,
+    theirs,
+    theirGroups,
+    isLoading,
+    all,
+    error,
+    refetch,
+    myActorId,
+    completedCount,
+  } = useCourt();
   const navigate = useNavigate({ from: "/" });
   const { thing } = Route.useSearch();
   const [selectedId, setSelectedId] = useState<string | null>(thing ?? null);
@@ -222,6 +234,7 @@ function CourtPage() {
         next={next}
         later={later}
         theirs={theirs}
+        completedCount={completedCount}
         isLoading={isLoading}
         error={error}
         refetch={refetch}

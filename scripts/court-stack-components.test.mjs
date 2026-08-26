@@ -136,12 +136,17 @@ test("Court desktop retains Magic Box, controls, quick filters, and With Others"
   assert.match(courtDesktop, /Sort within each lane/);
   assert.match(courtDesktop, /Clear detailed filters/);
   assert.match(courtDesktop, /WITH OTHERS/);
+  assert.match(courtDesktop, /label="COMPLETED"/);
+  assert.match(courtDesktop, /aria-label="Court collaborators"/);
   assert.match(courtDesktop, /onSelect=\{onSelect\}/);
 });
 
 test("Court route provides actor identity while retaining the existing Sheet selection flow", () => {
-  assert.match(courtRoute, /myActorId \} =\s*useCourt\(\)/);
-  assert.match(courtRoute, /<CourtDesktop[\s\S]*myActorId=\{myActorId\}/);
+  assert.match(courtRoute, /myActorId,[\s\S]*completedCount,[\s\S]*\} = useCourt\(\)/);
+  assert.match(
+    courtRoute,
+    /<CourtDesktop[\s\S]*completedCount=\{completedCount\}[\s\S]*myActorId=\{myActorId\}/,
+  );
   assert.match(courtRoute, /<ThingDetailSheet/);
   assert.doesNotMatch(courtDesktop, /navigate\(|useNavigate|Link to=/);
 });

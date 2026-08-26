@@ -57,7 +57,7 @@ export const courtLaneContent: Record<
   },
   later: {
     label: "LATER",
-    descriptor: "When time opens up",
+    descriptor: "Whenever you get to it",
     icon: "later-lob",
     tone: "text-status-later",
     headerTone: "bg-status-later/5",
@@ -348,6 +348,37 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                     <span className="block line-clamp-2 text-[18px] font-semibold leading-6 text-foreground">
                       {animation.outgoing.title}
                     </span>
+                  </div>
+                </div>
+              ) : null}
+
+              {gesture.dragging &&
+              gesture.offset.x < -8 &&
+              capabilities.canSetPace &&
+              lane !== "later" ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-4 z-[15] flex min-h-[286px] items-center justify-end rounded-[20px] bg-violet-600 px-7 text-white shadow-lg"
+                  style={{ opacity: Math.min(1, Math.abs(gesture.offset.x) / 72) }}
+                >
+                  <div className="flex flex-col items-center gap-1.5">
+                    <KatalistIcon name="arrow-left" className="h-6 w-6" />
+                    <span className="text-[12px] font-bold">Move to Later</span>
+                    <span className="text-[9.5px] text-white/75">Changes personal pace</span>
+                  </div>
+                </div>
+              ) : null}
+
+              {gesture.dragging && gesture.offset.x > 8 && capabilities.canSort ? (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-4 z-[15] flex min-h-[286px] items-center justify-start rounded-[20px] bg-emerald-600 px-7 text-white shadow-lg"
+                  style={{ opacity: Math.min(1, Math.abs(gesture.offset.x) / 72) }}
+                >
+                  <div className="flex flex-col items-center gap-1.5">
+                    <KatalistIcon name="arrow-right" className="h-6 w-6" />
+                    <span className="text-[12px] font-bold">Sorted</span>
+                    <span className="text-[9.5px] text-white/75">Complete this Thing</span>
                   </div>
                 </div>
               ) : null}

@@ -6,6 +6,7 @@ import {
   cardDensityForLane,
   courtAssignees,
   courtPeople,
+  countCompletedToday,
   filterCourtThings,
   formatCourtDue,
   sortCourtThings,
@@ -215,4 +216,23 @@ test("due labels include exact time only when the Thing has one", () => {
     { label: "Tomorrow", urgent: true },
   );
   assert.equal(formatCourtDue(thing({ dueAt: null }), now), null);
+});
+
+test("completed summary counts only Things sorted on the displayed local day", () => {
+  const now = new Date(2026, 7, 26, 12, 0, 0);
+  const source = [
+    thing({
+      id: "today",
+      workStatus: "sorted",
+      sortedAt: new Date(2026, 7, 26, 9, 0, 0).toISOString(),
+    }),
+    thing({
+      id: "yesterday",
+      workStatus: "sorted",
+      sortedAt: new Date(2026, 7, 25, 18, 0, 0).toISOString(),
+    }),
+    thing({ id: "active", workStatus: "under_progress", sortedAt: null }),
+  ];
+
+  assert.equal(countCompletedToday(source, now), 1);
 });

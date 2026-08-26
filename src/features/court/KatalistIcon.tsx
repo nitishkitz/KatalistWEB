@@ -2,6 +2,8 @@ import type { LucideIcon, LucideProps } from "lucide-react";
 import {
   AlertCircle,
   ArrowDownUp,
+  ArrowLeft,
+  ArrowRight,
   AtSign,
   BellRing,
   CalendarDays,
@@ -62,7 +64,9 @@ export type KatalistIconName =
   | "list"
   | "details"
   | "chevron-down"
-  | "chevron-right";
+  | "chevron-right"
+  | "arrow-left"
+  | "arrow-right";
 
 // These fallbacks preserve the typed icon boundary until the approved SVG masters are supplied.
 // Replacing a fallback with a validated SVG asset will not require Court component changes.
@@ -101,6 +105,8 @@ const fallbackIcons: Record<KatalistIconName, LucideIcon> = {
   details: Info,
   "chevron-down": ChevronDown,
   "chevron-right": ChevronRight,
+  "arrow-left": ArrowLeft,
+  "arrow-right": ArrowRight,
 };
 
 export function KatalistIcon({
