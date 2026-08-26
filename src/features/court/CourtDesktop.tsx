@@ -315,7 +315,7 @@ export function CourtDesktop({
   }
 
   return (
-    <div className="hidden w-full lg:mx-auto lg:block lg:max-w-[1260px]">
+    <div className="hidden w-full pb-28 lg:mx-auto lg:block lg:max-w-[1220px]">
       {isLoading ? (
         <p className="mb-3 text-[11px] text-muted-foreground" aria-live="polite">
           Loading your Court…
@@ -554,9 +554,9 @@ export function CourtDesktop({
         </div>
       )}
 
-      <div className="mx-auto mt-7 max-w-[860px]">
+      <div className="fixed inset-x-0 bottom-4 z-50 mx-auto hidden w-[min(760px,calc(100vw-19rem))] lg:block">
         <MagicBox desktop />
-        <p className="-mt-0.5 text-center text-[10.5px] text-muted-foreground">
+        <p className="mt-1.5 text-center text-[10px] font-medium text-slate-400">
           Add anything. Coey will sort it.
         </p>
       </div>

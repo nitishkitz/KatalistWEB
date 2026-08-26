@@ -60,8 +60,8 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     return (
       <article
         className={cn(
-          "relative min-h-[322px] overflow-hidden rounded-[22px] border bg-white",
-          "shadow-[0_26px_54px_-32px_rgba(15,23,42,0.46),0_12px_28px_-20px_rgba(109,94,252,0.24)]",
+          "relative min-h-[284px] overflow-hidden rounded-[20px] border bg-white",
+          "shadow-[0_22px_44px_-30px_rgba(15,23,42,0.46),0_10px_24px_-20px_rgba(109,94,252,0.24)]",
           laneTone[lane].border,
         )}
       >
@@ -71,7 +71,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           onClick={(event) => {
             if (!suppressClickRef.current) onOpen(thing, event.currentTarget);
           }}
-          className="block min-h-[246px] w-full px-5.5 pb-5 pt-5.5 text-left outline-none transition-colors hover:bg-slate-50/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="block min-h-[220px] w-full px-5 pb-4 pt-4.5 text-left outline-none transition-colors hover:bg-slate-50/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           aria-label={`Open ${thing.title}`}
         >
           <span className="block">
@@ -81,7 +81,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   name={thing.assignee.name}
                   initials={thing.assignee.initials}
                   src={assigneeAvatar}
-                  size={36}
+                  size={32}
                   className="ring-4 ring-white shadow-sm"
                 />
                 <span className="max-w-32 truncate text-[12px] font-semibold text-slate-600">
@@ -99,14 +99,14 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               </span>
             </span>
 
-            <span className="mt-5 block line-clamp-2 text-[18px] font-semibold leading-[1.35] tracking-[-0.02em] text-slate-950">
+            <span className="mt-4 block line-clamp-2 text-[17px] font-semibold leading-[1.32] tracking-[-0.02em] text-slate-950">
               {thing.title}
             </span>
 
-            <span className="mt-4 flex min-w-0 flex-wrap items-center gap-2 text-[10.5px] text-muted-foreground">
+            <span className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
               <span
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium",
+                  "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium",
                   thing.acknowledgement === "waiting_for_catch"
                     ? "bg-amber-50 text-status-waiting"
                     : "bg-emerald-50 text-status-caught",
@@ -118,17 +118,17 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 />
                 {thing.acknowledgement === "waiting_for_catch" ? "Waiting for Catch" : "Caught"}
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-slate-600">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
                 <KatalistIcon name={workIcon[thing.workStatus]} className="h-3.5 w-3.5" />
                 {workLabel[thing.workStatus]}
               </span>
-              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">
+              <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-violet-50 px-2 py-0.5 text-violet-700">
                 <KatalistIcon name="list" className="h-3.5 w-3.5 shrink-0" />
                 <span className="max-w-32 truncate">{thing.listName ?? "Standalone"}</span>
               </span>
             </span>
 
-            <span className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3">
+            <span className="mt-4 flex items-center justify-between border-t border-slate-100 pt-2.5">
               <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                 {thing.context}
               </span>
@@ -155,7 +155,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
 
         <div
           className={cn(
-            "grid min-h-[76px] items-stretch gap-0 border-t border-slate-100 bg-slate-50/55",
+            "grid min-h-[64px] items-stretch gap-0 border-t border-slate-100 bg-slate-50/55",
             capabilities.canCatch
               ? "grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]"
               : capabilities.canSetPace && lane !== "later"
@@ -183,7 +183,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               type="button"
               disabled={disabled}
               onClick={(event) => run(event, "catch")}
-              className="m-2 inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-xl bg-primary px-3 text-[10px] font-semibold text-primary-foreground shadow-[0_12px_25px_-14px_rgba(109,94,252,0.9)] outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className="m-2 inline-flex min-w-0 flex-col items-center justify-center gap-1 rounded-[11px] bg-primary px-3 text-[10px] font-semibold text-primary-foreground shadow-[0_12px_25px_-14px_rgba(109,94,252,0.9)] outline-none transition-transform hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
             >
               <KatalistIcon name="catch" className="h-4 w-4" />
               Caught It
