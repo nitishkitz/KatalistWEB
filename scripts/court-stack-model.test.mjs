@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  lockGestureAxis,
+  reconcileStackIndex,
+  resistedDragOffset,
+  resolveHorizontalAction,
+  stepStackIndex,
+} from "@/features/court/court-stack-model";
+
+const items = (...ids) => ids.map((id) => ({ id }));
+
+test("reconciliation preserves identity through reorder and clamps removal", () => {
+  assert.equal(reconcileStackIndex(1, "b", items("c", "b", "a")), 1);
+  assert.equal(reconcileStackIndex(2, "c", items("a", "b")), 1);
+  assert.equal(reconcileStackIndex(3, "missing", []), 0);
+});
+
+test("stepping wraps only non-empty multi-item stacks", () => {
+  assert.equal(stepStackIndex(2, 3, 1), 0);
+  assert.equal(stepStackIndex(0, 3, -1), 2);
+  assert.equal(stepStackIndex(0, 0, 1), 0);
+});
+
+test("gesture intent locks to the first dominant axis after ten pixels", () => {
+  assert.equal(lockGestureAxis(null, 6, 5), null);
+  assert.equal(lockGestureAxis(null, 12, 7), "horizontal");
+  assert.equal(lockGestureAxis("horizontal", 13, 40), "horizontal");
+  assert.equal(lockGestureAxis(null, 8, -14), "vertical");
+});
+
+test("actions honor capability, direction, threshold, and LATER resistance", () => {
+  assert.equal(
+    resolveHorizontalAction({ deltaX: 80, threshold: 72, canSort: true, canMoveLater: true }),
+    "sort",
+  );
+  assert.equal(
+    resolveHorizontalAction({ deltaX: -80, threshold: 72, canSort: true, canMoveLater: true }),
+    "later",
+  );
+  assert.equal(
+    resolveHorizontalAction({ deltaX: -80, threshold: 72, canSort: true, canMoveLater: false }),
+    null,
+  );
+  assert.equal(
+    resolveHorizontalAction({ deltaX: 50, threshold: 72, canSort: true, canMoveLater: true }),
+    null,
+  );
+  assert.equal(resistedDragOffset(-100, true, false), -18);
+});
