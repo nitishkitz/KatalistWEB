@@ -19,3 +19,9 @@ test("Thing detail sheet delegates to one shared content implementation", () => 
   assert.match(content, /await rpcCancelThing\(thing\.id\)/);
   assert.match(content, /await rpcShred\(thing\.id\)/);
 });
+
+test("Thing detail Sheet retains an accessible dialog name without a Sheet dependency in shared content", () => {
+  assert.match(sheet, /<SheetContent[\s\S]*aria-label="Thing details"/);
+  assert.equal(content.includes("SheetContent"), false);
+  assert.equal(content.includes("SheetTitle"), false);
+});
