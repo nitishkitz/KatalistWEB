@@ -72,10 +72,14 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
                 </span>
                 <span className="mt-1 flex items-center gap-1 text-[9.5px] text-muted-foreground">
                   <span className="truncate">{workLabel[thing.workStatus]}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className={cn("truncate", due.urgent && "text-status-now")}>
-                    {due.label}
-                  </span>
+                  {due ? (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className={cn("truncate", due.urgent && "text-status-now")}>
+                        {due.label}
+                      </span>
+                    </>
+                  ) : null}
                 </span>
               </button>
             );

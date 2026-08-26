@@ -55,7 +55,7 @@ test("Court removes duplicate Owner/My Pace labels and offers people filters", a
     read("src/features/court/CourtDesktop.tsx"),
     read("src/features/court/CourtThingCard.tsx"),
     read("src/components/katalist/ThingRow.tsx"),
-    read("src/features/things/ThingDetailSheet.tsx"),
+    read("src/features/things/ThingDetailContent.tsx"),
   ]);
   assert.match(desktop, /Show Things involving \$\{person\.name\}/);
   assert.doesNotMatch(desktop, /Owner importance|My pace/);

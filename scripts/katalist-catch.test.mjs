@@ -78,7 +78,7 @@ test("Court card, mobile card, list row, and Thing Detail all expose Catch", () 
   assertCatchSurface("src/features/court/CourtThingCard.tsx", "Court card");
   assertCatchSurface("src/features/court/ThingCard.tsx", "mobile Court card");
   assertCatchSurface("src/components/katalist/ThingRow.tsx", "List row");
-  assertCatchSurface("src/features/things/ThingDetailSheet.tsx", "Thing Detail");
+  assertCatchSurface("src/features/things/ThingDetailContent.tsx", "Thing Detail");
 });
 
 test("Self Toss lands in Owner Importance and Catch is eligible until caught", () => {
@@ -166,7 +166,7 @@ test("Notification deep-link opens the Thing so Catch can be authorized there", 
   const indexSrc = source("src/routes/index.tsx");
   assert.match(indexSrc, /ThingDetailSheet/);
   assert.match(indexSrc, /thing:/);
-  const detail = source("src/features/things/ThingDetailSheet.tsx");
+  const detail = source("src/features/things/ThingDetailContent.tsx");
   assert.match(detail, /canCatch/);
   assert.match(detail, /CatchActionButton|rpcCatchThing/);
 });

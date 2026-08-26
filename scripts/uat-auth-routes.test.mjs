@@ -27,6 +27,7 @@ function fakeDeps(result) {
     consumeRateLimit: async () => true,
     findProfileByPhone: async () => null,
     createUser: async () => {},
+    signInExisting: async () => ({ access_token: "access", refresh_token: "refresh" }),
     signIn: async () => ({ access_token: "access", refresh_token: "refresh" }),
     ...result,
   };

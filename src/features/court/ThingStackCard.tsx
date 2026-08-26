@@ -88,15 +88,17 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   @{thing.assignee.name.split(" ")[0]}
                 </span>
               </span>
-              <span
-                className={cn(
-                  "inline-flex shrink-0 items-center gap-1 text-[10.5px] font-semibold",
-                  due.urgent ? "text-status-now" : laneTone[lane].text,
-                )}
-              >
-                <KatalistIcon name="calendar" className="h-3.5 w-3.5" />
-                {due.label}
-              </span>
+              {due ? (
+                <span
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1 text-[10.5px] font-semibold",
+                    due.urgent ? "text-status-now" : laneTone[lane].text,
+                  )}
+                >
+                  <KatalistIcon name="calendar" className="h-3.5 w-3.5" />
+                  {due.label}
+                </span>
+              ) : null}
             </span>
 
             <span className="mt-4 block line-clamp-2 text-[17px] font-semibold leading-[1.32] tracking-[-0.02em] text-slate-950">

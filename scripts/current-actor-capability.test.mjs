@@ -53,7 +53,7 @@ test("a waiting self-assigned Thing offers Catch and unlocks execution only afte
 test("Thing actions do not obtain the current actor through the Court Things query", () => {
   for (const path of [
     "src/features/things/CatchActionButton.tsx",
-    "src/features/things/ThingDetailSheet.tsx",
+    "src/features/things/ThingDetailContent.tsx",
     "src/components/katalist/ThingRow.tsx",
   ]) {
     const body = source(path);
@@ -61,4 +61,3 @@ test("Thing actions do not obtain the current actor through the Court Things que
     assert.doesNotMatch(body, /useCourt\(\)/);
   }
 });
-

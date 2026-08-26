@@ -554,13 +554,6 @@ export function CourtDesktop({
         </div>
       )}
 
-      <div className="fixed inset-x-0 bottom-4 z-50 mx-auto hidden w-[min(760px,calc(100vw-19rem))] lg:block">
-        <MagicBox desktop />
-        <p className="mt-1.5 text-center text-[10px] font-medium text-slate-400">
-          Add anything. Coey will sort it.
-        </p>
-      </div>
-
       <section
         className="mt-8 border-t border-border/70 bg-white pt-4"
         aria-labelledby="theirs-title"

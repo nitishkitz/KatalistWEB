@@ -114,10 +114,14 @@ function LanePreviewRow({
         </span>
         <span className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
           <span>{previewWorkLabel[thing.workStatus]}</span>
-          <span aria-hidden="true">·</span>
-          <span className={cn("truncate", due.urgent && "font-medium text-status-now")}>
-            {due.label}
-          </span>
+          {due ? (
+            <>
+              <span aria-hidden="true">·</span>
+              <span className={cn("truncate", due.urgent && "font-medium text-status-now")}>
+                {due.label}
+              </span>
+            </>
+          ) : null}
         </span>
       </span>
       <KatalistIcon

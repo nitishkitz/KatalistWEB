@@ -178,7 +178,7 @@ test("SCENARIO H — duplicate add does not create a second reference", () => {
 });
 
 test("Thing Detail uses a persistent multi-select Add to Bucket dropdown", () => {
-  const source = readFileSync(new URL("../src/features/things/ThingDetailSheet.tsx", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../src/features/things/ThingDetailContent.tsx", import.meta.url), "utf8");
   assert.match(source, /DropdownMenuCheckboxItem/);
   assert.match(source, /selectedBuckets\.size/);
   assert.match(source, /onSelect=\{\(event\) => event\.preventDefault\(\)\}/);

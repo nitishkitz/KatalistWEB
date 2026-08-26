@@ -6,8 +6,8 @@ import {
   Bell,
   Calendar,
   Check,
+  ChevronDown,
   Hand,
-  Loader2,
   List as ListIcon,
   Lock,
   MoreHorizontal,
@@ -22,12 +22,18 @@ import { AcknowledgementBadge } from "@/components/katalist/AcknowledgementBadge
 import { WorkStatusBadge } from "@/components/katalist/WorkStatusBadge";
 import { PersonCell } from "@/components/katalist/PersonCell";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import {
   rpcAddToBucket,
   rpcAssignOutsideKatalist,
   rpcCancelThing,
-  rpcCatchThing,
   rpcNudgeThing,
   rpcRemoveFromBucket,
   rpcReassignThing,
@@ -39,13 +45,15 @@ import {
 } from "./rpc";
 import { invalidatePersonalSurfaces } from "./personal-shred";
 import { getThingCapabilities } from "@/domain/capabilities";
-import { useCourt } from "@/features/court/use-court";
+import { useCurrentActor } from "@/features/people/use-current-actor";
 import { useThing } from "./use-thing";
 import { useThingComments } from "./use-thing-comments";
 import { useAssignablePeople } from "@/features/people/use-assignable";
 import { useAvatarUrl } from "@/features/people/directory";
 import { useBuckets } from "@/features/buckets/use-buckets";
-import { getBucketRefs } from "./local-state";
+import { selectedBucketIds } from "@/features/buckets/bucket-items-surface";
+import { ThingAttachments } from "@/features/attachments/ThingAttachments";
+import { CatchActionButton } from "./CatchActionButton";
 
 export type ThingDetailContentProps = {
   initialThing: Thing | null;
@@ -217,13 +225,13 @@ export function ThingDetailContent({
   onAfterTerminalAction,
 }: ThingDetailContentProps): React.ReactNode {
   const qc = useQueryClient();
-  const court = useCourt();
+  const currentActor = useCurrentActor();
   const live = useThing(initialThing?.id ?? null);
   const thing = live.thing ?? initialThing;
-  const caps = thing ? getThingCapabilities(thing, court.myActorId) : null;
+  const caps = thing ? getThingCapabilities(thing, currentActor.actorId) : null;
   const thread = useThingComments(thing?.id ?? null);
   const people = useAssignablePeople();
-  const { buckets, preview: bucketsPreview } = useBuckets();
+  const { buckets } = useBuckets();
   const [tab, setTab] = useState<"comments" | "activity">("comments");
   const [comment, setComment] = useState("");
   const [due, setDue] = useState("");
@@ -251,6 +259,23 @@ export function ThingDetailContent({
     },
   });
 
+  const bucketRun = useMutation({
+    mutationFn: async ({ bucketId, action }: { bucketId: string; action: "add" | "remove" }) => {
+      if (!thing) return;
+      if (action === "add") await rpcAddToBucket(bucketId, thing.id);
+      else await rpcRemoveFromBucket(bucketId, thing.id);
+    },
+    onSuccess: async (_, variables) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["buckets"] }),
+        qc.invalidateQueries({ queryKey: ["bucket"] }),
+        qc.invalidateQueries({ queryKey: ["bucket-items"] }),
+      ]);
+      toast.success(variables.action === "add" ? "Added to Bucket." : "Removed from Bucket.");
+    },
+    onError: (err) => toast.error(domainErrorMessage(err)),
+  });
+
   const comments = thread.comments;
   const events = thread.activity;
   const busy = run.isPending;
@@ -268,15 +293,10 @@ export function ThingDetailContent({
     caps?.canShred,
   );
   const activePace: Pace = thing.personalPace ?? "next";
-  const currentBucket = buckets.find(
-    (bucket) =>
-      bucket.thingIds?.includes(thing.id) ||
-      bucket.previews.some((preview) => preview.kind === "thing" && preview.thingId === thing.id) ||
-      (bucketsPreview && getBucketRefs(bucket.id).some((ref) => ref.thingId === thing.id)),
-  );
+  const selectedBuckets = selectedBucketIds(buckets, thing.id);
   const dueLabel = thing.dueAt
     ? format(new Date(thing.dueAt), thing.dueHasTime ? "EEE, MMM d · h:mm a" : "EEE, MMM d")
-    : "No due date";
+    : null;
 
   return (
     <div className="min-h-full">
@@ -286,7 +306,7 @@ export function ThingDetailContent({
           {headerAction}
         </div>
         <p className="text-[12px] text-muted-foreground">
-          {thing.listName ?? "Standalone"} · {thing.context}
+          {thing.listName ? `${thing.listName} · ` : ""}{thing.context}
         </p>
         <p className={cn("text-[11px] font-medium", importanceTone[thing.ownerImportance].text)}>
           {importanceDisplay[thing.ownerImportance]} importance
@@ -294,6 +314,7 @@ export function ThingDetailContent({
       </header>
 
       <div className="space-y-5 px-8 py-5">
+        <ThingAttachments thingId={thing.id} />
         <section className="space-y-1.5">
           <h3 className="katalist-section-title">People</h3>
           <div className="grid gap-1 rounded-lg border border-border/70 bg-white p-3">
@@ -338,36 +359,37 @@ export function ThingDetailContent({
         {caps?.canAddToBucket ? (
           <section className="space-y-1.5">
             <h3 className="katalist-section-title">Add to Bucket</h3>
-            {currentBucket ? (
-              <p className="text-[11px] text-muted-foreground">
-                In <span className="font-medium text-foreground">{currentBucket.name}</span>
-              </p>
-            ) : null}
-            <select
-              disabled={busy}
-              className="h-8 w-full rounded-lg border border-border bg-white px-2 text-[11px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-              defaultValue=""
-              onChange={(e) => {
-                if (!e.target.value) return;
-                run.mutate(async () => {
-                  if (currentBucket && currentBucket.id !== e.target.value) {
-                    await rpcRemoveFromBucket(currentBucket.id, thing.id);
-                  }
-                  await rpcAddToBucket(e.target.value, thing.id);
-                  toast.success(currentBucket ? "Bucket changed." : "Added to bucket.");
-                });
-                e.target.value = "";
-              }}
-            >
-              <option value="">
-                {currentBucket ? "Change bucket…" : "Choose a private bucket…"}
-              </option>
-              {buckets.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="flex h-9 w-full items-center gap-2 rounded-lg border border-border bg-white px-3 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <ListIcon className="h-3.5 w-3.5 text-primary" />
+                  <span className="min-w-0 flex-1 truncate text-left">
+                    {selectedBuckets.size === 0 ? "Choose Buckets…" : `${selectedBuckets.size} Bucket${selectedBuckets.size === 1 ? "" : "s"} selected`}
+                  </span>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-[320px] max-w-[calc(100vw-4rem)] bg-white">
+                <DropdownMenuLabel className="text-[11px] text-muted-foreground">Add to one or more Buckets</DropdownMenuLabel>
+                {buckets.length === 0 ? (
+                  <p className="px-2 py-2 text-[11px] text-muted-foreground">Create a Bucket first, then add this Thing here.</p>
+                ) : buckets.map((bucket) => {
+                  const checked = selectedBuckets.has(bucket.id);
+                  return (
+                    <DropdownMenuCheckboxItem
+                      key={bucket.id}
+                      checked={checked}
+                      disabled={bucketRun.isPending}
+                      onSelect={(event) => event.preventDefault()}
+                      onCheckedChange={() => bucketRun.mutate({ bucketId: bucket.id, action: checked ? "remove" : "add" })}
+                      className="text-[12px]"
+                    >
+                      <span className="min-w-0 flex-1 truncate">{bucket.name}</span>
+                    </DropdownMenuCheckboxItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </section>
         ) : null}
 
@@ -384,11 +406,20 @@ export function ThingDetailContent({
               }
             />
           </div>
+          {caps?.canCatch ? (
+            <CatchActionButton
+              thing={thing}
+              className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[11px] font-medium text-primary hover:bg-white"
+            >
+              <Hand className="h-3.5 w-3.5" />
+              Catch
+            </CatchActionButton>
+          ) : null}
         </section>
 
         <section className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <h3 className="katalist-section-title">My Pace</h3>
+            <h3 className="katalist-section-title">Pace</h3>
             {!caps?.canSetPace ? <Lock className="h-3.5 w-3.5 text-muted-foreground" /> : null}
           </div>
           <div className="relative pt-1">
@@ -475,7 +506,7 @@ export function ThingDetailContent({
         </section>
 
         <div className="grid grid-cols-2 gap-3 border-t border-border/70 pt-3">
-          <section className="space-y-1.5">
+          {dueLabel ? <section className="space-y-1.5">
             <div className="flex items-center justify-between">
               <h3 className="katalist-section-title">Due Date</h3>
             </div>
@@ -490,18 +521,18 @@ export function ThingDetailContent({
                 ) : null}
               </span>
             </p>
-          </section>
+          </section> : null}
 
-          <section className="space-y-2">
+          {thing.listName ? <section className="space-y-2">
             <h3 className="katalist-section-title">Source</h3>
             <p className="flex items-start gap-1.5 text-[11px] text-foreground">
               <ListIcon className="mt-0.5 h-3.5 w-3.5 text-primary" />
               <span>
-                {thing.listName ?? "Standalone"}
+                {thing.listName}
                 <span className="block text-[10px] text-muted-foreground">List</span>
               </span>
             </p>
-          </section>
+          </section> : null}
         </div>
       </div>
 
@@ -592,27 +623,6 @@ export function ThingDetailContent({
             caps?.canCancel ||
             caps?.canShred ? (
               <div className="mt-3 space-y-3">
-                {caps?.canCatch ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      run.mutate(async () => {
-                        await rpcCatchThing(thing.id);
-                        toast.success("Caught.");
-                      })
-                    }
-                    className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[11px] font-medium text-primary hover:bg-white disabled:opacity-60"
-                  >
-                    {busy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Hand className="h-3.5 w-3.5" />
-                    )}
-                    Caught It
-                  </button>
-                ) : null}
-
                 {caps?.canNudge || caps?.canSort ? (
                   <div className="grid grid-cols-2 gap-2">
                     {caps?.canNudge ? (

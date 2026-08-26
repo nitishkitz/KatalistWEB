@@ -35,6 +35,10 @@ const courtDesktop = readFileSync(
   "utf8",
 );
 const courtRoute = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
+const appShell = readFileSync(
+  new URL("../src/components/layout/AppShell.tsx", import.meta.url),
+  "utf8",
+);
 const packageJson = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 
 test("Thing detail sheet delegates to one shared content implementation", () => {
@@ -127,8 +131,8 @@ test("Court desktop switches only the three personal lanes between stacks and in
   assert.doesNotMatch(courtDesktop, /focusIndex:\s*number/);
 });
 
-test("Court desktop retains Magic Box, controls, quick filters, and With Others", () => {
-  assert.match(courtDesktop, /<MagicBox desktop/);
+test("Court retains the global Magic Box, controls, avatar filters, and With Others", () => {
+  assert.match(appShell, /<FloatingMagicBox/);
   for (const label of ["All", "Due", "Waiting", "In Progress"]) {
     assert.ok(courtDesktop.includes(`"${label}"`), `missing ${label} quick filter`);
   }
@@ -137,7 +141,7 @@ test("Court desktop retains Magic Box, controls, quick filters, and With Others"
   assert.match(courtDesktop, /Clear detailed filters/);
   assert.match(courtDesktop, /WITH OTHERS/);
   assert.match(courtDesktop, /label="COMPLETED"/);
-  assert.match(courtDesktop, /aria-label="Court collaborators"/);
+  assert.match(courtDesktop, /aria-label=\{`Show Things involving \$\{person\.name\}`\}/);
   assert.match(courtDesktop, /onSelect=\{onSelect\}/);
 });
 
