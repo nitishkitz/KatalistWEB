@@ -280,41 +280,40 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         )}
         aria-labelledby={`court-${lane}-title`}
       >
-        <div
-          className={cn(
-            "flex min-h-[74px] items-center gap-2.5 border-b border-white/75 px-5",
-            content.headerTone,
-          )}
-        >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 shadow-sm ring-1 ring-slate-900/5">
-            <KatalistIcon name={content.icon} className={cn("h-[18px] w-[18px]", content.tone)} />
-          </span>
-          <h2
-            ref={headingRef}
-            id={`court-${lane}-title`}
-            tabIndex={-1}
-            className={cn(
-              "text-[14px] font-bold tracking-[0.06em] outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              content.tone,
-            )}
-          >
-            {content.label}
-          </h2>
-          <span
-            className={cn(
-              "rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold shadow-sm",
-              content.tone,
-            )}
-          >
-            {things.length}
-          </span>
-          <span className="ml-auto truncate text-[11px] text-muted-foreground">
-            {content.descriptor}
-          </span>
+        <div className={cn("min-h-[90px] border-b border-white/75 px-5 py-4", content.headerTone)}>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/80 shadow-sm ring-1 ring-slate-900/5">
+              <KatalistIcon name={content.icon} className={cn("h-[18px] w-[18px]", content.tone)} />
+            </span>
+            <h2
+              ref={headingRef}
+              id={`court-${lane}-title`}
+              tabIndex={-1}
+              className={cn(
+                "text-[14px] font-bold tracking-[0.06em] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                content.tone,
+              )}
+            >
+              {content.label}
+            </h2>
+            <span
+              className={cn(
+                "rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold shadow-sm",
+                content.tone,
+              )}
+            >
+              {things.length}
+            </span>
+            <span className="ml-auto inline-flex items-center gap-1 text-[10.5px] font-medium text-slate-500">
+              View all
+              <KatalistIcon name="chevron-right" className="h-3.5 w-3.5" />
+            </span>
+          </div>
+          <p className="mt-2 pl-[46px] text-[11px] text-slate-500">{content.descriptor}</p>
         </div>
 
         {activeThing ? (
-          <div className="relative min-h-[486px] px-4 pb-4 pt-1" onKeyDown={onKeyDown}>
+          <div className="relative min-h-[532px] px-4 pb-4 pt-1" onKeyDown={onKeyDown}>
             <div className="relative pt-4">
               {Array.from({ length: depthCount }, (_, index) => {
                 const depth = depthCount - index;
@@ -322,7 +321,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   <div
                     key={depth}
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-x-3 min-h-[286px] rounded-[20px] border border-white/90 bg-white/82 shadow-[0_10px_30px_-22px_rgba(15,23,42,0.32)] backdrop-blur-sm"
+                    className="pointer-events-none absolute inset-x-3 min-h-[322px] rounded-[22px] border border-white/90 bg-white/82 shadow-[0_10px_30px_-22px_rgba(15,23,42,0.32)] backdrop-blur-sm"
                     style={{
                       top: `${2 + (depthCount - depth) * 5}px`,
                       transform: `scale(${1 - depth * 0.022})`,
@@ -344,7 +343,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                       : { opacity: 1, transform: "translate3d(0, 0, 0)" }
                   }
                 >
-                  <div className="min-h-[286px] rounded-[20px] border border-border bg-white px-5 pt-5 shadow-lg">
+                  <div className="min-h-[322px] rounded-[22px] border border-border bg-white px-5 pt-5 shadow-lg">
                     <span className="block line-clamp-2 text-[18px] font-semibold leading-6 text-foreground">
                       {animation.outgoing.title}
                     </span>
@@ -358,7 +357,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               lane !== "later" ? (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-4 z-[15] flex min-h-[286px] items-center justify-end rounded-[20px] bg-violet-600 px-7 text-white shadow-lg"
+                  className="pointer-events-none absolute inset-x-0 top-4 z-[15] flex min-h-[322px] items-center justify-end rounded-[22px] bg-[linear-gradient(135deg,#7c3aed,#5b21b6)] px-7 text-white shadow-lg"
                   style={{ opacity: Math.min(1, Math.abs(gesture.offset.x) / 72) }}
                 >
                   <div className="flex flex-col items-center gap-1.5">
@@ -372,7 +371,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               {gesture.dragging && gesture.offset.x > 8 && capabilities.canSort ? (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-4 z-[15] flex min-h-[286px] items-center justify-start rounded-[20px] bg-emerald-600 px-7 text-white shadow-lg"
+                  className="pointer-events-none absolute inset-x-0 top-4 z-[15] flex min-h-[322px] items-center justify-start rounded-[22px] bg-[linear-gradient(135deg,#10b981,#047857)] px-7 text-white shadow-lg"
                   style={{ opacity: Math.min(1, Math.abs(gesture.offset.x) / 72) }}
                 >
                   <div className="flex flex-col items-center gap-1.5">
@@ -427,7 +426,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             </div>
           </div>
         ) : (
-          <div className="flex min-h-[486px] items-center justify-center px-6 text-center text-[12px] text-muted-foreground">
+          <div className="flex min-h-[532px] items-center justify-center px-6 text-center text-[12px] text-muted-foreground">
             No Things match this view.
           </div>
         )}

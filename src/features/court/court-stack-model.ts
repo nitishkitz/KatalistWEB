@@ -73,5 +73,9 @@ export function resistedDragOffset(
   canMoveLater: boolean,
 ): number {
   const permitted = (deltaX >= 0 && canSort) || (deltaX <= 0 && canMoveLater);
-  return permitted ? deltaX : deltaX * 0.18;
+  if (!permitted) return deltaX * 0.18;
+
+  // Preserve immediate pointer feedback, then progressively ease the card into
+  // its action surface so long trackpad drags feel deliberate rather than abrupt.
+  return Math.round(deltaX / (1 + Math.abs(deltaX) / 360));
 }

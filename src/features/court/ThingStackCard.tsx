@@ -60,8 +60,8 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     return (
       <article
         className={cn(
-          "relative min-h-[286px] overflow-hidden rounded-[20px] border bg-white",
-          "shadow-[0_22px_46px_-30px_rgba(15,23,42,0.45),0_10px_24px_-18px_rgba(109,94,252,0.24)]",
+          "relative min-h-[322px] overflow-hidden rounded-[22px] border bg-white",
+          "shadow-[0_26px_54px_-32px_rgba(15,23,42,0.46),0_12px_28px_-20px_rgba(109,94,252,0.24)]",
           laneTone[lane].border,
         )}
       >
@@ -71,7 +71,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           onClick={(event) => {
             if (!suppressClickRef.current) onOpen(thing, event.currentTarget);
           }}
-          className="block min-h-[210px] w-full px-5 pb-5 pt-5 text-left outline-none transition-colors hover:bg-slate-50/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="block min-h-[246px] w-full px-5.5 pb-5 pt-5.5 text-left outline-none transition-colors hover:bg-slate-50/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           aria-label={`Open ${thing.title}`}
         >
           <span className="block">
@@ -81,11 +81,11 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   name={thing.assignee.name}
                   initials={thing.assignee.initials}
                   src={assigneeAvatar}
-                  size={34}
+                  size={36}
                   className="ring-4 ring-white shadow-sm"
                 />
                 <span className="max-w-32 truncate text-[12px] font-semibold text-slate-600">
-                  {thing.assignee.name}
+                  @{thing.assignee.name.split(" ")[0]}
                 </span>
               </span>
               <span
@@ -99,11 +99,11 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               </span>
             </span>
 
-            <span className="mt-5 block line-clamp-2 text-[18px] font-semibold leading-[1.35] tracking-[-0.015em] text-slate-950">
+            <span className="mt-5 block line-clamp-2 text-[18px] font-semibold leading-[1.35] tracking-[-0.02em] text-slate-950">
               {thing.title}
             </span>
 
-            <span className="mt-3 flex min-w-0 flex-wrap items-center gap-2 text-[10.5px] text-muted-foreground">
+            <span className="mt-4 flex min-w-0 flex-wrap items-center gap-2 text-[10.5px] text-muted-foreground">
               <span
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium",
@@ -128,7 +128,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               </span>
             </span>
 
-            <span className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
+            <span className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3">
               <span className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                 {thing.context}
               </span>

@@ -77,3 +77,8 @@ test("actions honor capability, direction, threshold, and LATER resistance", () 
   );
   assert.equal(resistedDragOffset(-100, true, false), -18);
 });
+
+test("permitted horizontal drags ease into a soft swipe surface", () => {
+  assert.equal(resistedDragOffset(240, true, true), 144);
+  assert.equal(resistedDragOffset(-240, true, true), -144);
+});
