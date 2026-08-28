@@ -154,7 +154,7 @@ function CourtMetricCard({
   tone: string;
 }) {
   return (
-    <div className="flex h-16 min-w-0 items-center justify-center gap-3 border-l border-slate-200/80 px-3 first:border-l-0">
+    <div className="flex h-[56px] min-w-0 items-center justify-center gap-3 border-l border-slate-200/80 px-3 first:border-l-0">
       <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-current/5", tone)}>
         <KatalistIcon name={icon} className="h-[18px] w-[18px]" />
       </span>

@@ -87,6 +87,14 @@ test("Court stack previews use lane accents and a flat scroll transition", () =>
   assert.doesNotMatch(laneStack, /rotate|skew/);
 });
 
+test("Court lanes size to their content with a capped body and header counts stay authoritative", () => {
+  assert.match(laneStack, /min-h-\[248px\] max-h-\[392px\]/);
+  assert.doesNotMatch(laneStack, /remainingCount/);
+  assert.doesNotMatch(laneStack, /\+ \{remainingCount\} more/);
+  assert.match(courtDesktop, /className="flex h-\[56px\] min-w-0/);
+  assert.doesNotMatch(courtDesktop, /className="flex h-16 min-w-0/);
+});
+
 test("Court stack actions are capability-gated and route to canonical RPCs", () => {
   assert.match(laneStack, /getThingCapabilities\(activeThing, myActorId\)/);
   assert.match(stackCard, /canCatch \?/);

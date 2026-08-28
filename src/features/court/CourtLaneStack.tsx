@@ -289,7 +289,6 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     const previewThings = getStackPreviewIndices(renderIndex, things.length, 2).map(
       (index) => things[index],
     );
-    const remainingCount = Math.max(0, things.length - 1 - previewThings.length);
 
     return (
       <section
@@ -355,7 +354,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         </div>
 
         {activeThing ? (
-          <div className="relative min-h-[356px] px-3 pb-3" onKeyDown={onKeyDown}>
+          <div className="relative min-h-[248px] max-h-[392px] px-3 pb-3" onKeyDown={onKeyDown}>
             <div className="relative pt-4">
               {Array.from({ length: depthCount }, (_, index) => {
                 const depth = depthCount - index;
@@ -472,14 +471,9 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               </div>
             ) : null}
 
-            {remainingCount > 0 ? (
-              <div className={cn("relative z-30 mt-2 px-2 text-[10px] font-medium", content.tone)}>
-                + {remainingCount} more
-              </div>
-            ) : null}
           </div>
         ) : (
-          <div className="flex min-h-[356px] items-center justify-center px-6 text-center text-[12px] text-muted-foreground">
+          <div className="flex min-h-[248px] max-h-[392px] items-center justify-center px-6 text-center text-[12px] text-muted-foreground">
             No Things match this view.
           </div>
         )}
