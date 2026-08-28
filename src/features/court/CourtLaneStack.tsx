@@ -93,6 +93,20 @@ const previewWorkLabel: Record<Thing["workStatus"], string> = {
   cancelled: "Cancelled",
 };
 
+const previewWorkIcon: Record<Thing["workStatus"], KatalistIconName> = {
+  not_started: "not-started",
+  under_progress: "under-progress",
+  sorted: "sorted",
+  cancelled: "stale",
+};
+
+const previewWorkTone: Record<Thing["workStatus"], string> = {
+  not_started: "text-status-neutral",
+  under_progress: "text-status-next",
+  sorted: "text-status-caught",
+  cancelled: "text-status-now",
+};
+
 function LanePreviewRow({
   thing,
   borderClass,
@@ -104,6 +118,13 @@ function LanePreviewRow({
 }) {
   const due = formatCourtDue(thing);
   const avatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
+  const status = thing.acknowledgement === "waiting_for_catch"
+    ? { label: "Waiting for Catch", icon: "waiting" as const, tone: "text-status-waiting" }
+    : {
+        label: previewWorkLabel[thing.workStatus],
+        icon: previewWorkIcon[thing.workStatus],
+        tone: previewWorkTone[thing.workStatus],
+      };
 
   return (
     <button
@@ -126,8 +147,9 @@ function LanePreviewRow({
         <span className="block truncate text-[11.5px] font-semibold text-slate-800 transition-colors group-hover:text-primary">
           {thing.title}
         </span>
-        <span className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span>{previewWorkLabel[thing.workStatus]}</span>
+        <span className={cn("mt-1 flex items-center gap-1.5 text-[10px]", status.tone)}>
+          <KatalistIcon name={status.icon} className="h-3 w-3" />
+          <span>{status.label}</span>
           {due ? (
             <>
               <span aria-hidden="true">·</span>

@@ -13,6 +13,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/katalist/Logo";
 import { useAppContext } from "@/features/context/use-app-context";
+import { useNudgeBadge } from "@/features/nudges/use-nudge-badge";
 
 const navItems = [
   { title: "Court", to: "/", icon: LayoutGrid },
@@ -26,6 +27,7 @@ const navItems = [
 export function AppSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { context, setContext } = useAppContext();
+  const { count: nudgeCount } = useNudgeBadge();
 
   return (
     <>
@@ -55,6 +57,14 @@ export function AppSidebar() {
                 )}
                 <item.icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.8} />
                 <span>{item.title}</span>
+                {item.title === "Nudges" && nudgeCount > 0 ? (
+                  <span
+                    aria-label={`${nudgeCount} nudges`}
+                    className="ml-auto inline-flex min-w-4 items-center justify-center rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary"
+                  >
+                    {nudgeCount}
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -90,12 +100,20 @@ export function AppSidebar() {
               key={item.title}
               to={item.to}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 py-1 text-[10px] font-medium",
+                "relative flex flex-1 flex-col items-center gap-0.5 py-1 text-[10px] font-medium",
                 isActive ? "text-primary" : "text-muted-foreground",
               )}
             >
               <item.icon className="h-[18px] w-[18px]" strokeWidth={isActive ? 2.2 : 1.8} />
               <span>{item.title}</span>
+              {item.title === "Nudges" && nudgeCount > 0 ? (
+                <span
+                  aria-label={`${nudgeCount} nudges`}
+                  className="absolute right-2 top-0.5 inline-flex min-w-3.5 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold leading-4 text-primary-foreground"
+                >
+                  {nudgeCount}
+                </span>
+              ) : null}
             </Link>
           );
         })}
