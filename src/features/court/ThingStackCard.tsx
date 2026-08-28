@@ -190,12 +190,12 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
             </span>
             {createdAtLabel ? (
               <span
-                className="mt-1.5 inline-flex items-center gap-1 text-muted-foreground"
+                className="mt-1.5 flex w-fit items-center gap-1 text-[9px] text-muted-foreground"
                 aria-label={`Created ${createdAtLabel}`}
                 title={createdAtExact ? `Created ${createdAtExact}` : undefined}
               >
                 <KatalistIcon name="clock-time" className="h-3.5 w-3.5" />
-                Created {createdAtLabel}
+                {createdAtLabel}
               </span>
             ) : null}
           </span>
