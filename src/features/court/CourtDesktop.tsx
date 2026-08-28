@@ -9,6 +9,7 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import {
   DEFAULT_COURT_FILTERS,
+  DEFAULT_THEIRS_FOCUS,
   applyCourtView,
   courtPeople,
   toggleTheirsFocus,
@@ -112,7 +113,7 @@ function TheirSummaryCard({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-[112px] items-center gap-3 rounded-xl border bg-white px-4 text-left outline-none transition-[border-color] duration-200 focus-visible:ring-2 focus-visible:ring-ring",
+        "flex min-h-[80px] items-center gap-3 rounded-xl border bg-white px-4 text-left outline-none transition-[border-color] duration-200 focus-visible:ring-2 focus-visible:ring-ring",
         active ? "border-primary" : "border-border hover:border-primary/45",
       )}
     >
@@ -143,24 +144,25 @@ function CourtMetricCard({
   count,
   label,
   description,
+  icon,
   tone,
 }: {
   count: number;
   label: string;
   description: string;
+  icon: KatalistIconName;
   tone: string;
 }) {
   return (
-    <div className="flex min-h-[76px] min-w-0 items-center gap-3 rounded-2xl border border-slate-200/70 bg-white px-4 shadow-[0_16px_36px_-30px_rgba(15,23,42,0.36)]">
-      <span className={cn("text-[24px] font-bold tabular-nums tracking-[-0.03em]", tone)}>
-        {count}
+    <div className="flex h-16 min-w-0 items-center justify-center gap-3 border-l border-slate-200/80 px-3 first:border-l-0">
+      <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-current/5", tone)}>
+        <KatalistIcon name={icon} className="h-[18px] w-[18px]" />
       </span>
-      <span className="min-w-0">
-        <span className={cn("block text-[10.5px] font-bold tracking-[0.06em]", tone)}>{label}</span>
-        <span className="mt-0.5 block truncate text-[9.5px] text-muted-foreground">
-          {description}
-        </span>
+      <span className="inline-flex min-w-0 items-baseline gap-2">
+        <span className={cn("text-[11px] font-bold tracking-[0.055em]", tone)}>{label}</span>
+        <span className="text-[13px] font-semibold tabular-nums text-slate-800">{count}</span>
       </span>
+      <span className="sr-only">{description}</span>
     </div>
   );
 }
@@ -181,7 +183,7 @@ export function CourtDesktop({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<CourtSort>("due");
   const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
-  const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
+  const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(DEFAULT_THEIRS_FOCUS);
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{
     lane: CourtLaneId;
@@ -322,41 +324,46 @@ export function CourtDesktop({
         </p>
       ) : null}
 
-      <div className="mb-4 grid min-w-0 grid-cols-5 gap-3">
+      <div className="mb-4 grid min-w-0 grid-cols-5 overflow-hidden rounded-xl border border-slate-200/80 bg-white">
         <CourtMetricCard
           count={view.counts.now}
           label="NOW"
           description="Needs attention"
+          icon="now-smash"
           tone="text-status-now"
         />
         <CourtMetricCard
           count={view.counts.next}
           label="NEXT"
           description="On deck soon"
+          icon="next-rally"
           tone="text-status-next"
         />
         <CourtMetricCard
           count={view.counts.later}
           label="LATER"
           description="When time opens"
+          icon="later-lob"
           tone="text-status-later"
         />
         <CourtMetricCard
           count={completedCount}
           label="COMPLETED"
           description="Today"
+          icon="sorted"
           tone="text-emerald-600"
         />
         <CourtMetricCard
           count={view.counts.theirs}
           label="WAITING"
           description="On others"
+          icon="waiting"
           tone="text-amber-600"
         />
       </div>
 
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex items-center gap-1.5">
+      <div className="mb-4 flex min-w-0 flex-wrap items-center gap-3 xl:flex-nowrap">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
           {quickFilters.map(([id, label]) => (
             <button
               key={id}
@@ -392,8 +399,8 @@ export function CourtDesktop({
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <label className="flex h-9 w-52 items-center gap-2 rounded-lg border border-border bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring">
+        <div className="ml-auto flex min-w-0 items-center gap-2">
+          <label className="flex h-9 w-44 items-center gap-2 rounded-lg border border-border bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring 2xl:w-52">
             <KatalistIcon name="search" className="h-4 w-4 text-muted-foreground" />
             <input
               value={query}
@@ -419,7 +426,7 @@ export function CourtDesktop({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-9 min-w-[164px] items-center gap-2 rounded-lg border border-border bg-white px-3 text-[11px] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-9 min-w-[150px] items-center gap-2 rounded-lg border border-border bg-white px-3 text-[11px] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Sort Court: ${sortLabels[sort]}`}
               >
                 <KatalistIcon name="sort" className="h-4 w-4 text-muted-foreground" />
@@ -536,7 +543,7 @@ export function CourtDesktop({
           onClose={closeFocus}
         />
       ) : (
-        <div className="grid min-w-0 grid-cols-3 items-start gap-4 overflow-visible">
+        <div className="grid min-w-0 grid-cols-3 items-start gap-3 overflow-visible">
           {(["now", "next", "later"] as const).map((lane) => (
             <CourtLaneStack
               key={lane}
@@ -555,7 +562,7 @@ export function CourtDesktop({
       )}
 
       <section
-        className="mt-8 border-t border-border/70 bg-white pt-4"
+        className="mt-5 border-t border-border/70 bg-white pt-3"
         aria-labelledby="theirs-title"
       >
         <div className="mb-3 flex items-baseline gap-2 px-1">

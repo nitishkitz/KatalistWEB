@@ -10,6 +10,8 @@ export type CourtSort = "due" | "updated";
 export type CourtCardDensity = "overview" | "focused" | "peek";
 export type TheirsFocus = "waiting_for_catch" | "moving" | "needs_attention";
 
+export const DEFAULT_THEIRS_FOCUS: TheirsFocus = "waiting_for_catch";
+
 export type CourtFilterState = {
   quick: CourtQuickFilter;
   due: CourtDueFilter;

@@ -143,7 +143,7 @@ export function CourtThingCard({
   }
 
   return (
-    <div className={cn("group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-l-2 border-border/70 bg-white px-3 py-2.5", density === "focused" ? "min-h-[104px]" : "min-h-[72px]", muted && "text-muted-foreground", tone.border)}>
+    <div className={cn("group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-l-2 border-border/70 bg-white px-3 py-2", density === "focused" ? "min-h-[96px]" : "min-h-[56px]", muted && "text-muted-foreground", tone.border)}>
       <button
         type="button"
         onClick={open}

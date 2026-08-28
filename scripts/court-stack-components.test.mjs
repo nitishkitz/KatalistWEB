@@ -84,7 +84,7 @@ test("Court stack actions are capability-gated and route to canonical RPCs", () 
   assert.match(stackCard, /canCatch \?/);
   assert.match(stackCard, /canSetPace && lane !== "later"/);
   assert.match(stackCard, /canSort/);
-  assert.match(stackCard, />\s*Caught It\s*</);
+  assert.match(stackCard, />\s*Catch\s*</);
   assert.match(stackCard, />\s*Later\s*</);
   assert.match(stackCard, />\s*Sorted\s*</);
   assert.match(laneStack, /await rpcCatchThing\(activeThing\.id\)/);
@@ -141,6 +141,11 @@ test("Court retains the global Magic Box, controls, avatar filters, and With Oth
   assert.match(courtDesktop, /Clear detailed filters/);
   assert.match(courtDesktop, /WITH OTHERS/);
   assert.match(courtDesktop, /label="COMPLETED"/);
+  assert.match(courtDesktop, /icon="now-smash"/);
+  assert.match(courtDesktop, /icon="next-rally"/);
+  assert.match(courtDesktop, /icon="later-lob"/);
+  assert.match(courtDesktop, /icon="sorted"/);
+  assert.match(courtDesktop, /icon="waiting"/);
   assert.match(courtDesktop, /aria-label=\{`Show Things involving \$\{person\.name\}`\}/);
   assert.match(courtDesktop, /onSelect=\{onSelect\}/);
 });

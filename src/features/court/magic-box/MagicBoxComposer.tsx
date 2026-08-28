@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { Mic, Paperclip, Sparkles, Square, WandSparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { KatalistIcon } from "../KatalistIcon";
@@ -10,6 +10,7 @@ import { listOptionId } from "./list-token";
 import { ghostSuffix, mentionOptionId } from "./mention";
 import { useMagicBoxController } from "./useMagicBoxController";
 import { attachmentsUiEnabled } from "@/features/attachments/flags";
+import { insertMagicBoxToken, type MagicBoxToken } from "./token-insert";
 
 export function MagicBoxComposer({
   listId,
@@ -54,6 +55,21 @@ export function MagicBoxComposer({
     !transcribing &&
     box.draft.rawText.trim().length >= 8;
 
+  const insertToken = useCallback(
+    (token: MagicBoxToken) => {
+      const input = box.inputRef.current;
+      const start = input?.selectionStart ?? box.draft.rawText.length;
+      const end = input?.selectionEnd ?? start;
+      const next = insertMagicBoxToken(box.draft.rawText, start, end, token);
+      box.onTextChange(next.text, next.caret);
+      window.requestAnimationFrame(() => {
+        box.inputRef.current?.focus();
+        box.inputRef.current?.setSelectionRange(next.caret, next.caret);
+      });
+    },
+    [box],
+  );
+
   return (
     <div className={cn(floating ? "mb-0" : "mb-3", box.motionClass)} data-magic-box-state={visualState}>
       <div className="sr-only" aria-live="polite">
@@ -66,10 +82,10 @@ export function MagicBoxComposer({
       ) : null}
       <div
         className={cn(
-          "katalist-magic-box-frame relative flex h-11 items-center gap-2 transition-opacity duration-200",
+          "katalist-magic-box-frame relative flex items-center gap-1.5 transition-opacity duration-200",
           desktop
-            ? "rounded-xl border border-border bg-white px-3 shadow-[0_0_18px_rgba(88,71,255,0.12)]"
-            : "rounded-xl border border-border bg-card px-1.5",
+            ? "h-[58px] rounded-[20px] border bg-white px-3"
+            : "h-11 rounded-xl border border-border bg-card px-1.5",
         )}
       >
         {desktop ? (
@@ -123,25 +139,50 @@ export function MagicBoxComposer({
           ) : null}
           {box.listMenuOpen ? <ListAutocomplete composerId={composerId} lists={box.rankedLists} highlight={box.highlight} query={box.activeListToken?.query ?? ""} floating={floating} onPick={(list) => box.acceptList(list)} /> : null}
         </div>
-        <kbd
+        {!floating ? <kbd
           className={cn(
             "hidden rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline",
             desktop ? "bg-white" : "bg-muted",
           )}
         >
           ⌘K
-        </kbd>
+        </kbd> : null}
+        {desktop && floating ? (
+          <>
+            <button
+              type="button"
+              onClick={() => insertToken("@")}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 outline-none transition-colors hover:bg-violet-50 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Insert @ person"
+              title="Add a Team member"
+            >
+              <KatalistIcon name="at-person" className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => insertToken("#")}
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 outline-none transition-colors hover:bg-violet-50 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Insert # list"
+              title="Add a List"
+            >
+              <KatalistIcon name="hash-bucket" className="h-4 w-4" />
+            </button>
+          </>
+        ) : null}
         {canPolish ? (
           <button
             type="button"
             onClick={() => void box.assist.requestCorrection()}
             disabled={box.assist.busy}
-            className="hidden h-8 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed sm:inline-flex"
+            className={cn(
+              "hidden h-9 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-violet-50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed sm:inline-flex",
+              floating ? "w-9" : "gap-1 px-1.5 text-[11px]",
+            )}
             aria-label="Polish text"
             title="Polish text"
           >
             <WandSparkles className="h-3.5 w-3.5" />
-            Polish text
+            {floating ? <span className="sr-only">Polish text</span> : "Polish text"}
           </button>
         ) : null}
         {attachmentsUiEnabled() ? (
@@ -159,7 +200,7 @@ export function MagicBoxComposer({
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-violet-50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Attach files"
               title="Attach files"
             >
@@ -172,7 +213,7 @@ export function MagicBoxComposer({
             <button
               type="button"
               onClick={() => box.voice.stop()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Stop recording"
               title="Stop"
               disabled={transcribing}
@@ -182,7 +223,7 @@ export function MagicBoxComposer({
             <button
               type="button"
               onClick={() => box.voice.cancel()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Cancel recording"
               title="Cancel"
             >
@@ -194,7 +235,7 @@ export function MagicBoxComposer({
             type="button"
             onClick={() => void box.voice.start()}
             disabled={!box.voice.supported}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-violet-50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
             aria-label="Voice input"
             title={box.voice.supported ? "Voice input" : "Voice is unavailable here"}
           >
@@ -205,7 +246,7 @@ export function MagicBoxComposer({
           <button
             type="button"
             onClick={() => box.onTextChange("", 0)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-violet-50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Clear Magic Box"
             title="Clear input"
           >
@@ -216,11 +257,11 @@ export function MagicBoxComposer({
           type="button"
           disabled={!box.canToss || recovering}
           onClick={() => void box.toss()}
-          className="inline-flex h-8 w-9 items-center justify-center rounded-md border border-primary text-primary outline-none disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-primary bg-primary text-primary-foreground outline-none transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:border-primary/35 disabled:bg-primary/35 disabled:text-white focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Toss Thing"
           title="Toss Thing"
         >
-          <KatalistIcon name="send-toss" className="h-3.5 w-3.5" />
+          <KatalistIcon name="send-toss" className="h-4 w-4" />
         </button>
       </div>
 

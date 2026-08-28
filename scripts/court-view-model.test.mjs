@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   DEFAULT_COURT_FILTERS,
+  DEFAULT_THEIRS_FOCUS,
   applyCourtView,
   cardDensityForLane,
   courtAssignees,
@@ -186,6 +187,7 @@ test("applying a Court view returns filtered counts and sorted lane items", () =
 });
 
 test("lane and THEIRS selections toggle closed when selected twice", () => {
+  assert.equal(DEFAULT_THEIRS_FOCUS, "waiting_for_catch");
   assert.equal(toggleLaneFocus(null, "now"), "now");
   assert.equal(toggleLaneFocus("now", "now"), null);
   assert.equal(toggleLaneFocus("now", "later"), "later");

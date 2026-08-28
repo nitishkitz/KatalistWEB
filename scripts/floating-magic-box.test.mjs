@@ -40,6 +40,9 @@ test("floating composer has idle, engaged, busy, recovery, and reduced-motion st
   assert.match(styles, /prefers-reduced-motion/);
   assert.match(styles, /animation:\s*none\s*!important/);
   assert.match(composer, /onFocus/);
+  assert.match(composer, /aria-label="Insert @ person"/);
+  assert.match(composer, /aria-label="Insert # list"/);
+  assert.match(composer, /insertMagicBoxToken/);
 });
 
 test("floating mention autocomplete opens upward", () => {
