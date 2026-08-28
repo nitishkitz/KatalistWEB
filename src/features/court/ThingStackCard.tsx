@@ -7,6 +7,7 @@ import { useAvatarUrl } from "@/features/people/directory";
 import { cn } from "@/lib/utils";
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
+import { formatThingCreatedAt, formatThingCreatedAtExact } from "./thing-time";
 
 export type CourtStackAction = "catch" | "later" | "sort";
 
@@ -46,6 +47,8 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     ref,
   ) {
     const due = formatCourtDue(thing);
+    const createdAtLabel = formatThingCreatedAt(thing.createdAt);
+    const createdAtExact = formatThingCreatedAtExact(thing.createdAt);
     const capabilities = getThingCapabilities(thing, myActorId);
     const assigneeAvatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
     const assignedByAvatar = useAvatarUrl(
@@ -137,6 +140,16 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 <span className="text-status-waiting" title="Starred">
                   <KatalistIcon name="favourite-star" className="h-3.5 w-3.5 fill-current" />
                   <span className="sr-only">Starred</span>
+                </span>
+              ) : null}
+              {createdAtLabel ? (
+                <span
+                  className="inline-flex items-center gap-1"
+                  aria-label={`Created ${createdAtLabel}`}
+                  title={createdAtExact ? `Created ${createdAtExact}` : undefined}
+                >
+                  <KatalistIcon name="clock-time" className="h-3.5 w-3.5" />
+                  Created {createdAtLabel}
                 </span>
               ) : null}
             </span>

@@ -7,6 +7,7 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
 import { CatchActionButton } from "@/features/things/CatchActionButton";
 import { ArrowRight } from "lucide-react";
+import { formatThingCreatedAt, formatThingCreatedAtExact } from "./thing-time";
 
 const workLabel = {
   not_started: "Not Started",
@@ -100,6 +101,8 @@ export function CourtThingCard({
   onSelect: (thing: Thing) => void;
 }) {
   const due = formatCourtDue(thing);
+  const createdAtLabel = formatThingCreatedAt(thing.createdAt);
+  const createdAtExact = formatThingCreatedAtExact(thing.createdAt);
   const tone = lane ? laneTone[lane] : laneTone.later;
   const assigneeAvatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
   const assignedByAvatar = useAvatarUrl(thing.assignedBy.name, null, thing.assignedBy.avatarUrl);
@@ -134,6 +137,7 @@ export function CourtThingCard({
                   : workLabel[thing.workStatus]}
               </span>
               {due ? <><span aria-hidden="true">·</span><span className={cn("truncate", due.urgent && "text-status-now")}>{due.label}</span></> : null}
+              {createdAtLabel ? <><span aria-hidden="true">·</span><span title={createdAtExact ? `Created ${createdAtExact}` : undefined}>Created {createdAtLabel}</span></> : null}
             </span>
           </span>
         </button>
@@ -170,6 +174,10 @@ export function CourtThingCard({
           {thing.listName ? <span className="inline-flex min-w-0 items-center gap-1 truncate">
             <KatalistIcon name="list" className="h-3 w-3 shrink-0" />
             <span className="truncate">{thing.listName}</span>
+          </span> : null}
+          {createdAtLabel ? <span className="inline-flex min-w-0 items-center gap-1 text-muted-foreground" title={createdAtExact ? `Created ${createdAtExact}` : undefined}>
+            <KatalistIcon name="clock-time" className="h-3 w-3 shrink-0" />
+            <span className="truncate">Created {createdAtLabel}</span>
           </span> : null}
         </span>
 

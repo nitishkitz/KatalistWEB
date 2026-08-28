@@ -13,6 +13,15 @@ test("Court card keeps Catch outside the Thing title and shows assigner to assig
   assert.doesNotMatch(card, /absolute right-1\.5 top-2/);
 });
 
+test("Court Thing surfaces include optional creation timestamps", () => {
+  assert.match(card, /formatThingCreatedAt\(thing\.createdAt\)/);
+  assert.match(card, /Created/);
+  assert.match(card, /createdAtExact/);
+  const stack = readFileSync(new URL("../src/features/court/ThingStackCard.tsx", import.meta.url), "utf8");
+  assert.match(stack, /formatThingCreatedAt\(thing\.createdAt\)/);
+  assert.match(stack, /Created/);
+});
+
 test("Court person filters put the signed-in actor first", () => {
   assert.match(desktop, /courtPeople\(\{ now, next, later, theirs \}, myActorId\)/);
   assert.match(desktop, /myActorId: string \| null/);
