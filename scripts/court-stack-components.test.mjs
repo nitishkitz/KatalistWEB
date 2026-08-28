@@ -79,6 +79,14 @@ test("Court lane stacks render one active Thing over a capped deck with queued p
   assert.match(laneStack, /\{renderIndex \+ 1\} \/ \{things\.length\}/);
 });
 
+test("Court stack previews use lane accents and a flat scroll transition", () => {
+  assert.match(laneStack, /previewBorder/);
+  assert.doesNotMatch(laneStack, /border-slate-200\/(?:70|75)/);
+  assert.match(laneStack, /duration-\[200ms\]/);
+  assert.match(laneStack, /scale\(\.985\)/);
+  assert.doesNotMatch(laneStack, /rotate|skew/);
+});
+
 test("Court stack actions are capability-gated and route to canonical RPCs", () => {
   assert.match(laneStack, /getThingCapabilities\(activeThing, myActorId\)/);
   assert.match(stackCard, /canCatch \?/);

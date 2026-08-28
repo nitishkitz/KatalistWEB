@@ -39,7 +39,14 @@ export type CourtLaneStackProps = {
 
 export const courtLaneContent: Record<
   CourtLaneId,
-  { label: string; descriptor: string; icon: KatalistIconName; tone: string; headerTone: string }
+  {
+    label: string;
+    descriptor: string;
+    icon: KatalistIconName;
+    tone: string;
+    headerTone: string;
+    previewBorder: string;
+  }
 > = {
   now: {
     label: "NOW",
@@ -47,6 +54,7 @@ export const courtLaneContent: Record<
     icon: "now-smash",
     tone: "text-status-now",
     headerTone: "bg-status-now/5",
+    previewBorder: "border-status-now/35",
   },
   next: {
     label: "NEXT",
@@ -54,6 +62,7 @@ export const courtLaneContent: Record<
     icon: "next-rally",
     tone: "text-status-next",
     headerTone: "bg-status-next/5",
+    previewBorder: "border-status-next/35",
   },
   later: {
     label: "LATER",
@@ -61,6 +70,7 @@ export const courtLaneContent: Record<
     icon: "later-lob",
     tone: "text-status-later",
     headerTone: "bg-status-later/5",
+    previewBorder: "border-status-later/35",
   },
 };
 
@@ -85,9 +95,11 @@ const previewWorkLabel: Record<Thing["workStatus"], string> = {
 
 function LanePreviewRow({
   thing,
+  borderClass,
   onOpen,
 }: {
   thing: Thing;
+  borderClass: string;
   onOpen: (thing: Thing, origin: HTMLElement) => void;
 }) {
   const due = formatCourtDue(thing);
@@ -97,7 +109,10 @@ function LanePreviewRow({
     <button
       type="button"
       onClick={(event) => onOpen(thing, event.currentTarget)}
-      className="group mb-1 flex min-h-[46px] w-full items-center gap-2.5 rounded-[13px] border border-slate-200/75 bg-white/90 px-3 py-1.5 text-left outline-none last:mb-0 hover:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className={cn(
+        "group mb-1 flex min-h-[46px] w-full items-center gap-2.5 rounded-[13px] border bg-white/90 px-3 py-1.5 text-left outline-none last:mb-0 hover:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+        borderClass,
+      )}
       aria-label={`Open ${thing.title}`}
     >
       <PersonAvatar
@@ -138,8 +153,8 @@ function incomingStyle(
   if (!animation) return { transform: `translate3d(${offset.x}px, ${offset.y}px, 0)` };
   if (animation.phase === "prepare") {
     return {
-      opacity: 0.55,
-      transform: `translate3d(0, ${animation.direction * 18}px, 0) scale(.99)`,
+      opacity: 0.72,
+      transform: `translate3d(0, ${animation.direction * 20}px, 0) scale(.985)`,
     };
   }
   return { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)" };
@@ -348,7 +363,10 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   <div
                     key={depth}
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-x-3 min-h-[200px] rounded-[16px] border border-slate-200/70 bg-white/85"
+                    className={cn(
+                      "pointer-events-none absolute inset-x-3 min-h-[200px] rounded-[16px] border bg-white/85",
+                      content.previewBorder,
+                    )}
                     style={{
                       top: `${2 + (depthCount - depth) * 5}px`,
                       transform: `scale(${1 - depth * 0.022})`,
@@ -360,17 +378,22 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               {animation ? (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-4 z-10 transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none"
+                  className="pointer-events-none absolute inset-x-0 top-4 z-10 transition-[transform,opacity] duration-[200ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none"
                   style={
                     animation.phase === "moving"
                       ? {
                           opacity: 0,
-                          transform: `translate3d(0, ${animation.direction * -38}px, 0)`,
+                          transform: `translate3d(0, ${animation.direction * 26}px, 0) scale(.985)`,
                         }
                       : { opacity: 1, transform: "translate3d(0, 0, 0)" }
                   }
                 >
-                  <div className="min-h-[200px] rounded-[16px] border border-border bg-white px-4 pt-4">
+                  <div
+                    className={cn(
+                      "min-h-[200px] rounded-[16px] border bg-white px-4 pt-4",
+                      content.previewBorder,
+                    )}
+                  >
                     <span className="block line-clamp-2 text-[14px] font-semibold leading-5 text-foreground">
                       {animation.outgoing.title}
                     </span>
@@ -413,7 +436,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 ref={gesture.gestureRef}
                 {...gesture.gestureProps}
                 className={cn(
-                  "relative z-20 touch-pan-y select-none transition-[transform,opacity] duration-[220ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none",
+                  "relative z-20 touch-pan-y select-none transition-[transform,opacity] duration-[200ms] ease-out motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none",
                   gesture.dragging && "transition-none",
                 )}
                 style={incomingStyle(animation, gesture.offset)}
@@ -439,7 +462,12 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             {previewThings.length ? (
               <div className="relative z-30 mt-2 px-1">
                 {previewThings.map((thing) => (
-                  <LanePreviewRow key={thing.id} thing={thing} onOpen={onOpen} />
+                  <LanePreviewRow
+                    key={thing.id}
+                    thing={thing}
+                    borderClass={content.previewBorder}
+                    onOpen={onOpen}
+                  />
                 ))}
               </div>
             ) : null}

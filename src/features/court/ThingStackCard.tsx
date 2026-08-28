@@ -142,16 +142,6 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   <span className="sr-only">Starred</span>
                 </span>
               ) : null}
-              {createdAtLabel ? (
-                <span
-                  className="inline-flex items-center gap-1"
-                  aria-label={`Created ${createdAtLabel}`}
-                  title={createdAtExact ? `Created ${createdAtExact}` : undefined}
-                >
-                  <KatalistIcon name="clock-time" className="h-3.5 w-3.5" />
-                  Created {createdAtLabel}
-                </span>
-              ) : null}
             </span>
 
             <span
@@ -198,6 +188,16 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 </>
               )}
             </span>
+            {createdAtLabel ? (
+              <span
+                className="mt-1.5 inline-flex items-center gap-1 text-muted-foreground"
+                aria-label={`Created ${createdAtLabel}`}
+                title={createdAtExact ? `Created ${createdAtExact}` : undefined}
+              >
+                <KatalistIcon name="clock-time" className="h-3.5 w-3.5" />
+                Created {createdAtLabel}
+              </span>
+            ) : null}
           </span>
         </button>
 
