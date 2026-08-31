@@ -279,7 +279,6 @@ export function CourtDesktop({
   if (error) {
     return (
       <div className="hidden lg:block">
-        <MagicBox desktop />
         <section className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-border bg-white px-8 text-center">
           <KatalistIcon name="stuck" className="h-7 w-7 text-status-now" />
           <h2 className="mt-3 text-sm font-semibold">The Court could not be loaded.</h2>
@@ -300,8 +299,6 @@ export function CourtDesktop({
 
   return (
     <div className="hidden lg:block">
-      <MagicBox desktop />
-
       {isLoading ? (
         <p className="mb-3 text-[11px] text-muted-foreground" aria-live="polite">
           Loading your Court…
