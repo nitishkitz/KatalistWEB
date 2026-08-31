@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { rpcNudgeThing } from "@/features/things/rpc";
 import { toast } from "sonner";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
+import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import { useThing } from "@/features/things/use-thing";
 import { useQueryClient } from "@tanstack/react-query";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -50,6 +50,8 @@ function NudgesPage() {
 
   return (
     <AppShell title="Nudges" subtitle="Gentle follow-up, without the awkwardness">
+      <InlineThingDetailWorkspace thing={selected} onClose={() => setSelectedId(null)}>
+        <div>
       <p className="mb-4 flex items-center gap-2 text-[13px] text-muted-foreground">
         <img src="/katalist-mark-app.png" alt="" className="h-4 w-4 opacity-70" />
         Coey here—see what might need a nudge.
@@ -182,7 +184,8 @@ function NudgesPage() {
           ))}
         </div>
       </section>
-      <ThingDetailSheet thing={selected} open={Boolean(selected)} onOpenChange={(v) => !v && setSelectedId(null)} />
+        </div>
+      </InlineThingDetailWorkspace>
     </AppShell>
   );
 }

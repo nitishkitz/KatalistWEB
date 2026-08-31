@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/hooks/useSession";
 import { Logo } from "@/components/katalist/Logo";
-import katalistMark from "@/assets/katalist-mark.png.asset.json";
 
 export const Route = createFileRoute("/welcome")({
   head: () => ({
@@ -226,7 +225,11 @@ function CelebrateVisual() {
 function WelcomeVisual() {
   return (
     <div className="flex w-full items-center justify-center">
-      <img src={katalistMark.url} alt="Katalist" className="h-40 w-40 opacity-90" />
+      <img
+        src="/welcome-hero.png"
+        alt="Welcome to Katalist"
+        className="w-full max-w-md rounded-2xl object-contain drop-shadow-sm transition-all duration-300"
+      />
     </div>
   );
 }

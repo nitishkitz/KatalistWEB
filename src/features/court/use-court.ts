@@ -5,15 +5,20 @@ import { isActiveThing, partitionCourt, theirStateFor, type Thing } from "@/doma
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
+import { currentDemoActorId } from "@/features/demo/identities";
 import { accessibleDemoThings } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPreviewSession } from "@/lib/session-mode";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { excludePersonallyShreddedThings, usePersonalShred } from "@/features/things/personal-shred";
-import { useCurrentActor } from "@/features/people/use-current-actor";
-import { countCompletedToday } from "./court-view-model";
 
-async function fetchCourt(context: "work" | "home"): Promise<Thing[]> {
+async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; myActorId: string | null }> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { things: [], myActorId: null };
+
+  const { data: actor } = await supabase.from("actors").select("id").eq("profile_id", auth.user.id).maybeSingle();
+  const myActorId = actor?.id ?? null;
+
   const { data: rows, error } = await supabase
     .from("things")
     .select(THING_COLUMNS)
@@ -21,7 +26,8 @@ async function fetchCourt(context: "work" | "home"): Promise<Thing[]> {
     .is("cancelled_at", null);
 
   if (error) throw error;
-  return mapDbThingRows((rows ?? []) as DbThingRow[]);
+  const things = await mapDbThingRows((rows ?? []) as DbThingRow[]);
+  return { things, myActorId };
 }
 
 export function useCourt() {
@@ -29,9 +35,8 @@ export function useCourt() {
   const preview = isPreviewSession(session);
   const liveAuth = Boolean(session) && !preview;
   const { context } = useAppContext();
-  const localVersion = useLocalVersion();
+  useLocalVersion();
   const shred = usePersonalShred();
-  const currentActor = useCurrentActor();
 
   const query = useQuery({
     queryKey: keys.court(user?.id, context),
@@ -41,24 +46,23 @@ export function useCourt() {
   });
 
   const source = useMemo(() => {
-    void localVersion;
     if (preview) {
-      return {
-        things: accessibleDemoThings(context),
-        myActorId: currentActor.actorId,
-        live: false as const,
-      };
+      const me = currentDemoActorId();
+      return { things: accessibleDemoThings(context), myActorId: me, live: false as const };
     }
     return {
-      things: excludePersonallyShreddedThings(query.data ?? [], shred),
-      myActorId: currentActor.actorId,
+      things: excludePersonallyShreddedThings(query.data?.things ?? [], shred),
+      myActorId: query.data?.myActorId ?? null,
       live: true as const,
     };
-  }, [preview, query.data, context, shred, localVersion, currentActor.actorId]);
+  }, [preview, query.data, context, shred]);
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");
   const theirs = parts.theirs;
-  const completedCount = useMemo(() => countCompletedToday(source.things), [source.things]);
+  const completedCount = useMemo(
+    () => source.things.filter((t) => t.workStatus === "sorted" || Boolean(t.sortedAt)).length,
+    [source.things],
+  );
 
   return {
     isLoading: liveAuth && query.isLoading,

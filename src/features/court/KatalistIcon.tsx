@@ -17,8 +17,8 @@ import {
   Clock3,
   Filter,
   Hash,
-  Info,
   List,
+  Moon,
   MoreHorizontal,
   MousePointerClick,
   Search,
@@ -37,6 +37,7 @@ export type KatalistIconName =
   | "now-smash"
   | "next-rally"
   | "later-lob"
+  | "snooze"
   | "sorted"
   | "not-started"
   | "under-progress"
@@ -62,7 +63,6 @@ export type KatalistIconName =
   | "time-detection"
   | "ai-intelligence"
   | "list"
-  | "details"
   | "chevron-down"
   | "chevron-right"
   | "arrow-left"
@@ -77,6 +77,7 @@ const fallbackIcons: Record<KatalistIconName, LucideIcon> = {
   "now-smash": Zap,
   "next-rally": CircleGauge,
   "later-lob": CircleDashed,
+  snooze: Moon,
   sorted: Check,
   "not-started": Circle,
   "under-progress": CircleDot,
@@ -102,7 +103,6 @@ const fallbackIcons: Record<KatalistIconName, LucideIcon> = {
   "time-detection": Clock3,
   "ai-intelligence": Sparkles,
   list: List,
-  details: Info,
   "chevron-down": ChevronDown,
   "chevron-right": ChevronRight,
   "arrow-left": ArrowLeft,

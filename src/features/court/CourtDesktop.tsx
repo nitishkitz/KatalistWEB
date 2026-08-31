@@ -2,16 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Thing } from "@/domain/thing";
 import { theirStateFor } from "@/domain/thing";
 import { cn } from "@/lib/utils";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { MagicBox } from "./MagicBox";
+import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import { CourtFocusView, type CourtFocusSelection } from "./CourtFocusView";
 import { CourtLaneStack, type CourtLaneStackHandle } from "./CourtLaneStack";
 import { CourtThingCard } from "./CourtThingCard";
-import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import {
   DEFAULT_COURT_FILTERS,
-  DEFAULT_THEIRS_FOCUS,
   applyCourtView,
-  courtPeople,
   toggleTheirsFocus,
   type CourtAcknowledgementFilter,
   type CourtDueFilter,
@@ -113,7 +113,7 @@ function TheirSummaryCard({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-[80px] items-center gap-3 rounded-xl border bg-white px-4 text-left outline-none transition-[border-color] duration-200 focus-visible:ring-2 focus-visible:ring-ring",
+        "flex min-h-[112px] items-center gap-3 rounded-xl border bg-white px-4 text-left outline-none transition-[border-color] duration-200 focus-visible:ring-2 focus-visible:ring-ring",
         active ? "border-primary" : "border-border hover:border-primary/45",
       )}
     >
@@ -140,40 +140,13 @@ function TheirSummaryCard({
   );
 }
 
-function CourtMetricCard({
-  count,
-  label,
-  description,
-  icon,
-  tone,
-}: {
-  count: number;
-  label: string;
-  description: string;
-  icon: KatalistIconName;
-  tone: string;
-}) {
-  return (
-    <div className="flex h-[56px] min-w-0 items-center justify-center gap-3 border-l border-slate-200/80 px-3 first:border-l-0">
-      <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-current/5", tone)}>
-        <KatalistIcon name={icon} className="h-[18px] w-[18px]" />
-      </span>
-      <span className="inline-flex min-w-0 items-baseline gap-2">
-        <span className={cn("text-[11px] font-bold tracking-[0.055em]", tone)}>{label}</span>
-        <span className="text-[13px] font-semibold tabular-nums text-slate-800">{count}</span>
-      </span>
-      <span className="sr-only">{description}</span>
-    </div>
-  );
-}
-
 export function CourtDesktop({
   now,
   next,
   later,
   isLoading,
   theirs,
-  completedCount = 0,
+  completedCount,
   error,
   refetch,
   myActorId,
@@ -183,7 +156,8 @@ export function CourtDesktop({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<CourtSort>("due");
   const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
-  const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(DEFAULT_THEIRS_FOCUS);
+  const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
+  const [theirSelectedId, setTheirSelectedId] = useState<string | null>(null);
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{
     lane: CourtLaneId;
@@ -199,10 +173,17 @@ export function CourtDesktop({
     () => applyCourtView({ now, next, later, theirs }, filters, query, sort),
     [now, next, later, theirs, filters, query, sort],
   );
-  const involvedPeople = useMemo(
-    () => courtPeople({ now, next, later, theirs }, myActorId),
-    [now, next, later, theirs, myActorId],
-  );
+
+  const collaborators = useMemo(() => {
+    const allThings = [...now, ...next, ...later, ...theirs];
+    const map = new Map<string, Thing["assignee"]>();
+    for (const t of allThings) {
+      if (t.assignee && t.assignee.id && !map.has(t.assignee.id)) {
+        map.set(t.assignee.id, t.assignee);
+      }
+    }
+    return Array.from(map.values());
+  }, [now, next, later, theirs]);
 
   const theirGroups = useMemo(
     () => ({
@@ -214,6 +195,7 @@ export function CourtDesktop({
     }),
     [view.theirs],
   );
+  const theirSelectedThing = view.theirs.find((thing) => thing.id === theirSelectedId) ?? null;
 
   const closeFocus = useCallback(() => {
     const origin = originRef.current;
@@ -271,8 +253,7 @@ export function CourtDesktop({
     Number(filters.due !== "any") +
     Number(filters.acknowledgement !== "any") +
     Number(filters.workStatus !== "any") +
-    Number(filters.starredOnly) +
-    Number(Boolean(filters.personId));
+    Number(filters.starredOnly);
 
   const setDetailedFilter = <K extends keyof CourtFilterState>(
     key: K,
@@ -298,6 +279,7 @@ export function CourtDesktop({
   if (error) {
     return (
       <div className="hidden lg:block">
+        <MagicBox desktop />
         <section className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-border bg-white px-8 text-center">
           <KatalistIcon name="stuck" className="h-7 w-7 text-status-now" />
           <h2 className="mt-3 text-sm font-semibold">The Court could not be loaded.</h2>
@@ -317,53 +299,55 @@ export function CourtDesktop({
   }
 
   return (
-    <div className="hidden w-full pb-28 lg:mx-auto lg:block lg:max-w-[1220px]">
+    <div className="hidden lg:block">
+      <MagicBox desktop />
+
       {isLoading ? (
         <p className="mb-3 text-[11px] text-muted-foreground" aria-live="polite">
           Loading your Court…
         </p>
       ) : null}
 
-      <div className="mb-4 grid min-w-0 grid-cols-5 overflow-hidden rounded-xl border border-slate-200/80 bg-white">
-        <CourtMetricCard
-          count={view.counts.now}
-          label="NOW"
-          description="Needs attention"
-          icon="now-smash"
-          tone="text-status-now"
-        />
-        <CourtMetricCard
-          count={view.counts.next}
-          label="NEXT"
-          description="On deck soon"
-          icon="next-rally"
-          tone="text-status-next"
-        />
-        <CourtMetricCard
-          count={view.counts.later}
-          label="LATER"
-          description="When time opens"
-          icon="later-lob"
-          tone="text-status-later"
-        />
-        <CourtMetricCard
-          count={completedCount}
-          label="COMPLETED"
-          description="Today"
-          icon="sorted"
-          tone="text-emerald-600"
-        />
-        <CourtMetricCard
-          count={view.counts.theirs}
-          label="WAITING"
-          description="On others"
-          icon="waiting"
-          tone="text-amber-600"
-        />
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex flex-1 items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-xs">
+          <span className="text-2xl font-bold text-foreground">{view.counts.now}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-status-now">NOW</span>
+            <span className="block text-[10px] text-muted-foreground">Needs attention</span>
+          </div>
+        </div>
+        <div className="flex flex-1 items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-xs">
+          <span className="text-2xl font-bold text-foreground">{view.counts.next}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-status-next">NEXT</span>
+            <span className="block text-[10px] text-muted-foreground">On deck soon</span>
+          </div>
+        </div>
+        <div className="flex flex-1 items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-xs">
+          <span className="text-2xl font-bold text-foreground">{view.counts.later}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-status-later">LATER</span>
+            <span className="block text-[10px] text-muted-foreground">When time opens up</span>
+          </div>
+        </div>
+        <div className="flex flex-1 items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-xs">
+          <span className="text-2xl font-bold text-foreground">{completedCount ?? 0}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-emerald-500">COMPLETED</span>
+            <span className="block text-[10px] text-muted-foreground">Today</span>
+          </div>
+        </div>
+        <div className="flex flex-1 items-center gap-3 rounded-xl border border-border bg-white px-4 py-3 shadow-xs">
+          <span className="text-2xl font-bold text-foreground">{view.counts.theirs}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-orange-500">WAITING</span>
+            <span className="block text-[10px] text-muted-foreground">On others</span>
+          </div>
+        </div>
       </div>
 
-      <div className="mb-4 flex min-w-0 flex-wrap items-center gap-3 xl:flex-nowrap">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex items-center gap-1.5">
           {quickFilters.map(([id, label]) => (
             <button
               key={id}
@@ -380,27 +364,30 @@ export function CourtDesktop({
               {label}
             </button>
           ))}
-          <span className="mx-1 h-5 w-px bg-border" />
-          {involvedPeople.map((person) => (
-            <button
-              key={person.id}
-              type="button"
-              aria-pressed={filters.personId === person.id}
-              aria-label={`Show Things involving ${person.name}`}
-              title={person.name}
-              onClick={() => setDetailedFilter("personId", filters.personId === person.id ? null : person.id)}
-              className={cn(
-                "rounded-full p-0.5 outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                filters.personId === person.id && "ring-2 ring-primary ring-offset-1",
-              )}
-            >
-              <PersonAvatar name={person.name} initials={person.initials} src={person.avatarUrl} size={24} />
-            </button>
-          ))}
+
+          {collaborators.length > 0 ? (
+            <div className="ml-2 flex items-center -space-x-1.5">
+              {collaborators.slice(0, 3).map((person) => (
+                <PersonAvatar
+                  key={person.id}
+                  name={person.name}
+                  initials={person.initials}
+                  src={person.avatarUrl}
+                  size={24}
+                  className="ring-2 ring-white"
+                />
+              ))}
+              {collaborators.length > 3 ? (
+                <span className="flex h-6 items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground ring-2 ring-white">
+                  +{collaborators.length - 3}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
-        <div className="ml-auto flex min-w-0 items-center gap-2">
-          <label className="flex h-9 w-44 items-center gap-2 rounded-lg border border-border bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring 2xl:w-52">
+        <div className="ml-auto flex items-center gap-2">
+          <label className="flex h-9 w-52 items-center gap-2 rounded-lg border border-border bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring">
             <KatalistIcon name="search" className="h-4 w-4 text-muted-foreground" />
             <input
               value={query}
@@ -426,7 +413,7 @@ export function CourtDesktop({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-9 min-w-[150px] items-center gap-2 rounded-lg border border-border bg-white px-3 text-[11px] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-9 min-w-[164px] items-center gap-2 rounded-lg border border-border bg-white px-3 text-[11px] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Sort Court: ${sortLabels[sort]}`}
               >
                 <KatalistIcon name="sort" className="h-4 w-4 text-muted-foreground" />
@@ -485,7 +472,7 @@ export function CourtDesktop({
                   ["overdue", "Overdue"],
                   ["today", "Today"],
                   ["this_week", "This week"],
-                  ["no_due", "Without due date"],
+                  ["no_due", "No due date"],
                 ]}
                 onChange={(value) => setDetailedFilter("due", value)}
               />
@@ -543,7 +530,7 @@ export function CourtDesktop({
           onClose={closeFocus}
         />
       ) : (
-        <div className="grid min-w-0 grid-cols-3 items-start gap-3 overflow-visible">
+        <div className="grid min-w-0 grid-cols-3 items-start gap-3 overflow-hidden">
           {(["now", "next", "later"] as const).map((lane) => (
             <CourtLaneStack
               key={lane}
@@ -562,7 +549,7 @@ export function CourtDesktop({
       )}
 
       <section
-        className="mt-5 border-t border-border/70 bg-white pt-3"
+        className="mt-8 border-t border-border/70 bg-white pt-4"
         aria-labelledby="theirs-title"
       >
         <div className="mb-3 flex items-baseline gap-2 px-1">
@@ -610,34 +597,40 @@ export function CourtDesktop({
         </div>
 
         {theirFocus ? (
-          <div className="mt-3 border-t border-border pt-3">
-            <div className="mb-2 flex items-center gap-2 px-1">
-              <span className="text-[11px] font-semibold text-foreground">
-                {theirFocus === "waiting_for_catch"
-                  ? "Waiting for Catch"
-                  : theirFocus === "moving"
-                    ? "Moving"
-                    : "Needs Attention"}
-              </span>
-              <span className="text-[10px] text-muted-foreground">Things in this group</span>
+          <InlineThingDetailWorkspace
+            thing={theirSelectedThing}
+            onClose={() => setTheirSelectedId(null)}
+            className="mt-3 border-t border-border pt-3"
+          >
+            <div>
+              <div className="mb-2 flex items-center gap-2 px-1">
+                <span className="text-[11px] font-semibold text-foreground">
+                  {theirFocus === "waiting_for_catch"
+                    ? "Waiting for Catch"
+                    : theirFocus === "moving"
+                      ? "Moving"
+                      : "Needs Attention"}
+                </span>
+                <span className="text-[10px] text-muted-foreground">Things in this group</span>
+              </div>
+              {theirGroups[theirFocus].length ? (
+                <div className="grid grid-cols-2 gap-x-4">
+                  {theirGroups[theirFocus].map((thing) => (
+                    <CourtThingCard
+                      key={thing.id}
+                      thing={thing}
+                      density="overview"
+                      onSelect={(selectedThing) => setTheirSelectedId(selectedThing.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex min-h-[96px] items-center justify-center border-b border-dashed border-border/70 bg-white text-[11px] text-muted-foreground">
+                  No Things match this group.
+                </div>
+              )}
             </div>
-            {theirGroups[theirFocus].length ? (
-              <div className="grid grid-cols-2 gap-x-4">
-                {theirGroups[theirFocus].map((thing) => (
-                  <CourtThingCard
-                    key={thing.id}
-                    thing={thing}
-                    density="overview"
-                    onSelect={onSelect}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex min-h-[96px] items-center justify-center border-b border-dashed border-border/70 bg-white text-[11px] text-muted-foreground">
-                No Things match this group.
-              </div>
-            )}
-          </div>
+          </InlineThingDetailWorkspace>
         ) : null}
       </section>
     </div>

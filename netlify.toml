@@ -2,15 +2,14 @@
   command = "npm run build"
   publish = "dist"
 
-# Values live in the Netlify dashboard. This file may name variables but must
-# not contain secrets, JWTs, or API keys.
 [build.environment]
-  NODE_VERSION = "22"
+  NODE_VERSION = "20"
   NITRO_PRESET = "netlify"
   VITE_KATALIST_DEMO_MODE = "false"
-  VITE_KATALIST_ENV = "uat"
-  KATALIST_ENV = "uat"
-  VITE_MAGIC_BOX_ATTACHMENTS_ENABLED = "false"
-  MAGIC_BOX_ATTACHMENTS_ENABLED = "false"
-  VITE_LIST_COLLABORATION_ENABLED = "false"
-  LIST_COLLABORATION_ENABLED = "false"
+  VITE_KATALIST_FIXED_OTP = "111111"
+  VITE_SUPABASE_URL = "https://dyxqlgnbwtbxxdfoiqva.supabase.co"
+  VITE_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ue68qXGXDJsPVKD6uj-56Q_0sxo1H3h"
+  VITE_SUPABASE_PROJECT_ID = "dyxqlgnbwtbxxdfoiqva"
+  SUPABASE_URL = "https://dyxqlgnbwtbxxdfoiqva.supabase.co"
+  SUPABASE_PUBLISHABLE_KEY = "sb_publishable_ue68qXGXDJsPVKD6uj-56Q_0sxo1H3h"
+  SUPABASE_PROJECT_ID = "dyxqlgnbwtbxxdfoiqva"

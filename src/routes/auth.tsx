@@ -36,12 +36,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession, DEMO_PERSONAS, signInAsDemo, DemoPersona } from "@/hooks/useSession";
 import { Logo } from "@/components/katalist/Logo";
 import { demoEnabled } from "@/lib/session-mode";
-import { isUatClient } from "@/lib/auth/uat-contract";
-import { postUatRequest, postUatVerify } from "@/lib/auth/uat-client";
-import { validateRequiredProfile, type ProfileFieldErrors } from "@/lib/auth/profile-validation";
-import { uploadAvatarForUser } from "@/features/me/avatar-upload";
+import { localFixedOtp } from "@/lib/fixed-otp";
+import {
+  createLocalUser,
+  resolveFixedOtpOutcome,
+  type LocalProfileErrors,
+} from "@/lib/auth/local-user";
 import { useAvatarUrl } from "@/features/people/directory";
-import katalistMark from "@/assets/katalist-mark.png.asset.json";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -123,31 +124,17 @@ function AuthPage() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [profilePhone, setProfilePhone] = useState<string | null>(null);
-  const [pendingOtp, setPendingOtp] = useState("");
   const [fullName, setFullName] = useState("");
   const [age, setAge] = useState("");
   const [occupation, setOccupation] = useState("");
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [profileErrors, setProfileErrors] = useState<ProfileFieldErrors>({});
-
-  const uatMode = isUatClient({ VITE_KATALIST_ENV: import.meta.env.VITE_KATALIST_ENV });
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [profileErrors, setProfileErrors] = useState<LocalProfileErrors>({});
 
   useEffect(() => {
     if (!loading && session) {
       navigate({ to: "/", replace: true });
     }
   }, [loading, session, navigate]);
-
-  useEffect(() => {
-    if (!avatarFile) {
-      setAvatarPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(avatarFile);
-    setAvatarPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [avatarFile]);
 
   const destination =
     channel === "phone" ? `${dialCode}${phone.replace(/\D/g, "")}` : email.trim();
@@ -156,21 +143,6 @@ function AuthPage() {
     if (!demoEnabled()) return;
     signInAsDemo(persona);
     toast.success(`Welcome, ${persona.name}!`);
-    navigate({ to: "/", replace: true });
-  }
-
-  async function applyUatSession(tokens: { access_token: string; refresh_token: string }) {
-    const { error } = await supabase.auth.setSession(tokens);
-    if (error) throw error;
-    if (avatarFile) {
-      try {
-        const { data } = await supabase.auth.getSession();
-        const userId = data.session?.user.id;
-        if (userId) await uploadAvatarForUser(userId, avatarFile);
-      } catch {
-        toast.error("Photo couldn’t be saved. You can retry from Me.");
-      }
-    }
     navigate({ to: "/", replace: true });
   }
 
@@ -185,102 +157,92 @@ function AuthPage() {
     }
 
     setBusy(true);
-    try {
-      if (uatMode && channel === "phone") {
-        await postUatRequest(destination); // POST /api/uat-auth/request
-        setSent(true);
-        setOtp("");
-        toast.success(`We sent a one-time password to ${destination}`);
-        return;
-      }
-
-      const { error } =
-        channel === "phone"
-          ? await supabase.auth.signInWithOtp({ phone: destination })
-          : await supabase.auth.signInWithOtp({
-              email: destination,
-              options: { shouldCreateUser: true },
-            });
-
-      if (error) {
-        if (error.message.toLowerCase().includes("unsupported phone provider")) {
-          toast.error(
-            "Phone provider is not configured. Try the 'Demo (1-Click)' tab above or email login below!",
-            { duration: 6000 }
-          );
-        } else {
-          toast.error(error.message);
-        }
-        return;
-      }
+    const fixedOtp = localFixedOtp();
+    if (fixedOtp && channel === "phone") {
+      setBusy(false);
       setSent(true);
       setOtp("");
-      toast.success(`We sent a one-time password to ${destination}`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sign-in is temporarily unavailable.");
-    } finally {
-      setBusy(false);
+      toast.success(`Use the local test code ${fixedOtp}`);
+      return;
     }
+
+    const { error } =
+      channel === "phone"
+        ? await supabase.auth.signInWithOtp({ phone: destination })
+        : await supabase.auth.signInWithOtp({
+            email: destination,
+            options: { shouldCreateUser: true },
+          });
+    setBusy(false);
+
+    if (error) {
+      if (error.message.toLowerCase().includes("unsupported phone provider")) {
+        toast.error(
+          "Phone provider is not configured. Try the 'Demo (1-Click)' tab above or email login below!",
+          { duration: 6000 }
+        );
+      } else {
+        toast.error(error.message);
+      }
+      return;
+    }
+    setSent(true);
+    setOtp("");
+    toast.success(`We sent a one-time password to ${destination}`);
   }
 
   async function verifyOtp(code: string) {
     setBusy(true);
-    try {
-      if (uatMode && channel === "phone") {
-        const response = await postUatVerify({ phone: destination, otp: code }); // POST /api/uat-auth/verify
-        if (response.status === "needs_profile") {
-          setProfilePhone(destination);
-          setPendingOtp(code);
-          setProfileErrors({});
-          return;
-        }
-        await applyUatSession(response.session);
-        return;
-      }
-
-      const { error } =
-        channel === "phone"
-          ? await supabase.auth.verifyOtp({ phone: destination, token: code, type: "sms" })
-          : await supabase.auth.verifyOtp({ email: destination, token: code, type: "email" });
-
-      if (error) {
-        toast.error(error.message);
+    const fixedOtp = localFixedOtp();
+    if (fixedOtp && channel === "phone") {
+      if (code !== fixedOtp) {
+        setBusy(false);
+        toast.error("Enter the 6-digit local test code");
         setOtp("");
         return;
       }
-      navigate({ to: "/", replace: true });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sign-in is temporarily unavailable.");
-      setOtp("");
-    } finally {
+      const outcome = resolveFixedOtpOutcome(window.localStorage, destination, DEMO_PERSONAS);
+      if (outcome.kind === "profile-setup") {
+        setProfilePhone(outcome.phone);
+        setProfileErrors({});
+        setBusy(false);
+        return;
+      }
+      signInAsDemo(outcome.persona);
       setBusy(false);
+      navigate({ to: "/", replace: true });
+      return;
     }
+
+    const { error } =
+      channel === "phone"
+        ? await supabase.auth.verifyOtp({ phone: destination, token: code, type: "sms" })
+        : await supabase.auth.verifyOtp({ email: destination, token: code, type: "email" });
+    setBusy(false);
+
+    if (error) {
+      toast.error(error.message);
+      setOtp("");
+      return;
+    }
+    navigate({ to: "/", replace: true });
   }
 
-  async function completeUatProfile() {
+  function completeLocalProfile() {
     if (!profilePhone) return;
-    const result = validateRequiredProfile({ fullName, age, occupation });
+    const result = createLocalUser(window.localStorage, profilePhone, {
+      fullName,
+      age,
+      occupation,
+      avatarUrl,
+    });
     if (!result.ok) {
       setProfileErrors(result.errors);
       return;
     }
-    setBusy(true);
-    try {
-      const response = await postUatVerify({
-        phone: profilePhone,
-        otp: pendingOtp,
-        profile: { fullName, age, occupation },
-      });
-      if (response.status !== "authenticated") {
-        setProfileErrors({ fullName: "Enter your full name" });
-        return;
-      }
-      await applyUatSession(response.session);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Sign-in is temporarily unavailable.");
-    } finally {
-      setBusy(false);
-    }
+    signInAsDemo(result.persona);
+    toast.success(`Welcome, ${result.persona.name}!`);
+    navigate({ to: "/", replace: true });
   }
 
   return (
@@ -334,10 +296,14 @@ function AuthPage() {
                 </li>
               ))}
             </ul>
-          </div>
 
-          <div className="mt-auto hidden justify-center pt-12 lg:flex">
-            <img src={katalistMark.url} alt="" className="h-32 w-32 opacity-30" />
+            <div className="mt-8 flex justify-center lg:justify-start">
+              <img
+                src="/welcome-hero.png"
+                alt="Katalist overview"
+                className="w-full max-w-md rounded-2xl object-contain drop-shadow-sm transition-transform duration-300 hover:scale-[1.02]"
+              />
+            </div>
           </div>
         </div>
 
@@ -379,8 +345,8 @@ function AuthPage() {
                       </p>
                     </div>
                     <label className="group relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-dashed border-border bg-muted text-muted-foreground hover:border-primary hover:text-primary">
-                      {avatarPreview ? (
-                        <img src={avatarPreview} alt="Profile preview" className="h-full w-full object-cover" />
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt="Profile preview" className="h-full w-full object-cover" />
                       ) : (
                         <Camera className="h-5 w-5" />
                       )}
@@ -391,7 +357,10 @@ function AuthPage() {
                         aria-label="Profile photo"
                         onChange={(event) => {
                           const file = event.target.files?.[0];
-                          setAvatarFile(file ?? null);
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => setAvatarUrl(typeof reader.result === "string" ? reader.result : null);
+                          reader.readAsDataURL(file);
                         }}
                       />
                     </label>
@@ -448,7 +417,7 @@ function AuthPage() {
                           setOccupation(event.target.value);
                           setProfileErrors((current) => ({ ...current, occupation: undefined }));
                         }}
-                        onKeyDown={(event) => event.key === "Enter" && void completeUatProfile()}
+                        onKeyDown={(event) => event.key === "Enter" && completeLocalProfile()}
                         aria-invalid={Boolean(profileErrors.occupation)}
                       />
                       {profileErrors.occupation ? (
@@ -457,7 +426,7 @@ function AuthPage() {
                     </div>
                   </div>
 
-                  <Button className="mt-6 w-full" size="lg" disabled={busy} onClick={() => void completeUatProfile()}>
+                  <Button className="mt-6 w-full" size="lg" onClick={completeLocalProfile}>
                     Create profile
                     <ArrowRight className="ml-1 h-4 w-4" />
                   </Button>

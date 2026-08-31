@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertCircle,
   ChevronDown,
@@ -10,20 +10,16 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { MagicBox } from "@/features/court/MagicBox";
 import { CourtDesktop } from "@/features/court/CourtDesktop";
 import { useCourt } from "@/features/court/use-court";
 import { ThingRow, ThingTableHeader } from "@/components/katalist/ThingRow";
 import { ThingCard } from "@/features/court/ThingCard";
-import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
+import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import type { Thing } from "@/domain/thing";
 import { cn } from "@/lib/utils";
-import { isUuid } from "@/features/notifications/push-delivery";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (search: Record<string, unknown>): { thing?: string } => {
-    const raw = typeof search.thing === "string" ? search.thing : undefined;
-    return { thing: raw && isUuid(raw) ? raw : undefined };
-  },
   head: () => ({
     meta: [
       { title: "Court — Katalist" },
@@ -100,13 +96,14 @@ function Lane({
           </div>
           <table className="hidden w-full table-fixed md:table">
             <colgroup>
-              <col className="w-[30%]" />
-              <col className="w-[14%]" />
+              <col className="w-[26%]" />
               <col className="w-[12%]" />
-              <col className="w-[13%]" />
+              <col className="w-[10%]" />
+              <col className="w-[10%]" />
               <col className="w-[13%]" />
               <col className="w-[12%]" />
-              <col className="w-[6%]" />
+              <col className="w-[10%]" />
+              <col className="w-[7%]" />
             </colgroup>
             <ThingTableHeader />
             <tbody>
@@ -169,12 +166,10 @@ function CourtPage() {
     myActorId,
     completedCount,
   } = useCourt();
-  const navigate = useNavigate({ from: "/" });
-  const { thing } = Route.useSearch();
-  const [selectedId, setSelectedId] = useState<string | null>(thing ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<"due" | "updated">("due");
+  const [sort, setSort] = useState<"due" | "updated" | "importance" | "pace">("due");
   const [theirFocus, setTheirFocus] = useState<
     "waiting_for_catch" | "moving" | "needs_attention" | null
   >(null);
@@ -183,40 +178,34 @@ function CourtPage() {
     now.concat(next, later, theirs).find((t) => t.id === selectedId) ??
     null;
 
-  useEffect(() => {
-    setSelectedId(thing ?? null);
-  }, [thing]);
-
-  function selectThing(id: string | null) {
-    setSelectedId(id);
-    void navigate({
-      search: (prev) => ({ ...prev, thing: id ?? undefined }),
-      replace: true,
-    });
-  }
-
-  const sortThings = useCallback((list: Thing[]) => {
+  function sortThings(list: Thing[]) {
     return [...list].sort((a, b) => {
       if (sort === "due")
         return (
           (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) -
           (b.dueAt ? new Date(b.dueAt).getTime() : Infinity)
         );
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      if (sort === "updated")
+        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      if (sort === "importance")
+        return Number(a.ownerImportance === "now") > Number(b.ownerImportance === "now")
+          ? -1
+          : a.ownerImportance.localeCompare(b.ownerImportance);
+      return (a.personalPace ?? "next").localeCompare(b.personalPace ?? "next");
     });
-  }, [sort]);
+  }
 
   const fNow = useMemo(
     () => sortThings(now.filter((t) => matchesFilter(t, filter, query))),
-    [now, filter, query, sortThings],
+    [now, filter, query, sort],
   );
   const fNext = useMemo(
     () => sortThings(next.filter((t) => matchesFilter(t, filter, query))),
-    [next, filter, query, sortThings],
+    [next, filter, query, sort],
   );
   const fLater = useMemo(
     () => sortThings(later.filter((t) => matchesFilter(t, filter, query))),
-    [later, filter, query, sortThings],
+    [later, filter, query, sort],
   );
 
   const dueToday = now.filter(
@@ -239,10 +228,17 @@ function CourtPage() {
         error={error}
         refetch={refetch}
         myActorId={myActorId}
-        onSelect={(thing) => selectThing(thing.id)}
+        onSelect={(thing) => setSelectedId(thing.id)}
       />
 
-      <div className="lg:hidden">
+      <InlineThingDetailWorkspace
+        thing={selected}
+        onClose={() => setSelectedId(null)}
+        className="lg:hidden"
+      >
+        <div>
+        <MagicBox />
+
         <p className="mb-3 flex items-center gap-2 text-[13px] text-muted-foreground">
           <img src="/katalist-mark-app.png" alt="" className="h-4 w-4 opacity-70" />
           {emptyCourt && !isLoading
@@ -292,12 +288,28 @@ function CourtPage() {
             </label>
             <button
               type="button"
-              onClick={() => setSort((current) => current === "due" ? "updated" : "due")}
+              onClick={() =>
+                setSort((s) =>
+                  s === "due"
+                    ? "updated"
+                    : s === "updated"
+                      ? "importance"
+                      : s === "importance"
+                        ? "pace"
+                        : "due",
+                )
+              }
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] text-foreground"
             >
               <SlidersHorizontal className="h-3.5 w-3.5" />
               Sort:{" "}
-              {sort === "due" ? "Due soon" : "Recently updated"}
+              {sort === "due"
+                ? "Due soon"
+                : sort === "updated"
+                  ? "Recently updated"
+                  : sort === "importance"
+                    ? "Importance"
+                    : "Pace"}
             </button>
             <button
               type="button"
@@ -323,7 +335,7 @@ function CourtPage() {
                 <span className="text-status-next">● {progress} under progress</span>
               </span>
             }
-            onSelect={(t) => selectThing(t.id)}
+            onSelect={(t) => setSelectedId(t.id)}
           />
           <Lane
             title="NEXT"
@@ -338,7 +350,7 @@ function CourtPage() {
                 {next.filter((t) => t.workStatus === "under_progress").length} under progress
               </span>
             }
-            onSelect={(t) => selectThing(t.id)}
+            onSelect={(t) => setSelectedId(t.id)}
           />
           <Lane
             title="LATER"
@@ -346,7 +358,7 @@ function CourtPage() {
             things={fLater}
             defaultOpen={false}
             preview={0}
-            onSelect={(t) => selectThing(t.id)}
+            onSelect={(t) => setSelectedId(t.id)}
           />
 
           <section className="rounded-xl border border-border bg-card">
@@ -392,7 +404,7 @@ function CourtPage() {
                   <ThingTableHeader />
                   <tbody>
                     {theirGroups[theirFocus].map((t) => (
-                      <ThingRow key={t.id} thing={t} onSelect={(t) => selectThing(t.id)} />
+                      <ThingRow key={t.id} thing={t} onSelect={(t) => setSelectedId(t.id)} />
                     ))}
                   </tbody>
                 </table>
@@ -405,14 +417,8 @@ function CourtPage() {
           <img src="/katalist-mark-app.png" alt="" className="h-3.5 w-3.5 opacity-60" />
           Movement, not Storage.
         </p>
-      </div>
-      <ThingDetailSheet
-        thing={selected}
-        open={selected != null}
-        onOpenChange={(open) => {
-          if (!open) selectThing(null);
-        }}
-      />
+        </div>
+      </InlineThingDetailWorkspace>
     </AppShell>
   );
 }
