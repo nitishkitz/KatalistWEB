@@ -231,10 +231,10 @@ function CourtPage() {
         onSelect={(thing) => setSelectedId(thing.id)}
       />
 
+      <div className="lg:hidden">
       <InlineThingDetailWorkspace
         thing={selected}
         onClose={() => setSelectedId(null)}
-        className="lg:hidden"
       >
         <div>
         <MagicBox />
@@ -419,6 +419,7 @@ function CourtPage() {
         </p>
         </div>
       </InlineThingDetailWorkspace>
+      </div>
     </AppShell>
   );
 }
