@@ -77,7 +77,7 @@ export declare function injectGrokPwaHead(
   creator?: string,
   creatorId?: string,
 ): string;
-export declare function createHeadInjector(ctx?: GrokHeadContext): {
+export declare function createHeadInjector(ctx?: GrokHeadContext | string): {
   push(chunk: Uint8Array | string): Uint8Array[];
   flush(): Uint8Array[];
 };

@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
+import { pathToFileURL } from "node:url";
+import { build } from "vite";
 
 import {
   createLocalUser,
@@ -31,6 +36,41 @@ const seededPeople = [
     color: "bg-purple-100 text-purple-700",
   },
 ];
+
+test("an explicitly configured fixed OTP works in a production test build", async (t) => {
+  const previousOtp = process.env.VITE_KATALIST_FIXED_OTP;
+  const outputDirectory = await mkdtemp(join(tmpdir(), "katalist-fixed-otp-"));
+  process.env.VITE_KATALIST_FIXED_OTP = "111111";
+
+  t.after(async () => {
+    await rm(outputDirectory, { recursive: true });
+    if (previousOtp === undefined) delete process.env.VITE_KATALIST_FIXED_OTP;
+    else process.env.VITE_KATALIST_FIXED_OTP = previousOtp;
+  });
+
+  await build({
+    configFile: false,
+    envFile: false,
+    logLevel: "silent",
+    mode: "production",
+    build: {
+      emptyOutDir: false,
+      lib: {
+        entry: join(process.cwd(), "src/lib/fixed-otp.ts"),
+        formats: ["es"],
+      },
+      minify: false,
+      outDir: outputDirectory,
+      rollupOptions: {
+        output: { entryFileNames: "fixed-otp.js" },
+      },
+    },
+  });
+
+  const { localFixedOtp } = await import(pathToFileURL(join(outputDirectory, "fixed-otp.js")));
+
+  assert.equal(localFixedOtp(), "111111");
+});
 
 test("an unknown phone is not created until every required profile field is valid", () => {
   const storage = memoryStorage();

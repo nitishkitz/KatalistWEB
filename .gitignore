@@ -7,6 +7,8 @@ artifacts
 .grok
 .output
 dist
+.netlify
+.vercel
 *.log
 .node_modules.lock
 .DS_Store

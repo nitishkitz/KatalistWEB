@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
 import { MagicBox } from "@/features/court/MagicBox";
 import { ThingRow, ThingTableHeader } from "@/components/katalist/ThingRow";
-import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
+import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
 import { useLocalVersion } from "@/features/things/use-local-version";
@@ -121,7 +121,7 @@ function ListDetailPage() {
       </div>
 
       {tab === "things" ? (
-        <>
+        <InlineThingDetailWorkspace thing={selected} onClose={() => setSelectedId(null)}>
           {viewOnly ? null : <MagicBox listId={list.id} listName={list.name} />}
           <div className="mb-3 flex flex-wrap gap-1.5">
             {(
@@ -162,7 +162,7 @@ function ListDetailPage() {
               </p>
             ) : null}
           </div>
-        </>
+        </InlineThingDetailWorkspace>
       ) : null}
 
       {tab === "chat" ? (
@@ -243,12 +243,6 @@ function ListDetailPage() {
           )}
         </section>
       ) : null}
-
-      <ThingDetailSheet
-        thing={selected}
-        open={Boolean(selected)}
-        onOpenChange={(v) => !v && setSelectedId(null)}
-      />
     </AppShell>
   );
 }

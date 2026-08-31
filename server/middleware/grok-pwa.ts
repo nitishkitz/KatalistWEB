@@ -35,7 +35,7 @@ function requestHost(event: GrokPwaEvent): string {
 }
 
 function injectHeadStreaming(response: Response, appName: string): Response {
-  const injector = createHeadInjector(appName);
+  const injector = createHeadInjector({ appName });
   const transformed = response.body!.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
       transform(chunk, controller) {

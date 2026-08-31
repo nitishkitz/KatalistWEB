@@ -1,12 +1,11 @@
 /**
- * Local-only OTP convenience for development.
+ * Temporary fixed OTP convenience for test deployments.
  *
- * This is intentionally gated by Vite's DEV flag so a fixed code can never
- * become a production authentication bypass. Hosted Supabase Auth continues
- * to require the OTP it issued.
+ * The fixed code is active only when a deployment explicitly configures a
+ * valid six-digit value. Deployments without the variable continue to use
+ * hosted Supabase Auth and require the OTP it issued.
  */
 export function localFixedOtp(): string | null {
-  if (!import.meta.env.DEV) return null;
   const configured = import.meta.env.VITE_KATALIST_FIXED_OTP?.trim();
   return configured && /^\d{6}$/.test(configured) ? configured : null;
 }

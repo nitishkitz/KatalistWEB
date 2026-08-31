@@ -462,7 +462,7 @@ function findHeadClose(buf) {
  * then passes later chunks through so streaming SSR keeps streaming.
  */
 export function createHeadInjector(ctx = {}) {
-  const normalized = normalizeHeadContext(ctx);
+  const normalized = normalizeHeadContext(typeof ctx === "string" ? { appName: ctx } : ctx);
 
   /** @type {Buffer[]} */
   let pending = [];

@@ -43,7 +43,6 @@ import {
   type LocalProfileErrors,
 } from "@/lib/auth/local-user";
 import { useAvatarUrl } from "@/features/people/directory";
-import katalistMark from "@/assets/katalist-mark.png.asset.json";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -297,10 +296,14 @@ function AuthPage() {
                 </li>
               ))}
             </ul>
-          </div>
 
-          <div className="mt-auto hidden justify-center pt-12 lg:flex">
-            <img src={katalistMark.url} alt="" className="h-32 w-32 opacity-30" />
+            <div className="mt-8 flex justify-center lg:justify-start">
+              <img
+                src="/welcome-hero.png"
+                alt="Katalist overview"
+                className="w-full max-w-md rounded-2xl object-contain drop-shadow-sm transition-transform duration-300 hover:scale-[1.02]"
+              />
+            </div>
           </div>
         </div>
 

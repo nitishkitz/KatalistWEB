@@ -6,7 +6,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { useBucket } from "@/features/buckets/use-buckets";
 import { useAccessibleLists, useAccessibleThings, useBucketItems, type BucketItem } from "@/features/buckets/use-bucket-items";
 import { bucketItemsSurface } from "@/features/buckets/bucket-items-surface";
-import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
+import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import { useThing } from "@/features/things/use-thing";
 import { ImportanceBadge, PaceBadge } from "@/components/katalist/ImportanceBadge";
 import { AcknowledgementBadge } from "@/components/katalist/AcknowledgementBadge";
@@ -314,6 +314,7 @@ function BucketDetailPage() {
         </Popover>
       </div>
 
+      <InlineThingDetailWorkspace thing={selectedThing} onClose={() => setSelectedId(null)}>
       {itemsSurface === "loading" ? (
         <p className="text-sm text-muted-foreground">Loading references…</p>
       ) : itemsSurface === "error" ? (
@@ -386,8 +387,7 @@ function BucketDetailPage() {
           </section>
         </div>
       )}
-
-      <ThingDetailSheet thing={selectedThing} open={Boolean(selectedId)} onOpenChange={(v) => !v && setSelectedId(null)} />
+      </InlineThingDetailWorkspace>
 
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
