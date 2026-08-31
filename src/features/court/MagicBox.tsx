@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Mic, Sparkles } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
@@ -22,6 +22,7 @@ export function MagicBox({
 }) {
   const [value, setValue] = useState("");
   const [tossed, setTossed] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const { context } = useAppContext();
   const qc = useQueryClient();
   const people = useAssignablePeople();
@@ -58,12 +59,18 @@ export function MagicBox({
   const canToss = Boolean(value.trim()) && !blocked && !mutation.isPending;
 
   return (
-    <div className="mb-3">
+    <div
+      className={cn(
+        "mb-3",
+        desktop &&
+          "fixed bottom-3 left-[calc(50%+6.5rem)] z-50 mb-0 w-[min(840px,calc(100vw-18rem))] -translate-x-1/2",
+      )}
+    >
       <div
         className={cn(
-          "flex h-11 items-center gap-3 transition-opacity duration-200",
+          "flex items-center gap-3 transition-opacity duration-200",
           desktop
-            ? "rounded-xl border border-border bg-white px-3 shadow-[0_0_18px_rgba(88,71,255,0.12)]"
+            ? "h-[58px] rounded-[18px] border border-primary/70 bg-white px-4 shadow-[0_0_28px_rgba(88,71,255,0.2)]"
             : "rounded-xl border border-border bg-card px-1.5",
           tossed && "opacity-60",
         )}
@@ -74,6 +81,7 @@ export function MagicBox({
           <Sparkles className="h-4 w-4 shrink-0 text-primary" />
         )}
         <input
+          ref={inputRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
@@ -94,6 +102,27 @@ export function MagicBox({
         </kbd>
         {desktop ? (
           <>
+            {(["@", "#"] as const).map((token) => (
+              <button
+                key={token}
+                type="button"
+                onClick={() => {
+                  const input = inputRef.current;
+                  const start = input?.selectionStart ?? value.length;
+                  const end = input?.selectionEnd ?? start;
+                  const next = `${value.slice(0, start)}${token}${value.slice(end)}`;
+                  setValue(next);
+                  requestAnimationFrame(() => {
+                    input?.focus();
+                    input?.setSelectionRange(start + 1, start + 1);
+                  });
+                }}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] text-muted-foreground outline-none hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={token === "@" ? "Insert @ person" : "Insert # list"}
+              >
+                {token}
+              </button>
+            ))}
             {value ? (
               <button
                 type="button"
@@ -109,7 +138,7 @@ export function MagicBox({
               type="button"
               disabled={!canToss}
               onClick={() => void mutation.mutate()}
-              className="inline-flex h-8 w-9 items-center justify-center rounded-md border border-primary text-primary outline-none disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white shadow-[0_6px_16px_rgba(88,71,255,0.28)] outline-none disabled:cursor-not-allowed disabled:bg-primary/30 focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Toss Thing"
               title="Toss Thing"
             >

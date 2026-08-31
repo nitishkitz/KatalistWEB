@@ -1,5 +1,3 @@
-import { useMemo } from "react";
-
 import type { Thing } from "@/domain/thing";
 import { cn } from "@/lib/utils";
 import { courtLaneContent } from "./CourtLaneStack";
@@ -28,11 +26,6 @@ const workLabel: Record<Thing["workStatus"], string> = {
 
 export function ThingNavigator({ lane, things, selectedThingId, onSelect }: ThingNavigatorProps) {
   const content = courtLaneContent[lane];
-  const selectedTitle = useMemo(
-    () => things.find((thing) => thing.id === selectedThingId)?.title ?? "",
-    [selectedThingId, things],
-  );
-
   return (
     <nav
       className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-white"
@@ -51,7 +44,7 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
         <p className="mt-1 truncate text-[10px] text-muted-foreground">{content.descriptor}</p>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
+      <div className="min-h-0 flex-1 p-2">
         <div className="space-y-1">
           {things.map((thing) => {
             const selected = selectedThingId === thing.id;
@@ -63,8 +56,10 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
                 aria-current={selected}
                 onClick={() => onSelect(thing.id)}
                 className={cn(
-                  "w-full rounded-lg border border-transparent px-2.5 py-2 text-left outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring",
-                  selected ? laneSelectionTone[lane] : "hover:border-border hover:bg-muted/30",
+                  "relative w-full rounded-lg border border-transparent px-2.5 py-2 text-left outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring",
+                  selected
+                    ? `${laneSelectionTone[lane]} before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-[3px] before:rounded-full before:bg-current`
+                    : "hover:border-border hover:bg-muted/30",
                 )}
               >
                 <span className="block line-clamp-2 text-[11.5px] font-medium leading-4 text-foreground">
@@ -81,10 +76,6 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
             );
           })}
         </div>
-      </div>
-
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {selectedTitle ? `Selected ${selectedTitle}.` : ""}
       </div>
     </nav>
   );

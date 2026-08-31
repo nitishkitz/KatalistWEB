@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Thing } from "@/domain/thing";
 import { theirStateFor } from "@/domain/thing";
 import { cn } from "@/lib/utils";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { MagicBox } from "./MagicBox";
-import { CourtFocusView, type CourtFocusSelection } from "./CourtFocusView";
-import { CourtLaneStack, type CourtLaneStackHandle } from "./CourtLaneStack";
+import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
+import type { CourtLaneStackHandle } from "./CourtLaneStack";
+import { CourtWorkspace } from "./CourtWorkspace";
+import type { CourtFocusSelection } from "./court-stack-model";
 import { CourtThingCard } from "./CourtThingCard";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import {
@@ -37,6 +40,7 @@ type CourtDesktopProps = {
   next: Thing[];
   later: Thing[];
   theirs: Thing[];
+  completedCount?: number;
   isLoading: boolean;
   error: Error | null;
   refetch: () => unknown;
@@ -112,7 +116,7 @@ function TheirSummaryCard({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-[112px] items-center gap-3 rounded-xl border bg-white px-4 text-left outline-none transition-[border-color] duration-200 focus-visible:ring-2 focus-visible:ring-ring",
+        "flex min-h-[76px] items-center gap-3 rounded-xl border bg-white px-4 text-left outline-none transition-[border-color] duration-200 focus-visible:ring-2 focus-visible:ring-ring",
         active ? "border-primary" : "border-border hover:border-primary/45",
       )}
     >
@@ -145,6 +149,7 @@ export function CourtDesktop({
   later,
   isLoading,
   theirs,
+  completedCount,
   error,
   refetch,
   myActorId,
@@ -155,11 +160,13 @@ export function CourtDesktop({
   const [sort, setSort] = useState<CourtSort>("due");
   const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
+  const [theirSelectedId, setTheirSelectedId] = useState<string | null>(null);
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{
     lane: CourtLaneId;
     thingId: string;
     element: HTMLElement;
+    restoreFocus: boolean;
   } | null>(null);
   const savedPositionsRef = useRef<
     Partial<Record<CourtLaneId, { activeIndex: number; activeThingId: string | null }>>
@@ -171,6 +178,17 @@ export function CourtDesktop({
     [now, next, later, theirs, filters, query, sort],
   );
 
+  const collaborators = useMemo(() => {
+    const allThings = [...now, ...next, ...later, ...theirs];
+    const map = new Map<string, Thing["assignee"]>();
+    for (const t of allThings) {
+      if (t.assignee && t.assignee.id && !map.has(t.assignee.id)) {
+        map.set(t.assignee.id, t.assignee);
+      }
+    }
+    return Array.from(map.values());
+  }, [now, next, later, theirs]);
+
   const theirGroups = useMemo(
     () => ({
       waiting_for_catch: view.theirs.filter(
@@ -181,11 +199,12 @@ export function CourtDesktop({
     }),
     [view.theirs],
   );
+  const theirSelectedThing = view.theirs.find((thing) => thing.id === theirSelectedId) ?? null;
 
   const closeFocus = useCallback(() => {
     const origin = originRef.current;
     setFocusSelection(null);
-    if (!origin) return;
+    if (!origin?.restoreFocus) return;
 
     window.requestAnimationFrame(() => {
       laneRefs.current[origin.lane]?.focusThing(origin.thingId);
@@ -256,7 +275,12 @@ export function CourtDesktop({
       if (position) savedPositions[laneId] = position;
     }
     savedPositionsRef.current = savedPositions;
-    originRef.current = { lane, thingId: thing.id, element };
+    originRef.current = {
+      lane,
+      thingId: thing.id,
+      element,
+      restoreFocus: element.matches(":focus-visible"),
+    };
     focusIndexRef.current = view[lane].findIndex((candidate) => candidate.id === thing.id);
     setFocusSelection({ lane, thingId: thing.id });
   };
@@ -264,7 +288,6 @@ export function CourtDesktop({
   if (error) {
     return (
       <div className="hidden lg:block">
-        <MagicBox desktop />
         <section className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-border bg-white px-8 text-center">
           <KatalistIcon name="stuck" className="h-7 w-7 text-status-now" />
           <h2 className="mt-3 text-sm font-semibold">The Court could not be loaded.</h2>
@@ -293,8 +316,46 @@ export function CourtDesktop({
         </p>
       ) : null}
 
+      <div className="mb-5 grid grid-cols-5 overflow-hidden rounded-xl border border-border bg-white">
+        <div className="flex items-center gap-3 border-r border-border/70 px-4 py-3">
+          <span className="text-2xl font-bold text-foreground">{view.counts.now}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-status-now">NOW</span>
+            <span className="block text-[10px] text-muted-foreground">Needs attention</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 border-r border-border/70 px-4 py-3">
+          <span className="text-2xl font-bold text-foreground">{view.counts.next}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-status-next">NEXT</span>
+            <span className="block text-[10px] text-muted-foreground">On deck soon</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 border-r border-border/70 px-4 py-3">
+          <span className="text-2xl font-bold text-foreground">{view.counts.later}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-status-later">LATER</span>
+            <span className="block text-[10px] text-muted-foreground">When time opens up</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 border-r border-border/70 px-4 py-3">
+          <span className="text-2xl font-bold text-foreground">{completedCount ?? 0}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-emerald-500">COMPLETED</span>
+            <span className="block text-[10px] text-muted-foreground">Today</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 px-4 py-3">
+          <span className="text-2xl font-bold text-foreground">{view.counts.theirs}</span>
+          <div>
+            <span className="text-[12px] font-semibold text-orange-500">WAITING</span>
+            <span className="block text-[10px] text-muted-foreground">On others</span>
+          </div>
+        </div>
+      </div>
+
       <div className="mb-5 flex items-center gap-3">
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           {quickFilters.map(([id, label]) => (
             <button
               key={id}
@@ -311,6 +372,26 @@ export function CourtDesktop({
               {label}
             </button>
           ))}
+
+          {collaborators.length > 0 ? (
+            <div className="ml-2 flex items-center -space-x-1.5">
+              {collaborators.slice(0, 3).map((person) => (
+                <PersonAvatar
+                  key={person.id}
+                  name={person.name}
+                  initials={person.initials}
+                  src={person.avatarUrl}
+                  size={24}
+                  className="ring-2 ring-white"
+                />
+              ))}
+              {collaborators.length > 3 ? (
+                <span className="flex h-6 items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground ring-2 ring-white">
+                  +{collaborators.length - 3}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
@@ -447,33 +528,19 @@ export function CourtDesktop({
         </div>
       </div>
 
-      {focusSelection ? (
-        <CourtFocusView
-          selection={focusSelection}
-          lanes={{ now: view.now, next: view.next, later: view.later }}
-          onSelectThing={(thingId) =>
-            setFocusSelection((current) => (current ? { lane: current.lane, thingId } : current))
-          }
-          onClose={closeFocus}
-        />
-      ) : (
-        <div className="grid min-w-0 grid-cols-3 items-start gap-3 overflow-hidden">
-          {(["now", "next", "later"] as const).map((lane) => (
-            <CourtLaneStack
-              key={lane}
-              ref={(handle) => {
-                laneRefs.current[lane] = handle;
-              }}
-              lane={lane}
-              things={view[lane]}
-              myActorId={myActorId}
-              initialPosition={savedPositionsRef.current[lane]}
-              onOpen={(thing, origin) => handleOpen(lane, thing, origin)}
-              onRefresh={refetch}
-            />
-          ))}
-        </div>
-      )}
+      <CourtWorkspace
+        selection={focusSelection}
+        lanes={{ now: view.now, next: view.next, later: view.later }}
+        myActorId={myActorId}
+        initialPositions={savedPositionsRef.current}
+        laneRefs={laneRefs}
+        onOpen={handleOpen}
+        onSelectThing={(thingId) =>
+          setFocusSelection((current) => (current ? { lane: current.lane, thingId } : current))
+        }
+        onClose={closeFocus}
+        onRefresh={refetch}
+      />
 
       <section
         className="mt-8 border-t border-border/70 bg-white pt-4"
@@ -524,34 +591,40 @@ export function CourtDesktop({
         </div>
 
         {theirFocus ? (
-          <div className="mt-3 border-t border-border pt-3">
-            <div className="mb-2 flex items-center gap-2 px-1">
-              <span className="text-[11px] font-semibold text-foreground">
-                {theirFocus === "waiting_for_catch"
-                  ? "Waiting for Catch"
-                  : theirFocus === "moving"
-                    ? "Moving"
-                    : "Needs Attention"}
-              </span>
-              <span className="text-[10px] text-muted-foreground">Things in this group</span>
+          <InlineThingDetailWorkspace
+            thing={theirSelectedThing}
+            onClose={() => setTheirSelectedId(null)}
+            className="mt-3 border-t border-border pt-3"
+          >
+            <div>
+              <div className="mb-2 flex items-center gap-2 px-1">
+                <span className="text-[11px] font-semibold text-foreground">
+                  {theirFocus === "waiting_for_catch"
+                    ? "Waiting for Catch"
+                    : theirFocus === "moving"
+                      ? "Moving"
+                      : "Needs Attention"}
+                </span>
+                <span className="text-[10px] text-muted-foreground">Things in this group</span>
+              </div>
+              {theirGroups[theirFocus].length ? (
+                <div className="grid grid-cols-2 gap-x-4">
+                  {theirGroups[theirFocus].map((thing) => (
+                    <CourtThingCard
+                      key={thing.id}
+                      thing={thing}
+                      density="overview"
+                      onSelect={(selectedThing) => setTheirSelectedId(selectedThing.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="flex min-h-[96px] items-center justify-center border-b border-dashed border-border/70 bg-white text-[11px] text-muted-foreground">
+                  No Things match this group.
+                </div>
+              )}
             </div>
-            {theirGroups[theirFocus].length ? (
-              <div className="grid grid-cols-2 gap-x-4">
-                {theirGroups[theirFocus].map((thing) => (
-                  <CourtThingCard
-                    key={thing.id}
-                    thing={thing}
-                    density="overview"
-                    onSelect={onSelect}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="flex min-h-[96px] items-center justify-center border-b border-dashed border-border/70 bg-white text-[11px] text-muted-foreground">
-                No Things match this group.
-              </div>
-            )}
-          </div>
+          </InlineThingDetailWorkspace>
         ) : null}
       </section>
     </div>

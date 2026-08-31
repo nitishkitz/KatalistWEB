@@ -67,9 +67,9 @@ test("Court stack gestures use native pointer and wheel intent handling without 
 
 test("Court lane stacks render one active Thing over a capped, hidden decorative deck", () => {
   assert.match(laneStack, /<ThingStackCard[\s\S]*thing=\{activeThing\}/);
-  assert.match(laneStack, /Math\.min\(3, Math\.max\(0, things\.length - 1\)\)/);
+  assert.match(laneStack, /Math\.min\(2, Math\.max\(0, things\.length - 1\)\)/);
   assert.match(laneStack, /aria-hidden="true"/);
-  assert.match(laneStack, /2 \+ depth \* 2/);
+  assert.match(laneStack, /depth \* -5/);
   assert.match(laneStack, /motion-reduce:!transform-none/);
   assert.match(laneStack, /\{renderIndex \+ 1\} \/ \{things\.length\}/);
 });
@@ -79,7 +79,7 @@ test("Court stack actions are capability-gated and route to canonical RPCs", () 
   assert.match(stackCard, /canCatch \?/);
   assert.match(stackCard, /canSetPace && lane !== "later"/);
   assert.match(stackCard, /canSort/);
-  assert.match(stackCard, />\s*Caught It\s*</);
+  assert.match(stackCard, />\s*Catch\s*</);
   assert.match(stackCard, />\s*Later\s*</);
   assert.match(stackCard, />\s*Sorted\s*</);
   assert.match(laneStack, /await rpcCatchThing\(activeThing\.id\)/);
@@ -99,28 +99,25 @@ test("Court focus navigator selects stable Thing identities with accessible butt
   assert.match(thingNavigator, /onSelect\(thing\.id\)/);
 });
 
-test("Court focus is inline detail with two contextual non-selected rails", () => {
+test("Court focus is inline detail with two contextual compact lanes", () => {
   assert.match(focusView, /<ThingDetailContent/);
   assert.doesNotMatch(focusView, /ThingDetailSheet/);
-  assert.match(focusView, /laneOrder\.filter\(\(lane\) => lane !== selection\.lane\)/);
-  assert.match(focusView, /rails\.map\(\(lane\)/);
-  assert.match(focusView, /courtLaneContent\[lane\]\.label/);
-  assert.match(focusView, /lanes\[lane\]\.length/);
+  assert.match(focusView, /focusColumns\(selection\)/);
+  assert.match(focusView, /<CourtCompactLane/);
+  assert.doesNotMatch(focusView, /writing-mode:vertical-rl/);
 });
 
 test("Court focus has a real close control and identity-keyed restrained detail transition", () => {
   assert.match(focusView, /<button[\s\S]*onClick=\{onClose\}/);
   assert.match(focusView, /aria-label="Back to Court stacks"/);
-  assert.match(focusView, /key=\{selection\.thingId\}/);
-  assert.match(focusView, /duration-\[220ms\]/);
+  assert.match(focusView, /key=\{`detail-\$\{column\.thingId\}`\}/);
+  assert.match(focusView, /duration-\[240ms\]/);
   assert.match(focusView, /motion-reduce:transition-none/);
 });
 
 test("Court desktop switches only the three personal lanes between stacks and inline focus", () => {
-  assert.match(courtDesktop, /focusSelection \?/);
-  assert.match(courtDesktop, /<CourtFocusView/);
-  assert.match(courtDesktop, /<CourtLaneStack/);
-  assert.match(courtDesktop, /type CourtFocusSelection/);
+  assert.match(courtDesktop, /<CourtWorkspace/);
+  assert.match(courtDesktop, /import type \{ CourtFocusSelection \}/);
   assert.match(courtDesktop, /useState<CourtFocusSelection \| null>/);
   assert.match(courtDesktop, /setFocusSelection\(\{ lane, thingId: thing\.id \}\)/);
   assert.doesNotMatch(courtDesktop, /focusIndex:\s*number/);
@@ -135,12 +132,12 @@ test("Court desktop retains Magic Box, controls, quick filters, and With Others"
   assert.match(courtDesktop, /Sort within each lane/);
   assert.match(courtDesktop, /Clear detailed filters/);
   assert.match(courtDesktop, /WITH OTHERS/);
-  assert.match(courtDesktop, /onSelect=\{onSelect\}/);
+  assert.match(courtDesktop, /setTheirSelectedId\(selectedThing\.id\)/);
 });
 
-test("Court route provides actor identity while retaining the existing Sheet selection flow", () => {
-  assert.match(courtRoute, /myActorId \} =\s*useCourt\(\)/);
+test("Court route provides actor identity while retaining the existing inline selection flow", () => {
+  assert.match(courtRoute, /myActorId,[\s\S]*= useCourt\(\)/);
   assert.match(courtRoute, /<CourtDesktop[\s\S]*myActorId=\{myActorId\}/);
-  assert.match(courtRoute, /<ThingDetailSheet/);
+  assert.match(courtRoute, /<InlineThingDetailWorkspace/);
   assert.doesNotMatch(courtDesktop, /navigate\(|useNavigate|Link to=/);
 });

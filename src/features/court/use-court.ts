@@ -59,6 +59,10 @@ export function useCourt() {
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");
   const theirs = parts.theirs;
+  const completedCount = useMemo(
+    () => source.things.filter((t) => t.workStatus === "sorted" || Boolean(t.sortedAt)).length,
+    [source.things],
+  );
 
   return {
     isLoading: liveAuth && query.isLoading,
@@ -69,6 +73,7 @@ export function useCourt() {
     next: parts.next,
     later: parts.later,
     theirs,
+    completedCount,
     all: source.things.filter(isActiveThing),
     myActorId: source.myActorId,
     theirGroups: {

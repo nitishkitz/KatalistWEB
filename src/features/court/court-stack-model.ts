@@ -2,6 +2,18 @@ import type { CourtLaneId } from "@/features/court/court-view-model";
 
 export type GestureAxis = "horizontal" | "vertical" | null;
 
+export type CourtWorkspacePhase = "overview" | "opening" | "focused" | "closing";
+
+export type CourtFocusSelection = {
+  lane: CourtLaneId;
+  thingId: string;
+};
+
+export type FocusColumn =
+  | { kind: "navigator"; lane: CourtLaneId }
+  | { kind: "detail"; lane: CourtLaneId; thingId: string }
+  | { kind: "compact"; lane: CourtLaneId };
+
 export type HorizontalActionInput = {
   deltaX: number;
   threshold: number;
@@ -12,6 +24,29 @@ export type HorizontalActionInput = {
 export type CourtStackItemsByLane = Readonly<
   Record<CourtLaneId, readonly { id: string }[]>
 >;
+
+const laneOrder: CourtLaneId[] = ["now", "next", "later"];
+
+export function focusColumns(selection: CourtFocusSelection): FocusColumn[] {
+  return laneOrder.flatMap((lane): FocusColumn[] => {
+    if (lane !== selection.lane) return [{ kind: "compact", lane }];
+    return [
+      { kind: "navigator", lane },
+      { kind: "detail", lane, thingId: selection.thingId },
+    ];
+  });
+}
+
+export function transitionDuration(
+  phase: CourtWorkspacePhase,
+  reduceMotion: boolean,
+): number {
+  if (reduceMotion) return 0;
+  if (phase === "opening") return 240;
+  if (phase === "closing") return 220;
+  if (phase === "focused") return 180;
+  return 0;
+}
 
 export function reconcileStackIndex(
   previousIndex: number,

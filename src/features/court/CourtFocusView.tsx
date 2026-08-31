@@ -1,95 +1,101 @@
 import type { Thing } from "@/domain/thing";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
-import { cn } from "@/lib/utils";
-import { courtLaneContent } from "./CourtLaneStack";
+import { CourtCompactLane } from "./CourtCompactLane";
+import { focusColumns, type CourtFocusSelection } from "./court-stack-model";
 import type { CourtLaneId } from "./court-view-model";
 import { KatalistIcon } from "./KatalistIcon";
 import { ThingNavigator } from "./ThingNavigator";
 
-export type CourtFocusSelection = {
-  lane: CourtLaneId;
-  thingId: string;
-};
+export type { CourtFocusSelection } from "./court-stack-model";
 
 export type CourtFocusViewProps = {
   selection: CourtFocusSelection;
   lanes: Record<CourtLaneId, Thing[]>;
   onSelectThing: (thingId: string) => void;
+  onOpen: (lane: CourtLaneId, thing: Thing, origin: HTMLElement) => void;
   onClose: () => void;
 };
 
-const laneOrder: CourtLaneId[] = ["now", "next", "later"];
-
-export function CourtFocusView({ selection, lanes, onSelectThing, onClose }: CourtFocusViewProps) {
+export function CourtFocusView({
+  selection,
+  lanes,
+  onSelectThing,
+  onOpen,
+  onClose,
+}: CourtFocusViewProps) {
   const selectedThing =
     lanes[selection.lane].find((thing) => thing.id === selection.thingId) ?? null;
-  const rails = laneOrder.filter((lane) => lane !== selection.lane);
+  const columns = focusColumns(selection);
+  const gridTemplateColumns = columns
+    .map((column) =>
+      column.kind === "detail"
+        ? "minmax(500px,1fr)"
+        : column.kind === "navigator"
+          ? "minmax(220px,250px)"
+          : "minmax(150px,180px)",
+    )
+    .join(" ");
   const closeButton = (
     <button
       type="button"
       onClick={onClose}
-      className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-[10.5px] font-medium text-muted-foreground outline-none hover:border-primary/45 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-primary/15 bg-primary/5 px-2.5 text-[10.5px] font-medium text-primary outline-none transition-colors hover:border-primary/35 hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-ring"
       aria-label="Back to Court stacks"
     >
       <KatalistIcon name="chevron-right" className="h-3.5 w-3.5 rotate-180" />
-      Back
+      Back to Court stacks
     </button>
   );
 
   return (
     <section
-      className="grid min-w-0 grid-cols-[minmax(176px,224px)_minmax(0,1fr)_repeat(2,minmax(52px,64px))] items-stretch gap-2 overflow-hidden"
+      className="grid min-w-0 items-start gap-2 transition-[grid-template-columns,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
+      style={{ gridTemplateColumns }}
       aria-label="Focused Court Thing"
     >
-      <ThingNavigator
-        lane={selection.lane}
-        things={lanes[selection.lane]}
-        selectedThingId={selection.thingId}
-        onSelect={onSelectThing}
-      />
-
-      <div className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-white">
-        <div
-          key={selection.thingId}
-          className="h-full max-h-[calc(100vh-14rem)] min-w-0 overflow-y-auto overscroll-contain transition-[opacity,transform] duration-[220ms] ease-out motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-reduce:animate-none motion-reduce:transition-none"
-        >
-          {selectedThing ? (
-            <ThingDetailContent initialThing={selectedThing} headerAction={closeButton} />
-          ) : (
-            <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 px-6 text-center text-[11px] text-muted-foreground">
-              {closeButton}
-              This Thing is no longer in the selected lane.
-            </div>
-          )}
-        </div>
-      </div>
-
-      {rails.map((lane) => (
-        <aside
-          key={lane}
-          className={cn(
-            "flex min-w-0 flex-col items-center justify-between overflow-hidden rounded-xl border border-border/70 px-2 py-3",
-            courtLaneContent[lane].headerTone,
-          )}
-          aria-label={`${courtLaneContent[lane].label} lane, ${lanes[lane].length} Things`}
-        >
-          <KatalistIcon
-            name={courtLaneContent[lane].icon}
-            className={cn("h-4 w-4 shrink-0", courtLaneContent[lane].tone)}
-          />
-          <span
-            className={cn(
-              "my-2 whitespace-nowrap text-[10px] font-semibold tracking-[0.08em] [writing-mode:vertical-rl]",
-              courtLaneContent[lane].tone,
-            )}
+      {columns.map((column) => {
+        if (column.kind === "navigator") {
+          return (
+            <ThingNavigator
+              key={`navigator-${column.lane}`}
+              lane={column.lane}
+              things={lanes[column.lane]}
+              selectedThingId={selection.thingId}
+              onSelect={onSelectThing}
+            />
+          );
+        }
+        if (column.kind === "compact") {
+          return (
+            <CourtCompactLane
+              key={`compact-${column.lane}`}
+              lane={column.lane}
+              things={lanes[column.lane]}
+              onOpen={(thing, origin) => onOpen(column.lane, thing, origin)}
+            />
+          );
+        }
+        return (
+          <div
+            key={`detail-${column.thingId}`}
+            className="min-w-0 rounded-2xl border border-border/70 bg-white shadow-xs motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200 motion-reduce:animate-none"
           >
-            {courtLaneContent[lane].label}
-          </span>
-          <span className="text-[11px] tabular-nums text-muted-foreground">
-            {lanes[lane].length}
-          </span>
-        </aside>
-      ))}
+            {selectedThing ? (
+              <ThingDetailContent
+                initialThing={selectedThing}
+                headerAction={closeButton}
+                onAfterTerminalAction={onClose}
+                variant="court"
+              />
+            ) : (
+              <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 px-6 text-center text-[11px] text-muted-foreground">
+                {closeButton}
+                This Thing is no longer in the selected lane.
+              </div>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }
