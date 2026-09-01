@@ -142,6 +142,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     const [pendingAction, setPendingAction] = useState<CourtStackAction | null>(null);
     const [announcement, setAnnouncement] = useState("");
     const [anim, setAnim] = useState<StackAnim | null>(null);
+    const [isDragTarget, setIsDragTarget] = useState(false);
     const activeThingIdRef = useRef<string | null>(things[initialIndex]?.id ?? null);
     const activeButtonRef = useRef<HTMLButtonElement | null>(null);
     const headingRef = useRef<HTMLHeadingElement | null>(null);
@@ -277,13 +278,68 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     return (
       <section
         className={cn(
-          "flex min-w-0 flex-col overflow-hidden rounded-2xl border shadow-xs transition-colors",
+          "relative flex min-w-0 flex-col overflow-hidden rounded-2xl border shadow-xs transition-colors",
           content.bgTone,
           content.borderTone,
+          isDragTarget && "ring-2 ring-primary/60",
         )}
         aria-labelledby={`court-${lane}-title`}
         onWheel={handleWheel}
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("application/katalist-thing")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            if (!isDragTarget) setIsDragTarget(true);
+          }
+        }}
+        onDragEnter={(e) => {
+          if (e.dataTransfer.types.includes("application/katalist-thing")) {
+            e.preventDefault();
+            setIsDragTarget(true);
+          }
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setIsDragTarget(false);
+          }
+        }}
+        onDrop={async (e) => {
+          e.preventDefault();
+          setIsDragTarget(false);
+          try {
+            const raw = e.dataTransfer.getData("application/katalist-thing");
+            if (!raw) return;
+            const data = JSON.parse(raw) as { thingId: string; fromLane: CourtLaneId; title: string };
+            if (data.fromLane === lane) return;
+
+            await rpcSetPersonalPace(data.thingId, lane);
+            toast.success(`Moved "${data.title}" to ${content.label}`);
+            await onRefresh();
+          } catch (err: any) {
+            toast.error(domainErrorMessage(err));
+          }
+        }}
       >
+        {isDragTarget && (
+          <div
+            className={cn(
+              "absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed backdrop-blur-xs transition-all pointer-events-none animate-in fade-in-50 duration-150",
+              lane === "now"
+                ? "border-red-400 bg-red-50/90 text-red-700"
+                : lane === "next"
+                  ? "border-blue-400 bg-blue-50/90 text-blue-700"
+                  : "border-purple-400 bg-purple-50/90 text-purple-700",
+            )}
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm border border-border/40">
+              <KatalistIcon name={content.icon} className="h-5 w-5 fill-current" />
+            </div>
+            <span className="text-[13px] font-bold tracking-tight">
+              Drop to pace as {content.label}
+            </span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between px-3.5 pt-2.5 pb-1.5 shrink-0">
           <div className="flex items-center gap-1.5">
             <span className={cn("text-base", content.tone)}>⚡</span>
@@ -432,12 +488,22 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                     const due = formatCourtDue(thingItem);
                     const isProgress = thingItem.workStatus === "under_progress";
                     const isWaiting = thingItem.acknowledgement === "waiting_for_catch";
+                    const canPaceItem = getThingCapabilities(thingItem, myActorId).canSetPace;
                     return (
                       <div
                         key={thingItem.id}
+                        draggable={canPaceItem}
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(
+                            "application/katalist-thing",
+                            JSON.stringify({ thingId: thingItem.id, fromLane: lane, title: thingItem.title }),
+                          );
+                          e.dataTransfer.effectAllowed = "move";
+                        }}
                         onClick={(e) => onOpen(thingItem, e.currentTarget)}
                         className={cn(
                           "group flex items-center justify-between gap-3 rounded-xl border bg-white/90 hover:bg-white p-3 text-left shadow-2xs transition-all duration-150 hover:shadow-xs cursor-pointer",
+                          canPaceItem && "cursor-grab active:cursor-grabbing",
                           lane === "now"
                             ? "border-red-100/80 hover:border-red-200"
                             : lane === "next"

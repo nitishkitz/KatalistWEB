@@ -1,4 +1,5 @@
 import { forwardRef, type MouseEvent, type MutableRefObject } from "react";
+import { GripVertical } from "lucide-react";
 
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { getThingCapabilities } from "@/domain/capabilities";
@@ -93,8 +94,17 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
 
     return (
       <article
+        draggable={capabilities.canSetPace}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(
+            "application/katalist-thing",
+            JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
+          );
+          e.dataTransfer.effectAllowed = "move";
+        }}
         className={cn(
-          "flex flex-col justify-between overflow-hidden rounded-2xl border bg-white transition-all duration-200",
+          "group/card flex flex-col justify-between overflow-hidden rounded-2xl border bg-white transition-all duration-200",
+          capabilities.canSetPace && "cursor-grab active:cursor-grabbing",
           styling.border,
           styling.hover,
           styling.shadow,
@@ -109,7 +119,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           className="block w-full p-3.5 pb-2.5 text-left outline-none cursor-pointer focus-visible:ring-1 focus-visible:ring-primary/40"
           aria-label={`Open ${thing.title}`}
         >
-          {/* Top row: avatar + @name | due date */}
+          {/* Top row: avatar + @name | due date + drag grip */}
           <span className="flex items-center justify-between gap-2">
             <span className="inline-flex min-w-0 items-center gap-2">
               <PersonAvatar
@@ -122,16 +132,26 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 @{thing.assignee.name}
               </span>
             </span>
-            {dueLabel ? (
-              <span
-                className={cn(
-                  "shrink-0 text-[11px] font-bold",
-                  due.urgent ? "text-red-600" : laneTone[lane].text,
-                )}
-              >
-                Due {dueLabel}
-              </span>
-            ) : null}
+            <div className="flex items-center gap-1.5 shrink-0">
+              {dueLabel ? (
+                <span
+                  className={cn(
+                    "shrink-0 text-[11px] font-bold",
+                    due.urgent ? "text-red-600" : laneTone[lane].text,
+                  )}
+                >
+                  Due {dueLabel}
+                </span>
+              ) : null}
+              {capabilities.canSetPace ? (
+                <span
+                  title="Drag across lanes to repace (NOW / NEXT / LATER)"
+                  className="inline-flex items-center text-slate-300 group-hover/card:text-slate-500 transition-colors"
+                >
+                  <GripVertical className="h-3.5 w-3.5" />
+                </span>
+              ) : null}
+            </div>
           </span>
 
           {/* Title */}
