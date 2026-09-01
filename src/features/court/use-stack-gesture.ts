@@ -7,10 +7,10 @@ import {
   type GestureAxis,
 } from "./court-stack-model";
 
-const INTENT_THRESHOLD = 10;
-const ACTION_THRESHOLD = 72;
-const VERTICAL_SWIPE_THRESHOLD = 44;
-const WHEEL_THRESHOLD = 36;
+const INTENT_THRESHOLD = 8;
+const ACTION_THRESHOLD = 54;
+const VERTICAL_SWIPE_THRESHOLD = 36;
+const WHEEL_THRESHOLD = 32;
 const WHEEL_COOLDOWN_MS = 260;
 
 type Offset = { x: number; y: number };

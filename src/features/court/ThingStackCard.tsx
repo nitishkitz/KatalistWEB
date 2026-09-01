@@ -94,17 +94,8 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
 
     return (
       <article
-        draggable={capabilities.canSetPace}
-        onDragStart={(e) => {
-          e.dataTransfer.setData(
-            "application/katalist-thing",
-            JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
-          );
-          e.dataTransfer.effectAllowed = "move";
-        }}
         className={cn(
           "group/card flex flex-col justify-between overflow-hidden rounded-2xl border bg-white transition-all duration-200",
-          capabilities.canSetPace && "cursor-grab active:cursor-grabbing",
           styling.border,
           styling.hover,
           styling.shadow,
@@ -145,8 +136,17 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               ) : null}
               {capabilities.canSetPace ? (
                 <span
+                  draggable={true}
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    e.dataTransfer.setData(
+                      "application/katalist-thing",
+                      JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
+                    );
+                    e.dataTransfer.effectAllowed = "move";
+                  }}
                   title="Drag across lanes to repace (NOW / NEXT / LATER)"
-                  className="inline-flex items-center text-slate-300 group-hover/card:text-slate-500 transition-colors"
+                  className="inline-flex items-center p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-grab active:cursor-grabbing"
                 >
                   <GripVertical className="h-3.5 w-3.5" />
                 </span>
