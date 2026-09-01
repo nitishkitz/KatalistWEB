@@ -461,6 +461,28 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
         }
         return null as never;
       }
+
+      try {
+        const res = await fetch("/api/buckets/add-item", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ bucketId, thingId, listId }),
+        });
+        if (res.ok) {
+          if (thingId) {
+            const t = getThing(thingId);
+            addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
+          }
+          if (listId) {
+            const list = getListById(listId);
+            addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
+          }
+          return { ok: true } as never;
+        }
+      } catch {
+        // fallback to liveRpc
+      }
+
       return liveRpc(() =>
         supabase.rpc("add_to_bucket", {
           p_bucket_id: bucketId,

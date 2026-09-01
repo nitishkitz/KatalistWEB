@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Clock,
   FileText,
+  FolderPlus,
   GripVertical,
   RotateCw,
   Sparkles,
@@ -20,6 +21,8 @@ import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailW
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import type { CourtLaneStackHandle } from "./CourtLaneStack";
 import { CourtWorkspace } from "./CourtWorkspace";
+import { CourtBucketsSidePanel } from "./CourtBucketsSidePanel";
+import { CourtDragToBucketGuide } from "./CourtDragToBucketGuide";
 import type { CourtFocusSelection } from "./court-stack-model";
 import { KatalistIcon } from "./KatalistIcon";
 import {
@@ -318,6 +321,8 @@ export function CourtDesktop({
     setFocusSelection({ lane, thingId: thing.id });
   };
 
+  const [showBucketsPanel, setShowBucketsPanel] = useState(true);
+
   if (error) {
     return (
       <div className="hidden lg:block">
@@ -340,7 +345,17 @@ export function CourtDesktop({
   }
 
   return (
-    <div className="hidden lg:block max-w-[1240px] mx-auto">
+    <div className="hidden lg:block max-w-[1380px] mx-auto">
+      {/* Top Banner: Drag & Drop from Court to Buckets */}
+      <div className="mb-4 text-center">
+        <h1 className="text-2xl font-black tracking-tight text-slate-900">
+          Drag & Drop from Court to Buckets
+        </h1>
+        <p className="mt-1 text-[13px] font-medium text-slate-500">
+          Move any Thing from NOW, NEXT, or LATER into a Bucket to group and focus your work.
+        </p>
+      </div>
+
       <MagicBox desktop />
 
       {isLoading ? (
@@ -632,22 +647,48 @@ export function CourtDesktop({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <button
+            type="button"
+            onClick={() => setShowBucketsPanel((v) => !v)}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11.5px] font-bold outline-none transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
+              showBucketsPanel
+                ? "border-primary bg-primary/10 text-primary shadow-2xs"
+                : "border-border bg-white text-slate-700 hover:text-foreground hover:border-slate-300",
+            )}
+            title="Toggle Buckets side panel"
+          >
+            <FolderPlus className="h-3.5 w-3.5" />
+            <span>Buckets</span>
+          </button>
         </div>
       </div>
 
-      <CourtWorkspace
-        selection={focusSelection}
-        lanes={{ now: view.now, next: view.next, later: view.later }}
-        myActorId={myActorId}
-        initialPositions={savedPositionsRef.current}
-        laneRefs={laneRefs}
-        onOpen={handleOpen}
-        onSelectThing={(thingId) =>
-          setFocusSelection((current) => (current ? { lane: current.lane, thingId } : current))
-        }
-        onClose={closeFocus}
-        onRefresh={refetch}
-      />
+      <div className="flex min-w-0 items-start gap-4">
+        <div className="min-w-0 flex-1 space-y-4">
+          <CourtWorkspace
+            selection={focusSelection}
+            lanes={{ now: view.now, next: view.next, later: view.later }}
+            myActorId={myActorId}
+            initialPositions={savedPositionsRef.current}
+            laneRefs={laneRefs}
+            onOpen={handleOpen}
+            onSelectThing={(thingId) =>
+              setFocusSelection((current) => (current ? { lane: current.lane, thingId } : current))
+            }
+            onClose={closeFocus}
+            onRefresh={refetch}
+          />
+
+          {/* 4-Step Interactive Explainer Guide */}
+          <CourtDragToBucketGuide />
+        </div>
+
+        {showBucketsPanel && (
+          <CourtBucketsSidePanel onClose={() => setShowBucketsPanel(false)} />
+        )}
+      </div>
 
       <section
         className="mt-8 border-t border-border/70 pt-5 pb-6"
