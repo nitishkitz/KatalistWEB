@@ -13,7 +13,51 @@ export type ProfileIdentity = {
 export async function fetchProfileIdentities(): Promise<ProfileIdentity[]> {
   const map = new Map<string, ProfileIdentity>();
 
-  // 1. Try public_identities view
+  // 1. Try server directory endpoint (resolves all real profiles and actors via service role)
+  try {
+    const res = await fetch("/api/people/directory");
+    if (res.ok) {
+      const json = await res.json();
+      for (const p of json.people ?? []) {
+        const item: ProfileIdentity = {
+          id: p.id,
+          email: p.email ?? null,
+          display_name: p.display_name,
+          avatar_url: p.avatar_url ?? null,
+        };
+        if (p.profile_id) map.set(p.profile_id, item);
+        if (p.actor_id) map.set(p.actor_id, item);
+        if (p.id) map.set(p.id, item);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Try list_assignable_people RPC
+  try {
+    const { data: assignable, error } = await supabase.rpc("list_assignable_people");
+    if (!error && assignable) {
+      for (const r of assignable) {
+        if (r.actor_id && r.display_name) {
+          const avatarMatch = r.avatar_url?.match(/\/avatars\/([0-9a-f-]{36})\//i);
+          const profileId = avatarMatch ? avatarMatch[1] : undefined;
+          const item: ProfileIdentity = {
+            id: r.actor_id,
+            email: null,
+            display_name: r.display_name,
+            avatar_url: r.avatar_url ?? null,
+          };
+          if (!map.has(r.actor_id)) map.set(r.actor_id, item);
+          if (profileId && !map.has(profileId)) map.set(profileId, item);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 3. Try public_identities view
   try {
     const { data: identities, error } = await supabase
       .from("public_identities")
@@ -34,54 +78,16 @@ export async function fetchProfileIdentities(): Promise<ProfileIdentity[]> {
     // ignore
   }
 
-  // 2. Try list_assignable_people RPC
-  try {
-    const { data: assignable, error } = await supabase.rpc("list_assignable_people");
-    if (!error && assignable) {
-      for (const r of assignable) {
-        if (r.actor_id && r.display_name && !map.has(r.actor_id)) {
-          map.set(r.actor_id, {
-            id: r.actor_id,
-            email: null,
-            display_name: r.display_name,
-            avatar_url: r.avatar_url ?? null,
-          });
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  // 3. Try profiles table
+  // 4. Try profiles table
   try {
     const { data: profs, error } = await supabase.from("profiles").select("id, email, display_name, avatar_url");
     if (!error && profs) {
       for (const r of profs) {
-        if (r.id && r.display_name) {
+        if (r.id && r.display_name && !map.has(r.id)) {
           map.set(r.id, {
             id: r.id,
             email: r.email ?? null,
             display_name: r.display_name,
-            avatar_url: r.avatar_url ?? null,
-          });
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  // 4. Try public_profiles table
-  try {
-    const { data: pubProfs, error } = await supabase.from("public_profiles").select("id, email, display_name, avatar_url");
-    if (!error && pubProfs) {
-      for (const r of pubProfs) {
-        if (r.id && r.display_name && !map.has(r.id)) {
-          map.set(r.id, {
-            id: r.id as string,
-            email: r.email ?? null,
-            display_name: r.display_name as string,
             avatar_url: r.avatar_url ?? null,
           });
         }

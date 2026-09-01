@@ -50,10 +50,26 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
   const unique = [...new Set(profileIds.filter(Boolean))];
   const identities = new Map<string, { display_name: string; avatar_url: string | null }>();
 
-  // 1. Try public_identities view
-  if (unique.length) {
+  // 1. Fetch complete directory (server directory + assignable people + demo fallback)
+  try {
+    const dir = await fetchProfileIdentities();
+    for (const p of dir) {
+      if (p.id && p.display_name && p.display_name !== "Someone") {
+        identities.set(p.id, {
+          display_name: p.display_name,
+          avatar_url: p.avatar_url || matchAvatarByName(p.display_name),
+        });
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Try public_identities view for any extra IDs
+  const missingAfterDir = unique.filter((id) => !identities.has(id));
+  if (missingAfterDir.length) {
     try {
-      const { data } = await supabase.from("public_identities").select("id, display_name, avatar_url").in("id", unique);
+      const { data } = await supabase.from("public_identities").select("id, display_name, avatar_url").in("id", missingAfterDir);
       for (const row of data ?? []) {
         if (!row.id) continue;
         const name = row.display_name && row.display_name !== "Someone" ? row.display_name : "";
@@ -69,7 +85,7 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
     }
   }
 
-  // 2. Try profiles table for missing IDs
+  // 3. Try profiles table for missing IDs
   const missingAfterPublic = unique.filter((id) => !identities.has(id));
   if (missingAfterPublic.length) {
     try {
@@ -87,53 +103,6 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
       }
     } catch {
       // ignore
-    }
-  }
-
-  // 3. Try actors table to map actor_id -> profile_id
-  const missingAfterProfiles = unique.filter((id) => !identities.has(id));
-  if (missingAfterProfiles.length) {
-    try {
-      const { data: actors } = await supabase
-        .from("actors")
-        .select("id, profile_id, kind")
-        .in("id", missingAfterProfiles);
-      const actorProfileIds = (actors ?? []).map((a) => a.profile_id).filter(Boolean) as string[];
-      if (actorProfileIds.length) {
-        const { data: profs } = await supabase
-          .from("profiles")
-          .select("id, display_name, avatar_url")
-          .in("id", actorProfileIds);
-        const pMap = new Map((profs ?? []).map((p) => [p.id, p]));
-        for (const a of actors ?? []) {
-          const prof = a.profile_id ? pMap.get(a.profile_id) : null;
-          const name = prof?.display_name;
-          if (name && name !== "Someone") {
-            identities.set(a.id, {
-              display_name: name,
-              avatar_url: prof?.avatar_url || matchAvatarByName(name),
-            });
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // 4. Try demo directory / fetchProfileIdentities
-  const missingAfterActors = unique.filter((id) => !identities.has(id));
-  if (missingAfterActors.length) {
-    const dir = await fetchProfileIdentities();
-    for (const p of dir) {
-      if (p.display_name && p.display_name !== "Someone") {
-        if (!identities.has(p.id)) {
-          identities.set(p.id, {
-            display_name: p.display_name,
-            avatar_url: p.avatar_url || matchAvatarByName(p.display_name),
-          });
-        }
-      }
     }
   }
 
