@@ -152,7 +152,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                 className={cn(
                   "group relative flex items-center justify-between rounded-xl border p-2.5 transition-all duration-150 cursor-pointer",
                   isTarget
-                    ? "border-primary bg-primary/10 shadow-sm scale-[1.02] ring-2 ring-primary/40 border-dashed"
+                    ? "border-sky-500 bg-sky-50/80 shadow-sm scale-[1.02] ring-2 ring-sky-300/50 border-dashed"
                     : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/70 shadow-2xs",
                 )}
               >

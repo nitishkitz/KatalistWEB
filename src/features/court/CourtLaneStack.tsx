@@ -281,7 +281,6 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           "relative flex min-w-0 flex-col overflow-hidden rounded-2xl border shadow-xs transition-colors",
           content.bgTone,
           content.borderTone,
-          isDragTarget && "ring-2 ring-primary/60",
         )}
         aria-labelledby={`court-${lane}-title`}
         onWheel={handleWheel}
