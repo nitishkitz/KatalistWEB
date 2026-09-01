@@ -278,12 +278,55 @@ function listMemberPlugin(): Plugin {
             res.end(JSON.stringify({ error: "Method Not Allowed" }));
             return;
           }
-
           let bodyStr = "";
           for await (const chunk of req) {
             bodyStr += chunk;
           }
-          const { listId, personId, role = "collaborator" } = JSON.parse(bodyStr || "{}");
+          const body = JSON.parse(bodyStr || "{}");
+
+          if (pathOnly === "/api/buckets/add-item") {
+            const { bucketId, thingId, listId: reqListId } = body || {};
+            if (!bucketId || (!thingId && !reqListId)) {
+              res.statusCode = 400;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ error: "bucketId and either thingId or listId are required." }));
+              return;
+            }
+
+            let bQuery = admin.from("bucket_items").select("id").eq("bucket_id", bucketId);
+            if (thingId) bQuery = bQuery.eq("thing_id", thingId);
+            if (reqListId) bQuery = bQuery.eq("list_id", reqListId);
+            const { data: existing } = await bQuery.maybeSingle();
+
+            if (existing?.id) {
+              res.statusCode = 200;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ ok: true, id: existing.id, message: "Item already in bucket" }));
+              return;
+            }
+
+            const { data: inserted, error: insErr } = await admin.from("bucket_items").insert({
+              bucket_id: bucketId,
+              thing_id: thingId || null,
+              list_id: reqListId || null,
+            }).select().single();
+
+            if (insErr) {
+              res.statusCode = 500;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ error: insErr.message || "Failed to add item to bucket" }));
+              return;
+            }
+
+            await admin.from("buckets").update({ updated_at: new Date().toISOString() }).eq("id", bucketId);
+
+            res.statusCode = 200;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ ok: true, data: inserted }));
+            return;
+          }
+
+          const { listId, personId, role = "collaborator" } = body || {};
 
           if (!listId || !personId) {
             res.statusCode = 400;
@@ -403,48 +446,6 @@ function listMemberPlugin(): Plugin {
             res.statusCode = 200;
             res.setHeader("content-type", "application/json");
             res.end(JSON.stringify({ ok: true }));
-            return;
-          }
-
-          if (pathOnly === "/api/buckets/add-item") {
-            const { bucketId, thingId, listId: reqListId } = body || {};
-            if (!bucketId || (!thingId && !reqListId)) {
-              res.statusCode = 400;
-              res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ error: "bucketId and either thingId or listId are required." }));
-              return;
-            }
-
-            let bQuery = admin.from("bucket_items").select("id").eq("bucket_id", bucketId);
-            if (thingId) bQuery = bQuery.eq("thing_id", thingId);
-            if (reqListId) bQuery = bQuery.eq("list_id", reqListId);
-            const { data: existing } = await bQuery.maybeSingle();
-
-            if (existing?.id) {
-              res.statusCode = 200;
-              res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ ok: true, id: existing.id, message: "Item already in bucket" }));
-              return;
-            }
-
-            const { data: inserted, error: insErr } = await admin.from("bucket_items").insert({
-              bucket_id: bucketId,
-              thing_id: thingId || null,
-              list_id: reqListId || null,
-            }).select().single();
-
-            if (insErr) {
-              res.statusCode = 500;
-              res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ error: insErr.message || "Failed to add item to bucket" }));
-              return;
-            }
-
-            await admin.from("buckets").update({ updated_at: new Date().toISOString() }).eq("id", bucketId);
-
-            res.statusCode = 200;
-            res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ ok: true, data: inserted }));
             return;
           }
         } catch (err: any) {

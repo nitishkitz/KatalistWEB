@@ -131,8 +131,8 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                 }}
                 onDrop={async (e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   setHoveredBucketId(null);
-                  onClose?.();
                   try {
                     const raw = e.dataTransfer.getData("application/katalist-thing");
                     if (!raw) return;
@@ -147,6 +147,8 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                     await qc.invalidateQueries({ queryKey: ["bucket-items", b.id] });
                   } catch (err: any) {
                     toast.error(domainErrorMessage(err));
+                  } finally {
+                    onClose?.();
                   }
                 }}
                 className={cn(
