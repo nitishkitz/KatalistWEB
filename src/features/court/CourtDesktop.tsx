@@ -320,7 +320,33 @@ export function CourtDesktop({
     setFocusSelection({ lane, thingId: thing.id });
   };
 
-  const [showBucketsPanel, setShowBucketsPanel] = useState(true);
+  const [showBucketsPanel, setShowBucketsPanel] = useState(false);
+
+  useEffect(() => {
+    const handleDragEnter = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("application/katalist-thing")) {
+        setShowBucketsPanel(true);
+      }
+    };
+
+    const handleDragEnd = () => {
+      setShowBucketsPanel(false);
+    };
+
+    const handleDrop = () => {
+      setShowBucketsPanel(false);
+    };
+
+    window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragend", handleDragEnd);
+    window.addEventListener("drop", handleDrop);
+
+    return () => {
+      window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragend", handleDragEnd);
+      window.removeEventListener("drop", handleDrop);
+    };
+  }, []);
 
   if (error) {
     return (

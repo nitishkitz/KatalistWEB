@@ -132,6 +132,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                 onDrop={async (e) => {
                   e.preventDefault();
                   setHoveredBucketId(null);
+                  onClose?.();
                   try {
                     const raw = e.dataTransfer.getData("application/katalist-thing");
                     if (!raw) return;
