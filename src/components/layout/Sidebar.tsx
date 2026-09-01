@@ -1,3 +1,4 @@
+import { useState, useRef, useCallback } from "react";
 import {
   Bell,
   Briefcase,
@@ -13,6 +14,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/katalist/Logo";
 import { useAppContext } from "@/features/context/use-app-context";
+import { SpringLoadedBucketFlyout } from "@/features/buckets/SpringLoadedBucketFlyout";
 
 const navItems = [
   { title: "Court", to: "/", icon: LayoutGrid },
@@ -26,6 +28,34 @@ const navItems = [
 export function AppSidebar() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { context, setContext } = useAppContext();
+  const [isBucketFlyoutOpen, setIsBucketFlyoutOpen] = useState(false);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleBucketDragEnter = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/katalist-thing")) {
+      e.preventDefault();
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = setTimeout(() => {
+        setIsBucketFlyoutOpen(true);
+      }, 150);
+    }
+  }, []);
+
+  const handleBucketDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("application/katalist-thing")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  }, []);
+
+  const handleBucketDragLeave = useCallback((e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+        hoverTimeoutRef.current = null;
+      }
+    }
+  }, []);
 
   return (
     <>
@@ -39,15 +69,20 @@ export function AppSidebar() {
           {navItems.map((item) => {
             const isActive =
               item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+            const isBucketItem = item.to === "/buckets";
             return (
               <Link
                 key={item.title}
                 to={item.to}
+                onDragEnter={isBucketItem ? handleBucketDragEnter : undefined}
+                onDragOver={isBucketItem ? handleBucketDragOver : undefined}
+                onDragLeave={isBucketItem ? handleBucketDragLeave : undefined}
                 className={cn(
                   "relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] font-medium transition-colors duration-200",
                   isActive
                     ? "bg-sidebar-accent text-foreground"
                     : "text-sidebar-foreground/80 hover:bg-muted hover:text-foreground",
+                  isBucketItem && isBucketFlyoutOpen && "ring-2 ring-primary/60 bg-primary/10 text-primary font-bold shadow-xs",
                 )}
               >
                 {isActive && (
@@ -83,6 +118,11 @@ export function AppSidebar() {
             <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
         </div>
+
+        <SpringLoadedBucketFlyout
+          isOpen={isBucketFlyoutOpen}
+          onClose={() => setIsBucketFlyoutOpen(false)}
+        />
       </aside>
 
       {/* Mobile — bottom tab bar */}
@@ -90,13 +130,18 @@ export function AppSidebar() {
         {navItems.map((item) => {
           const isActive =
             item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+          const isBucketItem = item.to === "/buckets";
           return (
             <Link
               key={item.title}
               to={item.to}
+              onDragEnter={isBucketItem ? handleBucketDragEnter : undefined}
+              onDragOver={isBucketItem ? handleBucketDragOver : undefined}
+              onDragLeave={isBucketItem ? handleBucketDragLeave : undefined}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 py-1 text-[10px] font-medium",
+                "flex flex-1 flex-col items-center gap-0.5 py-1 text-[10px] font-medium transition-colors",
                 isActive ? "text-primary" : "text-muted-foreground",
+                isBucketItem && isBucketFlyoutOpen && "text-primary font-bold animate-pulse",
               )}
             >
               <item.icon className="h-[18px] w-[18px]" strokeWidth={isActive ? 2.2 : 1.8} />
