@@ -122,6 +122,102 @@ function authPopupPlugin(): Plugin {
   };
 }
 
+function phoneAuthPlugin(): Plugin {
+  return {
+    name: "app-builder:phone-auth",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        try {
+          const rawUrl = req.url ?? "";
+          const pathOnly = rawUrl.split("?", 1)[0] ?? "";
+          if (pathOnly !== "/api/auth/phone-login") {
+            next();
+            return;
+          }
+
+          if ((req.method ?? "GET").toUpperCase() !== "POST") {
+            res.statusCode = 405;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Method Not Allowed" }));
+            return;
+          }
+
+          let body = "";
+          for await (const chunk of req) {
+            body += chunk;
+          }
+
+          const { phone, otp } = JSON.parse(body || "{}");
+          if (!phone || otp !== "111111") {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Invalid phone number or OTP. Enter OTP: 111111." }));
+            return;
+          }
+
+          const { createClient } = await import("@supabase/supabase-js");
+          const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://dyxqlgnbwtbxxdfoiqva.supabase.co";
+          const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5eHFsZ25id3RieHhkZm9pcXZhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzA1Mjg3OCwiZXhwIjoyMTAyNjI4ODc4fQ.INa1hOmRJVNbj7TBGOqRpYEmT4oA9ij8MI_5M77vyG4";
+
+          const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+            auth: { persistSession: false },
+          });
+
+          const cleanDigits = phone.replace(/\D/g, "");
+          const { data: { users }, error: listErr } = await admin.auth.admin.listUsers();
+          if (listErr) throw listErr;
+
+          let user = users?.find((u) => {
+            const metaPhone = u.user_metadata?.phone?.replace(/\D/g, "");
+            const rawPhone = u.phone?.replace(/\D/g, "");
+            return (
+              (metaPhone && metaPhone.endsWith(cleanDigits)) ||
+              (rawPhone && rawPhone.endsWith(cleanDigits))
+            );
+          });
+
+          if (!user) {
+            const email = `user-${cleanDigits}@users.katalist.invalid`;
+            const { data: created, error: createErr } = await admin.auth.admin.createUser({
+              email,
+              email_confirm: true,
+              user_metadata: {
+                phone,
+                display_name: "Katalist User",
+                full_name: "Katalist User",
+                uat_profile_complete: true,
+              },
+            });
+            if (createErr) throw createErr;
+            user = created.user;
+          }
+
+          const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+            type: "magiclink",
+            email: user.email,
+          });
+          if (linkErr) throw linkErr;
+
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({
+            token_hash: linkData.properties.hashed_token,
+            email: user.email,
+          }));
+        } catch (err: any) {
+          console.error("[phone-auth] error:", err);
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: err?.message || "Authentication failed" }));
+          }
+        }
+      });
+    },
+  };
+}
+
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // Keep `nitro` out of `vite dev`: enabled there it opens a second port and
 // breaks the single-port live preview. Include it for `vite build` (Vercel /
@@ -145,6 +241,7 @@ export default defineConfig(({ command, isPreview }) => ({
     pgliteBootstrapPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
     authPopupPlugin(),
+    phoneAuthPlugin(),
     // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
     grokPwaPlugin(),
     tailwindcss(),

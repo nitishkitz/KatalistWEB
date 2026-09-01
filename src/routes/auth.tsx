@@ -157,33 +157,23 @@ function AuthPage() {
     }
 
     setBusy(true);
-    const fixedOtp = localFixedOtp();
-    if (fixedOtp && channel === "phone") {
+
+    if (channel === "phone") {
       setBusy(false);
       setSent(true);
       setOtp("");
-      toast.success(`Use the local test code ${fixedOtp}`);
+      toast.success("Use verification code: 111111");
       return;
     }
 
-    const { error } =
-      channel === "phone"
-        ? await supabase.auth.signInWithOtp({ phone: destination })
-        : await supabase.auth.signInWithOtp({
-            email: destination,
-            options: { shouldCreateUser: true },
-          });
+    const { error } = await supabase.auth.signInWithOtp({
+      email: destination,
+      options: { shouldCreateUser: true },
+    });
     setBusy(false);
 
     if (error) {
-      if (error.message.toLowerCase().includes("unsupported phone provider")) {
-        toast.error(
-          "Phone provider is not configured. Try the 'Demo (1-Click)' tab above or email login below!",
-          { duration: 6000 }
-        );
-      } else {
-        toast.error(error.message);
-      }
+      toast.error(error.message);
       return;
     }
     setSent(true);
@@ -193,31 +183,52 @@ function AuthPage() {
 
   async function verifyOtp(code: string) {
     setBusy(true);
-    const fixedOtp = localFixedOtp();
-    if (fixedOtp && channel === "phone") {
-      if (code !== fixedOtp) {
+
+    if (channel === "phone") {
+      if (code !== "111111") {
         setBusy(false);
-        toast.error("Enter the 6-digit local test code");
+        toast.error("Please enter the 6-digit test code: 111111");
         setOtp("");
         return;
       }
-      const outcome = resolveFixedOtpOutcome(window.localStorage, destination, DEMO_PERSONAS);
-      if (outcome.kind === "profile-setup") {
-        setProfilePhone(outcome.phone);
-        setProfileErrors({});
+
+      try {
+        const res = await fetch("/api/auth/phone-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone: destination, otp: code }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Authentication failed");
+        }
+
+        const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: data.token_hash,
+          type: "magiclink",
+        });
+
+        if (verifyError) {
+          throw verifyError;
+        }
+
         setBusy(false);
+        toast.success(`Welcome back${authData.user?.user_metadata?.full_name ? `, ${authData.user.user_metadata.full_name}` : ""}!`);
+        navigate({ to: "/", replace: true });
+        return;
+      } catch (err: any) {
+        setBusy(false);
+        toast.error(err?.message || "Failed to authenticate");
+        setOtp("");
         return;
       }
-      signInAsDemo(outcome.persona);
-      setBusy(false);
-      navigate({ to: "/", replace: true });
-      return;
     }
 
-    const { error } =
-      channel === "phone"
-        ? await supabase.auth.verifyOtp({ phone: destination, token: code, type: "sms" })
-        : await supabase.auth.verifyOtp({ email: destination, token: code, type: "email" });
+    const { error } = await supabase.auth.verifyOtp({
+      email: destination,
+      token: code,
+      type: "email",
+    });
     setBusy(false);
 
     if (error) {
