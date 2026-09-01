@@ -25,8 +25,12 @@ export function useAssignablePeople() {
           for (const row of data) {
             if (row.actor_id) {
               const name = row.display_name && row.display_name !== "Someone" ? row.display_name : "Priya Sharma";
+              const avatarMatch = row.avatar_url?.match(/\/avatars\/([0-9a-f-]{36})\//i);
+              const profileId = avatarMatch ? avatarMatch[1] : undefined;
               map.set(row.actor_id, {
                 id: row.actor_id,
+                actorId: row.actor_id,
+                profileId,
                 name,
                 initials: name
                   .split(" ")

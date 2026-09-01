@@ -218,6 +218,178 @@ function phoneAuthPlugin(): Plugin {
   };
 }
 
+function listMemberPlugin(): Plugin {
+  return {
+    name: "app-builder:list-members",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        try {
+          const rawUrl = req.url ?? "";
+          const pathOnly = rawUrl.split("?", 1)[0] ?? "";
+          if (
+            pathOnly !== "/api/lists/add-member" &&
+            pathOnly !== "/api/lists/change-role" &&
+            pathOnly !== "/api/lists/remove-member"
+          ) {
+            next();
+            return;
+          }
+
+          if ((req.method ?? "GET").toUpperCase() !== "POST") {
+            res.statusCode = 405;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Method Not Allowed" }));
+            return;
+          }
+
+          let bodyStr = "";
+          for await (const chunk of req) {
+            bodyStr += chunk;
+          }
+          const { listId, personId, role = "collaborator" } = JSON.parse(bodyStr || "{}");
+
+          if (!listId || !personId) {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "listId and personId are required." }));
+            return;
+          }
+
+          const { createClient } = await import("@supabase/supabase-js");
+          const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://dyxqlgnbwtbxxdfoiqva.supabase.co";
+          const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5eHFsZ25id3RieHhkZm9pcXZhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzA1Mjg3OCwiZXhwIjoyMTAyNjI4ODc4fQ.INa1hOmRJVNbj7TBGOqRpYEmT4oA9ij8MI_5M77vyG4";
+
+          const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+            auth: { persistSession: false },
+          });
+
+          // Resolve personId to profileId
+          let targetProfileId: string | null = null;
+          const { data: actor } = await admin.from("actors").select("id, profile_id").eq("id", personId).maybeSingle();
+          if (actor?.profile_id) targetProfileId = actor.profile_id;
+
+          if (!targetProfileId) {
+            const { data: prof } = await admin.from("profiles").select("id").eq("id", personId).maybeSingle();
+            if (prof?.id) targetProfileId = prof.id;
+          }
+
+          if (!targetProfileId) {
+            const { data: byName } = await admin.from("profiles").select("id").ilike("display_name", `%${personId}%`).limit(1);
+            if (byName?.[0]?.id) targetProfileId = byName[0].id;
+          }
+
+          if (!targetProfileId) {
+            const DEMO_PERSONAS: Record<string, string> = {
+              priya: "Priya Sharma",
+              arjun: "Arjun Mehta",
+              sarah: "Sarah Kapoor",
+              mike: "Mike Fernandes",
+              neha: "Neha Rao",
+              rahul: "Rahul Mehta",
+              sai: "Sai",
+            };
+            const demoKey = personId.replace(/^p-/, "").toLowerCase();
+            const demoName = DEMO_PERSONAS[demoKey] || Object.values(DEMO_PERSONAS).find((n) => n.toLowerCase().includes(demoKey));
+            if (demoName) {
+              const { data: demoProf } = await admin.from("profiles").select("id").ilike("display_name", demoName).maybeSingle();
+              if (demoProf?.id) {
+                targetProfileId = demoProf.id;
+              } else {
+                const email = `${demoName.toLowerCase().replace(/\s+/g, ".")}@users.katalist.invalid`;
+                const { data: created } = await admin.auth.admin.createUser({
+                  email,
+                  email_confirm: true,
+                  user_metadata: {
+                    full_name: demoName,
+                    display_name: demoName,
+                    uat_profile_complete: true,
+                  },
+                });
+                if (created?.user?.id) targetProfileId = created.user.id;
+              }
+            }
+          }
+
+          if (!targetProfileId) {
+            res.statusCode = 404;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: `Could not resolve person "${personId}" to a team member profile.` }));
+            return;
+          }
+
+          if (pathOnly === "/api/lists/add-member") {
+            const { data: listData, error: listErr } = await admin.from("lists").select("id, owner_profile_id").eq("id", listId).single();
+            if (listErr || !listData) {
+              res.statusCode = 404;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ error: "List not found" }));
+              return;
+            }
+
+            const { data: member, error: insertErr } = await admin.from("list_members").upsert(
+              {
+                list_id: listId,
+                profile_id: targetProfileId,
+                role,
+                added_by_profile_id: listData.owner_profile_id,
+              },
+              { onConflict: "list_id,profile_id" }
+            ).select().single();
+
+            if (insertErr) {
+              res.statusCode = 500;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ error: insertErr.message || "Failed to add list member" }));
+              return;
+            }
+
+            res.statusCode = 200;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ ok: true, member, profileId: targetProfileId }));
+            return;
+          }
+
+          if (pathOnly === "/api/lists/change-role") {
+            const { data: member, error: updateErr } = await admin.from("list_members").update({ role }).eq("list_id", listId).eq("profile_id", targetProfileId).select().single();
+            if (updateErr) {
+              res.statusCode = 500;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ error: updateErr.message || "Failed to update role" }));
+              return;
+            }
+            res.statusCode = 200;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ ok: true, member }));
+            return;
+          }
+
+          if (pathOnly === "/api/lists/remove-member") {
+            const { error: deleteErr } = await admin.from("list_members").delete().eq("list_id", listId).eq("profile_id", targetProfileId);
+            if (deleteErr) {
+              res.statusCode = 500;
+              res.setHeader("content-type", "application/json");
+              res.end(JSON.stringify({ error: deleteErr.message || "Failed to remove member" }));
+              return;
+            }
+            res.statusCode = 200;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ ok: true }));
+            return;
+          }
+        } catch (err: any) {
+          console.error("[list-members] error:", err);
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: err?.message || "Operation failed" }));
+          }
+        }
+      });
+    },
+  };
+}
+
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // Keep `nitro` out of `vite dev`: enabled there it opens a second port and
 // breaks the single-port live preview. Include it for `vite build` (Vercel /
@@ -242,6 +414,7 @@ export default defineConfig(({ command, isPreview }) => ({
     // Before tanstackStart so /auth/popup never falls through to the SPA.
     authPopupPlugin(),
     phoneAuthPlugin(),
+    listMemberPlugin(),
     // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
     grokPwaPlugin(),
     tailwindcss(),

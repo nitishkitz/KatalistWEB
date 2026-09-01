@@ -9,6 +9,8 @@ export type Person = {
   name: string;
   initials: string;
   avatarUrl?: string | null;
+  actorId?: string;
+  profileId?: string;
 };
 
 export type Thing = {

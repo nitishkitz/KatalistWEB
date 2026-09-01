@@ -1154,9 +1154,52 @@ function ListDetailPage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
-                              <button type="button" className="text-muted-foreground hover:text-foreground">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </button>
+                              {list.role === "owner" && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-44">
+                                    <DropdownMenuItem
+                                      onClick={async () => {
+                                        try {
+                                          await rpcChangeListRole(list.id, m.profileId || m.actorId || m.name, "view_only");
+                                          toast.success(`Updated ${m.name}'s role to View only`);
+                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
+                                          await qc.invalidateQueries({ queryKey: ["lists"] });
+                                        } catch (err: any) {
+                                          toast.error(err?.message || "Failed to update role");
+                                        }
+                                      }}
+                                    >
+                                      <Eye className="mr-2 h-3.5 w-3.5 text-emerald-500" />
+                                      Make View only
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={async () => {
+                                        try {
+                                          await rpcRemoveListMember(list.id, m.profileId || m.actorId || m.name);
+                                          toast.success(`Removed ${m.name} from list`);
+                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
+                                          await qc.invalidateQueries({ queryKey: ["lists"] });
+                                          await qc.invalidateQueries({ queryKey: ["assignable-people"] });
+                                        } catch (err: any) {
+                                          toast.error(err?.message || "Failed to remove member");
+                                        }
+                                      }}
+                                    >
+                                      <X className="mr-2 h-3.5 w-3.5 text-destructive" />
+                                      Remove from list
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1190,9 +1233,52 @@ function ListDetailPage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-3">
-                              <button type="button" className="text-muted-foreground hover:text-foreground">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </button>
+                              {list.role === "owner" && (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
+                                    >
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-44">
+                                    <DropdownMenuItem
+                                      onClick={async () => {
+                                        try {
+                                          await rpcChangeListRole(list.id, m.profileId || m.actorId || m.name, "collaborator");
+                                          toast.success(`Updated ${m.name}'s role to Collaborator`);
+                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
+                                          await qc.invalidateQueries({ queryKey: ["lists"] });
+                                        } catch (err: any) {
+                                          toast.error(err?.message || "Failed to update role");
+                                        }
+                                      }}
+                                    >
+                                      <Users className="mr-2 h-3.5 w-3.5 text-blue-500" />
+                                      Make Collaborator
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-destructive focus:text-destructive"
+                                      onClick={async () => {
+                                        try {
+                                          await rpcRemoveListMember(list.id, m.profileId || m.actorId || m.name);
+                                          toast.success(`Removed ${m.name} from list`);
+                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
+                                          await qc.invalidateQueries({ queryKey: ["lists"] });
+                                          await qc.invalidateQueries({ queryKey: ["assignable-people"] });
+                                        } catch (err: any) {
+                                          toast.error(err?.message || "Failed to remove member");
+                                        }
+                                      }}
+                                    >
+                                      <X className="mr-2 h-3.5 w-3.5 text-destructive" />
+                                      Remove from list
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1523,12 +1609,16 @@ function ListDetailPage() {
                           return p.name.toLowerCase().includes(inviteSearch.toLowerCase());
                         })
                         .map((person) => {
-                          const isAlreadyMember = (list.members || []).some(
-                            (m) =>
-                              m.profileId === person.id ||
-                              m.actorId === person.id ||
-                              m.name.toLowerCase() === person.name.toLowerCase(),
-                          ) || (list.ownerActorId === person.id);
+                          const isAlreadyMember =
+                            (list.members || []).some(
+                              (m) =>
+                                (person.profileId && m.profileId === person.profileId) ||
+                                m.profileId === person.id ||
+                                m.actorId === person.id ||
+                                m.name.toLowerCase() === person.name.toLowerCase(),
+                            ) ||
+                            list.ownerActorId === person.id ||
+                            (person.profileId && list.ownerActorId === person.profileId);
 
                           const isAdding = addingPersonId === person.id;
 
@@ -1566,7 +1656,7 @@ function ListDetailPage() {
                                   onClick={async () => {
                                     setAddingPersonId(person.id);
                                     try {
-                                      await rpcAddListMember(list.id, person.id, inviteRole);
+                                      await rpcAddListMember(list.id, person.profileId || person.id, inviteRole);
                                       toast.success(`Added ${person.name} as ${inviteRole === "collaborator" ? "Collaborator" : "View only"}`);
                                       await qc.invalidateQueries({ queryKey: ["list", listId] });
                                       await qc.invalidateQueries({ queryKey: ["lists"] });

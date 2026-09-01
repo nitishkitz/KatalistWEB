@@ -617,18 +617,34 @@ export async function rpcAddListMember(
         addListMemberLocal(listId, profileOrActorId, role);
         return null as never;
       }
-      const profId = await resolveToProfileUuid(profileOrActorId);
-      if (!profId || !isUuid(profId)) {
-        addListMemberLocal(listId, profileOrActorId, role);
-        return null as never;
+
+      // 1. First try API endpoint backed by service role to properly resolve actors/demo personas
+      try {
+        const res = await fetch("/api/lists/add-member", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listId, personId: profileOrActorId, role }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          return json.member as never;
+        }
+      } catch {
+        // fallback to direct Supabase RPC
       }
 
-      try {
+      // 2. Direct Supabase RPC
+      const profId = await resolveToProfileUuid(profileOrActorId);
+      if (profId && isUuid(profId)) {
         const { data, error } = await supabase.rpc("add_list_member", {
           p_list_id: listId,
           p_profile_id: profId,
           p_role: role,
         });
+
+        if (!error && data) {
+          return data as never;
+        }
 
         if (error) {
           const { error: upsertError } = await supabase.from("list_members").upsert(
@@ -639,15 +655,13 @@ export async function rpcAddListMember(
             },
             { onConflict: "list_id,profile_id" },
           );
-          if (upsertError) {
-            addListMemberLocal(listId, profileOrActorId, role);
+          if (!upsertError) {
+            return null as never;
           }
         }
-        return data as never;
-      } catch {
-        addListMemberLocal(listId, profileOrActorId, role);
-        return null as never;
       }
+
+      throw new Error("Unable to add team member to this list.");
     },
     preview: () => {
       addListMemberLocal(listId, profileOrActorId, role);
@@ -668,30 +682,42 @@ export async function rpcChangeListRole(
         changeListRoleLocal(listId, profileOrActorId, role);
         return null as never;
       }
-      const profId = await resolveToProfileUuid(profileOrActorId);
-      if (!profId || !isUuid(profId)) {
-        changeListRoleLocal(listId, profileOrActorId, role);
-        return null as never;
+
+      // 1. First try API endpoint
+      try {
+        const res = await fetch("/api/lists/change-role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listId, personId: profileOrActorId, role }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          return json.member as never;
+        }
+      } catch {
+        // fallback to direct RPC
       }
 
-      try {
+      // 2. Direct Supabase RPC
+      const profId = await resolveToProfileUuid(profileOrActorId);
+      if (profId && isUuid(profId)) {
         const { data, error } = await supabase.rpc("change_list_role", {
           p_list_id: listId,
           p_profile_id: profId,
           p_role: role,
         });
+        if (!error && data) return data as never;
+
         if (error) {
-          await supabase
+          const { error: updateError } = await supabase
             .from("list_members")
             .update({ role })
             .match({ list_id: listId, profile_id: profId });
-          changeListRoleLocal(listId, profileOrActorId, role);
+          if (!updateError) return null as never;
         }
-        return data as never;
-      } catch {
-        changeListRoleLocal(listId, profileOrActorId, role);
-        return null as never;
       }
+
+      throw new Error("Unable to change member role.");
     },
     preview: () => {
       changeListRoleLocal(listId, profileOrActorId, role);
@@ -708,29 +734,40 @@ export async function rpcRemoveListMember(listId: string, profileOrActorId: stri
         removeListMemberLocal(listId, profileOrActorId);
         return null as never;
       }
-      const profId = await resolveToProfileUuid(profileOrActorId);
-      if (!profId || !isUuid(profId)) {
-        removeListMemberLocal(listId, profileOrActorId);
-        return null as never;
+
+      // 1. First try API endpoint
+      try {
+        const res = await fetch("/api/lists/remove-member", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listId, personId: profileOrActorId }),
+        });
+        if (res.ok) {
+          return true as never;
+        }
+      } catch {
+        // fallback to direct RPC
       }
 
-      try {
+      // 2. Direct Supabase RPC
+      const profId = await resolveToProfileUuid(profileOrActorId);
+      if (profId && isUuid(profId)) {
         const { data, error } = await supabase.rpc("remove_list_member", {
           p_list_id: listId,
           p_profile_id: profId,
         });
+        if (!error) return data as never;
+
         if (error) {
-          await supabase
+          const { error: deleteError } = await supabase
             .from("list_members")
             .delete()
             .match({ list_id: listId, profile_id: profId });
-          removeListMemberLocal(listId, profileOrActorId);
+          if (!deleteError) return null as never;
         }
-        return data as never;
-      } catch {
-        removeListMemberLocal(listId, profileOrActorId);
-        return null as never;
       }
+
+      throw new Error("Unable to remove member from list.");
     },
     preview: () => {
       removeListMemberLocal(listId, profileOrActorId);
