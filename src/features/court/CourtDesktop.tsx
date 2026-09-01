@@ -22,7 +22,6 @@ import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import type { CourtLaneStackHandle } from "./CourtLaneStack";
 import { CourtWorkspace } from "./CourtWorkspace";
 import { CourtBucketsSidePanel } from "./CourtBucketsSidePanel";
-import { CourtDragToBucketGuide } from "./CourtDragToBucketGuide";
 import type { CourtFocusSelection } from "./court-stack-model";
 import { KatalistIcon } from "./KatalistIcon";
 import {
@@ -346,16 +345,6 @@ export function CourtDesktop({
 
   return (
     <div className="hidden lg:block max-w-[1380px] mx-auto">
-      {/* Top Banner: Drag & Drop from Court to Buckets */}
-      <div className="mb-4 text-center">
-        <h1 className="text-2xl font-black tracking-tight text-slate-900">
-          Drag & Drop from Court to Buckets
-        </h1>
-        <p className="mt-1 text-[13px] font-medium text-slate-500">
-          Move any Thing from NOW, NEXT, or LATER into a Bucket to group and focus your work.
-        </p>
-      </div>
-
       <MagicBox desktop />
 
       {isLoading ? (
@@ -666,7 +655,7 @@ export function CourtDesktop({
       </div>
 
       <div className="flex min-w-0 items-start gap-4">
-        <div className="min-w-0 flex-1 space-y-4">
+        <div className="min-w-0 flex-1">
           <CourtWorkspace
             selection={focusSelection}
             lanes={{ now: view.now, next: view.next, later: view.later }}
@@ -680,9 +669,6 @@ export function CourtDesktop({
             onClose={closeFocus}
             onRefresh={refetch}
           />
-
-          {/* 4-Step Interactive Explainer Guide */}
-          <CourtDragToBucketGuide />
         </div>
 
         {showBucketsPanel && (
