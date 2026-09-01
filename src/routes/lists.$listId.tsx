@@ -114,6 +114,45 @@ function ListDetailPage() {
   const viewOnly = list?.role === "view_only";
   const selected = listThings.find((t) => t.id === selectedId) ?? null;
 
+  // Unique collaborators in this list (deduped by normalized name)
+  const listCollaborators = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; initials: string; avatarUrl?: string | null; ids: Set<string> }>();
+
+    const recordPerson = (p?: { id?: string; name?: string; initials?: string; avatarUrl?: string | null }) => {
+      if (!p || !p.name || p.name === "Someone" || p.name.trim() === "") return;
+      const normName = p.name.trim().toLowerCase();
+      const existing = map.get(normName);
+      if (existing) {
+        if (p.id) existing.ids.add(p.id);
+        if (!existing.avatarUrl && p.avatarUrl) existing.avatarUrl = p.avatarUrl;
+      } else {
+        map.set(normName, {
+          id: p.id || normName,
+          name: p.name.trim(),
+          initials: p.initials || p.name.trim().slice(0, 2).toUpperCase(),
+          avatarUrl: p.avatarUrl || matchAvatarByName(p.name.trim()),
+          ids: new Set(p.id ? [p.id] : []),
+        });
+      }
+    };
+
+    if (list?.members) {
+      for (const m of list.members) {
+        recordPerson({
+          id: m.actorId || m.profileId,
+          name: m.name,
+          initials: m.initials,
+          avatarUrl: m.avatarUrl,
+        });
+      }
+    }
+    for (const t of listThings) {
+      recordPerson(t.assignee);
+      recordPerson(t.owner);
+    }
+    return Array.from(map.values());
+  }, [listThings, list]);
+
   // Filtered & Sorted Things
   const filteredThings = useMemo(() => {
     const list_ = listThings.filter((t) => {
@@ -127,7 +166,20 @@ function ListDetailPage() {
       if (thingsFilter === "sorted" && t.workStatus !== "sorted") return false;
 
       // Person filter
-      if (personFilter && t.assignee.id !== personFilter && t.owner.id !== personFilter) return false;
+      if (personFilter) {
+        const collab = listCollaborators.find(
+          (c) => c.name.toLowerCase() === personFilter.toLowerCase() || c.ids.has(personFilter),
+        );
+        const matchesAssignee =
+          t.assignee &&
+          (t.assignee.name.toLowerCase() === personFilter.toLowerCase() ||
+            (collab?.ids && collab.ids.has(t.assignee.id)));
+        const matchesOwner =
+          t.owner &&
+          (t.owner.name.toLowerCase() === personFilter.toLowerCase() ||
+            (collab?.ids && collab.ids.has(t.owner.id)));
+        if (!matchesAssignee && !matchesOwner) return false;
+      }
 
       // Due filter
       if (dueFilter === "no_due" && t.dueAt != null) return false;
@@ -171,38 +223,7 @@ function ListDetailPage() {
       }
       return 0;
     });
-  }, [listThings, thingsFilter, dueFilter, personFilter, myActorId, sortOption]);
-
-  // Unique collaborators in this list
-  const listCollaborators = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; initials: string; avatarUrl?: string | null }>();
-    if (list?.members) {
-      for (const m of list.members) {
-        if (m.name && m.name !== "Someone") {
-          const key = m.actorId || m.profileId || m.name;
-          if (!map.has(key)) {
-            map.set(key, {
-              id: key,
-              name: m.name,
-              initials: m.initials || m.name.slice(0, 2).toUpperCase(),
-              avatarUrl: m.avatarUrl || matchAvatarByName(m.name),
-            });
-          }
-        }
-      }
-    }
-    for (const t of listThings) {
-      if (t.assignee?.id && t.assignee.name && t.assignee.name !== "Someone" && !map.has(t.assignee.id)) {
-        map.set(t.assignee.id, {
-          id: t.assignee.id,
-          name: t.assignee.name,
-          initials: t.assignee.initials || t.assignee.name.slice(0, 2).toUpperCase(),
-          avatarUrl: t.assignee.avatarUrl || matchAvatarByName(t.assignee.name),
-        });
-      }
-    }
-    return Array.from(map.values());
-  }, [listThings, list]);
+  }, [listThings, thingsFilter, dueFilter, personFilter, myActorId, sortOption, listCollaborators]);
 
   // Things Metrics (purely dynamic)
   const thingsMetrics = useMemo(() => {
@@ -225,8 +246,19 @@ function ListDetailPage() {
 
   // Members search & filter
   const filteredMembers = useMemo(() => {
-    const members = list?.members ?? [];
-    return members.filter((m) => {
+    const rawMembers = list?.members ?? [];
+    const seen = new Set<string>();
+    const deduped: typeof rawMembers = [];
+
+    for (const m of rawMembers) {
+      const key = (m.name || "").toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      if (m.profileId) seen.add(m.profileId);
+      deduped.push(m);
+    }
+
+    return deduped.filter((m) => {
       if (memberRoleFilter !== "all" && m.role !== memberRoleFilter) return false;
       if (memberSearch.trim()) {
         const query = memberSearch.toLowerCase();
@@ -491,15 +523,18 @@ function ListDetailPage() {
                 </button>
                 <div className="flex items-center -space-x-1 pl-1">
                   {listCollaborators.map((person) => {
-                    const active = personFilter === person.id;
+                    const active =
+                      personFilter !== null &&
+                      (personFilter.toLowerCase() === person.name.toLowerCase() ||
+                        person.ids.has(personFilter));
                     return (
                       <button
-                        key={person.id}
+                        key={person.name}
                         type="button"
                         title={person.name}
-                        onClick={() => setPersonFilter(active ? null : person.id)}
+                        onClick={() => setPersonFilter(active ? null : person.name)}
                         className={cn(
-                          "relative rounded-full transition-all outline-none",
+                          "relative rounded-full transition-all outline-none cursor-pointer",
                           active ? "ring-2 ring-primary ring-offset-1 scale-110" : "opacity-80 hover:opacity-100",
                         )}
                       >

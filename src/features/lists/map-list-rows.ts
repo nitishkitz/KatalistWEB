@@ -134,21 +134,35 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
       avatarUrl: ownerIdent?.avatar_url || matchAvatarByName(ownerDisplayName),
     };
 
-    const collaboratorMembers = listMembers.map((m, mIdx) => {
+    const dedupedCollaborators: ListMember[] = [];
+    const seenKeys = new Set<string>();
+    if (l.owner_profile_id) seenKeys.add(l.owner_profile_id);
+    if (ownerDisplayName) seenKeys.add(ownerDisplayName.toLowerCase().trim());
+
+    for (let mIdx = 0; mIdx < listMembers.length; mIdx++) {
+      const m = listMembers[mIdx]!;
+      if (m.profile_id && seenKeys.has(m.profile_id)) continue;
+
       const ident = identities.get(m.profile_id);
       const fallback = DEFAULT_PERSONAS[mIdx % DEFAULT_PERSONAS.length]!;
       const name = ident?.display_name && ident.display_name !== "Someone" ? ident.display_name : fallback.name;
+      const normName = name.toLowerCase().trim();
+      if (seenKeys.has(normName)) continue;
+
+      if (m.profile_id) seenKeys.add(m.profile_id);
+      seenKeys.add(normName);
+
       const avatarUrl = ident?.avatar_url || matchAvatarByName(name) || fallback.avatarUrl;
-      return {
+      dedupedCollaborators.push({
         name,
         profileId: m.profile_id,
         role: (m.role ?? "collaborator") as ListRow["role"],
         initials: initialsFrom(name),
         avatarUrl,
-      };
-    });
+      });
+    }
 
-    const allMembers = [ownerMember, ...collaboratorMembers];
+    const allMembers = [ownerMember, ...dedupedCollaborators];
 
     return {
       id: l.id,
