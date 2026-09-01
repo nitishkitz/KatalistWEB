@@ -279,39 +279,41 @@ function BucketDetailPage() {
   const referencedThingIds = new Set(thingItemsAll.map((i) => i.thingId));
   const referencedListIds = new Set(listItemsAll.map((i) => i.listId));
 
-  // Extract collaborators for person filter
+  // Extract unique collaborators for person filter (deduped by person name)
   const collaborators = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; avatarUrl?: string | null; initials: string }>();
+    const map = new Map<string, { id: string; name: string; avatarUrl?: string | null; initials: string; ids: Set<string> }>();
+
+    const recordPerson = (person?: { id?: string; name?: string; avatarUrl?: string | null; initials?: string }) => {
+      if (!person || !person.name || person.name === "Someone" || person.name.trim() === "") return;
+      const normKey = person.name.trim().toLowerCase();
+      const existing = map.get(normKey);
+      if (existing) {
+        if (person.id) existing.ids.add(person.id);
+        if (!existing.avatarUrl && person.avatarUrl) existing.avatarUrl = person.avatarUrl;
+      } else {
+        map.set(normKey, {
+          id: person.id || normKey,
+          name: person.name.trim(),
+          avatarUrl: person.avatarUrl,
+          initials: person.initials || person.name.trim().slice(0, 2).toUpperCase(),
+          ids: new Set(person.id ? [person.id] : []),
+        });
+      }
+    };
+
     for (const it of thingItemsAll) {
-      if (it.thing.assignee && it.thing.assignee.name && it.thing.assignee.name !== "Someone") {
-        map.set(it.thing.assignee.id, {
-          id: it.thing.assignee.id,
-          name: it.thing.assignee.name,
-          avatarUrl: it.thing.assignee.avatarUrl,
-          initials: it.thing.assignee.initials || it.thing.assignee.name.slice(0, 2).toUpperCase(),
-        });
-      }
-      if (it.thing.owner && it.thing.owner.name && it.thing.owner.name !== "Someone") {
-        map.set(it.thing.owner.id, {
-          id: it.thing.owner.id,
-          name: it.thing.owner.name,
-          avatarUrl: it.thing.owner.avatarUrl,
-          initials: it.thing.owner.initials || it.thing.owner.name.slice(0, 2).toUpperCase(),
-        });
-      }
+      recordPerson(it.thing.assignee);
+      recordPerson(it.thing.owner);
     }
     for (const it of listItemsAll) {
       if (it.list.members) {
         for (const m of it.list.members) {
-          const key = m.actorId || m.profileId || m.name;
-          if (m.name && m.name !== "Someone" && !map.has(key)) {
-            map.set(key, {
-              id: key,
-              name: m.name,
-              avatarUrl: m.avatarUrl,
-              initials: m.initials || m.name.slice(0, 2).toUpperCase(),
-            });
-          }
+          recordPerson({
+            id: m.actorId || m.profileId,
+            name: m.name,
+            avatarUrl: m.avatarUrl,
+            initials: m.initials,
+          });
         }
       }
     }
@@ -322,8 +324,20 @@ function BucketDetailPage() {
     return items.filter((item) => {
       if (item.kind === "thing") {
         if (!matchesQuery(q, item.thing)) return false;
-        if (personFilter && item.thing.assignee.id !== personFilter && item.thing.owner.id !== personFilter)
-          return false;
+        if (personFilter) {
+          const collab = collaborators.find(
+            (c) => c.name.toLowerCase() === personFilter.toLowerCase() || c.ids.has(personFilter),
+          );
+          const matchesAssignee =
+            item.thing.assignee &&
+            (item.thing.assignee.name.toLowerCase() === personFilter.toLowerCase() ||
+              (collab?.ids && collab.ids.has(item.thing.assignee.id)));
+          const matchesOwner =
+            item.thing.owner &&
+            (item.thing.owner.name.toLowerCase() === personFilter.toLowerCase() ||
+              (collab?.ids && collab.ids.has(item.thing.owner.id)));
+          if (!matchesAssignee && !matchesOwner) return false;
+        }
         if (statusFilter) {
           if (statusFilter === "waiting_for_catch" && item.thing.acknowledgement !== "waiting_for_catch")
             return false;
@@ -336,12 +350,23 @@ function BucketDetailPage() {
       }
       if (item.kind === "list") {
         if (statusFilter) return false;
-        if (personFilter) return false;
+        if (personFilter) {
+          const collab = collaborators.find(
+            (c) => c.name.toLowerCase() === personFilter.toLowerCase() || c.ids.has(personFilter),
+          );
+          const hasMember = item.list.members?.some(
+            (m) =>
+              m.name.toLowerCase() === personFilter.toLowerCase() ||
+              (m.actorId && collab?.ids.has(m.actorId)) ||
+              (m.profileId && collab?.ids.has(m.profileId)),
+          );
+          if (!hasMember) return false;
+        }
         return matchesQuery(q, undefined, item.list);
       }
       return true;
     });
-  }, [items, q, personFilter, statusFilter]);
+  }, [items, q, personFilter, statusFilter, collaborators]);
 
   const thingItems = visible.filter((i): i is Extract<BucketItem, { kind: "thing" }> => i.kind === "thing");
   const listItems = visible.filter((i): i is Extract<BucketItem, { kind: "list" }> => i.kind === "list");
@@ -571,12 +596,12 @@ function BucketDetailPage() {
         </button>
         {collaborators.map((c) => (
           <button
-            key={c.id}
+            key={c.name}
             type="button"
-            onClick={() => setPersonFilter(personFilter === c.id ? null : c.id)}
+            onClick={() => setPersonFilter(personFilter === c.name ? null : c.name)}
             className={cn(
               "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors cursor-pointer",
-              personFilter === c.id
+              personFilter === c.name
                 ? "border-primary bg-primary/10 font-semibold text-primary"
                 : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
             )}
