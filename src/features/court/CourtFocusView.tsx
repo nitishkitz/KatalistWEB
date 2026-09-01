@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { Thing } from "@/domain/thing";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { CourtCompactLane } from "./CourtCompactLane";
@@ -29,27 +30,38 @@ export function CourtFocusView({
   const gridTemplateColumns = columns
     .map((column) =>
       column.kind === "detail"
-        ? "minmax(500px,1fr)"
+        ? "minmax(480px, 1fr)"
         : column.kind === "navigator"
-          ? "minmax(220px,250px)"
-          : "minmax(150px,180px)",
+          ? "minmax(220px, 240px)"
+          : "minmax(150px, 175px)",
     )
     .join(" ");
-  const closeButton = (
-    <button
-      type="button"
-      onClick={onClose}
-      className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg border border-primary/15 bg-primary/5 px-2.5 text-[10.5px] font-medium text-primary outline-none transition-colors hover:border-primary/35 hover:bg-primary/10 focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label="Back to Court stacks"
-    >
-      <KatalistIcon name="chevron-right" className="h-3.5 w-3.5 rotate-180" />
-      Back to Court stacks
-    </button>
+
+  const headerAction = (
+    <div className="flex items-center justify-between w-full">
+      <button
+        type="button"
+        onClick={onClose}
+        className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-foreground hover:text-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Back to Court stacks"
+      >
+        <KatalistIcon name="chevron-right" className="h-3.5 w-3.5 rotate-180 text-foreground" />
+        Back to Court stacks
+      </button>
+      <button
+        type="button"
+        onClick={onClose}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:bg-muted/30 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="Close"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
 
   return (
     <section
-      className="grid min-w-0 items-start gap-2 transition-[grid-template-columns,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
+      className="grid min-w-0 items-start gap-3.5 transition-[grid-template-columns,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0.8,0.2,1)] motion-reduce:transition-none"
       style={{ gridTemplateColumns }}
       aria-label="Focused Court Thing"
     >
@@ -83,13 +95,13 @@ export function CourtFocusView({
             {selectedThing ? (
               <ThingDetailContent
                 initialThing={selectedThing}
-                headerAction={closeButton}
+                headerAction={headerAction}
                 onAfterTerminalAction={onClose}
                 variant="court"
               />
             ) : (
               <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 px-6 text-center text-[11px] text-muted-foreground">
-                {closeButton}
+                {headerAction}
                 This Thing is no longer in the selected lane.
               </div>
             )}

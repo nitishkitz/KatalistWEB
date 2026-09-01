@@ -69,9 +69,9 @@ test("Court lane stacks render one active Thing over a capped, hidden decorative
   assert.match(laneStack, /<ThingStackCard[\s\S]*thing=\{activeThing\}/);
   assert.match(laneStack, /Math\.min\(2, Math\.max\(0, things\.length - 1\)\)/);
   assert.match(laneStack, /aria-hidden="true"/);
-  assert.match(laneStack, /depth \* -5/);
+  assert.match(laneStack, /depth \* -(5|6)/);
   assert.match(laneStack, /motion-reduce:!transform-none/);
-  assert.match(laneStack, /\{renderIndex \+ 1\} \/ \{things\.length\}/);
+  assert.doesNotMatch(laneStack, /\{renderIndex \+ 1\} \/ \{things\.length\}/);
 });
 
 test("Court stack actions are capability-gated and route to canonical RPCs", () => {

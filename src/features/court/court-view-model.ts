@@ -16,6 +16,7 @@ export type CourtFilterState = {
   acknowledgement: CourtAcknowledgementFilter;
   workStatus: CourtWorkStatusFilter;
   starredOnly: boolean;
+  personId?: string | null;
 };
 
 export const DEFAULT_COURT_FILTERS: CourtFilterState = {
@@ -24,6 +25,7 @@ export const DEFAULT_COURT_FILTERS: CourtFilterState = {
   acknowledgement: "any",
   workStatus: "any",
   starredOnly: false,
+  personId: null,
 };
 
 function searchableText(thing: Thing) {
@@ -79,6 +81,13 @@ export function filterCourtThings(
       return false;
     if (filters.workStatus !== "any" && thing.workStatus !== filters.workStatus) return false;
     if (filters.starredOnly && !thing.starred) return false;
+    if (filters.personId) {
+      const match =
+        thing.assignee.id === filters.personId ||
+        thing.owner.id === filters.personId ||
+        thing.creator.id === filters.personId;
+      if (!match) return false;
+    }
     return true;
   });
 }

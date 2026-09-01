@@ -1,15 +1,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeftRight,
+  CalendarCheck,
+  ChevronRight,
+  Clock,
+  FileText,
+  GripVertical,
+  RotateCw,
+  Sparkles,
+  Zap,
+} from "lucide-react";
 import type { Thing } from "@/domain/thing";
 import { theirStateFor } from "@/domain/thing";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { matchProfile, useProfileDirectory } from "@/features/people/directory";
 import { MagicBox } from "./MagicBox";
 import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
+import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import type { CourtLaneStackHandle } from "./CourtLaneStack";
 import { CourtWorkspace } from "./CourtWorkspace";
 import type { CourtFocusSelection } from "./court-stack-model";
-import { CourtThingCard } from "./CourtThingCard";
-import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
+import { KatalistIcon } from "./KatalistIcon";
 import {
   DEFAULT_COURT_FILTERS,
   applyCourtView,
@@ -103,7 +115,7 @@ function TheirSummaryCard({
   onClick,
 }: {
   active: boolean;
-  icon: KatalistIconName;
+  icon: "waiting" | "moving" | "needs_attention";
   label: string;
   description: string;
   count: number;
@@ -116,28 +128,40 @@ function TheirSummaryCard({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-[76px] items-center gap-3 rounded-xl border bg-white px-4 text-left outline-none transition-[border-color] duration-200 focus-visible:ring-2 focus-visible:ring-ring",
-        active ? "border-primary" : "border-border hover:border-primary/45",
+        "flex min-h-[50px] items-center gap-2.5 rounded-xl border bg-white px-3 py-2 text-left shadow-2xs outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring",
+        active
+          ? "border-primary ring-1 ring-primary/40 bg-primary/[0.02]"
+          : "border-border/70 hover:border-primary/45 hover:shadow-xs",
       )}
     >
       <span
         className={cn(
-          "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-current/30",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
           tone,
         )}
       >
-        <KatalistIcon name={icon} className="h-5 w-5" />
+        {icon === "waiting" ? (
+          <Clock className="h-4 w-4" />
+        ) : icon === "moving" ? (
+          <RotateCw className="h-4 w-4" />
+        ) : (
+          <Sparkles className="h-4 w-4" />
+        )}
       </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[12.5px] font-semibold text-foreground">{label}</span>
-        <span className="mt-0.5 block truncate text-[10.5px] text-muted-foreground">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11.5px] font-bold text-foreground">{label}</span>
+          <span className="text-[11.5px] font-bold text-foreground ml-1">{count}</span>
+        </div>
+        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
           {description}
         </span>
-      </span>
-      <span className="text-xl font-semibold text-foreground">{count}</span>
-      <KatalistIcon
-        name={active ? "chevron-down" : "chevron-right"}
-        className="h-4 w-4 text-muted-foreground"
+      </div>
+      <ChevronRight
+        className={cn(
+          "h-3.5 w-3.5 text-muted-foreground/60 transition-transform",
+          active && "rotate-90 text-primary",
+        )}
       />
     </button>
   );
@@ -161,6 +185,7 @@ export function CourtDesktop({
   const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
   const [theirSelectedId, setTheirSelectedId] = useState<string | null>(null);
+  const directory = useProfileDirectory();
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{
     lane: CourtLaneId;
@@ -185,8 +210,16 @@ export function CourtDesktop({
       if (t.assignee && t.assignee.id && !map.has(t.assignee.id)) {
         map.set(t.assignee.id, t.assignee);
       }
+      if (t.owner && t.owner.id && !map.has(t.owner.id)) {
+        map.set(t.owner.id, t.owner);
+      }
+      if (t.creator && t.creator.id && !map.has(t.creator.id)) {
+        map.set(t.creator.id, t.creator);
+      }
     }
-    return Array.from(map.values());
+    const all = Array.from(map.values());
+    const named = all.filter((p) => p.name && p.name.toLowerCase() !== "someone");
+    return named.length > 0 ? named : all;
   }, [now, next, later, theirs]);
 
   const theirGroups = useMemo(
@@ -307,54 +340,99 @@ export function CourtDesktop({
   }
 
   return (
-    <div className="hidden lg:block">
+    <div className="hidden lg:block max-w-[1240px] mx-auto">
       <MagicBox desktop />
 
       {isLoading ? (
-        <p className="mb-3 text-[11px] text-muted-foreground" aria-live="polite">
+        <p className="mb-2 text-[11px] text-muted-foreground" aria-live="polite">
           Loading your Court…
         </p>
       ) : null}
 
-      <div className="mb-5 grid grid-cols-5 overflow-hidden rounded-xl border border-border bg-white">
-        <div className="flex items-center gap-3 border-r border-border/70 px-4 py-3">
-          <span className="text-2xl font-bold text-foreground">{view.counts.now}</span>
-          <div>
-            <span className="text-[12px] font-semibold text-status-now">NOW</span>
-            <span className="block text-[10px] text-muted-foreground">Needs attention</span>
+      {/* Top 5-Item Summary Ribbon */}
+      <div className="mb-3.5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-white shadow-xs">
+        {/* NOW */}
+        <div className="flex items-center gap-3 p-2.5 px-3.5">
+          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
+            {view.counts.now}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 leading-none">
+              <Zap className="h-3.5 w-3.5 shrink-0 text-red-500 fill-red-500/20" />
+              <span className="text-[10.5px] font-black text-red-600 uppercase tracking-wide">NOW</span>
+            </div>
+            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
+              Needs you now
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-3 border-r border-border/70 px-4 py-3">
-          <span className="text-2xl font-bold text-foreground">{view.counts.next}</span>
-          <div>
-            <span className="text-[12px] font-semibold text-status-next">NEXT</span>
-            <span className="block text-[10px] text-muted-foreground">On deck soon</span>
+
+        {/* NEXT */}
+        <div className="flex items-center gap-3 p-2.5 px-3.5">
+          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
+            {view.counts.next}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 leading-none">
+              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-blue-500" />
+              <span className="text-[10.5px] font-black text-blue-600 uppercase tracking-wide">NEXT</span>
+            </div>
+            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
+              On deck soon
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-3 border-r border-border/70 px-4 py-3">
-          <span className="text-2xl font-bold text-foreground">{view.counts.later}</span>
-          <div>
-            <span className="text-[12px] font-semibold text-status-later">LATER</span>
-            <span className="block text-[10px] text-muted-foreground">When time opens up</span>
+
+        {/* LATER */}
+        <div className="flex items-center gap-3 p-2.5 px-3.5">
+          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
+            {view.counts.later}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 leading-none">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-purple-500" />
+              <span className="text-[10.5px] font-black text-purple-600 uppercase tracking-wide">LATER</span>
+            </div>
+            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
+              When time opens up
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-3 border-r border-border/70 px-4 py-3">
-          <span className="text-2xl font-bold text-foreground">{completedCount ?? 0}</span>
-          <div>
-            <span className="text-[12px] font-semibold text-emerald-500">COMPLETED</span>
-            <span className="block text-[10px] text-muted-foreground">Today</span>
+
+        {/* COMPLETED */}
+        <div className="flex items-center gap-3 p-2.5 px-3.5">
+          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
+            {completedCount ?? 0}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 leading-none">
+              <CalendarCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+              <span className="text-[10.5px] font-black text-emerald-600 uppercase tracking-wide">COMPLETED</span>
+            </div>
+            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
+              Done
+            </span>
           </div>
         </div>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <span className="text-2xl font-bold text-foreground">{view.counts.theirs}</span>
-          <div>
-            <span className="text-[12px] font-semibold text-orange-500">WAITING</span>
-            <span className="block text-[10px] text-muted-foreground">On others</span>
+
+        {/* WAITING */}
+        <div className="flex items-center gap-3 p-2.5 px-3.5">
+          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
+            {view.counts.theirs}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 leading-none">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+              <span className="text-[10.5px] font-black text-orange-600 uppercase tracking-wide">WAITING</span>
+            </div>
+            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
+              On others
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="mb-5 flex items-center gap-3">
+      <div className="mb-3.5 flex items-center gap-2.5">
         <div className="flex items-center gap-1.5">
           {quickFilters.map(([id, label]) => (
             <button
@@ -363,10 +441,10 @@ export function CourtDesktop({
               aria-pressed={filters.quick === id}
               onClick={() => setDetailedFilter("quick", id)}
               className={cn(
-                "inline-flex h-8 items-center rounded-full border px-3 text-[11px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "inline-flex h-7.5 items-center rounded-full border px-3 text-[11px] font-medium outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring",
                 filters.quick === id
-                  ? "border-primary text-primary"
-                  : "border-border bg-white text-muted-foreground hover:border-primary/45 hover:text-foreground",
+                  ? "border-purple-300 text-purple-700 bg-purple-50/60 font-semibold"
+                  : "border-border/80 bg-white text-muted-foreground hover:border-primary/45 hover:text-foreground",
               )}
             >
               {label}
@@ -374,45 +452,74 @@ export function CourtDesktop({
           ))}
 
           {collaborators.length > 0 ? (
-            <div className="ml-2 flex items-center -space-x-1.5">
-              {collaborators.slice(0, 3).map((person) => (
-                <PersonAvatar
-                  key={person.id}
-                  name={person.name}
-                  initials={person.initials}
-                  src={person.avatarUrl}
-                  size={24}
-                  className="ring-2 ring-white"
-                />
-              ))}
-              {collaborators.length > 3 ? (
-                <span className="flex h-6 items-center justify-center rounded-full bg-muted px-1.5 text-[10px] font-medium text-muted-foreground ring-2 ring-white">
-                  +{collaborators.length - 3}
-                </span>
+            <div className="ml-2 flex items-center gap-1">
+              {collaborators.map((person) => {
+                const isActive = filters.personId === person.id;
+                return (
+                  <button
+                    key={person.id}
+                    type="button"
+                    title={isActive ? `Clear filter for ${person.name}` : `Filter by ${person.name}`}
+                    aria-label={`Filter by ${person.name}`}
+                    aria-pressed={isActive}
+                    onClick={() => {
+                      setFilters((current) => ({
+                        ...current,
+                        personId: current.personId === person.id ? null : person.id,
+                      }));
+                    }}
+                    className={cn(
+                      "relative rounded-full transition-all duration-200 outline-none cursor-pointer",
+                      isActive
+                        ? "ring-2 ring-primary ring-offset-2 scale-110 shadow-xs"
+                        : "opacity-75 hover:opacity-100 hover:scale-105",
+                    )}
+                  >
+                    <PersonAvatar
+                      name={person.name}
+                      initials={person.initials}
+                      src={person.avatarUrl}
+                      size={24}
+                    />
+                    {isActive ? (
+                      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white" />
+                    ) : null}
+                  </button>
+                );
+              })}
+              {filters.personId ? (
+                <button
+                  type="button"
+                  onClick={() => setFilters((current) => ({ ...current, personId: null }))}
+                  className="ml-1 inline-flex h-5 items-center rounded-full bg-primary/10 px-1.5 text-[9.5px] font-semibold text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+                  title="Clear person filter"
+                >
+                  ✕ Clear
+                </button>
               ) : null}
             </div>
           ) : null}
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <label className="flex h-9 w-52 items-center gap-2 rounded-lg border border-border bg-white px-3 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring">
-            <KatalistIcon name="search" className="h-4 w-4 text-muted-foreground" />
+          <label className="flex h-8 w-48 items-center gap-2 rounded-lg border border-border bg-white px-2.5 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring">
+            <KatalistIcon name="search" className="h-3.5 w-3.5 text-muted-foreground" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search"
-              className="min-w-0 flex-1 bg-transparent text-[11.5px] outline-none placeholder:text-muted-foreground"
+              className="min-w-0 flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground"
               aria-label="Search Court"
             />
             {query ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="inline-flex h-7 w-7 items-center justify-center rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Clear search"
                 title="Clear search"
               >
-                <KatalistIcon name="clear-input" className="h-3.5 w-3.5" />
+                <KatalistIcon name="clear-input" className="h-3 w-3" />
               </button>
             ) : null}
           </label>
@@ -421,14 +528,14 @@ export function CourtDesktop({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-9 min-w-[164px] items-center gap-2 rounded-lg border border-border bg-white px-3 text-[11px] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-8 min-w-[150px] items-center gap-2 rounded-lg border border-border bg-white px-2.5 text-[11px] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Sort Court: ${sortLabels[sort]}`}
               >
-                <KatalistIcon name="sort" className="h-4 w-4 text-muted-foreground" />
+                <KatalistIcon name="sort" className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>Sort: {sortLabels[sort]}</span>
                 <KatalistIcon
                   name="chevron-down"
-                  className="ml-auto h-3.5 w-3.5 text-muted-foreground"
+                  className="ml-auto h-3 w-3 text-muted-foreground"
                 />
               </button>
             </DropdownMenuTrigger>
@@ -458,7 +565,7 @@ export function CourtDesktop({
               <button
                 type="button"
                 className={cn(
-                  "inline-flex h-9 items-center gap-2 rounded-lg border bg-white px-3 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "inline-flex h-8 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   detailedFilterCount ? "border-primary text-primary" : "border-border",
                 )}
                 aria-label={
@@ -467,7 +574,7 @@ export function CourtDesktop({
                     : "Filter Court"
                 }
               >
-                <KatalistIcon name="filter" className="h-4 w-4" />
+                <KatalistIcon name="filter" className="h-3.5 w-3.5" />
                 Filter{detailedFilterCount ? ` (${detailedFilterCount})` : ""}
               </button>
             </DropdownMenuTrigger>
@@ -543,89 +650,207 @@ export function CourtDesktop({
       />
 
       <section
-        className="mt-8 border-t border-border/70 bg-white pt-4"
+        className="mt-8 border-t border-border/70 pt-5 pb-6"
         aria-labelledby="theirs-title"
       >
-        <div className="mb-3 flex items-baseline gap-2 px-1">
-          <KatalistIcon name="at-person" className="h-4 w-4 text-foreground" />
-          <h2 id="theirs-title" className="text-[12px] font-semibold tracking-[0.08em]">
+        <div className="mb-3 flex items-center justify-between px-1">
+          <h2 id="theirs-title" className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
             WITH OTHERS
           </h2>
-          <span className="text-[11px] text-muted-foreground">{view.counts.theirs}</span>
         </div>
-        <p className="mb-3 px-1 text-[11px] text-muted-foreground">
-          Things you own that currently sit with someone else
-        </p>
+
         <div className="grid grid-cols-3 gap-3">
           <TheirSummaryCard
             active={theirFocus === "waiting_for_catch"}
             icon="waiting"
             label="Waiting for Catch"
-            description="Others still need to Catch"
+            description="Tasks waiting for others"
             count={theirGroups.waiting_for_catch.length}
-            tone="text-status-waiting"
+            tone="bg-orange-50 text-orange-500 border border-orange-100"
             onClick={() =>
               setTheirFocus((current) => toggleTheirsFocus(current, "waiting_for_catch"))
             }
           />
           <TheirSummaryCard
             active={theirFocus === "moving"}
-            icon="under-progress"
+            icon="moving"
             label="Moving"
-            description="Others are making progress"
+            description="Tasks in motion"
             count={theirGroups.moving.length}
-            tone="text-status-next"
+            tone="bg-blue-50 text-blue-500 border border-blue-100"
             onClick={() => setTheirFocus((current) => toggleTheirsFocus(current, "moving"))}
           />
           <TheirSummaryCard
             active={theirFocus === "needs_attention"}
-            icon="urgent"
+            icon="needs_attention"
             label="Needs Attention"
-            description="No movement or due risk"
+            description="Tasks need attention"
             count={theirGroups.needs_attention.length}
-            tone="text-status-now"
+            tone="bg-purple-50 text-purple-500 border border-purple-100"
             onClick={() =>
               setTheirFocus((current) => toggleTheirsFocus(current, "needs_attention"))
             }
           />
         </div>
 
-        {theirFocus ? (
-          <InlineThingDetailWorkspace
-            thing={theirSelectedThing}
-            onClose={() => setTheirSelectedId(null)}
-            className="mt-3 border-t border-border pt-3"
-          >
-            <div>
-              <div className="mb-2 flex items-center gap-2 px-1">
-                <span className="text-[11px] font-semibold text-foreground">
-                  {theirFocus === "waiting_for_catch"
-                    ? "Waiting for Catch"
-                    : theirFocus === "moving"
-                      ? "Moving"
-                      : "Needs Attention"}
-                </span>
-                <span className="text-[10px] text-muted-foreground">Things in this group</span>
-              </div>
-              {theirGroups[theirFocus].length ? (
-                <div className="grid grid-cols-2 gap-x-4">
-                  {theirGroups[theirFocus].map((thing) => (
-                    <CourtThingCard
-                      key={thing.id}
-                      thing={thing}
-                      density="overview"
-                      onSelect={(selectedThing) => setTheirSelectedId(selectedThing.id)}
+        {/* Selected / Highlighted Tasks List under With Others with spacious padding */}
+        <InlineThingDetailWorkspace
+          thing={theirSelectedThing}
+          onClose={() => setTheirSelectedId(null)}
+          className="mt-5"
+        >
+          <div className="space-y-3 max-h-[560px] overflow-y-auto px-1.5 py-2 pr-2">
+            {(theirFocus ? theirGroups[theirFocus] : view.theirs).map((thing) => {
+              const isSelected = theirSelectedId === thing.id;
+              const creatorAvatar = thing.creator.avatarUrl || matchProfile(directory, thing.creator.name)?.avatar_url;
+              const assigneeAvatar = thing.assignee.avatarUrl || matchProfile(directory, thing.assignee.name)?.avatar_url;
+              const state = theirStateFor(thing);
+              const isWaiting = state === "waiting_for_catch";
+
+              if (theirSelectedThing) {
+                // Compact Card style when detail panel is open on the right
+                return (
+                  <div
+                    key={thing.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      const selectedThing = thing;
+                      if (isSelected) {
+                        setTheirSelectedId(null);
+                      } else {
+                        setTheirSelectedId(selectedThing.id);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        const selectedThing = thing;
+                        if (isSelected) {
+                          setTheirSelectedId(null);
+                        } else {
+                          setTheirSelectedId(selectedThing.id);
+                        }
+                      }
+                    }}
+                    className={cn(
+                      "w-full rounded-2xl p-4 text-left shadow-2xs outline-none transition-all duration-200 cursor-pointer",
+                      isSelected
+                        ? "border-2 border-primary bg-primary/5 ring-1 ring-primary/30 shadow-xs"
+                        : "border border-border/60 bg-white hover:border-border",
+                    )}
+                  >
+                    <span className="block line-clamp-2 text-[13.5px] font-bold leading-snug text-foreground">
+                      {thing.title}
+                    </span>
+                    <div className="mt-3 flex items-center justify-between gap-2 text-[11px]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <PersonAvatar
+                          name={thing.assignee.name}
+                          initials={thing.assignee.initials}
+                          src={assigneeAvatar}
+                          size={22}
+                        />
+                        <span className="truncate font-semibold text-foreground max-w-[110px]">
+                          {thing.assignee.name}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5 shrink-0 font-medium",
+                          isWaiting ? "text-orange-600" : state === "moving" ? "text-blue-600" : "text-red-600",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            isWaiting ? "bg-orange-500" : state === "moving" ? "bg-blue-500" : "bg-red-500",
+                          )}
+                        />
+                        {isWaiting ? "Waiting for Catch" : state === "moving" ? "Moving" : "Needs Attention"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Full Width Row style when detail panel is closed
+              return (
+                <div
+                  key={thing.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => {
+                    setTheirSelectedId(thing.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setTheirSelectedId(thing.id);
+                    }
+                  }}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-border/60 bg-white px-5 py-3.5 shadow-2xs transition-all duration-200 hover:border-border hover:shadow-xs cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
+                >
+                  {/* Left: People Flow */}
+                  <div className="flex items-center gap-2.5 min-w-[200px] shrink-0">
+                    <PersonAvatar
+                      name={thing.creator.name}
+                      initials={thing.creator.initials}
+                      src={creatorAvatar}
+                      size={26}
                     />
-                  ))}
+                    <span className="text-[12.5px] font-semibold text-foreground truncate max-w-[80px]">
+                      {thing.creator.name}
+                    </span>
+                    <span className="text-muted-foreground/60 text-xs">→</span>
+                    <PersonAvatar
+                      name={thing.assignee.name}
+                      initials={thing.assignee.initials}
+                      src={assigneeAvatar}
+                      size={26}
+                    />
+                    <span className="text-[12.5px] font-semibold text-foreground truncate max-w-[80px]">
+                      {thing.assignee.name}
+                    </span>
+                  </div>
+
+                  {/* Center: Title */}
+                  <span className="flex-1 text-[13.5px] font-medium text-foreground px-4 truncate">
+                    {thing.title}
+                  </span>
+
+                  {/* Right: Status badge & Drag handle */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border",
+                        isWaiting
+                          ? "bg-orange-50 text-orange-600 border-orange-200/60"
+                          : state === "moving"
+                            ? "bg-blue-50 text-blue-600 border-blue-200/60"
+                            : "bg-purple-50 text-purple-600 border-purple-200/60",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 rounded-full",
+                          isWaiting ? "bg-orange-500" : state === "moving" ? "bg-blue-500" : "bg-purple-500",
+                        )}
+                      />
+                      {isWaiting ? "Waiting for Catch" : state === "moving" ? "Moving" : "Needs Attention"}
+                    </span>
+                    <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40" />
+                  </div>
                 </div>
-              ) : (
-                <div className="flex min-h-[96px] items-center justify-center border-b border-dashed border-border/70 bg-white text-[11px] text-muted-foreground">
-                  No Things match this group.
-                </div>
-              )}
-            </div>
-          </InlineThingDetailWorkspace>
-        ) : null}
+              );
+            })}
+            {view.theirs.length === 0 ? (
+              <div className="flex min-h-[80px] items-center justify-center rounded-xl border border-dashed border-border/70 bg-white text-[11.5px] text-muted-foreground">
+                No Things with others.
+              </div>
+            ) : null}
+          </div>
+        </InlineThingDetailWorkspace>
       </section>
     </div>
   );

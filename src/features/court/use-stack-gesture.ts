@@ -103,7 +103,6 @@ export function useStackGesture(options: StackGestureOptions): {
       if (options.interactionDisabled || !event.isPrimary) return;
       if (event.pointerType === "mouse" && event.button !== 0) return;
 
-      event.currentTarget.setPointerCapture(event.pointerId);
       pointerStartRef.current = { x: event.clientX, y: event.clientY };
       pointerIdRef.current = event.pointerId;
       axisRef.current = null;
@@ -129,6 +128,14 @@ export function useStackGesture(options: StackGestureOptions): {
       const axis = lockGestureAxis(axisRef.current, deltaX, deltaY, INTENT_THRESHOLD);
       axisRef.current = axis;
       if (!axis) return;
+
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // ignore
+        }
+      }
 
       setDragging(true);
       event.preventDefault();

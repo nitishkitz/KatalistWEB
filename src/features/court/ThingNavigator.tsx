@@ -1,4 +1,6 @@
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import type { Thing } from "@/domain/thing";
+import { matchProfile, useProfileDirectory } from "@/features/people/directory";
 import { cn } from "@/lib/utils";
 import { courtLaneContent } from "./CourtLaneStack";
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
@@ -11,71 +13,86 @@ type ThingNavigatorProps = {
   onSelect: (thingId: string) => void;
 };
 
-const laneSelectionTone: Record<CourtLaneId, string> = {
-  now: "border-status-now/35 bg-status-now/5",
-  next: "border-status-next/35 bg-status-next/5",
-  later: "border-status-later/35 bg-status-later/5",
-};
-
-const workLabel: Record<Thing["workStatus"], string> = {
-  not_started: "Not Started",
-  under_progress: "Under Progress",
-  sorted: "Sorted",
-  cancelled: "Cancelled",
-};
-
 export function ThingNavigator({ lane, things, selectedThingId, onSelect }: ThingNavigatorProps) {
   const content = courtLaneContent[lane];
+  const directory = useProfileDirectory();
   return (
     <nav
-      className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-white"
+      className={cn(
+        "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border shadow-xs p-3",
+        content.bgTone,
+        content.borderTone,
+      )}
       aria-label={`${content.label} Things`}
     >
-      <div className={cn("border-b border-border/70 px-3 py-3", content.headerTone)}>
-        <div className="flex items-center gap-2">
-          <KatalistIcon name={content.icon} className={cn("h-4 w-4", content.tone)} />
-          <h2 className={cn("text-[11px] font-semibold tracking-[0.08em]", content.tone)}>
-            {content.label}
-          </h2>
-          <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
-            {things.length}
-          </span>
+      <div className="mb-2.5 px-1 flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-1.5">
+            <KatalistIcon name={content.icon} className={cn("h-4 w-4", content.tone)} />
+            <h2 className={cn("text-[12px] font-bold tracking-[0.08em]", content.tone)}>
+              {content.label}
+            </h2>
+          </div>
+          <p className="mt-0.5 text-[10.5px] text-muted-foreground">{content.descriptor}</p>
         </div>
-        <p className="mt-1 truncate text-[10px] text-muted-foreground">{content.descriptor}</p>
+        <span className={cn("text-[12px] font-bold pt-0.5", content.tone)}>
+          {things.length}
+        </span>
       </div>
 
-      <div className="min-h-0 flex-1 p-2">
-        <div className="space-y-1">
-          {things.map((thing) => {
-            const selected = selectedThingId === thing.id;
-            const due = formatCourtDue(thing);
-            return (
-              <button
-                key={thing.id}
-                type="button"
-                aria-current={selected}
-                onClick={() => onSelect(thing.id)}
-                className={cn(
-                  "relative w-full rounded-lg border border-transparent px-2.5 py-2 text-left outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring",
-                  selected
-                    ? `${laneSelectionTone[lane]} before:absolute before:bottom-1.5 before:left-0 before:top-1.5 before:w-[3px] before:rounded-full before:bg-current`
-                    : "hover:border-border hover:bg-muted/30",
-                )}
-              >
-                <span className="block line-clamp-2 text-[11.5px] font-medium leading-4 text-foreground">
-                  {thing.title}
+      <div className="min-h-0 flex-1 space-y-2.5">
+        {things.map((thing) => {
+          const selected = selectedThingId === thing.id;
+          const due = formatCourtDue(thing);
+          const avatarUrl = thing.assignee.avatarUrl || matchProfile(directory, thing.assignee.name)?.avatar_url;
+          const isProgress = thing.workStatus === "under_progress";
+          return (
+            <button
+              key={thing.id}
+              type="button"
+              aria-current={selected}
+              onClick={() => onSelect(thing.id)}
+              className={cn(
+                "w-full rounded-xl p-3 text-left shadow-2xs outline-none transition-all duration-200 focus-visible:ring-1 focus-visible:ring-primary/40",
+                selected
+                  ? "border-2 border-red-400 bg-white ring-2 ring-red-400/20 shadow-xs"
+                  : "border border-border/60 bg-white hover:border-border",
+              )}
+            >
+              <span className="block line-clamp-2 text-[12px] font-bold leading-snug text-foreground">
+                {thing.title}
+              </span>
+              <span className="mt-2 flex items-center gap-1.5 text-[10px]">
+                <PersonAvatar
+                  name={thing.assignee.name}
+                  initials={thing.assignee.initials}
+                  src={avatarUrl}
+                  size={18}
+                />
+                <span
+                  className={cn(
+                    "font-medium",
+                    isProgress ? "text-blue-600" : "text-muted-foreground",
+                  )}
+                >
+                  {isProgress ? "Under Progress" : "Not Started"}
                 </span>
-                <span className="mt-1 flex items-center gap-1 text-[9.5px] text-muted-foreground">
-                  <span className="truncate">{workLabel[thing.workStatus]}</span>
-                  <span aria-hidden="true">·</span>
-                  <span className={cn("truncate", due.urgent && "text-status-now")}>
-                    {due.label}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
+                {due.label && due.label !== "No due date" ? (
+                  <>
+                    <span className="text-muted-foreground/60">·</span>
+                    <span
+                      className={cn(
+                        due.urgent ? "font-semibold text-red-500" : "text-muted-foreground",
+                      )}
+                    >
+                      {due.label}
+                    </span>
+                  </>
+                ) : null}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </nav>
   );

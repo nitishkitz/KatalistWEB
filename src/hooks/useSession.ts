@@ -17,6 +17,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
     email: "priya.sharma@katalist-demo.test",
     initials: "PS",
     color: "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300",
+    avatarUrl: "/avatars/priya.jpg",
   },
   {
     key: "arjun",
@@ -26,6 +27,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
     email: "arjun.mehta@katalist-demo.test",
     initials: "AM",
     color: "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300",
+    avatarUrl: "/avatars/arjun.jpg",
   },
   {
     key: "sarah",
@@ -35,6 +37,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
     email: "sarah.kapoor@katalist-demo.test",
     initials: "SK",
     color: "bg-pink-100 text-pink-700 dark:bg-pink-950/60 dark:text-pink-300",
+    avatarUrl: "/avatars/sarah.jpg",
   },
   {
     key: "mike",
@@ -44,6 +47,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
     email: "mike.fernandes@katalist-demo.test",
     initials: "MF",
     color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300",
+    avatarUrl: "/avatars/mike.jpg",
   },
   {
     key: "neha",
@@ -53,6 +57,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
     email: "neha.rao@katalist-demo.test",
     initials: "NR",
     color: "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300",
+    avatarUrl: "/avatars/neha.jpg",
   },
 ];
 

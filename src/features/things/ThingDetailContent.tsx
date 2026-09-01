@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -6,6 +6,7 @@ import {
   Bell,
   Calendar,
   Check,
+  Eye,
   Hand,
   Loader2,
   List as ListIcon,
@@ -52,6 +53,7 @@ export type ThingDetailContentProps = {
   headerAction?: React.ReactNode;
   onAfterTerminalAction?: () => void;
   variant?: "default" | "court";
+  viewOnly?: boolean;
 };
 
 const paces: Pace[] = ["now", "next", "later"];
@@ -207,14 +209,44 @@ export function ThingDetailContent({
   headerAction,
   onAfterTerminalAction,
   variant = "default",
+  viewOnly = false,
 }: ThingDetailContentProps): React.ReactNode {
   const qc = useQueryClient();
   const court = useCourt();
   const live = useThing(initialThing?.id ?? null);
   const thing = live.thing ?? initialThing;
-  const caps = thing ? getThingCapabilities(thing, court.myActorId) : null;
+  const rawCaps = thing ? getThingCapabilities(thing, court.myActorId) : null;
+  const caps = useMemo(() => {
+    if (!rawCaps) return null;
+    if (viewOnly) {
+      return {
+        ...rawCaps,
+        canCatch: false,
+        canSetPace: false,
+        canSetImportance: false,
+        canSetDue: false,
+        canSetStatus: false,
+        canAssign: false,
+        canReassign: false,
+        canNudge: false,
+        canSort: false,
+        canCancel: false,
+        canShred: false,
+        canAddToBucket: false,
+        canComment: true,
+      };
+    }
+    return rawCaps;
+  }, [rawCaps, viewOnly]);
   const thread = useThingComments(thing?.id ?? null);
   const people = useAssignablePeople();
+  const assignableList = useMemo(() => {
+    const list = [...people];
+    if (thing?.assignee && !list.some((p) => p.id === thing.assignee.id)) {
+      list.unshift(thing.assignee);
+    }
+    return list;
+  }, [people, thing?.assignee]);
   const { buckets, preview: bucketsPreview } = useBuckets();
   const [tab, setTab] = useState<"comments" | "activity">("comments");
   const [comment, setComment] = useState("");
@@ -230,6 +262,8 @@ export function ThingDetailContent({
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["thing"] }),
       qc.invalidateQueries({ queryKey: ["notifications"] }),
+      qc.invalidateQueries({ queryKey: ["buckets"] }),
+      qc.invalidateQueries({ queryKey: ["bucket-items"] }),
     ]);
   };
 
@@ -270,46 +304,159 @@ export function ThingDetailContent({
     ? format(new Date(thing.dueAt), thing.dueHasTime ? "EEE, MMM d · h:mm a" : "EEE, MMM d")
     : null;
 
+  const creatorAvatar = useAvatarUrl(thing.creator.name, null, thing.creator.avatarUrl);
+  const ownerAvatar = useAvatarUrl(thing.owner.name, null, thing.owner.avatarUrl);
+  const assigneeAvatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
+
+  const isCreatorSameAsOwner = thing.creator.id === thing.owner.id;
+  const isAssigneeSameAsOwner = thing.assignee.id === thing.owner.id;
+  const isTheirs = !isAssigneeSameAsOwner || !caps?.isAssignee;
+
   if (variant === "court") {
     return (
-      <div className="min-h-[454px] bg-white">
-        <header className="border-b border-border/70 px-5 py-4">
-          <div className="flex items-center justify-between gap-3">
+      <div className="min-h-[454px] rounded-2xl bg-white p-5 shadow-xs">
+        <header className="border-b border-border/60 pb-3.5">
+          <div className="mb-2">
             {headerAction}
-            <span className="text-[10px] text-muted-foreground">
-              Updated {format(new Date(thing.updatedAt), "MMM d · h:mm a")}
-            </span>
           </div>
-          <h2 className="mt-3 line-clamp-2 text-[17px] font-semibold leading-snug text-foreground">
+          <h2 className="line-clamp-2 text-[19px] font-bold leading-snug text-foreground">
             {thing.title}
           </h2>
-          <p className="mt-1 text-[10.5px] text-muted-foreground">
+          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
             <span className="capitalize">{thing.context}</span>
-            {thing.listId && thing.listName ? <span> · {thing.listName}</span> : null}
+            <span>·</span>
+            <span>Updated {format(new Date(thing.updatedAt), "MMM d · h:mm a")}</span>
+            {thing.listId && thing.listName ? <span>· {thing.listName}</span> : null}
           </p>
+          {viewOnly && (
+            <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[11.5px] font-semibold text-emerald-800">
+              <Eye className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+              <span>View only mode · You can view details and post comments.</span>
+            </div>
+          )}
         </header>
 
-        <div className="space-y-3 px-5 py-4">
-          <div className="flex items-center gap-3 border-b border-border/60 pb-3">
-            <PersonCell person={thing.creator} />
-            <span className="text-lg text-muted-foreground">→</span>
-            <PersonCell person={thing.assignee} />
-            <div className="ml-auto flex flex-wrap justify-end gap-2">
-              <AcknowledgementBadge value={thing.acknowledgement} />
-              <WorkStatusBadge value={thing.workStatus} />
+        <div className="space-y-3.5 pt-3.5">
+          {/* People Flow Row */}
+          <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-3.5">
+            <div className="flex items-center gap-3">
+              {isTheirs ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    <PersonAvatar
+                      name={thing.creator.name}
+                      initials={thing.creator.initials}
+                      src={creatorAvatar}
+                      size={28}
+                    />
+                    <div>
+                      <span className="block text-[12px] font-semibold text-foreground leading-tight">
+                        {thing.creator.name}
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        {isCreatorSameAsOwner ? "Creator · Owner" : "Creator"}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-muted-foreground/60 text-sm">→</span>
+                  <div className="flex items-center gap-2">
+                    <PersonAvatar
+                      name={thing.assignee.name}
+                      initials={thing.assignee.initials}
+                      src={assigneeAvatar}
+                      size={28}
+                    />
+                    <div>
+                      <span className="block text-[12px] font-semibold text-foreground leading-tight">
+                        {thing.assignee.name}
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground">Current Assignee</span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <PersonAvatar
+                      name={thing.creator.name}
+                      initials={thing.creator.initials}
+                      src={creatorAvatar}
+                      size={28}
+                    />
+                    <div>
+                      <span className="block text-[12px] font-semibold text-foreground leading-tight">
+                        {thing.creator.name}
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground">Creator</span>
+                    </div>
+                  </div>
+                  <span className="text-muted-foreground/60 text-sm">→</span>
+                  <div className="flex items-center gap-2">
+                    <PersonAvatar
+                      name={thing.owner.name}
+                      initials={thing.owner.initials}
+                      src={ownerAvatar}
+                      size={28}
+                    />
+                    <div>
+                      <span className="block text-[12px] font-semibold text-foreground leading-tight">
+                        {thing.owner.name}
+                      </span>
+                      <span className="block text-[10px] text-muted-foreground">Owner</span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {thing.acknowledgement === "waiting_for_catch" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-semibold text-orange-600 border border-orange-200/60">
+                  <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                  Waiting for Catch
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 border border-emerald-200/60">
+                  <Check className="h-3 w-3" strokeWidth={2.5} />
+                  Caught
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-600 border border-blue-200/60">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                {statusLabel(thing.workStatus)}
+              </span>
             </div>
           </div>
 
+          {/* Due date */}
           {thing.dueAt ? (
-            <div className="flex items-center gap-2 text-[11px] text-foreground">
+            <div className="flex items-center gap-2 text-[12px] text-foreground font-medium">
               <Calendar className="h-4 w-4 text-primary" />
               <span className="text-muted-foreground">Due</span>
-              <span className="font-medium">{dueLabel}</span>
+              <span className="text-muted-foreground">·</span>
+              <span className="font-semibold">{dueLabel}</span>
             </div>
           ) : null}
 
+          {/* Action & Pace Row */}
           {!terminal ? (
-            <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-border/60 pb-3.5">
+              {caps?.canNudge ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run.mutate(async () => {
+                      await rpcNudgeThing(thing.id);
+                      toast.success(`Nudge sent to ${thing.assignee.name}.`);
+                    })
+                  }
+                  className="h-8 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold text-[11.5px] px-3.5 shadow-xs transition-colors inline-flex items-center gap-1.5 disabled:opacity-60"
+                >
+                  <Bell className="h-3.5 w-3.5" />
+                  <span>Nudge {thing.assignee.name.split(" ")[0]}</span>
+                </button>
+              ) : null}
               {caps?.canSort ? (
                 <button
                   type="button"
@@ -321,28 +468,30 @@ export function ThingDetailContent({
                       onAfterTerminalAction?.();
                     })
                   }
-                  className="h-8 rounded-lg bg-primary px-3 text-[11px] font-semibold text-white shadow-sm disabled:opacity-60"
+                  className="h-8 rounded-lg bg-primary px-3.5 text-[11.5px] font-semibold text-white shadow-xs hover:bg-primary/90 disabled:opacity-60 transition-colors"
                 >
                   Mark Sorted
                 </button>
               ) : null}
               {caps?.canReassign ? (
-                <label className="inline-flex h-8 items-center gap-2 rounded-lg border border-border px-2 text-[11px]">
+                <label className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 text-[11.5px] font-medium text-foreground hover:bg-muted/40 cursor-pointer">
                   <UserPlus className="h-3.5 w-3.5 text-primary" />
                   <span>Reassign</span>
                   <select
                     disabled={busy}
                     value={thing.assignee.id}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const targetId = event.target.value;
+                      if (!targetId || targetId === thing.assignee.id) return;
                       run.mutate(async () => {
-                        await rpcReassignThing(thing.id, event.target.value);
+                        await rpcReassignThing(thing.id, targetId);
                         toast.success("Waiting for Catch.");
-                      })
-                    }
-                    className="max-w-[100px] bg-transparent font-medium outline-none"
+                      });
+                    }}
+                    className="max-w-[100px] bg-transparent font-medium outline-none cursor-pointer"
                     aria-label="Reassign"
                   >
-                    {people.map((person) => (
+                    {assignableList.map((person) => (
                       <option key={person.id} value={person.id}>
                         {person.name}
                       </option>
@@ -361,82 +510,108 @@ export function ThingDetailContent({
                       onAfterTerminalAction?.();
                     })
                   }
-                  className="h-8 px-2 text-[11px] font-medium text-destructive disabled:opacity-60"
+                  className="h-8 px-2 text-[11.5px] font-medium text-destructive hover:underline disabled:opacity-60"
                 >
                   Cancel
                 </button>
               ) : null}
 
-              <div className="ml-auto flex items-center gap-2">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                  Pace
-                </span>
-                <div className="grid overflow-hidden rounded-lg border border-border grid-cols-3">
-                  {paces.map((pace) => (
-                    <button
-                      key={pace}
-                      type="button"
-                      disabled={busy || !caps?.canSetPace}
-                      onClick={() => run.mutate(async () => rpcSetPersonalPace(thing.id, pace))}
-                      className={cn(
-                        "h-8 min-w-[64px] border-r border-border px-2 text-[10px] font-semibold uppercase last:border-r-0 disabled:opacity-60",
-                        activePace === pace ? "bg-primary/8 text-primary" : paceTone[pace],
-                      )}
-                    >
-                      {pace}
-                    </button>
-                  ))}
+              {caps?.canSetPace ? (
+                <div className="ml-auto flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-foreground">
+                    Pace
+                  </span>
+                  <div className="inline-flex rounded-lg border border-border/80 bg-muted/20 p-0.5">
+                    {paces.map((pace) => (
+                      <button
+                        key={pace}
+                        type="button"
+                        disabled={busy || !caps?.canSetPace}
+                        onClick={() => run.mutate(async () => rpcSetPersonalPace(thing.id, pace))}
+                        className={cn(
+                          "h-7 min-w-[54px] rounded-md px-2.5 text-[10.5px] font-bold uppercase transition-all disabled:opacity-60",
+                          activePace === pace
+                            ? pace === "now"
+                              ? "bg-red-50 text-red-600 border border-red-200/70 shadow-xs"
+                              : pace === "next"
+                                ? "bg-blue-50 text-blue-600 border border-blue-200/70 shadow-xs"
+                                : "bg-purple-50 text-purple-600 border border-purple-200/70 shadow-xs"
+                            : paceTone[pace],
+                        )}
+                      >
+                        {pace}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
+                  <span>Assigned to</span>
+                  <span className="font-semibold text-foreground">{thing.assignee.name}</span>
+                </div>
+              )}
             </div>
           ) : null}
 
-          {caps?.canAddToBucket ? (
-            <select
-              disabled={busy}
-              className="h-9 w-full rounded-lg border border-border bg-white px-3 text-[11px] outline-none focus:ring-2 focus:ring-ring"
-              defaultValue=""
-              aria-label="Choose Buckets"
-              onChange={(event) => {
-                if (!event.target.value) return;
-                run.mutate(async () => {
-                  if (currentBucket && currentBucket.id !== event.target.value) {
-                    await rpcRemoveFromBucket(currentBucket.id, thing.id);
-                  }
-                  await rpcAddToBucket(event.target.value, thing.id);
-                });
-                event.target.value = "";
-              }}
-            >
-              <option value="">Choose Buckets…</option>
-              {buckets.map((bucket) => (
-                <option key={bucket.id} value={bucket.id}>
-                  {bucket.name}
-                </option>
-              ))}
-            </select>
+          {/* Bucket selection or read-only badge */}
+          {viewOnly ? (
+            currentBucket ? (
+              <div className="flex items-center gap-2 rounded-xl border border-border/80 bg-muted/20 px-3 py-2 text-[11.5px] text-muted-foreground font-medium">
+                <ListIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Bucket: <strong className="text-foreground font-semibold">{currentBucket.name}</strong></span>
+              </div>
+            ) : null
+          ) : caps?.canAddToBucket ? (
+            <div className="relative">
+              <select
+                disabled={busy}
+                className="h-9 w-full rounded-xl border border-border/80 bg-white pl-9 pr-3 text-[11.5px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                defaultValue=""
+                aria-label="Choose Buckets"
+                onChange={(event) => {
+                  if (!event.target.value) return;
+                  run.mutate(async () => {
+                    if (currentBucket && currentBucket.id !== event.target.value) {
+                      await rpcRemoveFromBucket(currentBucket.id, thing.id);
+                    }
+                    await rpcAddToBucket(event.target.value, thing.id);
+                  });
+                  event.target.value = "";
+                }}
+              >
+                <option value="">Choose Buckets…</option>
+                {buckets.map((bucket) => (
+                  <option key={bucket.id} value={bucket.id}>
+                    {bucket.name}
+                  </option>
+                ))}
+              </select>
+              <ListIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            </div>
           ) : null}
 
-          <details className="border-b border-border/60 pb-3 text-[11px]">
-            <summary className="cursor-pointer list-none font-medium text-foreground">
-              Details ›
+          {/* Details toggle */}
+          <details className="border-b border-border/60 pb-3 text-[11.5px]">
+            <summary className="cursor-pointer list-none font-semibold text-foreground flex items-center gap-1">
+              <span>Details ›</span>
             </summary>
             <div className="mt-3 grid grid-cols-3 gap-3 text-muted-foreground">
               <div>
-                <span className="block text-[9px] uppercase">Creator</span>
+                <span className="block text-[9px] uppercase font-semibold">Creator</span>
                 {thing.creator.name}
               </div>
               <div>
-                <span className="block text-[9px] uppercase">Owner</span>
+                <span className="block text-[9px] uppercase font-semibold">Owner</span>
                 {thing.owner.name}
               </div>
               <div>
-                <span className="block text-[9px] uppercase">Assignee</span>
+                <span className="block text-[9px] uppercase font-semibold">Assignee</span>
                 {thing.assignee.name}
               </div>
             </div>
           </details>
 
+          {/* Comments & Activity tabs */}
           <div>
             <div className="flex items-center gap-5 border-b border-border/60">
               {(["comments", "activity"] as const).map((id) => (
@@ -445,21 +620,21 @@ export function ThingDetailContent({
                   type="button"
                   onClick={() => setTab(id)}
                   className={cn(
-                    "border-b-2 px-1 pb-2 text-[11px] font-medium capitalize",
+                    "border-b-2 px-1 pb-2 text-[12px] font-semibold capitalize transition-colors",
                     tab === id
                       ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground",
+                      : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {id}
-                  {id === "comments" && comments.length ? ` ${comments.length}` : ""}
+                  {id === "comments" && comments.length ? ` (${comments.length})` : ""}
                 </button>
               ))}
             </div>
             <div className="pt-3">
               {tab === "comments" ? (
-                <div className="space-y-2">
-                  {comments.slice(0, 2).map((entry) => (
+                <div className="space-y-3">
+                  {comments.slice(0, 3).map((entry) => (
                     <CommentRow
                       key={entry.id}
                       author={entry.author}
@@ -471,7 +646,7 @@ export function ThingDetailContent({
                     <p className="text-[11px] text-muted-foreground">No comments yet.</p>
                   ) : null}
                   <form
-                    className="flex gap-2"
+                    className="flex gap-2 pt-1"
                     onSubmit={(event) => {
                       event.preventDefault();
                       if (!comment.trim()) return;
@@ -482,11 +657,11 @@ export function ThingDetailContent({
                       value={comment}
                       onChange={(event) => setComment(event.target.value)}
                       placeholder="Write a comment…"
-                      className="h-8 min-w-0 flex-1 rounded-lg border border-border px-3 text-[11px] outline-none focus:ring-2 focus:ring-ring"
+                      className="h-9 min-w-0 flex-1 rounded-xl border border-border/80 px-3 text-[11.5px] outline-none focus:border-primary focus:ring-2 focus:ring-ring"
                     />
                     <button
                       type="submit"
-                      className="h-8 rounded-lg border border-primary px-3 text-[11px] font-medium text-primary"
+                      className="h-9 rounded-xl border border-primary px-4 text-[11.5px] font-semibold text-primary hover:bg-primary/5 transition-colors"
                     >
                       Post
                     </button>
@@ -495,7 +670,7 @@ export function ThingDetailContent({
               ) : (
                 <ul className="space-y-2">
                   {events.slice(0, 4).map((event) => (
-                    <li key={event.id} className="text-[11px] text-muted-foreground">
+                    <li key={event.id} className="text-[11.5px] text-muted-foreground">
                       <span className="font-medium text-foreground">
                         {event.event.replaceAll("_", " ")}
                       </span>
@@ -529,6 +704,12 @@ export function ThingDetailContent({
           <span aria-hidden="true">·</span>
           <span>Updated {format(new Date(thing.updatedAt), "MMM d · h:mm a")}</span>
         </p>
+        {viewOnly && (
+          <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[11.5px] font-semibold text-emerald-800">
+            <Eye className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span>View only mode · You can view details and post comments.</span>
+          </div>
+        )}
       </header>
 
       <div className="grid grid-cols-1 gap-4 px-5 py-4 xl:grid-cols-2">
@@ -548,32 +729,45 @@ export function ThingDetailContent({
               <PersonCell person={thing.assignee} />
             </div>
           </div>
-          <label className="flex h-9 items-center gap-2 px-1 text-[11px] text-muted-foreground">
-            <UserPlus className="h-3.5 w-3.5 text-primary" />
-            <span className="font-medium text-foreground">Reassign</span>
-            <select
-              disabled={busy || !caps?.canReassign}
-              className="ml-auto h-8 max-w-[170px] rounded-lg border border-border bg-white px-2 text-[11px] text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-              id="thing-detail-reassign"
-              defaultValue={thing.assignee.id}
-              onChange={(e) =>
-                run.mutate(async () => {
-                  await rpcReassignThing(thing.id, e.target.value);
-                  toast.success("Waiting for Catch.");
-                })
-              }
-            >
-              {people.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            {!caps?.canReassign ? <Lock className="h-3.5 w-3.5 text-muted-foreground" /> : null}
-          </label>
+          {!viewOnly && (
+            <label className="flex h-9 items-center gap-2 px-1 text-[11px] text-muted-foreground">
+              <UserPlus className="h-3.5 w-3.5 text-primary" />
+              <span className="font-medium text-foreground">Reassign</span>
+              <select
+                disabled={busy || !caps?.canReassign}
+                className="ml-auto h-8 max-w-[170px] rounded-lg border border-border bg-white px-2 text-[11px] text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                id="thing-detail-reassign"
+                value={thing.assignee.id}
+                onChange={(e) => {
+                  const targetId = e.target.value;
+                  if (!targetId || targetId === thing.assignee.id) return;
+                  run.mutate(async () => {
+                    await rpcReassignThing(thing.id, targetId);
+                    toast.success("Waiting for Catch.");
+                  });
+                }}
+              >
+                {assignableList.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              {!caps?.canReassign ? <Lock className="h-3.5 w-3.5 text-muted-foreground" /> : null}
+            </label>
+          )}
         </section>
 
-        {caps?.canAddToBucket ? (
+        {viewOnly ? (
+          currentBucket ? (
+            <section className="space-y-1.5 xl:col-span-2">
+              <h3 className="katalist-section-title">Bucket</h3>
+              <p className="text-[11px] text-muted-foreground">
+                In <span className="font-medium text-foreground">{currentBucket.name}</span>
+              </p>
+            </section>
+          ) : null
+        ) : caps?.canAddToBucket ? (
           <section className="space-y-1.5 xl:col-span-2">
             <h3 className="katalist-section-title">Add to Bucket</h3>
             {currentBucket ? (

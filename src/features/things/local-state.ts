@@ -416,6 +416,69 @@ export function getListMessages(listId: string): LocalMessage[] {
   return listMessages.get(listId) ?? [];
 }
 
+export function addListMemberLocal(
+  listId: string,
+  personId: string,
+  role: "collaborator" | "view_only" = "collaborator",
+) {
+  const person = directoryPeople().find((p) => p.id === personId) || demoDirectory().find((p) => p.id === personId);
+  const name = person?.name || "Teammate";
+  const initials = person?.initials || name.slice(0, 2).toUpperCase();
+  const avatarUrl = person?.avatarUrl || null;
+
+  extraLists = extraLists.map((l) => {
+    if (l.id !== listId) return l;
+    const existing = l.members.filter((m) => m.profileId !== personId && m.actorId !== personId && m.name !== name);
+    const newMember = {
+      profileId: personId,
+      actorId: personId,
+      name,
+      role,
+      initials,
+      avatarUrl,
+    };
+    const updated = [...existing, newMember];
+    return {
+      ...l,
+      members: updated,
+      memberCount: updated.length,
+      updatedAt: "Just now",
+    };
+  });
+  bump();
+}
+
+export function changeListRoleLocal(
+  listId: string,
+  personId: string,
+  role: "collaborator" | "view_only",
+) {
+  extraLists = extraLists.map((l) => {
+    if (l.id !== listId) return l;
+    const updated = l.members.map((m) => {
+      if (m.profileId === personId || m.actorId === personId || m.name === personId) {
+        return { ...m, role };
+      }
+      return m;
+    });
+    return { ...l, members: updated };
+  });
+  bump();
+}
+
+export function removeListMemberLocal(listId: string, personId: string) {
+  extraLists = extraLists.map((l) => {
+    if (l.id !== listId) return l;
+    const updated = l.members.filter((m) => m.profileId !== personId && m.actorId !== personId && m.name !== personId);
+    return {
+      ...l,
+      members: updated,
+      memberCount: updated.length,
+    };
+  });
+  bump();
+}
+
 export function getBuckets(activeContext?: "work" | "home"): BucketCard[] {
   const me = currentDemoActorId();
   const deleted = deletedBucketIdsByActor.get(me) ?? new Set<string>();

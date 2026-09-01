@@ -9,8 +9,8 @@ import { GhostCard } from "@/features/doorman/GhostCard";
 import { useRealtimeInvalidation } from "@/features/realtime/use-realtime";
 
 interface AppShellProps {
-  title: string;
-  subtitle?: string;
+  title: ReactNode;
+  subtitle?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }

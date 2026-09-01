@@ -1,14 +1,14 @@
 import type { Person } from "@/domain/thing";
 import { getStoredDemoSession } from "@/hooks/useSession";
 
-export const DEMO_ACTOR_BY_KEY: Record<string, { id: string; name: string; initials: string }> = {
-  priya: { id: "p-priya", name: "Priya Sharma", initials: "PS" },
-  arjun: { id: "p-arjun", name: "Arjun Mehta", initials: "AM" },
-  sarah: { id: "p-sarah", name: "Sarah Kapoor", initials: "SK" },
-  mike: { id: "p-mike", name: "Mike Fernandes", initials: "MF" },
-  neha: { id: "p-neha", name: "Neha Rao", initials: "NR" },
-  rahul: { id: "p-rahul", name: "Rahul Mehta", initials: "RM" },
-  sai: { id: "p-sai", name: "Sai", initials: "SA" },
+export const DEMO_ACTOR_BY_KEY: Record<string, { id: string; name: string; initials: string; avatarUrl?: string | null }> = {
+  priya: { id: "p-priya", name: "Priya Sharma", initials: "PS", avatarUrl: "/avatars/priya.jpg" },
+  arjun: { id: "p-arjun", name: "Arjun Mehta", initials: "AM", avatarUrl: "/avatars/arjun.jpg" },
+  sarah: { id: "p-sarah", name: "Sarah Kapoor", initials: "SK", avatarUrl: "/avatars/sarah.jpg" },
+  mike: { id: "p-mike", name: "Mike Fernandes", initials: "MF", avatarUrl: "/avatars/mike.jpg" },
+  neha: { id: "p-neha", name: "Neha Rao", initials: "NR", avatarUrl: "/avatars/neha.jpg" },
+  rahul: { id: "p-rahul", name: "Rahul Mehta", initials: "RM", avatarUrl: "/avatars/rahul.jpg" },
+  sai: { id: "p-sai", name: "Sai", initials: "SA", avatarUrl: "/avatars/sai.jpg" },
 };
 
 /** Test-only persona override. Null restores session-based resolution. */
@@ -35,14 +35,27 @@ export function resolveDemoActorId(
 export function resolveDemoPerson(session: DemoSessionLike): Person {
   const id = resolveDemoActorId(session);
   const canonical = Object.values(DEMO_ACTOR_BY_KEY).find((person) => person.id === id);
-  if (canonical) return canonical;
+  if (canonical) {
+    const res: Person = {
+      id: canonical.id,
+      name: canonical.name,
+      initials: canonical.initials,
+    };
+    if (canonical.avatarUrl) res.avatarUrl = canonical.avatarUrl;
+    return res;
+  }
   const name = session?.user?.user_metadata?.display_name;
   const initials = session?.user?.user_metadata?.initials;
-  return {
+  const avatarUrl = session?.user?.user_metadata?.avatar_url as string | undefined;
+  const res: Person = {
     id,
     name: typeof name === "string" && name ? name : "You",
     initials: typeof initials === "string" && initials ? initials : "YO",
   };
+  if (typeof avatarUrl === "string" && avatarUrl) {
+    res.avatarUrl = avatarUrl;
+  }
+  return res;
 }
 
 export function currentDemoActorId(): string {

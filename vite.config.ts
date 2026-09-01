@@ -123,12 +123,19 @@ function authPopupPlugin(): Plugin {
 }
 
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
-// Keep `nitro` gated to `build` (the Vercel deploy target): enabled in dev it
-// opens a second dev-server port, which breaks the single-port preview.
+// Keep `nitro` out of `vite dev`: enabled there it opens a second port and
+// breaks the single-port live preview. Include it for `vite build` (Vercel /
+// Netlify) AND `vite preview` — Nitro never emits dist/server/server.js, so
+// Start's preview plugin cannot serve a Nitro build on its own.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
-export default defineConfig(({ command }) => ({
+export default defineConfig(({ command, isPreview }) => ({
   server: {
+    host: "0.0.0.0",
+    port: 8080,
+    strictPort: true,
+  },
+  preview: {
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
@@ -142,7 +149,7 @@ export default defineConfig(({ command }) => ({
     grokPwaPlugin(),
     tailwindcss(),
     tanstackStart(),
-    ...(command === "build"
+    ...(command === "build" || isPreview
       ? [
           nitro({
             preset: process.env.NITRO_PRESET || (process.env.NETLIFY ? "netlify" : "vercel"),

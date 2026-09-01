@@ -8,8 +8,8 @@ import { useProfile } from "@/features/me/use-profile";
 import { useAvatarUrl } from "@/features/people/directory";
 
 interface PageHeaderProps {
-  title: string;
-  subtitle?: string;
+  title: React.ReactNode;
+  subtitle?: React.ReactNode;
   actions?: React.ReactNode;
   className?: string;
 }

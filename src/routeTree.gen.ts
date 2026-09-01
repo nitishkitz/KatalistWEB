@@ -16,6 +16,7 @@ import { Route as ListsRouteImport } from './routes/lists'
 import { Route as MeRouteImport } from './routes/me'
 import { Route as NudgesRouteImport } from './routes/nudges'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as TeamRouteImport } from './routes/team'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as BridgeTokenRouteImport } from './routes/bridge.$token'
 import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
@@ -60,6 +61,11 @@ const NudgesRoute = NudgesRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TeamRoute = TeamRouteImport.update({
+  id: '/team',
+  path: '/team',
   getParentRoute: () => rootRouteImport,
 } as any)
 const WelcomeRoute = WelcomeRouteImport.update({
@@ -121,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
+  '/team': typeof TeamRoute
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
+  '/team': typeof TeamRoute
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
+  '/team': typeof TeamRoute
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
@@ -179,6 +188,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/nudges'
     | '/onboarding'
+    | '/team'
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
@@ -196,6 +206,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/nudges'
     | '/onboarding'
+    | '/team'
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
@@ -215,6 +226,7 @@ export interface FileRouteTypes {
     | '/me'
     | '/nudges'
     | '/onboarding'
+    | '/team'
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
@@ -235,6 +247,7 @@ export interface RootRouteChildren {
   MeRoute: typeof MeRoute
   NudgesRoute: typeof NudgesRoute
   OnboardingRoute: typeof OnboardingRoute
+  TeamRoute: typeof TeamRoute
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
@@ -292,6 +305,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/team': {
+      id: '/team'
+      path: '/team'
+      fullPath: '/team'
+      preLoaderRoute: typeof TeamRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/welcome': {
@@ -400,6 +420,7 @@ const rootRouteChildren: RootRouteChildren = {
   MeRoute: MeRoute,
   NudgesRoute: NudgesRoute,
   OnboardingRoute: OnboardingRoute,
+  TeamRoute: TeamRoute,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,

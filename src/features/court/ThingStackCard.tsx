@@ -43,6 +43,30 @@ const laneTagTone: Record<CourtLaneId, { bg: string; text: string; border: strin
     },
   };
 
+const laneCardBorder: Record<CourtLaneId, { border: string; hover: string; shadow: string; pillBg: string; pillText: string }> = {
+  now: {
+    border: "border-red-100/90",
+    hover: "hover:border-red-200",
+    shadow: "shadow-[0_4px_24px_-4px_rgba(239,68,68,0.1),0_2px_8px_-2px_rgba(0,0,0,0.03)]",
+    pillBg: "bg-red-50/90",
+    pillText: "text-red-600",
+  },
+  next: {
+    border: "border-blue-100/90",
+    hover: "hover:border-blue-200",
+    shadow: "shadow-[0_4px_24px_-4px_rgba(59,130,246,0.1),0_2px_8px_-2px_rgba(0,0,0,0.03)]",
+    pillBg: "bg-blue-50/90",
+    pillText: "text-blue-600",
+  },
+  later: {
+    border: "border-purple-100/90",
+    hover: "hover:border-purple-200",
+    shadow: "shadow-[0_4px_24px_-4px_rgba(168,85,247,0.1),0_2px_8px_-2px_rgba(0,0,0,0.03)]",
+    pillBg: "bg-purple-50/90",
+    pillText: "text-purple-600",
+  },
+};
+
 const workLabel: Record<Thing["workStatus"], string> = {
   not_started: "Not Started",
   under_progress: "Under Progress",
@@ -60,6 +84,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     const capabilities = getThingCapabilities(thing, myActorId);
     const assigneeAvatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
     const disabled = pendingAction !== null;
+    const styling = laneCardBorder[lane];
 
     const run = (event: MouseEvent<HTMLButtonElement>, action: CourtStackAction) => {
       event.stopPropagation();
@@ -67,34 +92,41 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     };
 
     return (
-      <article className="relative min-h-[190px] overflow-hidden rounded-xl border border-border bg-white shadow-sm">
+      <article
+        className={cn(
+          "flex flex-col justify-between overflow-hidden rounded-2xl border bg-white transition-all duration-200",
+          styling.border,
+          styling.hover,
+          styling.shadow,
+        )}
+      >
         <button
           ref={ref}
           type="button"
           onClick={(event) => {
             if (!suppressClickRef.current) onOpen(thing, event.currentTarget);
           }}
-          className="block w-full px-4 pb-3 pt-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="block w-full p-3.5 pb-2.5 text-left outline-none cursor-pointer focus-visible:ring-1 focus-visible:ring-primary/40"
           aria-label={`Open ${thing.title}`}
         >
-          {/* Top row: avatar + name | due date */}
+          {/* Top row: avatar + @name | due date */}
           <span className="flex items-center justify-between gap-2">
-            <span className="inline-flex min-w-0 items-center gap-1.5">
+            <span className="inline-flex min-w-0 items-center gap-2">
               <PersonAvatar
                 name={thing.assignee.name}
                 initials={thing.assignee.initials}
                 src={assigneeAvatar}
-                size={28}
+                size={26}
               />
-              <span className="max-w-28 truncate text-[11px] font-medium text-muted-foreground">
-                @{thing.assignee.name.split(" ")[0]}
+              <span className="truncate text-[12.5px] font-bold text-slate-800">
+                @{thing.assignee.name}
               </span>
             </span>
             {dueLabel ? (
               <span
                 className={cn(
-                  "shrink-0 text-[11px] font-medium italic",
-                  due.urgent ? "text-status-now" : laneTone[lane].text,
+                  "shrink-0 text-[11px] font-bold",
+                  due.urgent ? "text-red-600" : laneTone[lane].text,
                 )}
               >
                 Due {dueLabel}
@@ -103,39 +135,50 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           </span>
 
           {/* Title */}
-          <span className="mt-3 block line-clamp-2 text-[15px] font-bold leading-[1.35] text-foreground">
+          <span className="mt-2.5 block line-clamp-2 text-[14.5px] font-bold leading-snug text-slate-900">
             {thing.title}
           </span>
 
-          <span className="mt-2.5 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 rounded-md bg-muted/65 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-              <KatalistIcon
-                name={
-                  thing.workStatus === "under_progress"
-                    ? "under-progress"
-                    : thing.workStatus === "sorted"
-                      ? "sorted"
-                      : "not-started"
-                }
-                className="h-3 w-3"
-              />
-              {workLabel[thing.workStatus]}
-            </span>
+          {/* Tags row */}
+          <span className="mt-2.5 flex flex-wrap items-center gap-1.5">
             {thing.listId && thing.listName ? (
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10.5px] font-semibold",
-                  laneTagTone[lane].bg,
-                  laneTagTone[lane].text,
-                  laneTagTone[lane].border,
+                  "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10.5px] font-semibold border border-transparent",
+                  styling.pillBg,
+                  styling.pillText,
                 )}
               >
-                <KatalistIcon name="list" className={cn("h-3 w-3", laneTagTone[lane].icon)} />
+                <KatalistIcon name="list" className="h-3 w-3" />
                 {thing.listName}
               </span>
             ) : null}
+
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10.5px] font-medium border",
+                thing.workStatus === "under_progress"
+                  ? "bg-blue-50 text-blue-600 border-blue-200/60"
+                  : thing.workStatus === "sorted"
+                    ? "bg-emerald-50 text-emerald-600 border-emerald-200/60"
+                    : "bg-slate-50 text-slate-600 border-slate-200/60",
+              )}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  thing.workStatus === "under_progress"
+                    ? "bg-blue-500"
+                    : thing.workStatus === "sorted"
+                      ? "bg-emerald-500"
+                      : "bg-slate-400",
+                )}
+              />
+              {workLabel[thing.workStatus]}
+            </span>
+
             {thing.starred ? (
-              <span className="text-status-waiting" title="Starred">
+              <span className="text-amber-500 ml-auto" title="Starred">
                 <KatalistIcon name="favourite-star" className="h-3.5 w-3.5 fill-current" />
                 <span className="sr-only">Starred</span>
               </span>
@@ -143,7 +186,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           </span>
         </button>
 
-        <div className="grid min-h-[48px] grid-cols-3 divide-x divide-border/60 border-t border-border/70">
+        <div className="flex min-h-[38px] h-9 divide-x divide-slate-100 border-t border-slate-100">
           <button
             type="button"
             disabled={disabled}
@@ -151,7 +194,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               event.stopPropagation();
               onOpen(thing, event.currentTarget);
             }}
-            className="inline-flex h-12 items-center justify-center gap-1.5 text-[10.5px] font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:opacity-60"
+            className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-600 outline-none hover:text-slate-900 hover:bg-slate-50/50 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:opacity-60 transition-colors"
           >
             <KatalistIcon name="list" className="h-3.5 w-3.5" />
             Details
@@ -161,9 +204,9 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               type="button"
               disabled={disabled}
               onClick={(event) => run(event, "catch")}
-              className="inline-flex h-12 items-center justify-center gap-1.5 text-[10.5px] font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 text-[11px] font-semibold text-primary outline-none hover:bg-primary/5 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
             >
-              <KatalistIcon name="catch" className="h-4 w-4" />
+              <KatalistIcon name="catch" className="h-3.5 w-3.5" />
               Catch
             </button>
           ) : capabilities.canSetPace && lane !== "later" ? (
@@ -171,27 +214,23 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               type="button"
               disabled={disabled}
               onClick={(event) => run(event, "later")}
-              className="inline-flex h-12 items-center justify-center gap-1.5 text-[10.5px] font-semibold text-status-later outline-none hover:text-status-later/80 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-700 outline-none hover:bg-purple-50/60 hover:text-purple-600 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
             >
-              <KatalistIcon name="snooze" className="h-4 w-4" />
+              <KatalistIcon name="snooze" className="h-3.5 w-3.5 text-slate-600" />
               Later
             </button>
-          ) : (
-            <span />
-          )}
+          ) : null}
           {capabilities.canSort ? (
             <button
               type="button"
               disabled={disabled}
               onClick={(event) => run(event, "sort")}
-              className="inline-flex h-12 items-center justify-center gap-1.5 text-[10.5px] font-semibold text-emerald-600 outline-none hover:text-emerald-700 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-600 outline-none hover:bg-emerald-50/60 hover:text-emerald-700 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
             >
-              <KatalistIcon name="sorted" className="h-4 w-4" />
+              <KatalistIcon name="sorted" className="h-3.5 w-3.5 text-emerald-600" />
               Sorted
             </button>
-          ) : (
-            <span />
-          )}
+          ) : null}
         </div>
       </article>
     );

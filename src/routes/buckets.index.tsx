@@ -6,7 +6,6 @@ import {
   ChevronDown,
   Filter,
   Lock,
-  MoreHorizontal,
   Plus,
   Search,
 } from "lucide-react";
@@ -14,6 +13,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { type BucketCard } from "@/features/buckets/fixtures";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useBuckets } from "@/features/buckets/use-buckets";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -28,90 +28,191 @@ export const Route = createFileRoute("/buckets/")({
   component: BucketsPage,
 });
 
-function BucketCardView({ bucket, large }: { bucket: BucketCard; large?: boolean }) {
+function PinnedBucketCard({ bucket }: { bucket: BucketCard }) {
   const navigate = useNavigate();
+  const letter = bucket.name.slice(0, 1).toUpperCase();
+  const pastelStyles = [
+    { bg: "bg-purple-100", text: "text-purple-700" },
+    { bg: "bg-sky-100", text: "text-sky-700" },
+    { bg: "bg-emerald-100", text: "text-emerald-700" },
+    { bg: "bg-amber-100", text: "text-amber-700" },
+    { bg: "bg-rose-100", text: "text-rose-700" },
+  ];
+  const charCode = (bucket.name.charCodeAt(0) || 0) % pastelStyles.length;
+  const { bg, text } = pastelStyles[charCode]!;
+
+  const tags = bucket.tags || [
+    bucket.context === "work" ? "Work" : "Personal",
+    "Yearly goals",
+    "Docs",
+  ];
+
   return (
     <article
       role="link"
       tabIndex={0}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("[data-stop-nav]")) return;
-        void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
-      }}
+      onClick={() => void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } })}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
         }
       }}
-      className={cn(
-        "group flex cursor-pointer flex-col rounded-xl border border-border bg-card p-4 transition-colors hover:bg-muted/30",
-        large ? "min-h-[210px]" : "min-h-[180px]",
-      )}
+      className="group flex flex-col justify-between rounded-2xl border border-border/80 bg-white p-5 shadow-2xs hover:shadow-xs transition-all duration-200 cursor-pointer min-h-[220px]"
     >
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <span
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-lg text-sm font-bold text-white",
-              bucket.color,
-            )}
-          >
-            {bucket.name.slice(0, 1)}
+      <div>
+        {/* Top Avatar Letter */}
+        <div className="mb-3.5 flex items-center justify-between">
+          <span className={cn("flex h-10 w-10 items-center justify-center rounded-xl text-[15px] font-bold", bg, text)}>
+            {letter}
           </span>
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h3 className="text-[14px] font-semibold text-foreground">{bucket.name}</h3>
-              <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-label="Private" />
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              {bucket.thingCount} Things · {bucket.listCount} Lists
-            </p>
-          </div>
         </div>
-        <button
-          type="button"
-          data-stop-nav
-          className="relative z-10 rounded p-1 text-muted-foreground hover:bg-muted"
-          aria-label="Bucket actions"
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
+
+        {/* Title + Lock */}
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-[14.5px] font-bold text-foreground group-hover:text-primary transition-colors">
+            {bucket.name}
+          </h3>
+          <Lock className="h-3.5 w-3.5 text-muted-foreground/80" />
+        </div>
+
+        {/* Counter */}
+        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+          {bucket.thingCount} Things · {bucket.listCount} {bucket.listCount === 1 ? "List" : "Lists"}
+        </p>
+
+        {/* Description */}
+        <p className="mt-2.5 text-[12px] leading-relaxed text-muted-foreground line-clamp-2">
+          {bucket.description}
+        </p>
+
+        {/* Tag pills */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {tags.map((tag) => (
+            <span
+              key={tag}
+              className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground"
+            >
+              {tag}
+            </span>
+          ))}
+        </div>
       </div>
 
-      <p className="mb-3 line-clamp-2 text-[12px] leading-relaxed text-muted-foreground">
-        {bucket.description}
-      </p>
+      {/* Footer: Collaborators Avatar Stack + View bucket link */}
+      <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3">
+        <div className="flex items-center -space-x-1.5 overflow-hidden">
+          {(bucket.collaborators && bucket.collaborators.length > 0 ? bucket.collaborators : [
+            { id: "c1", name: "Priya Sharma", avatarUrl: "/avatars/priya.jpg", initials: "PS" },
+            { id: "c2", name: "Arjun Mehta", avatarUrl: "/avatars/arjun.jpg", initials: "AM" },
+          ]).slice(0, 3).map((collab) => (
+            <PersonAvatar
+              key={collab.id}
+              name={collab.name}
+              src={collab.avatarUrl}
+              initials={collab.initials || collab.name.slice(0, 2).toUpperCase()}
+              size={22}
+              className="ring-2 ring-white"
+            />
+          ))}
+          {(bucket.collaborators?.length ?? 2) > 3 ? (
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
+              +{bucket.collaborators!.length - 3}
+            </span>
+          ) : (
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
+              +1
+            </span>
+          )}
+        </div>
 
-      <ul className="mb-3 flex-1 space-y-1.5">
-        {bucket.previews.slice(0, 3).map((p) => (
-          <li key={p.title} className="flex items-center gap-2 text-[12px] text-foreground">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
-            <span className="truncate">{p.title}</span>
-            {p.state ? (
-              <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                {p.state}
-              </span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-auto flex items-center justify-between border-t border-border/70 pt-3">
-        <span className="text-[11px] text-muted-foreground">{bucket.updatedAt}</span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
-          }}
-          className="inline-flex items-center gap-1 text-[12px] font-medium text-primary"
-        >
-          View bucket
-          <ArrowRight className="h-3.5 w-3.5" />
-        </button>
+        <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary group-hover:underline">
+          View bucket <ArrowRight className="h-3.5 w-3.5" />
+        </span>
       </div>
     </article>
+  );
+}
+
+function AllBucketRow({ bucket }: { bucket: BucketCard }) {
+  const navigate = useNavigate();
+  const letter = bucket.name.slice(0, 1).toUpperCase();
+  const pastelStyles = [
+    { bg: "bg-amber-100", text: "text-amber-800" },
+    { bg: "bg-rose-100", text: "text-rose-800" },
+    { bg: "bg-emerald-100", text: "text-emerald-800" },
+    { bg: "bg-orange-100", text: "text-orange-800" },
+    { bg: "bg-purple-100", text: "text-purple-800" },
+    { bg: "bg-sky-100", text: "text-sky-800" },
+  ];
+  const charCode = (bucket.name.charCodeAt(0) || 0) % pastelStyles.length;
+  const { bg, text } = pastelStyles[charCode]!;
+
+  return (
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={() => void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } })}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
+        }
+      }}
+      className="group flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border border-border/70 bg-white p-4 shadow-2xs hover:bg-muted/20 transition-all duration-200 cursor-pointer"
+    >
+      <div className="flex items-center gap-3.5 min-w-0">
+        <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[15px] font-bold", bg, text)}>
+          {letter}
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <h3 className="text-[13.5px] font-bold text-foreground group-hover:text-primary transition-colors truncate">
+              {bucket.name}
+            </h3>
+            <Lock className="h-3 w-3 text-muted-foreground/80 shrink-0" />
+          </div>
+          <p className="text-[11.5px] text-muted-foreground">
+            {bucket.thingCount} Things · {bucket.listCount} {bucket.listCount === 1 ? "List" : "Lists"}
+          </p>
+          <p className="text-[11.5px] text-muted-foreground truncate mt-0.5">
+            {bucket.description}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
+        {/* Collaborators Avatar Stack */}
+        <div className="flex items-center -space-x-1.5 overflow-hidden">
+          {(bucket.collaborators && bucket.collaborators.length > 0 ? bucket.collaborators : [
+            { id: "c1", name: "Priya Sharma", avatarUrl: "/avatars/priya.jpg", initials: "PS" },
+            { id: "c2", name: "Arjun Mehta", avatarUrl: "/avatars/arjun.jpg", initials: "AM" },
+          ]).slice(0, 3).map((collab) => (
+            <PersonAvatar
+              key={collab.id}
+              name={collab.name}
+              src={collab.avatarUrl}
+              initials={collab.initials || collab.name.slice(0, 2).toUpperCase()}
+              size={22}
+              className="ring-2 ring-white"
+            />
+          ))}
+          {(bucket.collaborators?.length ?? 2) > 3 ? (
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
+              +{bucket.collaborators!.length - 3}
+            </span>
+          ) : (
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
+              +1
+            </span>
+          )}
+        </div>
+
+        <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary group-hover:underline">
+          View bucket <ArrowRight className="h-3.5 w-3.5" />
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -152,23 +253,22 @@ function BucketsPage() {
         </button>
       }
     >
-      <div className="mb-5 flex flex-wrap items-center gap-2">
-        <label className="flex h-9 flex-1 items-center gap-2 rounded-lg border border-border bg-card px-3 sm:max-w-sm">
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <label className="flex h-9 flex-1 items-center gap-2 rounded-xl border border-border/80 bg-white px-3 sm:max-w-md shadow-2xs">
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your buckets"
-            className="w-full bg-transparent text-[13px] outline-none"
+            placeholder="Search buckets..."
+            className="w-full bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
           />
         </label>
-        <label className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground">
+        <label className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border/80 bg-white px-3 text-[12.5px] text-foreground shadow-2xs">
           <ArrowDownUp className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-muted-foreground">Sort:</span>
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as "recent" | "name")}
-            className="appearance-none bg-transparent pr-4 text-[13px] outline-none"
+            className="appearance-none bg-transparent pr-4 text-[12.5px] outline-none font-medium"
             aria-label="Sort buckets"
           >
             <option value="recent">Recently updated</option>
@@ -178,38 +278,44 @@ function BucketsPage() {
         </label>
         <button
           type="button"
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-card px-3 text-[13px] text-foreground"
+          className={cn(
+            "inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[12.5px] font-medium shadow-2xs transition-colors",
+            pinnedOnly ? "border-primary bg-primary/10 text-primary" : "border-border/80 bg-white text-foreground hover:bg-muted/40",
+          )}
           onClick={() => setPinnedOnly((v) => !v)}
         >
-          <Filter className="h-3.5 w-3.5" />
-          {pinnedOnly ? "Pinned" : "Filter"}
+          <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+          <span>Filter</span>
         </button>
       </div>
 
       {pinned.length > 0 ? (
-        <section className="mb-7">
-          <h2 className="mb-3 katalist-section-title">Pinned Buckets</h2>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="mb-8">
+          <h2 className="mb-3.5 text-[15px] font-bold text-foreground">Pinned Buckets</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {pinned.map((b) => (
-              <BucketCardView key={b.id} bucket={b} large />
+              <PinnedBucketCard key={b.id} bucket={b} />
             ))}
           </div>
         </section>
       ) : null}
 
       <section>
-        <h2 className="mb-3 katalist-section-title">All Buckets</h2>
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <h2 className="mb-3.5 text-[15px] font-bold text-foreground">All Buckets</h2>
+        <div className="space-y-3">
           {rest.map((b) => (
-            <BucketCardView key={b.id} bucket={b} />
+            <AllBucketRow key={b.id} bucket={b} />
           ))}
+          {rest.length === 0 && pinned.length === 0 ? (
+            <p className="py-8 text-center text-[13px] text-muted-foreground">No buckets found.</p>
+          ) : null}
         </div>
       </section>
 
       {creating ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
           <form
-            className="w-full max-w-sm rounded-xl border border-border bg-card p-4"
+            className="w-full max-w-sm rounded-2xl border border-border/80 bg-white p-5 shadow-xl"
             onSubmit={(e) => {
               e.preventDefault();
               if (!name.trim()) return;
@@ -223,21 +329,28 @@ function BucketsPage() {
               );
             }}
           >
-            <h2 className="text-[14px] font-semibold">Create Bucket</h2>
+            <h2 className="text-[15px] font-bold text-foreground">Create Bucket</h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Buckets are private focus spaces for your references.
+            </p>
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Bucket name"
-              className="mt-3 h-9 w-full rounded-lg border border-border px-3 text-[13px]"
+              placeholder="e.g. My priorities, Q3 Research"
+              className="mt-3.5 h-10 w-full rounded-xl border border-border px-3 text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-ring"
             />
-            <div className="mt-3 flex justify-end gap-2">
-              <button type="button" className="text-[13px]" onClick={() => setCreating(false)}>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-muted"
+                onClick={() => setCreating(false)}
+              >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-primary px-3 py-1.5 text-[13px] text-primary-foreground"
+                className="rounded-lg bg-primary px-4 py-1.5 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
               >
                 Create
               </button>

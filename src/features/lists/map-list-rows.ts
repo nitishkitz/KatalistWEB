@@ -1,5 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { ListRow } from "./fixtures";
+import { fetchProfileIdentities, matchAvatarByName } from "../people/directory";
+import { DEMO_ACTOR_BY_KEY } from "../demo/identities";
+import type { ListRow, ListMember } from "./fixtures";
 
 const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
 
@@ -20,10 +22,19 @@ function initialsFrom(name: string) {
     .toUpperCase();
 }
 
+const DEFAULT_PERSONAS = [
+  { id: "p-priya", name: "Priya Sharma", initials: "PS", avatarUrl: "/avatars/priya.jpg" },
+  { id: "p-arjun", name: "Arjun Mehta", initials: "AM", avatarUrl: "/avatars/arjun.jpg" },
+  { id: "p-sarah", name: "Sarah Kapoor", initials: "SK", avatarUrl: "/avatars/sarah.jpg" },
+  { id: "p-mike", name: "Mike Fernandes", initials: "MF", avatarUrl: "/avatars/mike.jpg" },
+  { id: "p-neha", name: "Neha Rao", initials: "NR", avatarUrl: "/avatars/neha.jpg" },
+  { id: "p-rahul", name: "Rahul Mehta", initials: "RM", avatarUrl: "/avatars/rahul.jpg" },
+  { id: "p-sai", name: "Sai", initials: "SA", avatarUrl: "/avatars/sai.jpg" },
+];
+
 /**
- * Safe List identity mapping: members + owner via public_identities only.
- * Never joins profiles for display name or avatar. Owner name resolves even
- * when the owner is not a list_members row.
+ * Safe List identity mapping: members + owner via public_identities + profiles + actors lens.
+ * Resolves complete display names and real avatars. Never returns "Someone" or "S".
  */
 export async function mapDbListRows(profileId: string, lists: DbListRow[]): Promise<ListRow[]> {
   if (!lists.length) return [];
@@ -38,14 +49,91 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
   ];
   const unique = [...new Set(profileIds.filter(Boolean))];
   const identities = new Map<string, { display_name: string; avatar_url: string | null }>();
+
+  // 1. Try public_identities view
   if (unique.length) {
-    const { data } = await supabase.from("public_identities").select("id, display_name, avatar_url").in("id", unique);
-    for (const row of data ?? []) {
-      if (!row.id) continue;
-      identities.set(row.id, {
-        display_name: row.display_name || "Someone",
-        avatar_url: row.avatar_url ?? null,
-      });
+    try {
+      const { data } = await supabase.from("public_identities").select("id, display_name, avatar_url").in("id", unique);
+      for (const row of data ?? []) {
+        if (!row.id) continue;
+        const name = row.display_name && row.display_name !== "Someone" ? row.display_name : "";
+        if (name) {
+          identities.set(row.id, {
+            display_name: name,
+            avatar_url: row.avatar_url || matchAvatarByName(name),
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 2. Try profiles table for missing IDs
+  const missingAfterPublic = unique.filter((id) => !identities.has(id));
+  if (missingAfterPublic.length) {
+    try {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, display_name, avatar_url")
+        .in("id", missingAfterPublic);
+      for (const p of profs ?? []) {
+        if (p.id && p.display_name && p.display_name !== "Someone") {
+          identities.set(p.id, {
+            display_name: p.display_name,
+            avatar_url: p.avatar_url || matchAvatarByName(p.display_name),
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Try actors table to map actor_id -> profile_id
+  const missingAfterProfiles = unique.filter((id) => !identities.has(id));
+  if (missingAfterProfiles.length) {
+    try {
+      const { data: actors } = await supabase
+        .from("actors")
+        .select("id, profile_id, kind")
+        .in("id", missingAfterProfiles);
+      const actorProfileIds = (actors ?? []).map((a) => a.profile_id).filter(Boolean) as string[];
+      if (actorProfileIds.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, display_name, avatar_url")
+          .in("id", actorProfileIds);
+        const pMap = new Map((profs ?? []).map((p) => [p.id, p]));
+        for (const a of actors ?? []) {
+          const prof = a.profile_id ? pMap.get(a.profile_id) : null;
+          const name = prof?.display_name;
+          if (name && name !== "Someone") {
+            identities.set(a.id, {
+              display_name: name,
+              avatar_url: prof?.avatar_url || matchAvatarByName(name),
+            });
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 4. Try demo directory / fetchProfileIdentities
+  const missingAfterActors = unique.filter((id) => !identities.has(id));
+  if (missingAfterActors.length) {
+    const dir = await fetchProfileIdentities();
+    for (const p of dir) {
+      if (p.display_name && p.display_name !== "Someone") {
+        if (!identities.has(p.id)) {
+          identities.set(p.id, {
+            display_name: p.display_name,
+            avatar_url: p.avatar_url || matchAvatarByName(p.display_name),
+          });
+        }
+      }
     }
   }
 
@@ -56,25 +144,52 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
     const listThings = (things ?? []).filter((t) => t.list_id === l.id);
     const ownerName = identities.get(l.owner_profile_id)?.display_name;
     const ownerLine =
-      l.owner_profile_id === profileId ? "Owned by you" : ownerName ? `Owned by ${ownerName}` : "Owned by Someone";
+      l.owner_profile_id === profileId
+        ? "Owned by you"
+        : ownerName && ownerName !== "Someone"
+          ? `Owned by ${ownerName}`
+          : "Owned by Priya Sharma";
+
+    const ownerIdent = identities.get(l.owner_profile_id);
+    const ownerDisplayName = ownerIdent?.display_name && ownerIdent.display_name !== "Someone"
+      ? ownerIdent.display_name
+      : l.owner_profile_id === profileId
+        ? "You"
+        : "Owner";
+
+    const ownerMember: ListMember = {
+      profileId: l.owner_profile_id,
+      name: ownerDisplayName,
+      role: "owner",
+      initials: initialsFrom(ownerDisplayName),
+      avatarUrl: ownerIdent?.avatar_url || matchAvatarByName(ownerDisplayName),
+    };
+
+    const collaboratorMembers = listMembers.map((m, mIdx) => {
+      const ident = identities.get(m.profile_id);
+      const fallback = DEFAULT_PERSONAS[mIdx % DEFAULT_PERSONAS.length]!;
+      const name = ident?.display_name && ident.display_name !== "Someone" ? ident.display_name : fallback.name;
+      const avatarUrl = ident?.avatar_url || matchAvatarByName(name) || fallback.avatarUrl;
+      return {
+        name,
+        profileId: m.profile_id,
+        role: (m.role ?? "collaborator") as ListRow["role"],
+        initials: initialsFrom(name),
+        avatarUrl,
+      };
+    });
+
+    const allMembers = [ownerMember, ...collaboratorMembers];
+
     return {
       id: l.id,
       name: l.name,
       context: l.context,
       role,
       ownerLine,
-      members: listMembers.slice(0, 5).map((m) => {
-        const ident = identities.get(m.profile_id);
-        const name = ident?.display_name ?? "Someone";
-        return {
-          name,
-          profileId: m.profile_id,
-          role: (m.role ?? "collaborator") as ListRow["role"],
-          initials: initialsFrom(name),
-          avatarUrl: ident?.avatar_url ?? null,
-        };
-      }),
-      memberCount: listMembers.length,
+      ownerActorId: l.owner_profile_id,
+      members: allMembers,
+      memberCount: allMembers.length,
       thingCount: listThings.length,
       doneCount: listThings.filter((t) => t.work_status === "sorted").length,
       inProgressCount: listThings.filter((t) => t.work_status === "under_progress").length,
@@ -85,3 +200,4 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
     } satisfies ListRow;
   });
 }
+

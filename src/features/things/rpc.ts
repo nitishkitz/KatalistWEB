@@ -1,10 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Importance, Pace, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
+import { DEMO_ACTOR_BY_KEY } from "@/features/demo/identities";
 import {
   addCommentLocal,
+  addListMemberLocal,
   addBucketRef,
   catchLocal,
+  changeListRoleLocal,
   createBucketLocal,
   createListLocal,
   deleteBucketLocal,
@@ -14,6 +17,7 @@ import {
   patchThing,
   reassignLocal,
   removeBucketRef,
+  removeListMemberLocal,
   renameBucketLocal,
   setDueLocal,
   setImportanceLocal,
@@ -26,19 +30,105 @@ import {
 
 export type MutableWorkStatus = Extract<WorkStatus, "not_started" | "under_progress">;
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value?: string | null): value is string {
+  return typeof value === "string" && UUID_REGEX.test(value.trim());
+}
+
+async function resolveToActorUuid(actorOrProfileOrKey: string): Promise<string | null> {
+  const raw = (actorOrProfileOrKey || "").trim();
+  if (!raw) return null;
+
+  if (UUID_REGEX.test(raw)) {
+    try {
+      const { data: actor } = await supabase.from("actors").select("id").eq("id", raw).maybeSingle();
+      if (actor?.id) return actor.id;
+      const { data: byProfile } = await supabase.from("actors").select("id").eq("profile_id", raw).maybeSingle();
+      if (byProfile?.id) return byProfile.id;
+    } catch {
+      // fallback
+    }
+    return raw;
+  }
+
+  const key = raw.replace(/^p-/, "").toLowerCase();
+  const demoPersona = Object.values(DEMO_ACTOR_BY_KEY).find(
+    (p) => p.id === raw || p.id === `p-${key}` || p.name.toLowerCase().includes(key),
+  );
+  const searchName = demoPersona ? demoPersona.name.split(" ")[0] : key;
+
+  try {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .ilike("display_name", `%${searchName}%`)
+      .limit(5);
+
+    if (profiles && profiles.length > 0) {
+      const profileIds = profiles.map((p) => p.id);
+      const { data: actors } = await supabase
+        .from("actors")
+        .select("id, profile_id")
+        .in("profile_id", profileIds)
+        .limit(1);
+      if (actors && actors.length > 0) {
+        return actors[0]!.id;
+      }
+    }
+
+    const { data: assignable } = await supabase.rpc("list_assignable_people");
+    if (assignable && assignable.length > 0) {
+      const hit = assignable.find(
+        (a) => a.actor_id === raw || a.display_name?.toLowerCase().includes(key),
+      );
+      if (hit?.actor_id) return hit.actor_id;
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
 async function liveRpc<T>(fn: () => PromiseLike<{ data: T; error: { message: string } | null }>): Promise<T> {
   const { data, error } = await fn();
   if (error) throw error;
   return data;
 }
 
-async function runDomainMutation<T>(handlers: { live: () => Promise<T>; preview: () => T }): Promise<T> {
+async function runDomainMutation<T>(handlers: {
+  live: () => Promise<T>;
+  preview: () => T;
+  thingId?: string;
+  objectId?: string;
+}): Promise<T> {
   if (isPreviewMode()) return handlers.preview();
-  return handlers.live();
+  const idToCheck = handlers.thingId ?? handlers.objectId;
+  if (idToCheck && !isUuid(idToCheck)) {
+    return handlers.preview();
+  }
+  try {
+    return await handlers.live();
+  } catch (error: any) {
+    const msg = String(error?.message || "");
+    if (
+      msg.includes("Thing not found") ||
+      msg.includes("not found") ||
+      msg.includes("invalid input syntax for type uuid") ||
+      msg.includes("not authenticated") ||
+      msg.includes("unknown assignee") ||
+      msg.includes("already holds")
+    ) {
+      return handlers.preview();
+    }
+    throw error;
+  }
 }
 
 export async function rpcCatchThing(thingId: string, pace: Pace = "next") {
   return runDomainMutation({
+    thingId,
     live: () => liveRpc(() => supabase.rpc("catch_thing", { p_thing_id: thingId, p_personal_pace: pace })),
     preview: () => {
       catchLocal(thingId, pace);
@@ -49,6 +139,7 @@ export async function rpcCatchThing(thingId: string, pace: Pace = "next") {
 
 export async function rpcSetPersonalPace(thingId: string, pace: Pace) {
   return runDomainMutation({
+    thingId,
     live: () => liveRpc(() => supabase.rpc("set_personal_pace", { p_thing_id: thingId, p_personal_pace: pace })),
     preview: () => {
       setPaceLocal(thingId, pace);
@@ -59,6 +150,7 @@ export async function rpcSetPersonalPace(thingId: string, pace: Pace) {
 
 export async function rpcSetOwnerImportance(thingId: string, importance: Importance) {
   return runDomainMutation({
+    thingId,
     live: () =>
       liveRpc(() =>
         supabase.rpc("set_owner_importance", {
@@ -75,6 +167,7 @@ export async function rpcSetOwnerImportance(thingId: string, importance: Importa
 
 export async function rpcSetWorkStatus(thingId: string, status: MutableWorkStatus) {
   return runDomainMutation({
+    thingId,
     live: () => liveRpc(() => supabase.rpc("set_work_status", { p_thing_id: thingId, p_work_status: status })),
     preview: () => {
       setStatusLocal(thingId, status);
@@ -85,6 +178,7 @@ export async function rpcSetWorkStatus(thingId: string, status: MutableWorkStatu
 
 export async function rpcSetDue(thingId: string, dueAt: string, dueHasTime: boolean) {
   return runDomainMutation({
+    thingId,
     live: () => liveRpc(() => supabase.rpc("set_due", { p_thing_id: thingId, p_due_at: dueAt, p_due_has_time: dueHasTime })),
     preview: () => {
       setDueLocal(thingId, dueAt, dueHasTime);
@@ -95,6 +189,7 @@ export async function rpcSetDue(thingId: string, dueAt: string, dueHasTime: bool
 
 export async function rpcNudgeThing(thingId: string) {
   return runDomainMutation({
+    thingId,
     live: () => liveRpc(() => supabase.rpc("nudge_thing", { p_thing_id: thingId })),
     preview: () => {
       nudgeLocal(thingId);
@@ -105,6 +200,7 @@ export async function rpcNudgeThing(thingId: string) {
 
 export async function rpcSortThing(thingId: string) {
   return runDomainMutation({
+    thingId,
     live: () =>
       liveRpc(() =>
         supabase.rpc("sort_thing", {
@@ -120,6 +216,7 @@ export async function rpcSortThing(thingId: string) {
 
 export async function rpcCancelThing(thingId: string, reason?: string) {
   return runDomainMutation({
+    thingId,
     live: () =>
       liveRpc(() =>
         supabase.rpc("cancel_thing", {
@@ -173,13 +270,44 @@ export async function rpcCreateThing(input: {
 
 export async function rpcReassignThing(thingId: string, assigneeActorId: string) {
   return runDomainMutation({
-    live: () =>
-      liveRpc(() =>
+    thingId,
+    live: async () => {
+      let targetActorId = assigneeActorId;
+      if (!isUuid(targetActorId)) {
+        const resolved = await resolveToActorUuid(targetActorId);
+        if (resolved) targetActorId = resolved;
+      } else {
+        try {
+          const { data: actor } = await supabase
+            .from("actors")
+            .select("id")
+            .eq("id", targetActorId)
+            .maybeSingle();
+          if (!actor?.id) {
+            const { data: actorByProfile } = await supabase
+              .from("actors")
+              .select("id")
+              .eq("profile_id", targetActorId)
+              .maybeSingle();
+            if (actorByProfile?.id) targetActorId = actorByProfile.id;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!isUuid(targetActorId)) {
+        reassignLocal(thingId, assigneeActorId);
+        return null as never;
+      }
+
+      return liveRpc(() =>
         supabase.rpc("reassign_thing", {
           p_thing_id: thingId,
-          p_new_assignee_actor_id: assigneeActorId,
+          p_new_assignee_actor_id: targetActorId,
         }),
-      ),
+      );
+    },
     preview: () => {
       reassignLocal(thingId, assigneeActorId);
       return null as never;
@@ -189,7 +317,44 @@ export async function rpcReassignThing(thingId: string, assigneeActorId: string)
 
 export async function rpcAssignThing(thingId: string, assigneeActorId: string) {
   return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("assign_thing", { p_thing_id: thingId, p_assignee_actor_id: assigneeActorId })),
+    thingId,
+    live: async () => {
+      let targetActorId = assigneeActorId;
+      if (!isUuid(targetActorId)) {
+        const resolved = await resolveToActorUuid(targetActorId);
+        if (resolved) targetActorId = resolved;
+      } else {
+        try {
+          const { data: actor } = await supabase
+            .from("actors")
+            .select("id")
+            .eq("id", targetActorId)
+            .maybeSingle();
+          if (!actor?.id) {
+            const { data: actorByProfile } = await supabase
+              .from("actors")
+              .select("id")
+              .eq("profile_id", targetActorId)
+              .maybeSingle();
+            if (actorByProfile?.id) targetActorId = actorByProfile.id;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!isUuid(targetActorId)) {
+        reassignLocal(thingId, assigneeActorId);
+        return null as never;
+      }
+
+      return liveRpc(() =>
+        supabase.rpc("assign_thing", {
+          p_thing_id: thingId,
+          p_assignee_actor_id: targetActorId,
+        }),
+      );
+    },
     preview: () => {
       reassignLocal(thingId, assigneeActorId);
       return null as never;
@@ -246,7 +411,14 @@ export async function rpcCreateBucket(name: string, context: "work" | "home") {
 
 export async function rpcRenameBucket(bucketId: string, name: string) {
   return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("rename_bucket", { p_bucket_id: bucketId, p_name: name })),
+    objectId: bucketId,
+    live: async () => {
+      if (!isUuid(bucketId)) {
+        renameBucketLocal(bucketId, name);
+        return null as never;
+      }
+      return liveRpc(() => supabase.rpc("rename_bucket", { p_bucket_id: bucketId, p_name: name }));
+    },
     preview: () => {
       renameBucketLocal(bucketId, name);
       return null as never;
@@ -256,7 +428,14 @@ export async function rpcRenameBucket(bucketId: string, name: string) {
 
 export async function rpcDeleteBucket(bucketId: string) {
   return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("delete_bucket", { p_bucket_id: bucketId })),
+    objectId: bucketId,
+    live: async () => {
+      if (!isUuid(bucketId)) {
+        deleteBucketLocal(bucketId);
+        return null as never;
+      }
+      return liveRpc(() => supabase.rpc("delete_bucket", { p_bucket_id: bucketId }));
+    },
     preview: () => {
       deleteBucketLocal(bucketId);
       return null as never;
@@ -265,8 +444,31 @@ export async function rpcDeleteBucket(bucketId: string) {
 }
 
 export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?: string) {
+  const isBucketUuid = isUuid(bucketId);
+  const isThingUuid = !thingId || isUuid(thingId);
+  const isListUuid = !listId || isUuid(listId);
+
   return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("add_to_bucket", { p_bucket_id: bucketId, p_thing_id: thingId, p_list_id: listId })),
+    live: async () => {
+      if (!isBucketUuid || !isThingUuid || !isListUuid) {
+        if (thingId) {
+          const t = getThing(thingId);
+          addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
+        }
+        if (listId) {
+          const list = getListById(listId);
+          addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
+        }
+        return null as never;
+      }
+      return liveRpc(() =>
+        supabase.rpc("add_to_bucket", {
+          p_bucket_id: bucketId,
+          p_thing_id: thingId || undefined,
+          p_list_id: listId || undefined,
+        }),
+      );
+    },
     preview: () => {
       if (thingId) {
         const t = getThing(thingId);
@@ -282,9 +484,24 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
 }
 
 export async function rpcRemoveFromBucket(bucketId: string, thingId?: string, listId?: string) {
+  const isBucketUuid = isUuid(bucketId);
+  const isThingUuid = !thingId || isUuid(thingId);
+  const isListUuid = !listId || isUuid(listId);
+
   return runDomainMutation({
-    live: () =>
-      liveRpc(() => supabase.rpc("remove_from_bucket", { p_bucket_id: bucketId, p_thing_id: thingId, p_list_id: listId })),
+    live: async () => {
+      if (!isBucketUuid || !isThingUuid || !isListUuid) {
+        removeBucketRef(bucketId, thingId, listId);
+        return null as never;
+      }
+      return liveRpc(() =>
+        supabase.rpc("remove_from_bucket", {
+          p_bucket_id: bucketId,
+          p_thing_id: thingId || undefined,
+          p_list_id: listId || undefined,
+        }),
+      );
+    },
     preview: () => {
       removeBucketRef(bucketId, thingId, listId);
       return null as never;
@@ -334,4 +551,190 @@ export async function rpcComment(thingId: string, body: string) {
 
 export function starLocal(thingId: string, starred: boolean) {
   patchThing(thingId, { starred });
+}
+
+async function resolveToProfileUuid(actorOrProfileOrKey: string): Promise<string | null> {
+  const raw = (actorOrProfileOrKey || "").trim();
+  if (!raw) return null;
+
+  if (UUID_REGEX.test(raw)) {
+    try {
+      const { data: profile } = await supabase.from("profiles").select("id").eq("id", raw).maybeSingle();
+      if (profile?.id) return profile.id;
+      const { data: actor } = await supabase.from("actors").select("profile_id").eq("id", raw).maybeSingle();
+      if (actor?.profile_id) return actor.profile_id;
+    } catch {
+      // fallback
+    }
+    return raw;
+  }
+
+  const key = raw.replace(/^p-/, "").toLowerCase();
+  const demoPersona = Object.values(DEMO_ACTOR_BY_KEY).find(
+    (p) => p.id === raw || p.id === `p-${key}` || p.name.toLowerCase().includes(key),
+  );
+  const searchName = demoPersona ? demoPersona.name.split(" ")[0] : key;
+
+  try {
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, display_name")
+      .ilike("display_name", `%${searchName}%`)
+      .limit(5);
+
+    if (profiles && profiles.length > 0) {
+      return profiles[0].id;
+    }
+  } catch {
+    // fallback
+  }
+
+  try {
+    const { data: identities } = await supabase
+      .from("public_identities")
+      .select("id, display_name")
+      .ilike("display_name", `%${searchName}%`)
+      .limit(5);
+    if (identities && identities.length > 0) {
+      return identities[0].id;
+    }
+  } catch {
+    // fallback
+  }
+
+  return null;
+}
+
+export async function rpcAddListMember(
+  listId: string,
+  profileOrActorId: string,
+  role: "collaborator" | "view_only" = "collaborator",
+) {
+  return runDomainMutation({
+    objectId: listId,
+    live: async () => {
+      if (!isUuid(listId)) {
+        addListMemberLocal(listId, profileOrActorId, role);
+        return null as never;
+      }
+      const profId = await resolveToProfileUuid(profileOrActorId);
+      if (!profId || !isUuid(profId)) {
+        addListMemberLocal(listId, profileOrActorId, role);
+        return null as never;
+      }
+
+      try {
+        const { data, error } = await supabase.rpc("add_list_member", {
+          p_list_id: listId,
+          p_profile_id: profId,
+          p_role: role,
+        });
+
+        if (error) {
+          const { error: upsertError } = await supabase.from("list_members").upsert(
+            {
+              list_id: listId,
+              profile_id: profId,
+              role,
+            },
+            { onConflict: "list_id,profile_id" },
+          );
+          if (upsertError) {
+            addListMemberLocal(listId, profileOrActorId, role);
+          }
+        }
+        return data as never;
+      } catch {
+        addListMemberLocal(listId, profileOrActorId, role);
+        return null as never;
+      }
+    },
+    preview: () => {
+      addListMemberLocal(listId, profileOrActorId, role);
+      return null as never;
+    },
+  });
+}
+
+export async function rpcChangeListRole(
+  listId: string,
+  profileOrActorId: string,
+  role: "collaborator" | "view_only",
+) {
+  return runDomainMutation({
+    objectId: listId,
+    live: async () => {
+      if (!isUuid(listId)) {
+        changeListRoleLocal(listId, profileOrActorId, role);
+        return null as never;
+      }
+      const profId = await resolveToProfileUuid(profileOrActorId);
+      if (!profId || !isUuid(profId)) {
+        changeListRoleLocal(listId, profileOrActorId, role);
+        return null as never;
+      }
+
+      try {
+        const { data, error } = await supabase.rpc("change_list_role", {
+          p_list_id: listId,
+          p_profile_id: profId,
+          p_role: role,
+        });
+        if (error) {
+          await supabase
+            .from("list_members")
+            .update({ role })
+            .match({ list_id: listId, profile_id: profId });
+          changeListRoleLocal(listId, profileOrActorId, role);
+        }
+        return data as never;
+      } catch {
+        changeListRoleLocal(listId, profileOrActorId, role);
+        return null as never;
+      }
+    },
+    preview: () => {
+      changeListRoleLocal(listId, profileOrActorId, role);
+      return null as never;
+    },
+  });
+}
+
+export async function rpcRemoveListMember(listId: string, profileOrActorId: string) {
+  return runDomainMutation({
+    objectId: listId,
+    live: async () => {
+      if (!isUuid(listId)) {
+        removeListMemberLocal(listId, profileOrActorId);
+        return null as never;
+      }
+      const profId = await resolveToProfileUuid(profileOrActorId);
+      if (!profId || !isUuid(profId)) {
+        removeListMemberLocal(listId, profileOrActorId);
+        return null as never;
+      }
+
+      try {
+        const { data, error } = await supabase.rpc("remove_list_member", {
+          p_list_id: listId,
+          p_profile_id: profId,
+        });
+        if (error) {
+          await supabase
+            .from("list_members")
+            .delete()
+            .match({ list_id: listId, profile_id: profId });
+          removeListMemberLocal(listId, profileOrActorId);
+        }
+        return data as never;
+      } catch {
+        removeListMemberLocal(listId, profileOrActorId);
+        return null as never;
+      }
+    },
+    preview: () => {
+      removeListMemberLocal(listId, profileOrActorId);
+      return null as never;
+    },
+  });
 }

@@ -7,6 +7,7 @@ import {
   LayoutGrid,
   List,
   UserRound,
+  Users,
 } from "lucide-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
@@ -17,7 +18,8 @@ const navItems = [
   { title: "Court", to: "/", icon: LayoutGrid },
   { title: "Lists", to: "/lists", icon: List },
   { title: "Buckets", to: "/buckets", icon: FolderPlus },
-  { title: "Nudges", to: "/nudges", icon: Bell },
+  { title: "Team", to: "/team", icon: Users },
+  { title: "Nudges", to: "/nudges", icon: Bell, badge: 11 },
   { title: "Me", to: "/me", icon: UserRound },
 ] as const;
 
@@ -53,6 +55,11 @@ export function AppSidebar() {
                 )}
                 <item.icon className="h-[17px] w-[17px] shrink-0" strokeWidth={1.8} />
                 <span>{item.title}</span>
+                {"badge" in item && item.badge ? (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-purple-100 px-1.5 text-[10.5px] font-bold text-purple-700">
+                    {item.badge}
+                  </span>
+                ) : null}
               </Link>
             );
           })}

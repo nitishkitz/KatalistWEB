@@ -10,6 +10,13 @@ export type BucketCard = {
   ownerActorId?: string;
   context: "work" | "home";
   thingIds?: string[];
+  tags?: string[];
+  collaborators?: {
+    id: string;
+    name: string;
+    avatarUrl?: string | null;
+    initials: string;
+  }[];
   previews: {
     title: string;
     kind: "thing" | "list";

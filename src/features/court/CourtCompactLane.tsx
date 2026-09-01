@@ -1,5 +1,6 @@
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import type { Thing } from "@/domain/thing";
+import { matchProfile, useProfileDirectory } from "@/features/people/directory";
 import { cn } from "@/lib/utils";
 import { courtLaneContent } from "./CourtLaneStack";
 import type { CourtLaneId } from "./court-view-model";
@@ -20,50 +21,71 @@ const workLabel: Record<Thing["workStatus"], string> = {
 
 export function CourtCompactLane({ lane, things, onOpen }: CourtCompactLaneProps) {
   const content = courtLaneContent[lane];
+  const directory = useProfileDirectory();
 
   return (
     <aside
       className={cn(
-        "min-w-0 overflow-hidden rounded-2xl border shadow-xs",
+        "min-w-0 overflow-hidden rounded-2xl border shadow-xs p-3",
         content.bgTone,
         content.borderTone,
       )}
       aria-label={`${content.label} lane, ${things.length} Things`}
     >
-      <div className="flex min-h-12 items-center gap-2 border-b border-border/45 px-3">
-        <KatalistIcon name={content.icon} className={cn("h-4 w-4", content.tone)} />
-        <h2 className={cn("text-[11px] font-bold tracking-[0.08em]", content.tone)}>
-          {content.label}
-        </h2>
-        <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
-          {things.length}
-        </span>
+      <div className="mb-2.5 px-1">
+        <div className="flex items-center gap-2">
+          <KatalistIcon name={content.icon} className={cn("h-4 w-4", content.tone)} />
+          <h2 className={cn("text-[12px] font-bold tracking-[0.08em]", content.tone)}>
+            {content.label}
+          </h2>
+          <span className={cn("ml-1 text-[11px] font-bold", content.tone)}>
+            {things.length}
+          </span>
+        </div>
+        <p className="mt-0.5 text-[10.5px] text-muted-foreground">{content.descriptor}</p>
       </div>
-      <div className="space-y-2 p-2">
-        {things.slice(0, 3).map((thing) => (
-          <button
-            key={thing.id}
-            type="button"
-            onClick={(event) => onOpen(thing, event.currentTarget)}
-            className="w-full rounded-xl border border-border/70 bg-white px-2.5 py-2.5 text-left shadow-xs outline-none transition-[border-color,box-shadow] duration-200 hover:border-primary/35 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
-          >
-            <span className="block line-clamp-2 text-[11px] font-semibold leading-4 text-foreground">
-              {thing.title}
-            </span>
-            <span className="mt-2 flex items-center gap-1.5 text-[9.5px] text-muted-foreground">
-              <PersonAvatar
-                name={thing.assignee.name}
-                initials={thing.assignee.initials}
-                src={thing.assignee.avatarUrl}
-                size={18}
-              />
-              <span className="truncate">{workLabel[thing.workStatus]}</span>
-            </span>
-          </button>
-        ))}
+
+      <div className="space-y-2">
+        {things.slice(0, 3).map((thing) => {
+          const avatarUrl = thing.assignee.avatarUrl || matchProfile(directory, thing.assignee.name)?.avatar_url;
+          const isCatch = thing.acknowledgement === "waiting_for_catch";
+          const isProgress = thing.workStatus === "under_progress";
+          return (
+            <button
+              key={thing.id}
+              type="button"
+              onClick={(event) => onOpen(thing, event.currentTarget)}
+              className="w-full rounded-xl border border-border/60 bg-white p-3 text-left shadow-2xs outline-none transition-all duration-200 hover:border-border hover:shadow-xs focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="block line-clamp-2 text-[12px] font-bold leading-snug text-foreground">
+                {thing.title}
+              </span>
+              <span className="mt-2 flex items-center gap-1.5 text-[10px]">
+                <PersonAvatar
+                  name={thing.assignee.name}
+                  initials={thing.assignee.initials}
+                  src={avatarUrl}
+                  size={18}
+                />
+                <span
+                  className={cn(
+                    "truncate font-medium",
+                    isCatch
+                      ? "text-orange-500 font-semibold"
+                      : isProgress
+                        ? "text-blue-600"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {isCatch ? "Waiting for Catch" : workLabel[thing.workStatus]}
+                </span>
+              </span>
+            </button>
+          );
+        })}
         {things.length > 3 ? (
-          <p className="py-1 text-center text-[10px] text-muted-foreground">
-            {things.length - 3} more
+          <p className="pt-1 text-center text-[10.5px] font-medium text-muted-foreground">
+            + {things.length - 3} more ∨
           </p>
         ) : null}
       </div>
