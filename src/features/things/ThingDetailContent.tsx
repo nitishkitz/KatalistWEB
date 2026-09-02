@@ -76,8 +76,18 @@ function initialsForName(name: string) {
   return initials || "?";
 }
 
-function CommentRow({ author, body, at }: { author: string; body: string; at: string }) {
-  const avatarUrl = useAvatarUrl(author);
+function CommentRow({
+  author,
+  body,
+  at,
+  avatarUrl: explicitAvatar,
+}: {
+  author: string;
+  body: string;
+  at: string;
+  avatarUrl?: string | null;
+}) {
+  const avatarUrl = useAvatarUrl(author, null, explicitAvatar);
 
   return (
     <div className="flex gap-2.5 rounded-lg border border-border/70 bg-white px-3 py-2">
@@ -638,6 +648,7 @@ export function ThingDetailContent({
                     <CommentRow
                       key={entry.id}
                       author={entry.author}
+                      avatarUrl={entry.avatarUrl}
                       body={entry.body}
                       at={entry.at}
                     />
@@ -1142,7 +1153,13 @@ export function ThingDetailContent({
                 <p className="text-[12px] text-muted-foreground">No comments yet.</p>
               ) : (
                 comments.map((c) => (
-                  <CommentRow key={c.id} author={c.author} body={c.body} at={c.at} />
+                  <CommentRow
+                    key={c.id}
+                    author={c.author}
+                    avatarUrl={c.avatarUrl}
+                    body={c.body}
+                    at={c.at}
+                  />
                 ))
               )}
               <form

@@ -7,7 +7,16 @@ import { useLocalVersion } from "./use-local-version";
 import { rpcComment } from "./rpc";
 import { currentDemoPerson } from "@/features/demo/identities";
 
-export type ThingComment = { id: string; body: string; author: string; at: string };
+import { resolveActorPeople } from "@/features/people/resolve-actors";
+
+export type ThingComment = {
+  id: string;
+  body: string;
+  author: string;
+  at: string;
+  avatarUrl?: string | null;
+  authorActorId?: string | null;
+};
 export type ThingActivity = { id: string; event: string; at: string };
 
 export function useThingComments(thingId: string | null) {
@@ -26,12 +35,24 @@ export function useThingComments(thingId: string | null) {
         .eq("thing_id", thingId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((c) => ({
-        id: c.id,
-        body: c.body,
-        author: "Member",
-        at: c.created_at,
-      }));
+      const rows = data ?? [];
+      const actorIds = [...new Set(rows.map((c) => c.author_actor_id).filter(Boolean))];
+      const people = await resolveActorPeople(actorIds);
+      const currentUserName =
+        (session?.user?.user_metadata?.display_name as string | undefined) ||
+        (session?.user?.user_metadata?.name as string | undefined);
+
+      return rows.map((c) => {
+        const person = c.author_actor_id ? people.get(c.author_actor_id) : null;
+        return {
+          id: c.id,
+          body: c.body,
+          author: person?.name || currentUserName || "Member",
+          avatarUrl: person?.avatarUrl ?? null,
+          at: c.created_at,
+          authorActorId: c.author_actor_id,
+        };
+      });
     },
   });
 
@@ -66,7 +87,14 @@ export function useThingComments(thingId: string | null) {
 
   if (preview && thingId) {
     return {
-      comments: getComments(thingId).map((c) => ({ id: c.id, body: c.body, author: c.author, at: c.at })),
+      comments: getComments(thingId).map((c) => ({
+        id: c.id,
+        body: c.body,
+        author: c.author,
+        at: c.at,
+        avatarUrl: null,
+        authorActorId: null,
+      })),
       activity: getActivity(thingId).map((e) => ({ id: e.id, event: e.event, at: e.at })),
       post,
     };

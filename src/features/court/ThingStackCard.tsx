@@ -134,23 +134,25 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   Due {dueLabel}
                 </span>
               ) : null}
-              {capabilities.canSetPace ? (
-                <span
-                  draggable={true}
-                  onDragStart={(e) => {
-                    e.stopPropagation();
-                    e.dataTransfer.setData(
-                      "application/katalist-thing",
-                      JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
-                    );
-                    e.dataTransfer.effectAllowed = "move";
-                  }}
-                  title="Drag across lanes to repace (NOW / NEXT / LATER)"
-                  className="inline-flex items-center p-0.5 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-grab active:cursor-grabbing"
-                >
-                  <GripVertical className="h-3.5 w-3.5" />
-                </span>
-              ) : null}
+              <span
+                draggable={true}
+                onDragStart={(e) => {
+                  e.stopPropagation();
+                  e.dataTransfer.setData(
+                    "application/katalist-thing",
+                    JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
+                  );
+                  e.dataTransfer.setData(
+                    "text/plain",
+                    JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
+                  );
+                  e.dataTransfer.effectAllowed = "copyMove";
+                }}
+                title="Drag to Buckets or across lanes"
+                className="inline-flex items-center justify-center h-5 w-5 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-grab active:cursor-grabbing"
+              >
+                <GripVertical className="h-3.5 w-3.5" />
+              </span>
             </div>
           </span>
 

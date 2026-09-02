@@ -469,6 +469,7 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
       });
 
       if (res.ok) {
+        const json = await res.json().catch(() => ({ ok: true }));
         if (thingId) {
           const t = getThing(thingId);
           addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
@@ -477,7 +478,7 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
           const list = getListById(listId);
           addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
         }
-        return { ok: true } as never;
+        return json as never;
       }
 
       const errJson = await res.json().catch(() => ({}));

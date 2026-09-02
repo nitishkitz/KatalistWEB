@@ -323,7 +323,19 @@ export function CourtDesktop({
   const [showBucketsPanel, setShowBucketsPanel] = useState(false);
 
   useEffect(() => {
+    const handleDragStart = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("application/katalist-thing") || e.dataTransfer?.types.includes("text/plain")) {
+        setShowBucketsPanel(true);
+      }
+    };
+
     const handleDragEnter = (e: DragEvent) => {
+      if (e.dataTransfer?.types.includes("application/katalist-thing")) {
+        setShowBucketsPanel(true);
+      }
+    };
+
+    const handleDragOver = (e: DragEvent) => {
       if (e.dataTransfer?.types.includes("application/katalist-thing")) {
         setShowBucketsPanel(true);
       }
@@ -334,15 +346,19 @@ export function CourtDesktop({
     };
 
     const handleDrop = () => {
-      setShowBucketsPanel(false);
+      setTimeout(() => setShowBucketsPanel(false), 100);
     };
 
+    window.addEventListener("dragstart", handleDragStart);
     window.addEventListener("dragenter", handleDragEnter);
+    window.addEventListener("dragover", handleDragOver);
     window.addEventListener("dragend", handleDragEnd);
     window.addEventListener("drop", handleDrop);
 
     return () => {
+      window.removeEventListener("dragstart", handleDragStart);
       window.removeEventListener("dragenter", handleDragEnter);
+      window.removeEventListener("dragover", handleDragOver);
       window.removeEventListener("dragend", handleDragEnd);
       window.removeEventListener("drop", handleDrop);
     };

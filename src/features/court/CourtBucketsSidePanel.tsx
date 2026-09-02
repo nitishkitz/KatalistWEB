@@ -134,14 +134,20 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                   e.stopPropagation();
                   setHoveredBucketId(null);
                   try {
-                    const raw = e.dataTransfer.getData("application/katalist-thing");
+                    const raw =
+                      e.dataTransfer.getData("application/katalist-thing") ||
+                      e.dataTransfer.getData("text/plain");
                     if (!raw) return;
                     const data = JSON.parse(raw) as { thingId: string; title?: string };
 
-                    await rpcAddToBucket(b.id, data.thingId);
-                    toast.success(
-                      `Added "${data.title || "Thing"}" to 📁 ${b.name}`,
-                    );
+                    const res = (await rpcAddToBucket(b.id, data.thingId)) as any;
+                    if (res?.message?.includes("already") || res?.alreadyExists) {
+                      toast.info(`"${data.title || "Thing"}" is already in 📁 ${b.name}`);
+                    } else {
+                      toast.success(
+                        `Added "${data.title || "Thing"}" to 📁 ${b.name}`,
+                      );
+                    }
                     await qc.invalidateQueries({ queryKey: ["buckets"] });
                     await qc.invalidateQueries({ queryKey: ["bucket", b.id] });
                     await qc.invalidateQueries({ queryKey: ["bucket-items", b.id] });
