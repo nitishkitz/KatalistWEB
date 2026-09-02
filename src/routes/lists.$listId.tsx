@@ -830,7 +830,7 @@ function ListDetailPage() {
             </div>
 
             </InlineThingDetailWorkspace>
-            {!viewOnly && <MagicBox listId={list.id} listName={list.name} desktop />}
+            {!viewOnly && !selectedId && <MagicBox listId={list.id} listName={list.name} desktop />}
           </>
         )}
 
