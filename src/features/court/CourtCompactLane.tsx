@@ -10,6 +10,7 @@ type CourtCompactLaneProps = {
   lane: CourtLaneId;
   things: Thing[];
   onOpen: (thing: Thing, origin: HTMLElement) => void;
+  collapsed?: boolean;
 };
 
 const workLabel: Record<Thing["workStatus"], string> = {
@@ -19,14 +20,62 @@ const workLabel: Record<Thing["workStatus"], string> = {
   cancelled: "Cancelled",
 };
 
-export function CourtCompactLane({ lane, things, onOpen }: CourtCompactLaneProps) {
+export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: CourtCompactLaneProps) {
   const content = courtLaneContent[lane];
   const directory = useProfileDirectory();
+
+  if (collapsed) {
+    return (
+      <aside
+        className={cn(
+          "min-w-0 h-full min-h-[380px] overflow-hidden rounded-2xl border shadow-xs transition-all duration-200 flex flex-col items-center py-3.5 px-1 cursor-pointer hover:shadow-sm select-none",
+          content.bgTone,
+          content.borderTone,
+        )}
+        title={`${content.label} (${things.length} Things) — Hover to expand`}
+        aria-label={`${content.label} lane, ${things.length} Things, collapsed. Hover to expand.`}
+      >
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/90 shadow-2xs border border-border/40">
+            <KatalistIcon name={content.icon} className={cn("h-3.5 w-3.5", content.tone)} />
+          </div>
+          <span
+            className={cn(
+              "flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10.5px] font-black bg-white shadow-2xs border border-border/50",
+              content.tone,
+            )}
+          >
+            {things.length}
+          </span>
+        </div>
+
+        <div className="my-auto flex flex-col items-center gap-1 py-4">
+          {content.label.split("").map((letter, index) => (
+            <span
+              key={index}
+              className={cn(
+                "text-[10.5px] font-black uppercase tracking-widest leading-none select-none",
+                content.tone,
+              )}
+            >
+              {letter}
+            </span>
+          ))}
+        </div>
+
+        <div className="flex flex-col items-center gap-1 opacity-50 pb-1">
+          <span className={cn("h-1 w-1 rounded-full bg-current", content.tone)} />
+          <span className={cn("h-1 w-1 rounded-full bg-current", content.tone)} />
+          <span className={cn("h-1 w-1 rounded-full bg-current", content.tone)} />
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <aside
       className={cn(
-        "min-w-0 overflow-hidden rounded-2xl border shadow-xs p-3",
+        "min-w-0 overflow-hidden rounded-2xl border shadow-xs p-3 transition-all duration-200",
         content.bgTone,
         content.borderTone,
       )}

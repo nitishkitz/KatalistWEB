@@ -44,7 +44,8 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
         {things.map((thing) => {
           const selected = selectedThingId === thing.id;
           const due = formatCourtDue(thing);
-          const avatarUrl = thing.assignee.avatarUrl || matchProfile(directory, thing.assignee.name)?.avatar_url;
+          const avatarUrl =
+            thing.assignee.avatarUrl || matchProfile(directory, thing.assignee.name)?.avatar_url;
           const isProgress = thing.workStatus === "under_progress";
           return (
             <button
@@ -72,10 +73,18 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
                 <span
                   className={cn(
                     "font-medium",
-                    isProgress ? "text-blue-600" : "text-muted-foreground",
+                    thing.acknowledgement === "waiting_for_catch"
+                      ? "text-orange-600 font-semibold"
+                      : isProgress
+                        ? "text-blue-600"
+                        : "text-muted-foreground",
                   )}
                 >
-                  {isProgress ? "Under Progress" : "Not Started"}
+                  {thing.acknowledgement === "waiting_for_catch"
+                    ? "Waiting for Catch"
+                    : isProgress
+                      ? "Under Progress"
+                      : "Not Started"}
                 </span>
                 {due.label && due.label !== "No due date" ? (
                   <>

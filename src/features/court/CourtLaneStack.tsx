@@ -1,14 +1,17 @@
-import { ArrowUp } from "lucide-react";
 import {
   forwardRef,
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
+import { GripVertical } from "lucide-react";
+import { gsap } from "gsap";
+import { Observer } from "gsap/Observer";
 import { toast } from "sonner";
 
 import { getThingCapabilities } from "@/domain/capabilities";
@@ -23,6 +26,8 @@ import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 
+gsap.registerPlugin(Observer);
+
 export type CourtLaneStackHandle = {
   getPosition: () => { activeIndex: number; activeThingId: string | null };
   focusThing: (thingId: string | null) => void;
@@ -35,6 +40,7 @@ export type CourtLaneStackProps = {
   initialPosition?: { activeIndex: number; activeThingId: string | null };
   onOpen: (thing: Thing, origin: HTMLElement) => void;
   onRefresh: () => unknown;
+  onViewAll?: (lane: CourtLaneId) => void;
 };
 
 export const courtLaneContent: Record<
@@ -78,61 +84,42 @@ export const courtLaneContent: Record<
   },
 };
 
-// ─── Cinematic animation system ───────────────────────────────────────────────
+// ─── Rotating deck / peel stack animation system ─────────────────────────────
+// Active card: 0°, scale 1.0, elevated shadow 12
+// Card 2 (depth 1): -1.2°, scale 0.98, shadow 6
+// Card 3 (depth 2): +1.5°, scale 0.96, shadow 2
+// Card 4 (depth 3): -0.7°, scale 0.94
 //
-// 3 phases per navigation:
-//   "idle"  → positions SET, no CSS transition yet (one double-RAF paint)
-//   "exit"  → outgoing card flies out; incoming hides below/above
-//   "enter" → incoming card springs in with overshoot spring curve
-//
-type AnimPhase = "idle" | "exit" | "enter";
+// Scrolling down:
+// 1. Current card lifts, tilts (-2deg), translates up (-84px), fades out
+// 2. Card #2 straightens to 0°, scales to 1.0, shadow elevates to shadow 12
+// 3. Card #3 rotates to -1.2°, scales to 0.98
+// 4. A new card enters at back of stack
+// Duration: 460 ms, scrubbed by GSAP's natural power3 easing.
 
 type StackAnim = {
   outgoing: Thing;
-  direction: 1 | -1; // 1 = next (forward), -1 = previous (backward)
-  phase: AnimPhase;
+  direction: 1 | -1;
 };
 
-function outgoingStyle(anim: StackAnim): CSSProperties {
-  if (anim.phase === "idle") {
-    return { opacity: 1, transform: "translate3d(0,0,0) scale(1)", filter: "blur(0px)" };
-  }
-  const yOut = anim.direction === 1 ? -120 : 120;
-  return {
-    opacity: 0,
-    transform: `translate3d(0, ${yOut}px, 0) scale(0.84)`,
-    filter: "blur(4px)",
-    pointerEvents: "none",
-  };
-}
+function depthCardStyle(depth: number): CSSProperties {
+  const overlap = depth * -6;
+  const yBase = depth === 1 ? 166 + overlap : 238 + overlap;
+  const inset = depth === 1 ? 4 : 8;
 
-function incomingStyle(anim: StackAnim | null, offset: { x: number; y: number }): CSSProperties {
-  if (!anim) return { transform: `translate3d(${offset.x}px, ${offset.y}px, 0)` };
-  if (anim.phase === "idle" || anim.phase === "exit") {
-    const yStart = anim.direction === 1 ? 88 : -88;
-    return {
-      opacity: 0,
-      transform: `translate3d(0, ${yStart}px, 0) scale(0.9)`,
-      filter: "blur(3px)",
-    };
-  }
-  return { opacity: 1, transform: "translate3d(0, 0, 0) scale(1)", filter: "blur(0px)" };
-}
-
-function depthCardStyle(depth: number, animating: boolean): CSSProperties {
-  const yBase = depth * -6;
-  const scaleBase = 1 - depth * 0.018;
   return {
-    transform: animating
-      ? `translateY(${yBase + 3}px) scale(${scaleBase + 0.006})`
-      : `translateY(${yBase}px) scale(${scaleBase})`,
-    opacity: animating ? 1 - depth * 0.14 : 1 - depth * 0.18,
-    transition: "transform 440ms cubic-bezier(0.34,1.56,0.64,1), opacity 320ms ease",
+    left: inset,
+    right: inset,
+    transform: `translate3d(0, ${yBase}px, 0)`,
+    opacity: 1,
   };
 }
 
 export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackProps>(
-  function CourtLaneStack({ lane, things, myActorId, initialPosition, onOpen, onRefresh }, ref) {
+  function CourtLaneStack(
+    { lane, things, myActorId, initialPosition, onOpen, onRefresh, onViewAll },
+    ref,
+  ) {
     const initialIndex = reconcileStackIndex(
       initialPosition?.activeIndex ?? 0,
       initialPosition?.activeThingId ?? null,
@@ -145,16 +132,29 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     const [isDragTarget, setIsDragTarget] = useState(false);
     const activeThingIdRef = useRef<string | null>(things[initialIndex]?.id ?? null);
     const activeButtonRef = useRef<HTMLButtonElement | null>(null);
+    const activeCardRef = useRef<HTMLDivElement | null>(null);
+    const outgoingCardRef = useRef<HTMLDivElement | null>(null);
     const headingRef = useRef<HTMLHeadingElement | null>(null);
-    const rafRef = useRef<number | null>(null);
-    const wheelThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const sectionRef = useRef<HTMLElement | null>(null);
+    const animatingRef = useRef(false);
+    const lastWheelTimeRef = useRef(0);
+
+    useLayoutEffect(() => {
+      return () => {
+        gsap.killTweensOf(activeCardRef.current);
+        gsap.killTweensOf(outgoingCardRef.current);
+      };
+    }, []);
+
     const content = courtLaneContent[lane];
     const renderIndex = reconcileStackIndex(activeIndex, activeThingIdRef.current, things);
     const activeThing = things[renderIndex] ?? null;
     const capabilities = activeThing
       ? getThingCapabilities(activeThing, myActorId)
       : { canCatch: false, canSetPace: false, canSort: false };
-
+    const actionCapabilities = {
+      canMoveLater: capabilities.canSetPace && lane !== "later",
+    };
     useEffect(() => {
       setActiveIndex((prev) => {
         const next = reconcileStackIndex(prev, activeThingIdRef.current, things);
@@ -163,64 +163,141 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       });
     }, [things]);
 
-    useEffect(
-      () => () => {
-        if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-        if (wheelThrottleRef.current !== null) clearTimeout(wheelThrottleRef.current);
-      },
-      [],
-    );
-
     const startNavigation = useCallback(
       (direction: 1 | -1) => {
-        if (!activeThing || things.length <= 1 || pendingAction) return;
+        if (!activeThing || things.length <= 1 || pendingAction || animatingRef.current) return;
         const nextIndex = stepStackIndex(renderIndex, things.length, direction);
         const nextThing = things[nextIndex];
+        if (!nextThing) return;
 
-        if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+        const reduceMotion =
+          typeof window !== "undefined" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-        // Phase 1: set start positions (no transition)
-        setAnim({ outgoing: activeThing, direction, phase: "idle" });
+        if (reduceMotion) {
+          setActiveIndex(nextIndex);
+          activeThingIdRef.current = nextThing.id;
+          setAnnouncement(`Now viewing ${nextThing.title}.`);
+          return;
+        }
 
-        rafRef.current = requestAnimationFrame(() => {
-          rafRef.current = requestAnimationFrame(() => {
-            setActiveIndex(nextIndex);
-            activeThingIdRef.current = nextThing.id;
-            setAnnouncement(`Now viewing ${nextThing.title}.`);
-            // Phase 2: outgoing exits
-            setAnim({ outgoing: activeThing, direction, phase: "exit" });
-
-            // Phase 3: incoming springs in
-            rafRef.current = requestAnimationFrame(() => {
-              rafRef.current = requestAnimationFrame(() => {
-                setAnim((cur) => (cur ? { ...cur, phase: "enter" } : null));
-              });
-            });
-          });
-        });
+        animatingRef.current = true;
+        setAnim({ outgoing: activeThing, direction });
+        setActiveIndex(nextIndex);
+        activeThingIdRef.current = nextThing.id;
+        setAnnouncement(`Now viewing ${nextThing.title}.`);
       },
       [activeThing, pendingAction, renderIndex, things],
     );
+    const startNavigationRef = useRef(startNavigation);
 
-    // Scroll wheel → card navigation (one card per 600ms throttle window)
-    const handleWheel = useCallback(
-      (e: React.WheelEvent<HTMLElement>) => {
-        if (things.length <= 1) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (wheelThrottleRef.current !== null) return; // mid-animation, ignore
-        const direction: 1 | -1 = e.deltaY > 0 ? 1 : -1;
-        startNavigation(direction);
-        wheelThrottleRef.current = setTimeout(() => {
-          wheelThrottleRef.current = null;
-        }, 600);
-      },
-      [things.length, startNavigation],
-    );
+    useLayoutEffect(() => {
+      startNavigationRef.current = startNavigation;
+    }, [startNavigation]);
+
+    useLayoutEffect(() => {
+      if (!anim) return;
+      const activeNode = activeCardRef.current;
+      const outgoingNode = outgoingCardRef.current;
+      if (!activeNode) return;
+
+      const forward = anim.direction === 1;
+      const context = gsap.context(() => {
+        if (outgoingNode) {
+          gsap.fromTo(
+            outgoingNode,
+            { y: 0, opacity: 1, scale: 1 },
+            {
+              y: forward ? -140 : 140,
+              opacity: 0,
+              scale: 0.96,
+              duration: 0.28,
+              ease: "power2.in",
+            },
+          );
+        }
+
+        gsap.fromTo(
+          activeNode,
+          {
+            y: forward ? 70 : -70,
+            opacity: 0.7,
+            scale: 0.98,
+          },
+          {
+            y: 0,
+            opacity: 1,
+            scale: 1,
+            duration: 0.36,
+            ease: "power3.out",
+            onComplete: () => {
+              animatingRef.current = false;
+              lastWheelTimeRef.current = Date.now();
+              gsap.set(activeNode, { clearProps: "transform,scale,opacity" });
+              setAnim(null);
+            },
+          },
+        );
+      }, sectionRef);
+
+      return () => {
+        animatingRef.current = false;
+        context.revert();
+      };
+    }, [anim]);
+
+    // Keep page position fixed throughout trackpad momentum, including the
+    // brief frame in which Observer is refreshed after the active Thing changes.
+    useEffect(() => {
+      const node = sectionRef.current;
+      if (!node) return;
+
+      const holdPage = (event: WheelEvent) => {
+        if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.preventDefault();
+      };
+
+      node.addEventListener("wheel", holdPage, { capture: true, passive: false });
+      return () => node.removeEventListener("wheel", holdPage, { capture: true });
+    }, []);
+
+    // GSAP Observer owns wheel intent inside a lane. preventDefault is applied to
+    // every delta (including tiny trackpad momentum), so the Court page cannot
+    // drift while a user is cycling the stack.
+    useEffect(() => {
+      const node = sectionRef.current;
+      if (!node || things.length <= 1) return;
+
+      const observer = Observer.create({
+        target: node,
+        type: "wheel",
+        capture: true,
+        preventDefault: true,
+        lockAxis: true,
+        tolerance: 14,
+        wheelSpeed: 0.8,
+        onChangeY: (self) => {
+          const now = Date.now();
+          if (
+            animatingRef.current ||
+            now - lastWheelTimeRef.current < 260 ||
+            Math.abs(self.deltaY) < 14
+          ) {
+            return;
+          }
+          lastWheelTimeRef.current = now;
+          startNavigationRef.current(self.deltaY > 0 ? 1 : -1);
+        },
+      });
+
+      return () => observer.kill();
+    }, [things.length]);
 
     const runAction = useCallback(
       async (action: CourtStackAction) => {
         if (!activeThing || pendingAction) return;
+        if (action === "catch" && !capabilities.canCatch) return;
+        if (action === "later" && !actionCapabilities.canMoveLater) return;
+        if (action === "sort" && !capabilities.canSort) return;
         setPendingAction(action);
         try {
           if (action === "catch") await rpcCatchThing(activeThing.id);
@@ -237,18 +314,41 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           setPendingAction(null);
         }
       },
-      [activeThing, content.label, onRefresh, pendingAction],
+      [
+        activeThing,
+        actionCapabilities.canMoveLater,
+        capabilities.canCatch,
+        capabilities.canSort,
+        content.label,
+        onRefresh,
+        pendingAction,
+      ],
     );
 
     const gesture = useStackGesture({
       canSort: capabilities.canSort,
-      canMoveLater: capabilities.canSetPace && lane !== "later",
-      horizontalDisabled: capabilities.canCatch,
-      interactionDisabled: pendingAction !== null,
+      canMoveLater: actionCapabilities.canMoveLater,
+      interactionDisabled: pendingAction !== null || anim !== null,
       onSort: () => void runAction("sort"),
       onLater: () => void runAction("later"),
+      onBlockedAction: (action) => {
+        if (action === "later") {
+          if (lane === "later") {
+            toast.info("This card is already in Later. Drag it or open Details to change its pace.");
+          } else if (capabilities.canCatch) {
+            toast.info("Catch this task before moving it to Later.");
+          }
+        } else if (action === "sort") {
+          if (capabilities.canCatch) {
+            toast.info("Catch this task before sorting.");
+          }
+        }
+      },
       onStep: startNavigation,
     });
+    // GSAP Observer exclusively owns wheel events. Pointer handlers below are
+    // only for deliberate touch/mouse swipes after the gesture axis locks.
+    const { onWheel: _wheelHandledByObserver, ...swipePointerProps } = gesture.gestureProps;
 
     useImperativeHandle(
       ref,
@@ -273,17 +373,18 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     };
 
     const depthCount = Math.min(2, Math.max(0, things.length - 1));
-    const isAnimating = anim !== null;
-
+    const swipeDistance = Math.abs(gesture.offset.x);
+    const swipeCommitted = swipeDistance >= 54;
+    const swipeDirection = gesture.offset.x > 0 ? "sort" : gesture.offset.x < 0 ? "later" : null;
     return (
       <section
+        ref={sectionRef}
         className={cn(
-          "relative flex min-w-0 flex-col overflow-hidden rounded-2xl border shadow-xs transition-colors",
+          "relative flex min-w-0 flex-col overflow-hidden rounded-[22px] border shadow-[0_18px_42px_-32px_rgba(15,23,42,0.34)] transition-colors",
           content.bgTone,
           content.borderTone,
         )}
         aria-labelledby={`court-${lane}-title`}
-        onWheel={handleWheel}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes("application/katalist-thing")) {
             e.preventDefault();
@@ -308,7 +409,11 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           try {
             const raw = e.dataTransfer.getData("application/katalist-thing");
             if (!raw) return;
-            const data = JSON.parse(raw) as { thingId: string; fromLane: CourtLaneId; title: string };
+            const data = JSON.parse(raw) as {
+              thingId: string;
+              fromLane: CourtLaneId;
+              title: string;
+            };
             if (data.fromLane === lane) return;
 
             await rpcSetPersonalPace(data.thingId, lane);
@@ -322,146 +427,224 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         {isDragTarget && (
           <div
             className={cn(
-              "absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed backdrop-blur-xs transition-all pointer-events-none animate-in fade-in-50 duration-150",
+              "absolute inset-0 z-40 flex flex-col items-center justify-center gap-2.5 rounded-2xl border-2 border-dashed transition-all pointer-events-none animate-in fade-in-50 duration-150",
               lane === "now"
-                ? "border-red-400 bg-red-50/90 text-red-700"
+                ? "border-red-400 bg-red-50/40 text-red-700"
                 : lane === "next"
-                  ? "border-blue-400 bg-blue-50/90 text-blue-700"
-                  : "border-purple-400 bg-purple-50/90 text-purple-700",
+                  ? "border-blue-400 bg-blue-50/40 text-blue-700"
+                  : "border-purple-400 bg-purple-50/40 text-purple-700",
             )}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm border border-border/40">
-              <KatalistIcon name={content.icon} className="h-5 w-5 fill-current" />
+            <div className="flex items-center gap-2 rounded-xl bg-white/95 px-4 py-2.5 shadow-lg border border-border/70 backdrop-blur-sm">
+              <KatalistIcon name={content.icon} className={cn("h-4 w-4 fill-current", content.tone)} />
+              <span className="text-[13px] font-bold tracking-tight text-slate-800">
+                Drop to pace as {content.label}
+              </span>
             </div>
-            <span className="text-[13px] font-bold tracking-tight">
-              Drop to pace as {content.label}
-            </span>
           </div>
         )}
 
-        <div className="flex items-center justify-between px-3.5 pt-2.5 pb-1.5 shrink-0">
+        {/* Sticky lane header */}
+        <div className="sticky top-0 z-20 flex items-center justify-between px-4 pt-3.5 pb-2 bg-inherit shrink-0">
           <div className="flex items-center gap-1.5">
-            <span className={cn("text-base", content.tone)}>⚡</span>
+            <span className={cn("text-base", content.tone)}>
+              {lane === "now" ? "⚡" : lane === "next" ? "⇄" : "✦"}
+            </span>
             <h2
               ref={headingRef}
               id={`court-${lane}-title`}
               tabIndex={-1}
               className={cn(
-                "text-[13.5px] font-black tracking-wider uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "text-[13px] font-black tracking-wider uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 content.tone,
               )}
             >
               {content.label}
             </h2>
-            <span className={cn("text-[13px] font-bold ml-1", content.tone)}>{things.length}</span>
+            <span
+              className={cn(
+                "inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold",
+                lane === "now"
+                  ? "bg-red-500 text-white"
+                  : lane === "next"
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-purple-100 text-purple-700",
+              )}
+            >
+              {things.length}
+            </span>
           </div>
           <div className="text-right">
-            <span className="flex items-center justify-end text-[10.5px] font-semibold text-slate-700 hover:text-foreground cursor-pointer transition-colors">
+            <button
+              type="button"
+              onClick={() => onViewAll?.(lane)}
+              className="inline-flex items-center text-[10.5px] font-semibold text-slate-700 hover:text-foreground cursor-pointer transition-colors outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1"
+              aria-label={`View all ${things.length} in ${content.label}`}
+            >
               View all <KatalistIcon name="chevron-right" className="h-3 w-3 ml-0.5" />
-            </span>
+            </button>
           </div>
         </div>
 
         {activeThing ? (
-          <div className="flex-1 px-3 pb-3 pt-1 space-y-2.5">
+          <div className="flex-1 px-3.5 pb-2.5 pt-2.5 space-y-1">
             {/* Stack arena */}
             <div
-              className="relative"
+              className="relative pb-[140px]"
               onKeyDown={onKeyDown}
               style={{ perspective: "1000px", perspectiveOrigin: "50% 0%" }}
             >
-              {/* Background depth cards */}
+              {/* Background depth cards (Card 3, Card 2) */}
               {Array.from({ length: depthCount }, (_, i) => {
                 const depth = depthCount - i;
+                const targetIndex = (renderIndex + depth) % things.length;
+                const depthThing = things[targetIndex];
+                const depthShadow =
+                  depth === 1
+                    ? "shadow-[0_6px_16px_-3px_rgba(0,0,0,0.08),0_2px_6px_-2px_rgba(0,0,0,0.04)]"
+                    : "shadow-[0_2px_8px_-1px_rgba(0,0,0,0.05)]";
+
                 return (
                   <div
-                    key={depth}
+                    key={`depth-${depth}-${depthThing?.id ?? i}`}
                     aria-hidden="true"
+                    onClick={() => startNavigation(1)}
                     className={cn(
-                      "pointer-events-none absolute inset-x-2 top-0 min-h-[145px] rounded-2xl border bg-white/60 shadow-2xs",
+                      "pointer-events-auto absolute top-0 h-[74px] rounded-[15px] border bg-white overflow-hidden select-none cursor-pointer will-change-transform motion-reduce:!transform-none motion-reduce:!opacity-100",
                       lane === "now"
-                        ? "border-red-100/80"
+                        ? "border-red-200/90 hover:border-red-300"
                         : lane === "next"
-                          ? "border-blue-100/80"
-                          : "border-purple-100/80",
+                          ? "border-blue-200/90 hover:border-blue-300"
+                          : "border-purple-200/90 hover:border-purple-300",
+                      depthShadow,
                     )}
-                    style={depthCardStyle(depth, isAnimating)}
-                  />
+                    style={{
+                      zIndex: depth === 1 ? 10 : 5,
+                      ...depthCardStyle(depth),
+                    }}
+                  >
+                    {/* Real compact cards remain readable behind the hero card. */}
+                    {depthThing && (
+                      <div className="px-3 py-2">
+                        <div className="grid grid-cols-[24px_minmax(0,1fr)_16px] items-start gap-x-2.5">
+                          <PersonAvatar
+                            name={depthThing.assignee.name}
+                            initials={depthThing.assignee.initials}
+                            src={depthThing.assignee.avatarUrl}
+                            size={24}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="line-clamp-2 text-[12.5px] font-bold leading-[1.25] text-slate-800">
+                              {depthThing.title}
+                            </p>
+                            <div className="mt-1 flex items-center gap-2 text-[10px]">
+                              <span
+                                className={cn(
+                                  depthThing.dueAt
+                                    ? "font-semibold text-red-500"
+                                    : "text-slate-400",
+                                )}
+                              >
+                                {depthThing.dueAt
+                                  ? `Due ${formatCourtDue(depthThing).label}`
+                                  : "No due date"}
+                              </span>
+                              <span
+                                className={cn(
+                                  depthThing.workStatus === "under_progress"
+                                    ? "text-blue-600"
+                                    : "text-slate-400",
+                                )}
+                              >
+                                {depthThing.workStatus === "under_progress"
+                                  ? "Under Progress"
+                                  : "Not Started"}
+                              </span>
+                            </div>
+                          </div>
+                          <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
 
-              {/* Outgoing card ghost */}
-              {anim && (
+              {/* Horizontal motion uncovers the action behind the card. */}
+              {swipeDirection ? (
                 <div
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-0 z-30"
-                  style={{
-                    willChange: "transform, opacity, filter",
-                    transition:
-                      anim.phase === "idle"
-                        ? "none"
-                        : "transform 340ms cubic-bezier(0.55,0,0.45,1), opacity 300ms ease, filter 300ms ease",
-                    ...outgoingStyle(anim),
-                  }}
+                  className={cn(
+                    "pointer-events-none absolute inset-x-0 top-0 z-[19] h-[168px] overflow-hidden rounded-2xl",
+                    swipeDirection === "sort"
+                      ? capabilities.canSort
+                        ? "bg-emerald-500"
+                        : "bg-slate-400"
+                      : actionCapabilities.canMoveLater
+                        ? "bg-violet-500"
+                        : lane === "later"
+                          ? "bg-purple-900/80"
+                          : "bg-slate-400",
+                  )}
                 >
-                  <div className="min-h-[145px] rounded-2xl border border-border bg-white px-4 pt-4 shadow-sm">
-                    <span className="block line-clamp-2 text-[14.5px] font-bold leading-snug text-foreground">
-                      {anim.outgoing.title}
-                    </span>
+                  <div
+                    className={cn(
+                      "absolute inset-y-0 flex w-[112px] items-center justify-center",
+                      swipeDirection === "sort" ? "left-0" : "right-0",
+                    )}
+                  >
+                    <div className="flex flex-col items-center gap-1.5 text-center text-white">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
+                        <KatalistIcon
+                          name={
+                            swipeDirection === "sort"
+                              ? "sorted"
+                              : lane === "later"
+                                ? "clock-time"
+                                : capabilities.canCatch
+                                  ? "catch"
+                                  : "snooze"
+                          }
+                          className="h-4 w-4"
+                        />
+                      </span>
+                      <span className="text-[11px] font-bold tracking-tight">
+                        {swipeDirection === "sort"
+                          ? capabilities.canSort
+                            ? swipeCommitted
+                              ? "Release to sort"
+                              : "Sorted"
+                            : capabilities.canCatch
+                              ? "Catch first"
+                              : "Unavailable"
+                          : actionCapabilities.canMoveLater
+                            ? swipeCommitted
+                              ? "Release for Later"
+                              : "Later"
+                            : lane === "later"
+                              ? "Already in Later"
+                              : capabilities.canCatch
+                                ? "Catch first"
+                                : "Unavailable"}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {/* Gesture hint overlays */}
-              {gesture.dragging && gesture.offset.x < -8 && capabilities.canSetPace && lane !== "later" && (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 z-[15] flex min-h-[145px] items-center justify-end rounded-2xl bg-status-later/95 px-5 transition-opacity duration-150"
-                  style={{ opacity: Math.min(1, Math.abs(gesture.offset.x) / 72) }}
-                >
-                  <div className="flex flex-col items-center gap-1 text-white">
-                    <KatalistIcon name="arrow-left" className="h-5 w-5" />
-                    <span className="text-[12px] font-semibold">Later</span>
-                    <span className="text-[9.5px] opacity-80">Moves to LATER</span>
-                  </div>
-                </div>
-              )}
-              {gesture.dragging && gesture.offset.x > 8 && capabilities.canSort && (
-                <div
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 z-[15] flex min-h-[145px] items-center justify-start rounded-2xl bg-emerald-500/95 px-5 transition-opacity duration-150"
-                  style={{ opacity: Math.min(1, Math.abs(gesture.offset.x) / 72) }}
-                >
-                  <div className="flex flex-col items-center gap-1 text-white">
-                    <KatalistIcon name="arrow-right" className="h-5 w-5" />
-                    <span className="text-[12px] font-semibold">Sorted</span>
-                    <span className="text-[9.5px] opacity-80">Move to DONE</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Incoming / active card — spring up from stack depth */}
+              {/* Active card stays level during both scroll and swipe. */}
               <div
-                {...gesture.gestureProps}
+                ref={activeCardRef}
+                {...swipePointerProps}
                 className={cn(
-                  "relative z-20 touch-pan-y select-none motion-reduce:!transform-none motion-reduce:!opacity-100 motion-reduce:transition-none",
-                  gesture.dragging && "transition-none",
+                  "relative z-20 h-[168px] touch-pan-y select-none will-change-transform motion-reduce:!transform-none motion-reduce:transition-none",
+                  !gesture.dragging &&
+                    !anim &&
+                    "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
                 )}
                 style={{
-                  willChange: "transform, opacity, filter",
-                  transition: gesture.dragging
-                    ? "none"
-                    : anim?.phase === "enter"
-                      ? "transform 520ms cubic-bezier(0.34,1.56,0.64,1), opacity 400ms ease, filter 400ms ease"
-                      : anim?.phase === "exit" || anim?.phase === "idle"
-                        ? "none"
-                        : "transform 240ms cubic-bezier(0.2,0.8,0.2,1), opacity 200ms ease",
-                  ...incomingStyle(anim, gesture.offset),
-                }}
-                onTransitionEnd={(e) => {
-                  if (e.target === e.currentTarget && anim?.phase === "enter") {
-                    setAnim(null);
-                  }
+                  transformOrigin: "50% 50%",
+                  transform: `translate3d(${gesture.offset.x}px, 0, 0)`,
                 }}
               >
                 <ThingStackCard
@@ -475,104 +658,48 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   onAction={(action) => void runAction(action)}
                 />
               </div>
+
+              {/* Outgoing card animating out during scroll navigation */}
+              {anim?.outgoing ? (
+                <div
+                  ref={outgoingCardRef}
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[168px] overflow-hidden select-none will-change-transform motion-reduce:hidden"
+                >
+                  <ThingStackCard
+                    thing={anim.outgoing}
+                    lane={lane}
+                    myActorId={myActorId}
+                    pendingAction={null}
+                    suppressClickRef={{ current: true }}
+                    onOpen={() => {}}
+                    onAction={() => {}}
+                  />
+                </div>
+              ) : null}
             </div>
 
-            {/* Subsequent cards list */}
-            {things.length > 1 && (
-              <div className="space-y-2 pt-0.5">
-                {things
-                  .filter((_, index) => index !== renderIndex)
-                  .slice(0, 2)
-                  .map((thingItem) => {
-                    const due = formatCourtDue(thingItem);
-                    const isProgress = thingItem.workStatus === "under_progress";
-                    const isWaiting = thingItem.acknowledgement === "waiting_for_catch";
-                    const canPaceItem = getThingCapabilities(thingItem, myActorId).canSetPace;
-                    return (
-                      <div
-                        key={thingItem.id}
-                        draggable={canPaceItem}
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(
-                            "application/katalist-thing",
-                            JSON.stringify({ thingId: thingItem.id, fromLane: lane, title: thingItem.title }),
-                          );
-                          e.dataTransfer.effectAllowed = "move";
-                        }}
-                        onClick={(e) => onOpen(thingItem, e.currentTarget)}
-                        className={cn(
-                          "group flex items-center justify-between gap-3 rounded-xl border bg-white/90 hover:bg-white p-3 text-left shadow-2xs transition-all duration-150 hover:shadow-xs cursor-pointer",
-                          canPaceItem && "cursor-grab active:cursor-grabbing",
-                          lane === "now"
-                            ? "border-red-100/80 hover:border-red-200"
-                            : lane === "next"
-                              ? "border-blue-100/80 hover:border-blue-200"
-                              : "border-purple-100/80 hover:border-purple-200",
-                        )}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <PersonAvatar
-                            name={thingItem.assignee.name}
-                            initials={thingItem.assignee.initials}
-                            src={thingItem.assignee.avatarUrl}
-                            size={24}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <span className="block truncate text-[12.5px] font-bold text-slate-900 group-hover:text-primary transition-colors">
-                              {thingItem.title}
-                            </span>
-                            <div className="mt-0.5 flex items-center gap-1.5 text-[10px]">
-                              {due.label && due.label !== "No due date" ? (
-                                <span className={cn("font-semibold", due.urgent ? "text-red-600" : "text-slate-500")}>
-                                  Due {due.label}
-                                </span>
-                              ) : (
-                                <span className="text-slate-400">No due date</span>
-                              )}
-                              <span className="text-slate-200">·</span>
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  isWaiting ? "text-orange-500 font-semibold" : isProgress ? "text-blue-600" : "text-slate-400",
-                                )}
-                              >
-                                {isWaiting ? "Waiting for Catch" : isProgress ? "Under Progress" : "Not Started"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const idx = things.findIndex((t) => t.id === thingItem.id);
-                            if (idx >= 0) {
-                              startNavigation(idx > renderIndex ? 1 : -1);
-                              setActiveIndex(idx);
-                              activeThingIdRef.current = thingItem.id;
-                            }
-                          }}
-                          title="Bring to top"
-                          className="shrink-0 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors opacity-0 group-hover:opacity-100"
-                          aria-label="Bring to top of stack"
-                        >
-                          <ArrowUp className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                {things.length > 3 && (
-                  <button
-                    type="button"
-                    onClick={() => startNavigation(1)}
-                    className="flex w-full items-center justify-center gap-1 pt-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 outline-none transition-colors cursor-pointer"
-                  >
-                    <KatalistIcon name="chevron-down" className="h-3 w-3" />
-                    Scroll for more
-                  </button>
-                )}
+            {/* Deck indicator */}
+            {things.length > 1 ? (
+              <div className="flex flex-col items-center pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => startNavigation(1)}
+                  className={cn(
+                    "group inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded",
+                    content.tone,
+                  )}
+                  aria-label={`${things.length - 1} more Things in ${content.label}. Click to cycle.`}
+                >
+                  <span className="text-[14px] leading-none">+</span>
+                  <span>{things.length - 1} more</span>
+                  <KatalistIcon
+                    name="chevron-down"
+                    className="h-3 w-3 transition-transform group-hover:translate-y-0.5"
+                  />
+                </button>
               </div>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="flex min-h-[160px] items-center justify-center px-3 text-center text-[11px] text-muted-foreground">

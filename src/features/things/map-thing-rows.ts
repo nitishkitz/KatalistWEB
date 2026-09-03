@@ -39,8 +39,52 @@ export async function mapDbThingRows(rows: DbThingRow[]): Promise<Thing[]> {
   const listIds = [...new Set(rows.map((r) => r.list_id).filter(Boolean))] as string[];
   const listNames = new Map<string, string>();
   if (listIds.length) {
-    const { data: lists } = await supabase.from("lists").select("id,name").in("id", listIds);
-    for (const l of lists ?? []) listNames.set(l.id, l.name);
+    // 1. Try server endpoint which bypasses RLS via service role
+    try {
+      if (typeof window !== "undefined") {
+        const res = await fetch("/api/lists/resolve-names", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ listIds }),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          for (const l of json.lists ?? []) {
+            if (l.id && l.name) listNames.set(l.id, l.name);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // 2. Try resolve_list_names RPC
+    const missingAfterApi = listIds.filter((id) => !listNames.has(id));
+    if (missingAfterApi.length) {
+      try {
+        const { data, error } = await supabase.rpc("resolve_list_names", { p_list_ids: missingAfterApi });
+        if (!error && data) {
+          for (const l of (data as { id: string; name: string }[])) {
+            if (l.id && l.name) listNames.set(l.id, l.name);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // 3. Direct query on lists table for any remaining
+    const missing = listIds.filter((id) => !listNames.has(id));
+    if (missing.length) {
+      try {
+        const { data: lists } = await supabase.from("lists").select("id,name").in("id", missing);
+        for (const l of lists ?? []) {
+          if (l.id && l.name) listNames.set(l.id, l.name);
+        }
+      } catch {
+        // ignore
+      }
+    }
   }
 
   return rows.map((r) => ({
@@ -57,7 +101,7 @@ export async function mapDbThingRows(rows: DbThingRow[]): Promise<Thing[]> {
     dueHasTime: r.due_has_time,
     context: r.context,
     listId: r.list_id,
-    listName: r.list_id ? (listNames.get(r.list_id) ?? "List") : "Standalone",
+    listName: r.list_id ? (listNames.get(r.list_id) ?? null) : "Standalone",
     cancelledAt: r.cancelled_at,
     sortedAt: r.sorted_at,
     caughtAt: r.caught_at,

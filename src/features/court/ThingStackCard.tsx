@@ -44,7 +44,10 @@ const laneTagTone: Record<CourtLaneId, { bg: string; text: string; border: strin
     },
   };
 
-const laneCardBorder: Record<CourtLaneId, { border: string; hover: string; shadow: string; pillBg: string; pillText: string }> = {
+const laneCardBorder: Record<
+  CourtLaneId,
+  { border: string; hover: string; shadow: string; pillBg: string; pillText: string }
+> = {
   now: {
     border: "border-red-100/90",
     hover: "hover:border-red-200",
@@ -95,11 +98,15 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     return (
       <article
         className={cn(
-          "group/card flex flex-col justify-between overflow-hidden rounded-2xl border bg-white transition-all duration-200",
+          "group/card flex h-[168px] flex-col justify-between overflow-hidden rounded-2xl border bg-white transition-all duration-200",
           styling.border,
           styling.hover,
           styling.shadow,
         )}
+        style={{
+          boxShadow:
+            "0 16px 32px -22px rgba(15, 23, 42, 0.34), 0 5px 14px -9px rgba(15, 23, 42, 0.2)",
+        }}
       >
         <button
           ref={ref}
@@ -107,7 +114,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           onClick={(event) => {
             if (!suppressClickRef.current) onOpen(thing, event.currentTarget);
           }}
-          className="block w-full p-3.5 pb-2.5 text-left outline-none cursor-pointer focus-visible:ring-1 focus-visible:ring-primary/40"
+          className="block w-full px-4 pb-2.5 pt-3.5 text-left outline-none cursor-pointer focus-visible:ring-1 focus-visible:ring-primary/40"
           aria-label={`Open ${thing.title}`}
         >
           {/* Top row: avatar + @name | due date + drag grip */}
@@ -138,6 +145,35 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 draggable={true}
                 onDragStart={(e) => {
                   e.stopPropagation();
+                  const cardEl = (e.currentTarget as HTMLElement).closest("article");
+                  if (cardEl && e.dataTransfer.setDragImage) {
+                    const rect = cardEl.getBoundingClientRect();
+                    const gripRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+
+                    // Clone the entire card so the drag preview is the full card, not a small icon
+                    const clone = cardEl.cloneNode(true) as HTMLElement;
+                    clone.style.width = `${rect.width}px`;
+                    clone.style.height = `${rect.height}px`;
+                    clone.style.position = "fixed";
+                    clone.style.top = "-9999px";
+                    clone.style.left = "-9999px";
+                    clone.style.zIndex = "99999";
+                    clone.style.pointerEvents = "none";
+                    clone.style.opacity = "0.95";
+                    clone.style.boxShadow =
+                      "0 20px 35px -10px rgba(0, 0, 0, 0.25), 0 4px 10px rgba(0, 0, 0, 0.1)";
+                    clone.style.transform = "none";
+                    document.body.appendChild(clone);
+
+                    const offsetX = Math.max(10, gripRect.left - rect.left + gripRect.width / 2);
+                    const offsetY = Math.max(10, gripRect.top - rect.top + gripRect.height / 2);
+
+                    e.dataTransfer.setDragImage(clone, offsetX, offsetY);
+
+                    window.requestAnimationFrame(() => {
+                      clone.remove();
+                    });
+                  }
                   e.dataTransfer.setData(
                     "application/katalist-thing",
                     JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
@@ -149,7 +185,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   e.dataTransfer.effectAllowed = "copyMove";
                 }}
                 title="Drag to Buckets or across lanes"
-                className="inline-flex items-center justify-center h-5 w-5 rounded text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-grab active:cursor-grabbing"
+                className="inline-flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-grab active:cursor-grabbing"
               >
                 <GripVertical className="h-3.5 w-3.5" />
               </span>
@@ -157,13 +193,20 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           </span>
 
           {/* Title */}
-          <span className="mt-2.5 block line-clamp-2 text-[14.5px] font-bold leading-snug text-slate-900">
+          <span
+            className="mt-2 block overflow-hidden text-[15px] font-bold leading-[1.3] tracking-[-0.01em] text-slate-900"
+            style={{
+              display: "-webkit-box",
+              WebkitBoxOrient: "vertical",
+              WebkitLineClamp: 2,
+            }}
+          >
             {thing.title}
           </span>
 
           {/* Tags row */}
           <span className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {thing.listId && thing.listName ? (
+            {thing.listId && thing.listName && thing.listName.toLowerCase() !== "list" ? (
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10.5px] font-semibold border border-transparent",

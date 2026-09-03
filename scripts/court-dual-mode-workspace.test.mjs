@@ -11,9 +11,8 @@ test("overview is composed as three equal layered stacks", () => {
   assert.match(workspace, /grid-cols-3/);
   assert.match(workspace, /CourtLaneStack/);
   assert.match(stack, /Math\.min\(2, Math\.max\(0, things\.length - 1\)\)/);
-  assert.match(stack, /\.slice\(0, 2\)/);
-  assert.match(stack, /Scroll for more/);
-  assert.doesNotMatch(stack, /\+\s*\{?.*more/i);
+  assert.match(stack, /more Things in/);
+  assert.doesNotMatch(stack, /\.slice\(0, 2\)/);
 });
 
 test("focused mode inserts detail after the selected lane and uses compact lanes", () => {

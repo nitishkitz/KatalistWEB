@@ -16,6 +16,7 @@ export type ThingComment = {
   at: string;
   avatarUrl?: string | null;
   authorActorId?: string | null;
+  sending?: boolean;
 };
 export type ThingActivity = { id: string; event: string; at: string };
 
@@ -79,7 +80,42 @@ export function useThingComments(thingId: string | null) {
       }
       await rpcComment(thingId, body);
     },
-    onSuccess: () => {
+    onMutate: async (newBody: string) => {
+      await qc.cancelQueries({ queryKey: ["thing-comments", thingId] });
+      const previousComments = qc.getQueryData<ThingComment[]>(["thing-comments", thingId]);
+
+      const currentUserName =
+        (session?.user?.user_metadata?.display_name as string | undefined) ||
+        (session?.user?.user_metadata?.name as string | undefined) ||
+        "Me";
+
+      const optimisticComment: ThingComment = {
+        id: `optimistic-${Date.now()}`,
+        body: newBody,
+        author: currentUserName,
+        avatarUrl: (session?.user?.user_metadata?.avatar_url as string | undefined) ?? null,
+        at: new Date().toISOString(),
+        authorActorId: null,
+        sending: true,
+      };
+
+      if (!preview) {
+        qc.setQueryData<ThingComment[]>(["thing-comments", thingId], (old = []) => [
+          optimisticComment,
+          ...old,
+        ]);
+      } else {
+        addCommentLocal(thingId, newBody, currentDemoPerson().name);
+      }
+
+      return { previousComments };
+    },
+    onError: (_err, _newBody, context) => {
+      if (context?.previousComments) {
+        qc.setQueryData(["thing-comments", thingId], context.previousComments);
+      }
+    },
+    onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["thing-comments", thingId] });
       void qc.invalidateQueries({ queryKey: ["thing-activity", thingId] });
     },

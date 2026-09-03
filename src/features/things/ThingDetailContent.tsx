@@ -3,6 +3,7 @@ import type * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
+  AlertCircle,
   Bell,
   Calendar,
   Check,
@@ -12,6 +13,8 @@ import {
   List as ListIcon,
   Lock,
   MoreHorizontal,
+  RotateCcw,
+  Star,
   Trash2,
   UserPlus,
   X,
@@ -30,6 +33,7 @@ import {
   rpcCancelThing,
   rpcCatchThing,
   rpcNudgeThing,
+  rpcReopenThing,
   rpcRemoveFromBucket,
   rpcReassignThing,
   rpcSetDue,
@@ -41,12 +45,14 @@ import {
 import { invalidatePersonalSurfaces } from "./personal-shred";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { useCourt } from "@/features/court/use-court";
+import { useSession } from "@/hooks/useSession";
 import { useThing } from "./use-thing";
 import { useThingComments } from "./use-thing-comments";
 import { useAssignablePeople } from "@/features/people/use-assignable";
 import { useAvatarUrl } from "@/features/people/directory";
 import { useBuckets } from "@/features/buckets/use-buckets";
 import { getBucketRefs } from "./local-state";
+import { useLocalVersion } from "./use-local-version";
 
 export type ThingDetailContentProps = {
   initialThing: Thing | null;
@@ -81,22 +87,36 @@ function CommentRow({
   body,
   at,
   avatarUrl: explicitAvatar,
+  sending,
 }: {
   author: string;
   body: string;
   at: string;
   avatarUrl?: string | null;
+  sending?: boolean;
 }) {
   const avatarUrl = useAvatarUrl(author, null, explicitAvatar);
 
   return (
-    <div className="flex gap-2.5 rounded-lg border border-border/70 bg-white px-3 py-2">
+    <div
+      className={cn(
+        "flex gap-2.5 rounded-lg border border-border/70 bg-white px-3 py-2 transition-opacity",
+        sending && "opacity-75 bg-muted/15",
+      )}
+    >
       <PersonAvatar name={author} initials={initialsForName(author)} src={avatarUrl} size={24} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
           <p className="truncate text-[11px] font-semibold text-foreground">{author}</p>
-          <time className="shrink-0 text-[10px] text-muted-foreground">
-            {format(new Date(at), "MMM d · h:mm a")}
+          <time className="shrink-0 text-[10px] text-muted-foreground flex items-center gap-1">
+            {sending ? (
+              <>
+                <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
+                <span>Sending…</span>
+              </>
+            ) : (
+              format(new Date(at), "MMM d · h:mm a")
+            )}
           </time>
         </div>
         <p className="mt-0.5 text-[12px] leading-relaxed text-foreground">{body}</p>
@@ -222,10 +242,23 @@ export function ThingDetailContent({
   viewOnly = false,
 }: ThingDetailContentProps): React.ReactNode {
   const qc = useQueryClient();
+  const localVersion = useLocalVersion();
+  const { user } = useSession();
   const court = useCourt();
+  const people = useAssignablePeople();
   const live = useThing(initialThing?.id ?? null);
   const thing = live.thing ?? initialThing;
-  const rawCaps = thing ? getThingCapabilities(thing, court.myActorId) : null;
+
+  const myActorId = useMemo(() => {
+    if (court.myActorId) return court.myActorId;
+    if (user?.id) {
+      const match = people.find((p) => p.profileId === user.id || p.id === user.id);
+      if (match?.id) return match.id;
+    }
+    return null;
+  }, [court.myActorId, user?.id, people]);
+
+  const rawCaps = thing ? getThingCapabilities(thing, myActorId) : null;
   const caps = useMemo(() => {
     if (!rawCaps) return null;
     if (viewOnly) {
@@ -241,6 +274,7 @@ export function ThingDetailContent({
         canNudge: false,
         canSort: false,
         canCancel: false,
+        canReopen: false,
         canShred: false,
         canAddToBucket: false,
         canComment: true,
@@ -249,7 +283,6 @@ export function ThingDetailContent({
     return rawCaps;
   }, [rawCaps, viewOnly]);
   const thread = useThingComments(thing?.id ?? null);
-  const people = useAssignablePeople();
   const assignableList = useMemo(() => {
     const list = [...people];
     if (thing?.assignee && !list.some((p) => p.id === thing.assignee.id)) {
@@ -304,12 +337,16 @@ export function ThingDetailContent({
     caps?.canShred,
   );
   const activePace: Pace = thing.personalPace ?? "next";
-  const currentBucket = buckets.find(
-    (bucket) =>
-      bucket.thingIds?.includes(thing.id) ||
-      bucket.previews.some((preview) => preview.kind === "thing" && preview.thingId === thing.id) ||
-      (bucketsPreview && getBucketRefs(bucket.id).some((ref) => ref.thingId === thing.id)),
-  );
+  const currentBuckets = useMemo(() => {
+    void localVersion;
+    return buckets.filter(
+      (bucket) =>
+        bucket.thingIds?.includes(thing.id) ||
+        bucket.previews?.some((preview) => preview.kind === "thing" && preview.thingId === thing.id) ||
+        getBucketRefs(bucket.id).some((ref) => ref.thingId === thing.id),
+    );
+  }, [buckets, thing.id, localVersion]);
+  const currentBucket = currentBuckets[0] ?? null;
   const dueLabel = thing.dueAt
     ? format(new Date(thing.dueAt), thing.dueHasTime ? "EEE, MMM d · h:mm a" : "EEE, MMM d")
     : null;
@@ -324,19 +361,37 @@ export function ThingDetailContent({
 
   if (variant === "court") {
     return (
-      <div className="min-h-[454px] rounded-2xl bg-white p-5 shadow-xs">
+      <div className="min-h-[454px] w-full">
         <header className="border-b border-border/60 pb-3.5">
-          <div className="mb-2">
-            {headerAction}
+          <div className="mb-2">{headerAction}</div>
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="text-[20px] font-bold leading-snug text-foreground break-words flex-1">
+              {thing.title}
+            </h2>
+            <div className="flex items-center gap-1 shrink-0 pt-0.5">
+              <button
+                type="button"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-amber-500 hover:bg-muted/40 transition-colors"
+                aria-label="Star this thing"
+              >
+                <Star className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
+                aria-label="More options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-          <h2 className="line-clamp-2 text-[19px] font-bold leading-snug text-foreground">
-            {thing.title}
-          </h2>
           <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
             <span className="capitalize">{thing.context}</span>
             <span>·</span>
-            <span>Updated {format(new Date(thing.updatedAt), "MMM d · h:mm a")}</span>
-            {thing.listId && thing.listName ? <span>· {thing.listName}</span> : null}
+            <span>Created {format(new Date(thing.createdAt ?? thing.updatedAt), "MMM d, h:mm a")}</span>
+            <span>·</span>
+            <span>Updated {format(new Date(thing.updatedAt), "MMM d, h:mm a")}</span>
+            {thing.listId && thing.listName && thing.listName.toLowerCase() !== "list" ? <span>· {thing.listName}</span> : null}
           </p>
           {viewOnly && (
             <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[11.5px] font-semibold text-emerald-800">
@@ -380,7 +435,9 @@ export function ThingDetailContent({
                       <span className="block text-[12px] font-semibold text-foreground leading-tight">
                         {thing.assignee.name}
                       </span>
-                      <span className="block text-[10px] text-muted-foreground">Current Assignee</span>
+                      <span className="block text-[10px] text-muted-foreground">
+                        Current Assignee
+                      </span>
                     </div>
                   </div>
                 </>
@@ -420,23 +477,74 @@ export function ThingDetailContent({
             </div>
 
             <div className="flex items-center gap-2">
-              {thing.acknowledgement === "waiting_for_catch" ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-semibold text-orange-600 border border-orange-200/60">
-                  <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-                  Waiting for Catch
+              {thing.workStatus === "cancelled" || Boolean(thing.cancelledAt) ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 border border-rose-200/60">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                  Cancelled
                 </span>
+              ) : thing.acknowledgement === "waiting_for_catch" ? (
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-semibold text-orange-600 border border-orange-200/60">
+                    <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                    Waiting for Catch
+                  </span>
+                  {caps?.canCatch && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        run.mutate(async () => {
+                          await rpcCatchThing(thing.id);
+                          toast.success("Caught.");
+                        })
+                      }
+                      className="inline-flex items-center gap-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-0.5 text-[11px] font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-60"
+                    >
+                      <Hand className="h-3 w-3" />
+                      <span>Catch</span>
+                    </button>
+                  )}
+                </div>
               ) : (
                 <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 border border-emerald-200/60">
                   <Check className="h-3 w-3" strokeWidth={2.5} />
                   Caught
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-600 border border-blue-200/60">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                {statusLabel(thing.workStatus)}
-              </span>
+              {thing.workStatus !== "cancelled" && !thing.cancelledAt && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-600 border border-blue-200/60">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                  {statusLabel(thing.workStatus)}
+                </span>
+              )}
             </div>
           </div>
+
+          {/* Cancelled Banner with Reopen option */}
+          {(thing.workStatus === "cancelled" || Boolean(thing.cancelledAt)) && (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200/80 bg-rose-50/70 p-3 text-[12px] text-rose-900">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+                <span>This thing was cancelled and cannot be caught in its current state.</span>
+              </div>
+              {caps?.canReopen && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run.mutate(async () => {
+                      await rpcReopenThing(thing.id);
+                      toast.success("Thing reopened. You can now catch it.");
+                    })
+                  }
+                  className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-[11.5px] font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Reopen Thing</span>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Due date */}
           {thing.dueAt ? (
@@ -451,6 +559,22 @@ export function ThingDetailContent({
           {/* Action & Pace Row */}
           {!terminal ? (
             <div className="flex flex-wrap items-center gap-2.5 border-b border-border/60 pb-3.5">
+              {caps?.canCatch ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run.mutate(async () => {
+                      await rpcCatchThing(thing.id);
+                      toast.success("Caught.");
+                    })
+                  }
+                  className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11.5px] px-3.5 shadow-xs transition-colors inline-flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
+                >
+                  <Hand className="h-3.5 w-3.5" />
+                  <span>Catch</span>
+                </button>
+              ) : null}
               {caps?.canNudge ? (
                 <button
                   type="button"
@@ -513,24 +637,24 @@ export function ThingDetailContent({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() =>
-                    run.mutate(async () => {
-                      await rpcCancelThing(thing.id);
-                      toast.success("Cancelled.");
-                      onAfterTerminalAction?.();
-                    })
-                  }
-                  className="h-8 px-2 text-[11.5px] font-medium text-destructive hover:underline disabled:opacity-60"
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to cancel this thing?")) {
+                      run.mutate(async () => {
+                        await rpcCancelThing(thing.id);
+                        toast.success("Cancelled.");
+                        onAfterTerminalAction?.();
+                      });
+                    }
+                  }}
+                  className="h-8 px-2 text-[11.5px] font-medium text-destructive hover:underline disabled:opacity-60 cursor-pointer"
                 >
-                  Cancel
+                  Cancel Thing
                 </button>
               ) : null}
 
               {caps?.canSetPace ? (
                 <div className="ml-auto flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-foreground">
-                    Pace
-                  </span>
+                  <span className="text-[11px] font-semibold text-foreground">Pace</span>
                   <div className="inline-flex rounded-lg border border-border/80 bg-muted/20 p-0.5">
                     {paces.map((pace) => (
                       <button
@@ -563,49 +687,80 @@ export function ThingDetailContent({
             </div>
           ) : null}
 
-          {/* Bucket selection or read-only badge */}
-          {viewOnly ? (
-            currentBucket ? (
-              <div className="flex items-center gap-2 rounded-xl border border-border/80 bg-muted/20 px-3 py-2 text-[11.5px] text-muted-foreground font-medium">
-                <ListIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Bucket: <strong className="text-foreground font-semibold">{currentBucket.name}</strong></span>
-              </div>
-            ) : null
-          ) : caps?.canAddToBucket ? (
-            <div className="relative">
-              <select
-                disabled={busy}
-                className="h-9 w-full rounded-xl border border-border/80 bg-white pl-9 pr-3 text-[11.5px] text-foreground outline-none focus:border-primary focus:ring-2 focus:ring-ring"
-                defaultValue=""
-                aria-label="Choose Buckets"
-                onChange={(event) => {
-                  if (!event.target.value) return;
-                  run.mutate(async () => {
-                    if (currentBucket && currentBucket.id !== event.target.value) {
-                      await rpcRemoveFromBucket(currentBucket.id, thing.id);
-                    }
-                    await rpcAddToBucket(event.target.value, thing.id);
-                  });
-                  event.target.value = "";
-                }}
-              >
-                <option value="">Choose Buckets…</option>
-                {buckets.map((bucket) => (
-                  <option key={bucket.id} value={bucket.id}>
-                    {bucket.name}
-                  </option>
-                ))}
-              </select>
-              <ListIcon className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          {/* Small and compact Choose Buckets row */}
+          <div className="w-full rounded-xl border border-border/70 bg-white px-3 py-2 flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-foreground shrink-0">
+              <ListIcon className="h-3.5 w-3.5 text-muted-foreground" />
+              <span>Choose Buckets:</span>
             </div>
-          ) : null}
+
+            {currentBuckets.map((b) => (
+              <span
+                key={b.id}
+                className="inline-flex items-center gap-1 rounded-md border border-purple-200/80 bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 shadow-2xs"
+              >
+                <span>{b.name}</span>
+                {!viewOnly && caps?.canAddToBucket && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      run.mutate(async () => {
+                        await rpcRemoveFromBucket(b.id, thing.id);
+                        await qc.invalidateQueries({ queryKey: ["buckets"] });
+                        toast.success(`Removed from ${b.name}.`);
+                      })
+                    }
+                    className="rounded p-0.5 text-purple-400 hover:bg-purple-200/50 hover:text-purple-800 transition-colors cursor-pointer"
+                    aria-label={`Remove from ${b.name}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                )}
+              </span>
+            ))}
+
+            {!viewOnly && caps?.canAddToBucket && (
+              <div className="relative ml-auto sm:ml-0">
+                <select
+                  disabled={busy}
+                  className="h-6 cursor-pointer rounded-md border border-dashed border-border/80 bg-muted/20 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground outline-none hover:bg-muted/40 transition-colors"
+                  defaultValue=""
+                  aria-label="Choose Buckets"
+                  onChange={(event) => {
+                    if (!event.target.value) return;
+                    const selectedBucketId = event.target.value;
+                    event.target.value = "";
+                    run.mutate(async () => {
+                      await rpcAddToBucket(selectedBucketId, thing.id);
+                      await qc.invalidateQueries({ queryKey: ["buckets"] });
+                      toast.success("Added to bucket.");
+                    });
+                  }}
+                >
+                  <option value="">+ Add to bucket</option>
+                  {buckets
+                    .filter((b) => !currentBuckets.some((cb) => cb.id === b.id))
+                    .map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            )}
+          </div>
 
           {/* Details toggle */}
           <details className="border-b border-border/60 pb-3 text-[11.5px]">
-            <summary className="cursor-pointer list-none font-semibold text-foreground flex items-center gap-1">
-              <span>Details ›</span>
+            <summary className="cursor-pointer list-none font-semibold text-foreground flex items-center justify-between">
+              <span className="flex items-center gap-1">Details ›</span>
+              <span className="text-[10px] text-muted-foreground font-normal">Click to expand</span>
             </summary>
-            <div className="mt-3 grid grid-cols-3 gap-3 text-muted-foreground">
+            <p className="mt-2 text-[12px] text-muted-foreground/90 italic">
+              Add a description, notes or any other details about this thing...
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-3 text-muted-foreground border-t border-border/40 pt-2.5">
               <div>
                 <span className="block text-[9px] uppercase font-semibold">Creator</span>
                 {thing.creator.name}
@@ -644,13 +799,14 @@ export function ThingDetailContent({
             <div className="pt-3">
               {tab === "comments" ? (
                 <div className="space-y-3">
-                  {comments.slice(0, 3).map((entry) => (
+                  {comments.map((entry) => (
                     <CommentRow
                       key={entry.id}
                       author={entry.author}
                       avatarUrl={entry.avatarUrl}
                       body={entry.body}
                       at={entry.at}
+                      sending={entry.sending}
                     />
                   ))}
                   {!comments.length ? (
@@ -660,21 +816,40 @@ export function ThingDetailContent({
                     className="flex gap-2 pt-1"
                     onSubmit={(event) => {
                       event.preventDefault();
-                      if (!comment.trim()) return;
-                      void thread.post.mutateAsync(comment.trim()).then(() => setComment(""));
+                      const text = comment.trim();
+                      if (!text || thread.post.isPending) return;
+                      setComment("");
+                      thread.post.mutate(text, {
+                        onError: (err) => {
+                          setComment(text);
+                          toast.error(domainErrorMessage(err));
+                        },
+                        onSuccess: () => {
+                          toast.success("Comment sent.");
+                        },
+                      });
                     }}
                   >
                     <input
                       value={comment}
                       onChange={(event) => setComment(event.target.value)}
-                      placeholder="Write a comment…"
-                      className="h-9 min-w-0 flex-1 rounded-xl border border-border/80 px-3 text-[11.5px] outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                      placeholder={thread.post.isPending ? "Sending comment…" : "Write a comment…"}
+                      disabled={thread.post.isPending}
+                      className="h-9 min-w-0 flex-1 rounded-xl border border-border/80 px-3 text-[11.5px] outline-none focus:border-primary focus:ring-2 focus:ring-ring disabled:opacity-60"
                     />
                     <button
                       type="submit"
-                      className="h-9 rounded-xl border border-primary px-4 text-[11.5px] font-semibold text-primary hover:bg-primary/5 transition-colors"
+                      disabled={!comment.trim() || thread.post.isPending}
+                      className="inline-flex items-center gap-1.5 h-9 rounded-xl border border-primary px-4 text-[11.5px] font-semibold text-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
                     >
-                      Post
+                      {thread.post.isPending ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Sending…</span>
+                        </>
+                      ) : (
+                        <span>Post</span>
+                      )}
                     </button>
                   </form>
                 </div>
@@ -1111,17 +1286,19 @@ export function ThingDetailContent({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() =>
-                          run.mutate(async () => {
-                            await rpcCancelThing(thing.id);
-                            toast.success("Cancelled.");
-                            onAfterTerminalAction?.();
-                          })
-                        }
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[11px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => {
+                          if (window.confirm("Are you sure you want to cancel this thing?")) {
+                            run.mutate(async () => {
+                              await rpcCancelThing(thing.id);
+                              toast.success("Cancelled.");
+                              onAfterTerminalAction?.();
+                            });
+                          }
+                        }}
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[11px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                       >
                         <Trash2 className="h-3 w-3" />
-                        Cancel
+                        Cancel Thing
                       </button>
                     ) : null}
                     {caps?.canShred ? (
@@ -1159,6 +1336,7 @@ export function ThingDetailContent({
                     avatarUrl={c.avatarUrl}
                     body={c.body}
                     at={c.at}
+                    sending={c.sending}
                   />
                 ))
               )}
@@ -1166,26 +1344,40 @@ export function ThingDetailContent({
                 className="flex gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (!comment.trim()) return;
-                  void thread.post.mutateAsync(comment.trim()).then(
-                    () => setComment(""),
-                    (err) => toast.error(domainErrorMessage(err)),
-                  );
+                  const text = comment.trim();
+                  if (!text || thread.post.isPending) return;
+                  setComment("");
+                  thread.post.mutate(text, {
+                    onError: (err) => {
+                      setComment(text);
+                      toast.error(domainErrorMessage(err));
+                    },
+                    onSuccess: () => {
+                      toast.success("Comment sent.");
+                    },
+                  });
                 }}
               >
                 <input
                   value={comment}
-                  disabled={!caps?.canComment}
+                  disabled={!caps?.canComment || thread.post.isPending}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="Write a comment…"
+                  placeholder={thread.post.isPending ? "Sending…" : "Write a comment…"}
                   className="h-7 flex-1 rounded-md border border-border bg-white px-2 text-[10px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <button
                   type="submit"
-                  disabled={!caps?.canComment}
-                  className="h-7 rounded-md bg-primary px-2 text-[10px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={!caps?.canComment || !comment.trim() || thread.post.isPending}
+                  className="inline-flex items-center gap-1 h-7 rounded-md bg-primary px-2.5 text-[10px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                 >
-                  Post
+                  {thread.post.isPending ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      <span>Sending…</span>
+                    </>
+                  ) : (
+                    <span>Post</span>
+                  )}
                 </button>
               </form>
               {thing.workStatus === "sorted" ? (

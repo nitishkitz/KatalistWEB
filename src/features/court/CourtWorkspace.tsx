@@ -16,6 +16,8 @@ type CourtWorkspaceProps = {
   onSelectThing: (thingId: string) => void;
   onClose: () => void;
   onRefresh: () => unknown;
+  onViewAll?: (lane: CourtLaneId) => void;
+  heroRect?: { top: number; left: number; width: number; height: number } | null;
 };
 
 export function CourtWorkspace({
@@ -24,10 +26,12 @@ export function CourtWorkspace({
   myActorId,
   initialPositions,
   laneRefs,
+  heroRect,
   onOpen,
   onSelectThing,
   onClose,
   onRefresh,
+  onViewAll,
 }: CourtWorkspaceProps) {
   if (selection) {
     return (
@@ -37,6 +41,7 @@ export function CourtWorkspace({
         onSelectThing={onSelectThing}
         onOpen={onOpen}
         onClose={onClose}
+        heroRect={heroRect}
       />
     );
   }
@@ -55,6 +60,7 @@ export function CourtWorkspace({
           initialPosition={initialPositions[lane]}
           onOpen={(thing, origin) => onOpen(lane, thing, origin)}
           onRefresh={onRefresh}
+          onViewAll={onViewAll}
         />
       ))}
     </div>

@@ -22,6 +22,7 @@ export type StackGestureOptions = {
   interactionDisabled?: boolean;
   onSort: () => void;
   onLater: () => void;
+  onBlockedAction?: (action: "sort" | "later") => void;
   onStep: (direction: 1 | -1) => void;
 };
 
@@ -44,9 +45,7 @@ export function useStackGesture(options: StackGestureOptions): {
   const lastWheelTimeRef = React.useRef(0);
   const dragStartTimeRef = React.useRef(0);
   const suppressClickRef = React.useRef(false);
-  const suppressClearRef = React.useRef<
-    { id: number; kind: "frame" | "timeout" } | null
-  >(null);
+  const suppressClearRef = React.useRef<{ id: number; kind: "frame" | "timeout" } | null>(null);
 
   const resetGesture = React.useCallback(() => {
     pointerStartRef.current = null;
@@ -115,11 +114,7 @@ export function useStackGesture(options: StackGestureOptions): {
   const onPointerMove = React.useCallback(
     (event: React.PointerEvent<HTMLElement>) => {
       const start = pointerStartRef.current;
-      if (
-        options.interactionDisabled ||
-        !start ||
-        pointerIdRef.current !== event.pointerId
-      ) {
+      if (options.interactionDisabled || !start || pointerIdRef.current !== event.pointerId) {
         return;
       }
 
@@ -154,7 +149,12 @@ export function useStackGesture(options: StackGestureOptions): {
 
       setOffset({ x: 0, y: Math.max(-96, Math.min(96, deltaY * 0.35)) });
     },
-    [options.canMoveLater, options.canSort, options.horizontalDisabled, options.interactionDisabled],
+    [
+      options.canMoveLater,
+      options.canSort,
+      options.horizontalDisabled,
+      options.interactionDisabled,
+    ],
   );
 
   const onPointerUp = React.useCallback(
@@ -177,7 +177,6 @@ export function useStackGesture(options: StackGestureOptions): {
 
       if (axis === "vertical" && Math.abs(deltaY) >= VERTICAL_SWIPE_THRESHOLD) {
         options.onStep(deltaY < 0 ? 1 : -1);
-        scheduleSuppressClickClear();
       } else if (axis === "horizontal" && !options.horizontalDisabled) {
         const action = resolveHorizontalAction({
           deltaX,
@@ -187,20 +186,22 @@ export function useStackGesture(options: StackGestureOptions): {
         });
         if (action === "sort") {
           options.onSort();
-          scheduleSuppressClickClear();
         } else if (action === "later") {
           options.onLater();
-          scheduleSuppressClickClear();
+        } else if (deltaX <= -ACTION_THRESHOLD && !options.canMoveLater) {
+          options.onBlockedAction?.("later");
+        } else if (deltaX >= ACTION_THRESHOLD && !options.canSort) {
+          options.onBlockedAction?.("sort");
         }
       }
 
+      // Any locked drag is a gesture, even when it stops short of an action.
+      // Suppress the synthetic click so a preview swipe cannot open the card.
+      if (axis) scheduleSuppressClickClear();
+
       resetGesture();
     },
-    [
-      options,
-      resetGesture,
-      scheduleSuppressClickClear,
-    ],
+    [options, resetGesture, scheduleSuppressClickClear],
   );
 
   const onPointerCancel = React.useCallback(

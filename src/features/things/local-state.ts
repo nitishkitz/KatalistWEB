@@ -94,6 +94,15 @@ export function setStatusLocal(id: string, status: WorkStatus) {
   patchThing(id, extra, status === "sorted" ? "sorted" : status === "cancelled" ? "cancelled" : "status_changed");
 }
 
+export function reopenLocalThing(id: string) {
+  requireCap(id, "canReopen");
+  patchThing(
+    id,
+    { workStatus: "not_started", cancelledAt: null, acknowledgement: "waiting_for_catch" },
+    "reopened" as never,
+  );
+}
+
 function shreddedSetFor(actorId: string): Set<string> {
   if (!shreddedByActor.has(actorId)) shreddedByActor.set(actorId, new Set());
   return shreddedByActor.get(actorId)!;
@@ -511,11 +520,33 @@ export function createBucketLocal(name: string, context: "work" | "home" = "work
   return row;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function ownedBucket(bucketId: string): BucketCard | undefined {
   const me = currentDemoActorId();
-  const bucket = getBuckets().find((b) => b.id === bucketId);
-  if (!bucket || (bucket.ownerActorId && bucket.ownerActorId !== me)) return undefined;
-  return bucket;
+  const allKnown = [...extraBuckets, ...bucketFixtures];
+  const known = allKnown.find((b) => b.id === bucketId);
+  if (known) {
+    if (known.ownerActorId && known.ownerActorId !== me) {
+      return undefined;
+    }
+    return known;
+  }
+  if (UUID_REGEX.test(bucketId)) {
+    return {
+      id: bucketId,
+      name: bucketNameById.get(bucketId) ?? "Bucket",
+      description: "",
+      color: "bg-violet-500",
+      pinned: false,
+      thingCount: 0,
+      listCount: 0,
+      updatedAt: "Just now",
+      context: "work",
+      previews: [],
+    };
+  }
+  return undefined;
 }
 
 function requireOwnedBucket(bucketId: string): BucketCard {

@@ -23,6 +23,7 @@ import {
   setImportanceLocal,
   setPaceLocal,
   setStatusLocal,
+  reopenLocalThing,
   restoreLocal,
   shredLocal,
   tossLocalThing,
@@ -226,6 +227,35 @@ export async function rpcCancelThing(thingId: string, reason?: string) {
       ),
     preview: () => {
       setStatusLocal(thingId, "cancelled");
+      return null as never;
+    },
+  });
+}
+
+export async function rpcReopenThing(thingId: string) {
+  return runDomainMutation({
+    thingId,
+    live: async () => {
+      try {
+        if (typeof window !== "undefined") {
+          const res = await fetch("/api/things/reopen", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ thingId }),
+          });
+          if (res.ok) return null as never;
+        }
+      } catch {
+        // ignore and fallback to rpc
+      }
+      return liveRpc(() =>
+        supabase.rpc("reopen_thing", {
+          p_thing_id: thingId,
+        }),
+      );
+    },
+    preview: () => {
+      reopenLocalThing(thingId);
       return null as never;
     },
   });
@@ -444,6 +474,19 @@ export async function rpcDeleteBucket(bucketId: string) {
 }
 
 export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?: string) {
+  try {
+    if (thingId) {
+      const t = getThing(thingId);
+      addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
+    }
+    if (listId) {
+      const list = getListById(listId);
+      addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
+    }
+  } catch {
+    // ignore
+  }
+
   const isBucketUuid = isUuid(bucketId);
   const isThingUuid = !thingId || isUuid(thingId);
   const isListUuid = !listId || isUuid(listId);
@@ -451,14 +494,6 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
   return runDomainMutation({
     live: async () => {
       if (!isBucketUuid || !isThingUuid || !isListUuid) {
-        if (thingId) {
-          const t = getThing(thingId);
-          addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
-        }
-        if (listId) {
-          const list = getListById(listId);
-          addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
-        }
         return null as never;
       }
 
@@ -470,14 +505,6 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
 
       if (res.ok) {
         const json = await res.json().catch(() => ({ ok: true }));
-        if (thingId) {
-          const t = getThing(thingId);
-          addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
-        }
-        if (listId) {
-          const list = getListById(listId);
-          addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
-        }
         return json as never;
       }
 
@@ -485,20 +512,18 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
       throw new Error(errJson.error || errJson.message || `Failed to add to bucket (${res.status})`);
     },
     preview: () => {
-      if (thingId) {
-        const t = getThing(thingId);
-        addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
-      }
-      if (listId) {
-        const list = getListById(listId);
-        addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
-      }
       return null as never;
     },
   });
 }
 
 export async function rpcRemoveFromBucket(bucketId: string, thingId?: string, listId?: string) {
+  try {
+    removeBucketRef(bucketId, thingId, listId);
+  } catch {
+    // ignore
+  }
+
   const isBucketUuid = isUuid(bucketId);
   const isThingUuid = !thingId || isUuid(thingId);
   const isListUuid = !listId || isUuid(listId);
@@ -506,7 +531,6 @@ export async function rpcRemoveFromBucket(bucketId: string, thingId?: string, li
   return runDomainMutation({
     live: async () => {
       if (!isBucketUuid || !isThingUuid || !isListUuid) {
-        removeBucketRef(bucketId, thingId, listId);
         return null as never;
       }
       return liveRpc(() =>
@@ -518,7 +542,6 @@ export async function rpcRemoveFromBucket(bucketId: string, thingId?: string, li
       );
     },
     preview: () => {
-      removeBucketRef(bucketId, thingId, listId);
       return null as never;
     },
   });
@@ -546,6 +569,8 @@ export async function rpcRestore(objectId: string, objectType: "thing" | "list" 
   });
 }
 
+const actorIdByProfileCache = new Map<string, string>();
+
 export async function rpcComment(thingId: string, body: string) {
   if (isPreviewMode()) {
     addCommentLocal(thingId, body);
@@ -553,13 +578,24 @@ export async function rpcComment(thingId: string, body: string) {
   }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Sign in to comment.");
-  const { data: actor, error: actorError } = await supabase.from("actors").select("id").eq("profile_id", auth.user.id).maybeSingle();
-  if (actorError) throw actorError;
-  if (!actor?.id) throw new Error("Couldn’t resolve your actor.");
+
+  let actorId = actorIdByProfileCache.get(auth.user.id);
+  if (!actorId) {
+    const { data: actor, error: actorError } = await supabase
+      .from("actors")
+      .select("id")
+      .eq("profile_id", auth.user.id)
+      .maybeSingle();
+    if (actorError) throw actorError;
+    if (!actor?.id) throw new Error("Couldn’t resolve your actor.");
+    actorId = actor.id;
+    actorIdByProfileCache.set(auth.user.id, actorId);
+  }
+
   const { error } = await supabase.from("thing_comments").insert({
     thing_id: thingId,
     body,
-    author_actor_id: actor.id,
+    author_actor_id: actorId,
   });
   if (error) throw error;
 }

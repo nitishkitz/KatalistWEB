@@ -39,6 +39,7 @@ export function getThingCapabilities(thing: Thing, myActorId: string | null) {
     canNudge: Boolean(isOwner && !isAssignee && !terminal),
     canSort: Boolean(isAssignee && caught && !terminal),
     canCancel: Boolean(isOwner && !terminal),
+    canReopen: Boolean(isOwner && (thing.workStatus === "cancelled" || Boolean(thing.cancelledAt))),
     canComment: Boolean(myActorId),
     canShred: Boolean(myActorId && (terminal || (!isOwner && !isAssignee))),
     canAddToBucket: Boolean(myActorId),

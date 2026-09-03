@@ -187,6 +187,7 @@ export function CourtDesktop({
   const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
   const [theirSelectedId, setTheirSelectedId] = useState<string | null>(null);
+  const [heroRect, setHeroRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const directory = useProfileDirectory();
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{
@@ -237,6 +238,7 @@ export function CourtDesktop({
   const theirSelectedThing = view.theirs.find((thing) => thing.id === theirSelectedId) ?? null;
 
   const closeFocus = useCallback(() => {
+    setHeroRect(null);
     const origin = originRef.current;
     setFocusSelection(null);
     if (!origin?.restoreFocus) return;
@@ -252,6 +254,19 @@ export function CourtDesktop({
       });
     });
   }, []);
+
+  const handleViewAll = useCallback(
+    (lane: CourtLaneId) => {
+      setHeroRect(null);
+      const laneThings = view[lane];
+      const activePosition = savedPositionsRef.current[lane];
+      const activeId = activePosition?.activeThingId ?? laneThings[0]?.id;
+      if (activeId) {
+        setFocusSelection({ lane, thingId: activeId });
+      }
+    },
+    [view],
+  );
 
   const selectedLaneThings = focusSelection ? view[focusSelection.lane] : null;
 
@@ -317,6 +332,18 @@ export function CourtDesktop({
       restoreFocus: element.matches(":focus-visible"),
     };
     focusIndexRef.current = view[lane].findIndex((candidate) => candidate.id === thing.id);
+    const cardEl = element?.closest ? (element.closest("article") ?? element) : element;
+    if (cardEl?.getBoundingClientRect) {
+      const rect = cardEl.getBoundingClientRect();
+      setHeroRect({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height,
+      });
+    } else {
+      setHeroRect(null);
+    }
     setFocusSelection({ lane, thingId: thing.id });
   };
 
@@ -704,12 +731,14 @@ export function CourtDesktop({
             myActorId={myActorId}
             initialPositions={savedPositionsRef.current}
             laneRefs={laneRefs}
+            heroRect={heroRect}
             onOpen={handleOpen}
             onSelectThing={(thingId) =>
               setFocusSelection((current) => (current ? { lane: current.lane, thingId } : current))
             }
             onClose={closeFocus}
             onRefresh={refetch}
+            onViewAll={handleViewAll}
           />
         </div>
 
