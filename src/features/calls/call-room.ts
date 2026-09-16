@@ -34,19 +34,67 @@ type PeerSlot = {
   stream: MediaStream;
 };
 
+function envStr(key: string): string | undefined {
+  const v = (import.meta.env as Record<string, unknown>)[key];
+  return typeof v === "string" && v.trim() ? v.trim() : undefined;
+}
+
+/**
+ * ICE servers from env (static-credential / Metered-style — no secrets in code).
+ * Set in Vercel and redeploy:
+ *   VITE_TURN_URL         one or more TURN URLs, comma-separated (Metered gives
+ *                         several, e.g. "turn:host:80,turn:host:80?transport=tcp,turns:host:443?transport=tcp")
+ *   VITE_TURN_USERNAME    TURN username
+ *   VITE_TURN_CREDENTIAL  TURN credential
+ *   VITE_STUN_URLS        optional, comma-separated (defaults to Google STUN)
+ */
 function iceServers(): RTCIceServer[] {
   const servers: RTCIceServer[] = [];
-  const stun = (import.meta.env.VITE_STUN_URLS as string | undefined)?.split(",").map((s) => s.trim()).filter(Boolean);
+  const stun = envStr("VITE_STUN_URLS")?.split(",").map((s) => s.trim()).filter(Boolean);
   servers.push({ urls: stun && stun.length ? stun : ["stun:stun.l.google.com:19302"] });
-  const turnUrl = import.meta.env.VITE_TURN_URL as string | undefined;
-  if (turnUrl) {
-    servers.push({
-      urls: turnUrl,
-      username: import.meta.env.VITE_TURN_USERNAME as string | undefined,
-      credential: import.meta.env.VITE_TURN_CREDENTIAL as string | undefined,
-    });
+
+  const turnRaw = envStr("VITE_TURN_URL");
+  if (turnRaw) {
+    const urls = turnRaw.split(",").map((s) => s.trim()).filter(Boolean);
+    if (urls.length) {
+      servers.push({
+        urls,
+        username: envStr("VITE_TURN_USERNAME"),
+        credential: envStr("VITE_TURN_CREDENTIAL"),
+      });
+    }
   }
   return servers;
+}
+
+/** Set VITE_FORCE_TURN=1 to force relay-only ICE (useful to verify TURN works). */
+function forceRelay(): boolean {
+  const v = envStr("VITE_FORCE_TURN");
+  return v === "1" || v === "true";
+}
+
+/**
+ * Resolve ICE servers. If Metered is configured (VITE_METERED_DOMAIN +
+ * VITE_METERED_API_KEY), fetch STUN+TURN credentials from its API at call time;
+ * otherwise fall back to the static env config (VITE_TURN_*) / Google STUN.
+ */
+async function loadIceServers(): Promise<RTCIceServer[]> {
+  const domain = envStr("VITE_METERED_DOMAIN");
+  const apiKey = envStr("VITE_METERED_API_KEY");
+  if (domain && apiKey) {
+    try {
+      const res = await fetch(
+        `https://${domain}/api/v1/turn/credentials?apiKey=${encodeURIComponent(apiKey)}`,
+      );
+      if (res.ok) {
+        const list = (await res.json()) as RTCIceServer[];
+        if (Array.isArray(list) && list.length) return list;
+      }
+    } catch {
+      // fall through to static/STUN
+    }
+  }
+  return iceServers();
 }
 
 export class CallRoom {
@@ -59,6 +107,7 @@ export class CallRoom {
   private localStream: MediaStream | null = null;
   private cameraTrack: MediaStreamTrack | null = null;
   private screenStream: MediaStream | null = null;
+  private resolvedIce: RTCIceServer[] | null = null;
   private closed = false;
 
   constructor(opts: {
@@ -77,6 +126,7 @@ export class CallRoom {
   async join(constraints: MediaStreamConstraints = { audio: true, video: true }): Promise<MediaStream> {
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
     this.cameraTrack = this.localStream.getVideoTracks()[0] ?? null;
+    this.resolvedIce = await loadIceServers();
 
     const channel = supabase.channel(`call:${this.listId}`, {
       config: { presence: { key: this.selfId }, broadcast: { self: false } },
@@ -126,7 +176,10 @@ export class CallRoom {
   }
 
   private createPeer(peerId: string, name: string): PeerSlot {
-    const pc = new RTCPeerConnection({ iceServers: iceServers() });
+    const pc = new RTCPeerConnection({
+      iceServers: this.resolvedIce ?? iceServers(),
+      ...(forceRelay() ? { iceTransportPolicy: "relay" as RTCIceTransportPolicy } : {}),
+    });
     const slot: PeerSlot = { pc, makingOffer: false, ignoreOffer: false, name, stream: new MediaStream() };
     this.peers.set(peerId, slot);
 
