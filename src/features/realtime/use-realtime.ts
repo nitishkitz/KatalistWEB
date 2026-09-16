@@ -30,6 +30,7 @@ export function useRealtimeInvalidation() {
       .on("postgres_changes", { event: "*", schema: "public", table: "thing_comments" }, () => {
         void qc.invalidateQueries({ queryKey: ["thing-comments"] });
         void qc.invalidateQueries({ queryKey: ["thing"] });
+        void qc.invalidateQueries({ queryKey: ["court"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "thing_activity" }, () => {
         void qc.invalidateQueries({ queryKey: ["thing-activity"] });

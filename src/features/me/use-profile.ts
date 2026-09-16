@@ -10,6 +10,9 @@ export type ProfileRow = {
   email: string | null;
   phone_e164: string | null;
   active_context: "work" | "home";
+  created_at?: string | null;
+  timezone?: string | null;
+  occupation?: string | null;
 };
 
 export function useProfile() {
@@ -46,7 +49,7 @@ export function useProfile() {
       }
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, display_name, avatar_url, email, phone_e164, active_context")
+        .select("id, display_name, avatar_url, email, phone_e164, active_context, created_at, timezone, occupation")
         .eq("id", user!.id)
         .maybeSingle();
       if (error) throw error;

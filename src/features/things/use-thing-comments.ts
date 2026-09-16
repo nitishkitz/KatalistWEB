@@ -6,6 +6,7 @@ import { addCommentLocal, getActivity, getComments } from "./local-state";
 import { useLocalVersion } from "./use-local-version";
 import { rpcComment } from "./rpc";
 import { currentDemoPerson } from "@/features/demo/identities";
+import type { ThingFile } from "@/domain/thing";
 
 import { resolveActorPeople } from "@/features/people/resolve-actors";
 
@@ -17,8 +18,23 @@ export type ThingComment = {
   avatarUrl?: string | null;
   authorActorId?: string | null;
   sending?: boolean;
+  attachments?: ThingFile[];
 };
 export type ThingActivity = { id: string; event: string; at: string };
+
+export type PostCommentInput = string | { body: string; attachments?: ThingFile[] };
+
+function parseCommentBody(rawBody: string): { body: string; attachments?: ThingFile[] } {
+  const match = rawBody.match(/\n?<!--attachments:(.*?)-->/s);
+  if (!match) return { body: rawBody };
+  try {
+    const attachments = JSON.parse(match[1]);
+    const cleanBody = rawBody.replace(match[0], "").trim();
+    return { body: cleanBody, attachments: Array.isArray(attachments) ? attachments : undefined };
+  } catch {
+    return { body: rawBody };
+  }
+}
 
 export function useThingComments(thingId: string | null) {
   const { session } = useSession();
@@ -45,13 +61,15 @@ export function useThingComments(thingId: string | null) {
 
       return rows.map((c) => {
         const person = c.author_actor_id ? people.get(c.author_actor_id) : null;
+        const parsed = parseCommentBody(c.body);
         return {
           id: c.id,
-          body: c.body,
+          body: parsed.body,
           author: person?.name || currentUserName || "Member",
           avatarUrl: person?.avatarUrl ?? null,
           at: c.created_at,
           authorActorId: c.author_actor_id,
+          attachments: parsed.attachments,
         };
       });
     },
@@ -72,15 +90,17 @@ export function useThingComments(thingId: string | null) {
   });
 
   const post = useMutation({
-    mutationFn: async (body: string) => {
+    mutationFn: async (input: PostCommentInput) => {
       if (!thingId) throw new Error("No Thing selected.");
+      const bodyText = typeof input === "string" ? input : input.body;
+      const attachments = typeof input === "object" ? input.attachments : undefined;
       if (preview) {
-        addCommentLocal(thingId, body, currentDemoPerson().name);
+        addCommentLocal(thingId, bodyText, currentDemoPerson().name, attachments);
         return;
       }
-      await rpcComment(thingId, body);
+      await rpcComment(thingId, bodyText, attachments);
     },
-    onMutate: async (newBody: string) => {
+    onMutate: async (input: PostCommentInput) => {
       await qc.cancelQueries({ queryKey: ["thing-comments", thingId] });
       const previousComments = qc.getQueryData<ThingComment[]>(["thing-comments", thingId]);
 
@@ -89,14 +109,18 @@ export function useThingComments(thingId: string | null) {
         (session?.user?.user_metadata?.name as string | undefined) ||
         "Me";
 
+      const bodyText = typeof input === "string" ? input : input.body;
+      const attachments = typeof input === "object" ? input.attachments : undefined;
+
       const optimisticComment: ThingComment = {
         id: `optimistic-${Date.now()}`,
-        body: newBody,
+        body: bodyText,
         author: currentUserName,
         avatarUrl: (session?.user?.user_metadata?.avatar_url as string | undefined) ?? null,
         at: new Date().toISOString(),
         authorActorId: null,
         sending: true,
+        attachments,
       };
 
       if (!preview) {
@@ -104,13 +128,13 @@ export function useThingComments(thingId: string | null) {
           optimisticComment,
           ...old,
         ]);
-      } else {
-        addCommentLocal(thingId, newBody, currentDemoPerson().name);
+      } else if (thingId) {
+        addCommentLocal(thingId, bodyText, currentDemoPerson().name, attachments);
       }
 
       return { previousComments };
     },
-    onError: (_err, _newBody, context) => {
+    onError: (_err, _input, context) => {
       if (context?.previousComments) {
         qc.setQueryData(["thing-comments", thingId], context.previousComments);
       }
@@ -118,6 +142,7 @@ export function useThingComments(thingId: string | null) {
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["thing-comments", thingId] });
       void qc.invalidateQueries({ queryKey: ["thing-activity", thingId] });
+      void qc.invalidateQueries({ queryKey: ["court"] });
     },
   });
 
@@ -130,6 +155,7 @@ export function useThingComments(thingId: string | null) {
         at: c.at,
         avatarUrl: null,
         authorActorId: null,
+        attachments: c.attachments,
       })),
       activity: getActivity(thingId).map((e) => ({ id: e.id, event: e.event, at: e.at })),
       post,

@@ -10,6 +10,7 @@ export type NudgeRow = {
   title: string;
   person: string;
   reason: string;
+  dbReason?: "waiting_for_catch" | "quiet" | "due_soon" | "stale" | "repeated_handoff";
   acknowledged: "Waiting" | "Caught" | "Open";
   workStatus: string;
   due: string;

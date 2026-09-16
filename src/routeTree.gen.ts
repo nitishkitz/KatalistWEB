@@ -23,6 +23,8 @@ import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
+import { Route as ApiJobsDailyMaintenanceRouteImport } from './routes/api/jobs/daily-maintenance'
+import { Route as ApiJobsEscalateNudgesRouteImport } from './routes/api/jobs/escalate-nudges'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
 import { Route as ApiPublicBridgeCommentRouteImport } from './routes/api/public/bridge/comment'
 import { Route as ApiPublicBridgeRedeemRouteImport } from './routes/api/public/bridge/redeem'
@@ -98,6 +100,16 @@ const ListsListIdRoute = ListsListIdRouteImport.update({
   path: '/$listId',
   getParentRoute: () => ListsRoute,
 } as any)
+const ApiJobsDailyMaintenanceRoute = ApiJobsDailyMaintenanceRouteImport.update({
+  id: '/api/jobs/daily-maintenance',
+  path: '/api/jobs/daily-maintenance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiJobsEscalateNudgesRoute = ApiJobsEscalateNudgesRouteImport.update({
+  id: '/api/jobs/escalate-nudges',
+  path: '/api/jobs/escalate-nudges',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicBridgeActRoute = ApiPublicBridgeActRouteImport.update({
   id: '/api/public/bridge/act',
   path: '/api/public/bridge/act',
@@ -134,6 +146,8 @@ export interface FileRoutesByFullPath {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
+  '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -152,6 +166,8 @@ export interface FileRoutesByTo {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets': typeof BucketsIndexRoute
   '/lists': typeof ListsIndexRoute
+  '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
+  '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -173,6 +189,8 @@ export interface FileRoutesById {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
+  '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -195,6 +213,8 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/jobs/daily-maintenance'
+    | '/api/jobs/escalate-nudges'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -213,6 +233,8 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets'
     | '/lists'
+    | '/api/jobs/daily-maintenance'
+    | '/api/jobs/escalate-nudges'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -233,6 +255,8 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/jobs/daily-maintenance'
+    | '/api/jobs/escalate-nudges'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -250,6 +274,8 @@ export interface RootRouteChildren {
   TeamRoute: typeof TeamRoute
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
+  ApiJobsDailyMaintenanceRoute: typeof ApiJobsDailyMaintenanceRoute
+  ApiJobsEscalateNudgesRoute: typeof ApiJobsEscalateNudgesRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
   ApiPublicBridgeCommentRoute: typeof ApiPublicBridgeCommentRoute
   ApiPublicBridgeRedeemRoute: typeof ApiPublicBridgeRedeemRoute
@@ -356,6 +382,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListsListIdRouteImport
       parentRoute: typeof ListsRoute
     }
+    '/api/jobs/daily-maintenance': {
+      id: '/api/jobs/daily-maintenance'
+      path: '/api/jobs/daily-maintenance'
+      fullPath: '/api/jobs/daily-maintenance'
+      preLoaderRoute: typeof ApiJobsDailyMaintenanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/jobs/escalate-nudges': {
+      id: '/api/jobs/escalate-nudges'
+      path: '/api/jobs/escalate-nudges'
+      fullPath: '/api/jobs/escalate-nudges'
+      preLoaderRoute: typeof ApiJobsEscalateNudgesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/bridge/act': {
       id: '/api/public/bridge/act'
       path: '/api/public/bridge/act'
@@ -423,6 +463,8 @@ const rootRouteChildren: RootRouteChildren = {
   TeamRoute: TeamRoute,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
+  ApiJobsDailyMaintenanceRoute: ApiJobsDailyMaintenanceRoute,
+  ApiJobsEscalateNudgesRoute: ApiJobsEscalateNudgesRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,
   ApiPublicBridgeCommentRoute: ApiPublicBridgeCommentRoute,
   ApiPublicBridgeRedeemRoute: ApiPublicBridgeRedeemRoute,

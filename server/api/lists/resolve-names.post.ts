@@ -1,7 +1,9 @@
 import { defineEventHandler, readBody } from "h3";
-import { createClient } from "@supabase/supabase-js";
+import { requireUser } from "../../lib/require-user";
 
 export default defineEventHandler(async (event) => {
+  const { client } = await requireUser(event);
+
   const body = (await readBody(event)) as {
     listIds?: string[];
   } | null;
@@ -11,14 +13,9 @@ export default defineEventHandler(async (event) => {
     return { ok: true, lists: [] };
   }
 
-  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://dyxqlgnbwtbxxdfoiqva.supabase.co";
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5eHFsZ25id3RieHhkZm9pcXZhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzA1Mjg3OCwiZXhwIjoyMTAyNjI4ODc4fQ.INa1hOmRJVNbj7TBGOqRpYEmT4oA9ij8MI_5M77vyG4";
-
-  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
-
-  const { data, error } = await admin
+  // User-scoped client: RLS on `lists` naturally limits results to Lists the
+  // caller can see, instead of resolving names for arbitrary list ids.
+  const { data, error } = await client
     .from("lists")
     .select("id, name")
     .in("id", listIds);

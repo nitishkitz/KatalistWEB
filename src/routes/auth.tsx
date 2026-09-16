@@ -44,6 +44,22 @@ import {
 } from "@/lib/auth/local-user";
 import { useAvatarUrl } from "@/features/people/directory";
 
+/**
+ * verifyOtp() can resolve before the client's own getSession()/getUser()
+ * reliably reflects the new session. Poll briefly for it to actually be
+ * readable before navigating, so the next page's first queries don't fire
+ * against a still-anonymous client.
+ */
+async function waitForSessionReady(expectedAccessToken: string | undefined, timeoutMs = 2000) {
+  if (!expectedAccessToken) return;
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token === expectedAccessToken) return;
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+}
+
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
@@ -212,6 +228,13 @@ function AuthPage() {
           throw verifyError;
         }
 
+        // verifyOtp's returned session isn't guaranteed to be readable by
+        // the client's own getSession()/getUser() yet - navigating before
+        // it settles races every query on the next page (Court, directory,
+        // etc.) into firing with no session and permanently caching empty
+        // results. Confirm it's actually readable first.
+        await waitForSessionReady(authData.session?.access_token);
+
         setBusy(false);
         toast.success(`Welcome back${authData.user?.user_metadata?.full_name ? `, ${authData.user.user_metadata.full_name}` : ""}!`);
         navigate({ to: "/", replace: true });
@@ -224,18 +247,21 @@ function AuthPage() {
       }
     }
 
-    const { error } = await supabase.auth.verifyOtp({
+    const { data: authData, error } = await supabase.auth.verifyOtp({
       email: destination,
       token: code,
       type: "email",
     });
-    setBusy(false);
 
     if (error) {
+      setBusy(false);
       toast.error(error.message);
       setOtp("");
       return;
     }
+
+    await waitForSessionReady(authData.session?.access_token);
+    setBusy(false);
     navigate({ to: "/", replace: true });
   }
 

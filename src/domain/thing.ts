@@ -33,14 +33,34 @@ export type Thing = {
   sortedAt: string | null;
   caughtAt: string | null;
   updatedAt: string;
+  createdAt?: string;
+  description?: string | null;
+  commentCount?: number;
+  unreadCommentCount?: number;
+  attachmentCount?: number;
+  files?: ThingFile[];
+};
+
+export type ThingFileType = "image" | "video" | "pdf" | "docx" | "excel" | "other" | "png" | "jpg";
+
+export type ThingFile = {
+  id: string;
+  name: string;
+  type: ThingFileType;
+  url?: string;
+  sizeLabel?: string;
+  mimeType?: string;
+  isNew?: boolean;
 };
 
 export type CourtLane = "now" | "next" | "later";
 export type TheirState = "waiting_for_catch" | "moving" | "needs_attention";
 
 export function laneOf(thing: Thing): CourtLane {
-  if (thing.acknowledgement === "waiting_for_catch") return "now";
-  return thing.personalPace ?? "next";
+  // Caught Things follow the assignee's personal pace. Uncaught (waiting for
+  // catch) Things surface in the lane matching the owner's stated importance,
+  // so a Thing tossed as "later" stays in Later — not forced into Now.
+  return thing.personalPace ?? thing.ownerImportance ?? "next";
 }
 
 export function theirStateFor(thing: Thing): TheirState {

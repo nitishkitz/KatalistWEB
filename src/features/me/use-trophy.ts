@@ -8,6 +8,7 @@ import { currentDemoActorId } from "@/features/demo/identities";
 import { rpcRestore } from "@/features/things/rpc";
 import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
 import { keys } from "@/domain/query-keys";
+import { computeStreak } from "@/features/nudges/escalation-logic";
 
 export type TrophyStats = {
   sorted: number;
@@ -41,6 +42,10 @@ export function useTrophy() {
       const caught = mine.filter((e) => e.event === "caught").length;
       const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
       const weekly = mine.filter((e) => new Date(e.created_at).getTime() >= weekAgo).length;
+      // Real consecutive-day streak from "sorted" events (shared, unit-tested logic).
+      const streakDays = computeStreak(
+        mine.filter((e) => e.event === "sorted").map((e) => e.created_at as string),
+      );
       const { data: shreddedRows } = await supabase
         .from("profile_object_state")
         .select("object_id, object_type, shredded_at")
@@ -58,7 +63,7 @@ export function useTrophy() {
         caught,
         inProgress: 0,
         waiting: 0,
-        streak: sorted > 0 ? `${Math.min(sorted, 7)}d` : "—",
+        streak: streakDays > 0 ? `${streakDays}d` : "—",
         weekly,
         achievement: sorted > 0 ? "Movement on the board" : "—",
         shredded: (shreddedRows ?? []).map((s) => ({

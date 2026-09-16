@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, Folder, Hash, Layers, List, Mic, Paperclip, Sparkles } from "lucide-react";
+import { AtSign, FileText, Folder, Hash, Layers, List, Paperclip, Sparkles, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { useAppContext } from "@/features/context/use-app-context";
@@ -13,15 +13,21 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { isPreviewMode } from "@/lib/session-mode";
 import { parseToss, tossBlockedByPerson } from "./parse-toss";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
+import type { ThingFile, Person } from "@/domain/thing";
+import { processFileForUpload } from "@/lib/file-utils";
 
 export function MagicBox({
   listId,
   listName,
   desktop = false,
+  extraPeople,
 }: {
   listId?: string;
   listName?: string;
   desktop?: boolean;
+  /** Extra @-mention candidates (e.g. the current list's members) merged with
+   *  the globally assignable people so mentions like @Rohit resolve. */
+  extraPeople?: Person[];
 }) {
   const [value, setValue] = useState("");
   const [tossed, setTossed] = useState(false);
@@ -33,13 +39,62 @@ export function MagicBox({
   const [activeIndex, setActiveIndex] = useState(0);
   // tracks which person ID the user has explicitly dismissed from the suggestion prompt
   const [dismissedSuggestionId, setDismissedSuggestionId] = useState<string | null>(null);
+  const [attachedFiles, setAttachedFiles] = useState<ThingFile[]>([]);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const { context } = useAppContext();
   const qc = useQueryClient();
-  const people = useAssignablePeople();
+  const assignablePeople = useAssignablePeople();
+  const people = useMemo(() => {
+    if (!extraPeople?.length) return assignablePeople;
+    const byKey = new Map<string, Person>();
+    for (const p of [...extraPeople, ...assignablePeople]) {
+      const key = (p.id || p.name).toLowerCase();
+      if (!byKey.has(key)) byKey.set(key, p);
+    }
+    return [...byKey.values()];
+  }, [assignablePeople, extraPeople]);
   const { lists } = useLists();
   const { buckets } = useBuckets();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const newFiles: ThingFile[] = [];
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const processed = await processFileForUpload(files[i]);
+          newFiles.push(processed);
+        } catch (err) {
+          console.error("Failed to process file:", err);
+          toast.error(`Could not attach ${files[i].name}`);
+        }
+      }
+      if (newFiles.length > 0) {
+        setAttachedFiles((prev) => [...prev, ...newFiles]);
+        // If input value is empty, auto-populate with the file name (without extension)
+        // so the user immediately sees what they are tossing, can edit it or add tags,
+        // and the Toss button enables immediately.
+        if (!value.trim()) {
+          const cleanName = newFiles[0].name
+            .replace(/\.[^/.]+$/, "")
+            .replace(/[-_]+/g, " ")
+            .trim();
+          if (cleanName) {
+            setValue(cleanName);
+          }
+        }
+      }
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachedFile = (fileId: string) => {
+    setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
+  };
 
   const isMac = typeof navigator !== "undefined" && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent);
 
@@ -201,18 +256,23 @@ export function MagicBox({
         (id) => !(live && id.startsWith("p-")),
       );
 
+      const titleToUse =
+        parsed.title.trim() ||
+        (attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "New Thing");
+
       // Multi-toss: one Thing per assignee in parallel
       if (assigneeIds.length > 1) {
         const results = await Promise.all(
           assigneeIds.map((assigneeActorId) =>
             rpcCreateThing({
-              title: parsed.title,
+              title: titleToUse,
               context,
               ownerImportance: parsed.importance,
               listId: effectiveListId,
               assigneeActorId,
               dueAt: parsed.dueAt,
               dueHasTime: parsed.dueHasTime,
+              files: attachedFiles.length > 0 ? attachedFiles : undefined,
             }),
           ),
         );
@@ -230,13 +290,14 @@ export function MagicBox({
       // Single-toss (0 or 1 assignee)
       const assignee = assigneeIds[0];
       const created = await rpcCreateThing({
-        title: parsed.title,
+        title: titleToUse,
         context,
         ownerImportance: parsed.importance,
         listId: effectiveListId,
         assigneeActorId: assignee,
         dueAt: parsed.dueAt,
         dueHasTime: parsed.dueHasTime,
+        files: attachedFiles.length > 0 ? attachedFiles : undefined,
       });
 
       if (effectiveBucketId && created?.id) {
@@ -251,6 +312,7 @@ export function MagicBox({
     onSuccess: async (result) => {
       setTossed(true);
       setValue("");
+      setAttachedFiles([]);
       setTrigger(null);
       setDismissedSuggestionId(null);
       await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
@@ -270,14 +332,13 @@ export function MagicBox({
       toast.error(err instanceof Error ? err.message : "Couldn’t toss that.");
     },
   });
-  const canToss = Boolean(value.trim()) && !blocked && !mutation.isPending;
+  const canToss = (Boolean(value.trim()) || attachedFiles.length > 0) && !blocked && !mutation.isPending;
 
   return (
     <div
       className={cn(
-        "relative mb-3",
-        desktop &&
-          "fixed bottom-3 left-[calc(50%+6.5rem)] z-50 mb-0 w-[min(840px,calc(100vw-18rem))] -translate-x-1/2",
+        "relative w-full",
+        !desktop && "mb-3",
       )}
     >
       {/* Autocomplete Popover for @ People — appears immediately on typing @ */}
@@ -316,12 +377,8 @@ export function MagicBox({
                       src={person.avatarUrl}
                       size={26}
                     />
-                    <div className="min-w-0">
-                      <span className="block truncate font-bold text-[12.5px]">{person.name}</span>
-                      <span className="block text-[10px] text-muted-foreground">Connected teammate</span>
-                    </div>
+                    <span className="block min-w-0 truncate font-medium text-[12.5px]">{person.name}</span>
                   </div>
-                  <span className="text-[11px] text-muted-foreground opacity-60">↵ select</span>
                 </button>
               ))
             ) : (
@@ -366,14 +423,8 @@ export function MagicBox({
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                       <List className="h-3.5 w-3.5" />
                     </div>
-                    <div className="min-w-0">
-                      <span className="block truncate font-bold text-[12.5px]">{item.name}</span>
-                      <span className="block text-[10px] text-muted-foreground capitalize">
-                        List • {item.context}
-                      </span>
-                    </div>
+                    <span className="block min-w-0 truncate font-medium text-[12.5px]">{item.name}</span>
                   </div>
-                  <span className="text-[11px] text-muted-foreground opacity-60">↵ select</span>
                 </button>
               ))
             ) : (
@@ -418,14 +469,8 @@ export function MagicBox({
                     <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                       <Layers className="h-3.5 w-3.5" />
                     </div>
-                    <div className="min-w-0">
-                      <span className="block truncate font-bold text-[12.5px]">{bucket.name}</span>
-                      <span className="block text-[10px] text-muted-foreground capitalize">
-                        Bucket • {bucket.context}
-                      </span>
-                    </div>
+                    <span className="block min-w-0 truncate font-medium text-[12.5px]">{bucket.name}</span>
                   </div>
-                  <span className="text-[11px] text-muted-foreground opacity-60">↵ select</span>
                 </button>
               ))
             ) : (
@@ -437,20 +482,72 @@ export function MagicBox({
         </div>
       )}
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+        accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
+      />
+
+      {/* Pending attached files chips */}
+      {attachedFiles.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-bottom-1">
+          {attachedFiles.map((file) => (
+            <div
+              key={file.id}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[11.5px] font-medium text-slate-800 shadow-2xs"
+            >
+              {file.type === "image" && file.url ? (
+                <img src={file.url} alt={file.name} className="h-4 w-4 rounded object-cover" />
+              ) : (
+                <span
+                  className={cn(
+                    "flex h-4 px-1 items-center justify-center rounded text-[8.5px] font-bold uppercase",
+                    file.type === "pdf"
+                      ? "bg-red-50 text-red-600 border border-red-200"
+                      : file.type === "excel"
+                        ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                        : file.type === "docx"
+                          ? "bg-blue-50 text-blue-600 border border-blue-200"
+                          : file.type === "video"
+                            ? "bg-purple-50 text-purple-600 border border-purple-200"
+                            : "bg-slate-100 text-slate-600 border border-slate-200",
+                  )}
+                >
+                  {file.type}
+                </span>
+              )}
+              <span className="max-w-[140px] truncate">{file.name}</span>
+              {file.sizeLabel && (
+                <span className="text-[10px] text-muted-foreground font-normal">({file.sizeLabel})</span>
+              )}
+              <button
+                type="button"
+                onClick={() => removeAttachedFile(file.id)}
+                className="ml-0.5 rounded p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                aria-label={`Remove ${file.name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div
         className={cn(
-          "flex items-center gap-3 transition-opacity duration-200",
+          "flex items-center gap-2.5 transition-opacity duration-200",
           desktop
-            ? "h-[58px] rounded-[18px] border border-primary/70 bg-white px-4 shadow-[0_0_28px_rgba(88,71,255,0.2)]"
+            ? "h-[50px] rounded-[10px] border border-[#975ee2]/25 bg-white px-3 font-composer hover:border-[#975ee2]/40 transition-all"
             : "rounded-xl border border-border bg-card px-1.5",
           tossed && "opacity-60",
         )}
+        style={desktop ? { boxShadow: "0 10px 30px -14px rgba(151,94,226,0.35)" } : undefined}
       >
-        {desktop ? (
-          <KatalistIcon name="katalist-spark" className="h-4 w-4 shrink-0 text-primary" />
-        ) : (
-          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
-        )}
+        <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+
         {/* ── Highlight mirror + input overlay ─────────────────────────────
             The mirror div renders @person #list /bucket tokens as colored bold
             spans. The real <input> sits on top with color:transparent so only
@@ -586,88 +683,45 @@ export function MagicBox({
               }
             }
 
-            if (e.key === "Enter" && value.trim() && !blocked && !mutation.isPending) {
+            if (e.key === "Enter" && (value.trim() || attachedFiles.length > 0) && !blocked && !mutation.isPending) {
               e.preventDefault();
               void mutation.mutate();
             }
           }}
           placeholder={listName ? `Toss into ${listName}…` : "Toss a thought..."}
-          className="absolute inset-0 w-full h-full bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground"
+          className="absolute inset-0 w-full h-full bg-transparent text-[13.5px] outline-none placeholder:text-[#7e7a94]"
           style={{ color: "transparent", caretColor: "var(--foreground)" }}
           aria-label="Magic Box"
         />
         </div>
-        <kbd
-          onClick={() => {
-            inputRef.current?.focus();
-            inputRef.current?.select();
-          }}
-          title={isMac ? "Press ⌘K to activate" : "Press Ctrl+K to activate"}
-          className={cn(
-            "hidden rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground sm:inline cursor-pointer select-none hover:bg-primary/5 hover:text-primary transition-colors",
-            desktop ? "bg-white" : "bg-muted",
-          )}
-        >
-          {isMac ? "⌘K" : "Ctrl K"}
-        </kbd>
         {desktop ? (
-          <>
-            {(["@", "#", "/"] as const).map((token) => (
-              <button
-                key={token}
-                type="button"
-                onClick={() => {
-                  const input = inputRef.current;
-                  const start = input?.selectionStart ?? value.length;
-                  const end = input?.selectionEnd ?? start;
-                  const next = `${value.slice(0, start)}${token}${value.slice(end)}`;
-                  setValue(next);
-                  const newPos = start + 1;
-                  setTrigger({
-                    type: token === "@" ? "person" : token === "#" ? "list" : "bucket",
-                    query: "",
-                    startIndex: start,
-                  });
-                  setActiveIndex(0);
-                  requestAnimationFrame(() => {
-                    input?.focus();
-                    input?.setSelectionRange(newPos, newPos);
-                  });
-                }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] text-muted-foreground outline-none hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-                aria-label={
-                  token === "@"
-                    ? "Insert @ person"
-                    : token === "#"
-                      ? "Insert # list"
-                      : "Insert / bucket"
-                }
-                title={
-                  token === "@"
-                    ? "Mention person (@)"
-                    : token === "#"
-                      ? "Link list (#)"
-                      : "Link bucket (/)"
-                }
-              >
-                {token}
-              </button>
-            ))}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <kbd
+              onClick={() => {
+                inputRef.current?.focus();
+                inputRef.current?.select();
+              }}
+              title={isMac ? "Press ⌘K to activate" : "Press Ctrl+K to activate"}
+              className="hidden sm:inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10.5px] font-medium text-slate-500 cursor-pointer select-none hover:bg-slate-100 transition-colors"
+            >
+              {isMac ? "⌘ K" : "Ctrl K"}
+            </kbd>
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Add attachment"
-              title="Add attachment"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label="Attach file"
+              title="Attach files (photos, videos, doc, excel, etc.)"
             >
               <Paperclip className="h-4 w-4" />
             </button>
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-primary/5 hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               aria-label="Voice input"
               title="Voice input"
             >
-              <Mic className="h-4 w-4" />
+              <KatalistIcon name="mic" className="h-4 w-4" />
             </button>
             {value ? (
               <button
@@ -676,7 +730,7 @@ export function MagicBox({
                   setValue("");
                   setTrigger(null);
                 }}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 outline-none hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
                 aria-label="Clear Magic Box"
                 title="Clear input"
               >
@@ -687,21 +741,33 @@ export function MagicBox({
               type="button"
               disabled={!canToss}
               onClick={() => void mutation.mutate()}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-white shadow-[0_4px_14px_rgba(88,71,255,0.35)] outline-none disabled:cursor-not-allowed disabled:bg-primary/30 hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               aria-label="Toss Thing"
               title="Toss Thing"
             >
               <KatalistIcon name="send-toss" className="h-3.5 w-3.5" />
+              Toss
             </button>
-          </>
+          </div>
         ) : (
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground"
-            aria-label="Voice input"
-          >
-            <Mic className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="text-muted-foreground hover:text-foreground p-1 cursor-pointer"
+              aria-label="Attach file"
+              title="Attach files (photos, videos, doc, excel, etc.)"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground p-1"
+              aria-label="Voice input"
+            >
+              <KatalistIcon name="mic" className="h-4 w-4" />
+            </button>
+          </div>
         )}
       </div>
 

@@ -1,7 +1,8 @@
 import { forwardRef, type MouseEvent, type MutableRefObject } from "react";
-import { GripVertical } from "lucide-react";
+import { Play } from "lucide-react";
 
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { PdfCanvas } from "@/features/things/PdfCanvas";
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
 import { useAvatarUrl } from "@/features/people/directory";
@@ -71,6 +72,16 @@ const laneCardBorder: Record<
   },
 };
 
+// Exact Figma per-lane accents for the due chip and primary action button.
+const laneFigma: Record<
+  CourtLaneId,
+  { primaryBtn: string; primaryHover: string; dueChipBg: string; dueChipText: string }
+> = {
+  now: { primaryBtn: "#fe1d19", primaryHover: "#e01512", dueChipBg: "#feeaeb", dueChipText: "#fd0d0d" },
+  next: { primaryBtn: "#005dfe", primaryHover: "#0050df", dueChipBg: "#e3f0fd", dueChipText: "#0b62f8" },
+  later: { primaryBtn: "#fe1d19", primaryHover: "#e01512", dueChipBg: "#f0effc", dueChipText: "#641dfb" },
+};
+
 const workLabel: Record<Thing["workStatus"], string> = {
   not_started: "Not Started",
   under_progress: "Under Progress",
@@ -87,6 +98,14 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     const dueLabel = thing.dueAt ? due.label : null;
     const capabilities = getThingCapabilities(thing, myActorId);
     const assigneeAvatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
+    const ownerAvatar = useAvatarUrl(thing.owner.name, null, thing.owner.avatarUrl);
+    // When someone else assigns a Thing to me, show THEIR face (the assigner),
+    // so it doesn't look like a Thing I created for myself.
+    const assignedByOther = Boolean(
+      myActorId && thing.assignee.id === myActorId && thing.owner.id !== thing.assignee.id,
+    );
+    const facePerson = assignedByOther ? thing.owner : thing.assignee;
+    const faceAvatar = assignedByOther ? ownerAvatar : assigneeAvatar;
     const disabled = pendingAction !== null;
     const styling = laneCardBorder[lane];
 
@@ -98,14 +117,12 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     return (
       <article
         className={cn(
-          "group/card flex h-[168px] flex-col justify-between overflow-hidden rounded-2xl border bg-white transition-all duration-200",
+          "group/card flex min-h-[170px] flex-col justify-between overflow-hidden rounded-[12px] border bg-white transition-all duration-200",
           styling.border,
           styling.hover,
-          styling.shadow,
         )}
         style={{
-          boxShadow:
-            "0 16px 32px -22px rgba(15, 23, 42, 0.34), 0 5px 14px -9px rgba(15, 23, 42, 0.2)",
+          boxShadow: "0 3.788px 3.788px 0 rgba(0, 0, 0, 0.03)",
         }}
       >
         <button
@@ -114,33 +131,12 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           onClick={(event) => {
             if (!suppressClickRef.current) onOpen(thing, event.currentTarget);
           }}
-          className="block w-full px-4 pb-2.5 pt-3.5 text-left outline-none cursor-pointer focus-visible:ring-1 focus-visible:ring-primary/40"
+          className="flex flex-col flex-1 w-full px-4 pb-2.5 pt-3.5 text-left outline-none cursor-pointer focus-visible:ring-1 focus-visible:ring-primary/40"
           aria-label={`Open ${thing.title}`}
         >
-          {/* Top row: avatar + @name | due date + drag grip */}
+          {/* Top row: drag grip + avatar + name | due date */}
           <span className="flex items-center justify-between gap-2">
-            <span className="inline-flex min-w-0 items-center gap-2">
-              <PersonAvatar
-                name={thing.assignee.name}
-                initials={thing.assignee.initials}
-                src={assigneeAvatar}
-                size={26}
-              />
-              <span className="truncate text-[12.5px] font-bold text-slate-800">
-                @{thing.assignee.name}
-              </span>
-            </span>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {dueLabel ? (
-                <span
-                  className={cn(
-                    "shrink-0 text-[11px] font-bold",
-                    due.urgent ? "text-red-600" : laneTone[lane].text,
-                  )}
-                >
-                  Due {dueLabel}
-                </span>
-              ) : null}
+            <span className="inline-flex min-w-0 items-center gap-1.5">
               <span
                 draggable={true}
                 onDragStart={(e) => {
@@ -150,7 +146,6 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                     const rect = cardEl.getBoundingClientRect();
                     const gripRect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 
-                    // Clone the entire card so the drag preview is the full card, not a small icon
                     const clone = cardEl.cloneNode(true) as HTMLElement;
                     clone.style.width = `${rect.width}px`;
                     clone.style.height = `${rect.height}px`;
@@ -185,118 +180,213 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   e.dataTransfer.effectAllowed = "copyMove";
                 }}
                 title="Drag to Buckets or across lanes"
-                className="inline-flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-grab active:cursor-grabbing"
+                className="inline-flex items-center justify-center h-6 w-6 rounded-md text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-grab active:cursor-grabbing -ml-1.5 shrink-0"
               >
-                <GripVertical className="h-3.5 w-3.5" />
+                <KatalistIcon name="drag-handle" className="h-3.5 w-3.5" />
               </span>
-            </div>
+              <PersonAvatar
+                name={facePerson.name}
+                initials={facePerson.initials}
+                src={faceAvatar}
+                size={24}
+              />
+              <span className="truncate text-[12.5px] font-bold text-slate-800">
+                {assignedByOther
+                  ? `${thing.owner.name.split(" ")[0]} → You`
+                  : myActorId && thing.assignee.id === myActorId
+                    ? "You"
+                    : thing.assignee.name.split(" ")[0]}
+              </span>
+            </span>
+            {dueLabel ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[10.5px] font-medium"
+                style={{
+                  backgroundColor: laneFigma[lane].dueChipBg,
+                  color: due.urgent ? "#fd0d0d" : laneFigma[lane].dueChipText,
+                }}
+              >
+                <KatalistIcon name="calendar" className="h-3 w-3" />
+                {dueLabel}
+              </span>
+            ) : null}
           </span>
 
           {/* Title */}
-          <span
-            className="mt-2 block overflow-hidden text-[15px] font-bold leading-[1.3] tracking-[-0.01em] text-slate-900"
-            style={{
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical",
-              WebkitLineClamp: 2,
-            }}
-          >
+          <span className="mt-2 text-[15px] font-medium leading-[1.35] tracking-[-0.01em] text-slate-900 break-words line-clamp-3">
             {thing.title}
           </span>
-
-          {/* Tags row */}
-          <span className="mt-2.5 flex flex-wrap items-center gap-1.5">
-            {thing.listId && thing.listName && thing.listName.toLowerCase() !== "list" ? (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10.5px] font-semibold border border-transparent",
-                  styling.pillBg,
-                  styling.pillText,
-                )}
-              >
-                <KatalistIcon name="list" className="h-3 w-3" />
-                {thing.listName}
-              </span>
-            ) : null}
-
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10.5px] font-medium border",
-                thing.workStatus === "under_progress"
-                  ? "bg-blue-50 text-blue-600 border-blue-200/60"
-                  : thing.workStatus === "sorted"
-                    ? "bg-emerald-50 text-emerald-600 border-emerald-200/60"
-                    : "bg-slate-50 text-slate-600 border-slate-200/60",
-              )}
-            >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  thing.workStatus === "under_progress"
-                    ? "bg-blue-500"
-                    : thing.workStatus === "sorted"
-                      ? "bg-emerald-500"
-                      : "bg-slate-400",
-                )}
-              />
-              {workLabel[thing.workStatus]}
+          {thing.listName && thing.listName.toLowerCase() !== "standalone" && thing.listName.toLowerCase() !== "list" && (
+            <span className="mt-0.5 block text-[11px] text-muted-foreground font-medium truncate">
+              {thing.listName}
             </span>
+          )}
 
-            {thing.starred ? (
-              <span className="text-amber-500 ml-auto" title="Starred">
-                <KatalistIcon name="favourite-star" className="h-3.5 w-3.5 fill-current" />
-                <span className="sr-only">Starred</span>
-              </span>
-            ) : null}
-          </span>
+          {/* Badges: comments & files */}
+          {((thing.commentCount ?? 0) > 0 || (thing.files?.length ?? 0) > 0) && (
+            <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
+              {(thing.commentCount ?? 0) > 0 && (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 font-medium",
+                    (thing.unreadCommentCount ?? 0) > 0
+                      ? "text-blue-600 font-semibold"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  <KatalistIcon name="comment" className="h-3 w-3" />
+                  {(thing.unreadCommentCount ?? 0) > 0
+                    ? `${thing.unreadCommentCount} ${thing.unreadCommentCount === 1 ? "new comment" : "new comments"}`
+                    : `${thing.commentCount} ${thing.commentCount === 1 ? "comment" : "comments"}`}
+                </span>
+              )}
+              {(thing.files?.length ?? 0) > 0 && (
+                <span className="inline-flex items-center gap-1 text-muted-foreground font-medium">
+                  <KatalistIcon name="attachment" className="h-3 w-3" />
+                  {thing.files!.length} {thing.files!.length === 1 ? "file" : "files"}
+                  {thing.files!.some((f) => f.isNew) && (
+                    <span className="text-blue-600 font-semibold">· 1 new</span>
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Description */}
+          {thing.description ? (
+            <p className="mt-2 text-[11.5px] text-slate-600 leading-relaxed text-left break-words whitespace-pre-wrap">
+              {thing.description}
+            </p>
+          ) : null}
+
+          {/* File Preview thumbnail card or Notes preview - strictly uniform height matching Image 1 */}
+          {thing.files && thing.files.length > 0 ? (
+            (() => {
+              const firstFile = thing.files[0];
+              const isPdf = firstFile.type === "pdf";
+              const isDocx = firstFile.type === "docx";
+              const isImg = firstFile.type === "image" || firstFile.type === "png" || firstFile.type === "jpg";
+              const isVid = firstFile.type === "video";
+              const isMedia = Boolean((isImg || isVid || isPdf) && firstFile.url);
+
+              return (
+                <div
+                  className={cn(
+                    "mt-2.5 flex h-[175px] min-h-[175px] max-h-[175px] flex-col overflow-hidden rounded-xl",
+                    isMedia
+                      ? "bg-slate-50"
+                      : "justify-between border border-slate-200/80 bg-white p-3 text-left",
+                  )}
+                >
+                  {isImg && firstFile.url ? (
+                    <img
+                      src={firstFile.url}
+                      alt={firstFile.name}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : isVid && firstFile.url ? (
+                    <div className="relative h-full w-full bg-black">
+                      <video
+                        src={firstFile.url}
+                        className="h-full w-full object-cover opacity-90"
+                        muted
+                        playsInline
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="h-8 w-8 rounded-full bg-white/85 flex items-center justify-center text-slate-900">
+                          <Play className="h-4 w-4 fill-current ml-0.5" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : isPdf && firstFile.url ? (
+                    <div className="h-full w-full overflow-hidden bg-white">
+                      <PdfCanvas url={firstFile.url} page={1} className="w-full" />
+                    </div>
+                  ) : isPdf || isDocx ? (
+                    <div className="flex-1 min-h-0 overflow-hidden text-left">
+                      <h4 className={cn("text-[13px] font-bold leading-tight truncate", isDocx ? "text-blue-600" : "text-slate-900")}>
+                        {firstFile.name.replace(/\.[^/.]+$/, "")}
+                      </h4>
+                      <p className={cn("text-[10px] mt-0.5 font-medium", isDocx ? "text-blue-500" : "text-muted-foreground")}>
+                        {thing.listName || (isDocx ? "Notes" : "Document")}
+                      </p>
+                      <div className="mt-2 text-[10px] text-slate-600 leading-snug space-y-1">
+                        <p className="font-bold text-slate-800 text-[10px]">Overview</p>
+                        <p className="text-slate-600 text-[9.5px] line-clamp-4">
+                          {thing.description || "No preview available for this file. Open it to view the full attachment."}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-h-0 overflow-hidden text-left flex items-center gap-2">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-lg text-[10px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                        {firstFile.type}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-bold text-slate-900 truncate">
+                          {firstFile.name}
+                        </p>
+                        {firstFile.sizeLabel && (
+                          <p className="text-[10px] text-slate-500 font-medium">
+                            {firstFile.sizeLabel}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                </div>
+              );
+            })()
+          ) : null}
+
+          {/* Assigned pace — only for Things assigned to you by someone else */}
+          {assignedByOther &&
+            (() => {
+              const pace = thing.personalPace ?? thing.ownerImportance;
+              return (
+                <div className="mt-2.5 flex items-center text-[11px]">
+                  <span className="text-[10.5px] text-[#3b4976]">
+                    Assigned pace:{" "}
+                    <span
+                      className="font-medium capitalize"
+                      style={{
+                        color:
+                          pace === "now"
+                            ? "#fe0908"
+                            : pace === "next"
+                              ? "#0b62f8"
+                              : pace === "later"
+                                ? "#7c33fd"
+                                : "#7078a2",
+                      }}
+                    >
+                      {pace ?? "—"}
+                    </span>
+                  </span>
+                </div>
+              );
+            })()}
         </button>
 
-        <div className="flex min-h-[38px] h-9 divide-x divide-slate-100 border-t border-slate-100">
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpen(thing, event.currentTarget);
-            }}
-            className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-600 outline-none hover:text-slate-900 hover:bg-slate-50/50 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:opacity-60 transition-colors"
+        {/* Card action: only Catch (Things awaiting catch). Sorting happens by
+            swiping right or from the Thing detail. */}
+        {capabilities.canCatch && (
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            className="flex items-center gap-2 p-3 pt-2.5 border-t border-slate-100"
           >
-            <KatalistIcon name="list" className="h-3.5 w-3.5" />
-            Details
-          </button>
-          {capabilities.canCatch ? (
             <button
               type="button"
               disabled={disabled}
               onClick={(event) => run(event, "catch")}
-              className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 text-[11px] font-semibold text-primary outline-none hover:bg-primary/5 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
+              style={{ backgroundColor: laneFigma[lane].primaryBtn }}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[11.5px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
             >
-              <KatalistIcon name="catch" className="h-3.5 w-3.5" />
-              Catch
+              <span>Catch</span>
             </button>
-          ) : capabilities.canSetPace && lane !== "later" ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={(event) => run(event, "later")}
-              className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-700 outline-none hover:bg-purple-50/60 hover:text-purple-600 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
-            >
-              <KatalistIcon name="snooze" className="h-3.5 w-3.5 text-slate-600" />
-              Later
-            </button>
-          ) : null}
-          {capabilities.canSort ? (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={(event) => run(event, "sort")}
-              className="flex-1 inline-flex h-9 items-center justify-center gap-1.5 text-[11px] font-semibold text-emerald-600 outline-none hover:bg-emerald-50/60 hover:text-emerald-700 focus-visible:ring-1 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
-            >
-              <KatalistIcon name="sorted" className="h-3.5 w-3.5 text-emerald-600" />
-              Sorted
-            </button>
-          ) : null}
-        </div>
+          </div>
+        )}
       </article>
     );
   },

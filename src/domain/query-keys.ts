@@ -18,4 +18,5 @@ export const keys = {
   notifications: (profileId: string | undefined) =>
     ["notifications", profileId] as const,
   shredded: (profileId: string | undefined) => ["shredded", profileId] as const,
+  snoozed: (profileId: string | undefined) => ["snoozed", profileId] as const,
 };

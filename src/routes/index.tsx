@@ -217,7 +217,7 @@ function CourtPage() {
   const emptyFilter = !emptyCourt && fNow.length + fNext.length + fLater.length === 0;
 
   return (
-    <AppShell title="Court" subtitle="What needs your attention">
+    <AppShell noPadding>
       <CourtDesktop
         now={now}
         next={next}
@@ -232,7 +232,11 @@ function CourtPage() {
       />
 
       <div className="lg:hidden">
-        <InlineThingDetailWorkspace thing={selected} onClose={() => setSelectedId(null)}>
+        <InlineThingDetailWorkspace
+          thing={selected}
+          onClose={() => setSelectedId(null)}
+          className="px-4 py-4 pb-12"
+        >
           <div>
             <MagicBox />
 

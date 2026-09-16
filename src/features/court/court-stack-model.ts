@@ -4,8 +4,10 @@ export type GestureAxis = "horizontal" | "vertical" | null;
 
 export type CourtWorkspacePhase = "overview" | "opening" | "focused" | "closing";
 
+export type FocusViewTabId = CourtLaneId | "theirs";
+
 export type CourtFocusSelection = {
-  lane: CourtLaneId;
+  lane: FocusViewTabId;
   thingId: string;
 };
 

@@ -15,6 +15,8 @@ export type ListRow = {
   name: string;
   context: ListContext;
   role: ListRole;
+  description?: string | null;
+  coverUrl?: string | null;
   ownerLine: string;
   ownerActorId?: string;
   members: ListMember[];

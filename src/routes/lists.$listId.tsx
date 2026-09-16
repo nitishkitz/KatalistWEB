@@ -1,6 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  List,
   FileText,
   Clock,
   RefreshCw,
@@ -20,6 +24,7 @@ import {
   Pin,
   Send,
   Paperclip,
+  AtSign,
   Smile,
   Download,
   FileSpreadsheet,
@@ -37,10 +42,20 @@ import {
   X,
   ExternalLink,
   ChevronDown,
+  Phone,
+  PhoneOff,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { useListCall } from "@/features/calls/use-list-call";
+import { ListCallPanel } from "@/features/calls/ListCallPanel";
+import { useSession } from "@/hooks/useSession";
 import { MagicBox } from "@/features/court/MagicBox";
 import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
+import { ThingDetailContent } from "@/features/things/ThingDetailContent";
+import { PDFViewer, type ThingFile } from "@/features/things/PDFViewer";
+import { formatCourtDue } from "@/features/court/court-view-model";
+import { laneOf } from "@/domain/thing";
+import { format } from "date-fns";
 import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
 import { useLocalVersion } from "@/features/things/use-local-version";
@@ -87,10 +102,28 @@ function ListDetailPage() {
   const { list, isLoading, error } = useList(listId);
   const chat = useListMessages(listId);
   const { things: listThings, myActorId } = useListThings(listId);
+  const { user } = useSession();
+  // Unique per-device call identity. Using only user.id collides when the same
+  // account is open on two devices, so each side would filter the other out as
+  // "self" and never connect. A per-session suffix keeps every device distinct.
+  const sessionSuffix = useMemo(
+    () => (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10)),
+    [],
+  );
+  const selfId = `${user?.id || myActorId || "anon"}:${sessionSuffix}`;
+  const selfName =
+    list?.members?.find((m) => m.actorId === myActorId)?.name ||
+    (user?.user_metadata?.display_name as string | undefined) ||
+    user?.email?.split("@")[0] ||
+    "You";
+  const call = useListCall(listId, selfId, selfName);
   const assignablePeople = useAssignablePeople();
 
   const [tab, setTab] = useState<TabType>("things");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [navLane, setNavLane] = useState<"now" | "next" | "later">("now");
+  const [navSearch, setNavSearch] = useState("");
+  const [selectedFile, setSelectedFile] = useState<ThingFile | null>(null);
 
   // Things tab filters & search
   const [thingsFilter, setThingsFilter] = useState<QuickFilterType>("all");
@@ -268,6 +301,37 @@ function ListDetailPage() {
     });
   }, [list?.members, memberRoleFilter, memberSearch]);
 
+  // ── Things three-pane derived state ──────────────────────────────────────
+  const grouped = useMemo(() => {
+    const g: Record<"now" | "next" | "later", typeof filteredThings> = { now: [], next: [], later: [] };
+    for (const t of filteredThings) g[laneOf(t)].push(t);
+    return g;
+  }, [filteredThings]);
+  const laneTabs = [
+    { id: "now" as const, label: "Now", color: "#fe1016" },
+    { id: "next" as const, label: "NEXT", color: "#022dfb" },
+    { id: "later" as const, label: "LATER", color: "#5c0bed" },
+  ];
+  const laneThings = useMemo(
+    () => grouped[navLane].filter((t) => t.title.toLowerCase().includes(navSearch.trim().toLowerCase())),
+    [grouped, navLane, navSearch],
+  );
+  const activeThing = selected ?? laneThings[0] ?? filteredThings[0] ?? null;
+  const selTint =
+    navLane === "next"
+      ? { bg: "#eef4ff", border: "#0b62f8" }
+      : navLane === "later"
+        ? { bg: "#f4f0ff", border: "#641dfb" }
+        : { bg: "#fef0f4", border: "#fe0734" };
+  // Reset/auto-select the file preview whenever the active Thing changes so a
+  // previous Thing's image never stays on screen; a Thing with files shows its
+  // first file, a Thing without files shows no preview.
+  const activeThingId = activeThing?.id ?? null;
+  useEffect(() => {
+    setSelectedFile(activeThing?.files?.[0] ?? null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeThingId]);
+
   if (isLoading) {
     return (
       <AppShell title="List" subtitle="Loading">
@@ -301,60 +365,138 @@ function ListDetailPage() {
   const collaboratorMembers = filteredMembers.filter((m) => m.role === "collaborator" || (!m.role && m.role !== "owner" && m.role !== "view_only"));
   const viewOnlyMembers = filteredMembers.filter((m) => m.role === "view_only");
 
+  const listInitials =
+    list.name
+      .split(" ")
+      .map((w) => w[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "L";
+
   return (
-    <AppShell
-      title={list.name}
-      subtitle={
-        <span className="flex items-center gap-2">
-          <span className="capitalize">{list.context}</span>
-          <span>•</span>
-          <span>{list.ownerLine}</span>
-          <span className="inline-flex items-center rounded-full border border-purple-200/80 bg-purple-50 px-2 py-0.5 text-[10.5px] font-semibold text-purple-700">
-            {roleBadgeLabel}
-          </span>
-        </span>
-      }
-    >
-      <div className="space-y-4 pb-20">
-        {/* Top Navigation Tabs with Clean Underlines */}
-        <div className="border-b border-border/80">
-          <div className="flex items-center gap-6">
+    <AppShell noPadding hideTopNav>
+      <div className="min-h-screen bg-[#edf2fe] px-4 py-3 space-y-3 pb-20">
+        {/* List sub-header + tabs card */}
+        <div className="rounded-[10px] bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-5 pt-4 pb-3">
+            <div className="flex flex-wrap items-center gap-4">
+              <Link
+                to="/lists"
+                className="inline-flex items-center gap-2 rounded-full text-[12.5px] font-medium text-[#6a769c] hover:text-[#000533] transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back to List</span>
+              </Link>
+              <div className="h-8 w-px bg-[#eef0f6]" />
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-11 w-11 items-center justify-center rounded-[6px] bg-[#fee19c] text-[12px] font-medium text-black">
+                  {listInitials}
+                </span>
+                <div className="min-w-0">
+                  <div className="text-[15px] font-medium text-black leading-tight truncate max-w-[220px]">
+                    {list.name}
+                  </div>
+                  <div className="text-[12px] text-[#6a769c]">{list.ownerLine}</div>
+                </div>
+              </div>
+              {listCollaborators.length > 0 && (
+                <div className="flex items-center gap-3 pl-1">
+                  <button
+                    type="button"
+                    onClick={() => setPersonFilter(null)}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-colors cursor-pointer",
+                      personFilter === null
+                        ? "border-[#c9c4fc] bg-[#f5f4fe] text-black"
+                        : "border-transparent text-[#6a769c] hover:text-black",
+                    )}
+                  >
+                    <Users className="h-3.5 w-3.5 text-[#503188]" />
+                    All People
+                  </button>
+                  {listCollaborators.slice(0, 3).map((person) => (
+                    <button
+                      key={person.id}
+                      type="button"
+                      onClick={() =>
+                        setPersonFilter((cur) => (cur === person.id ? null : person.id))
+                      }
+                      className={cn(
+                        "inline-flex items-center gap-1.5 text-[12px] font-medium transition-opacity cursor-pointer",
+                        personFilter && personFilter !== person.id ? "opacity-50 hover:opacity-100" : "text-black",
+                      )}
+                      title={`Filter by ${person.name}`}
+                    >
+                      <PersonAvatar
+                        name={person.name}
+                        initials={person.initials}
+                        src={person.avatarUrl}
+                        size={24}
+                      />
+                      <span>{person.name.split(" ")[0]}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button
               type="button"
-              onClick={() => setTab("things")}
+              onClick={() => (call.joined ? call.leave() : void call.join())}
+              disabled={call.connecting}
               className={cn(
-                "relative pb-3 text-[13.5px] font-semibold transition-colors outline-none",
-                tab === "things"
-                  ? "text-primary border-b-2 border-primary font-bold -mb-px"
-                  : "text-muted-foreground hover:text-foreground",
+                "inline-flex h-[42px] items-center gap-2 rounded-[9px] px-4 text-[14px] font-medium transition cursor-pointer disabled:opacity-60",
+                call.joined
+                  ? "bg-[#fc404d] text-white hover:brightness-95"
+                  : "border border-[#eaeffa] bg-white text-[#1d1d1d] hover:bg-muted/40",
               )}
+              title={call.joined ? "Leave call" : "Start or join a call with this list"}
             >
-              Things
+              {call.joined ? <PhoneOff className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+              <span>{call.connecting ? "Connecting…" : call.joined ? "Leave call" : "Call"}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setTab("chat")}
-              className={cn(
-                "relative pb-3 text-[13.5px] font-semibold transition-colors outline-none",
-                tab === "chat"
-                  ? "text-primary border-b-2 border-primary font-bold -mb-px"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Chat
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab("members")}
-              className={cn(
-                "relative pb-3 text-[13.5px] font-semibold transition-colors outline-none",
-                tab === "members"
-                  ? "text-primary border-b-2 border-primary font-bold -mb-px"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Members & Permissions
-            </button>
+            {!viewOnly && (
+              <button
+                type="button"
+                onClick={() => {
+                  setTab("things");
+                  setSelectedId(null);
+                }}
+                className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-[#975ee2] px-4 text-[14px] font-medium text-white hover:brightness-95 transition cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                <span>New Thing</span>
+              </button>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-8 border-t border-[#eef0f6] px-5">
+            {(
+              [
+                ["things", "Things"],
+                ["chat", "Chat"],
+                ["members", "Members & Permissions"],
+              ] as const
+            ).map(([id, label]) => {
+              const active = tab === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTab(id)}
+                  className={cn(
+                    "relative py-3 text-[13.5px] transition-colors outline-none cursor-pointer",
+                    active ? "text-[#000533] font-medium" : "text-[#6a769c] hover:text-[#000533] font-normal",
+                  )}
+                >
+                  {label}
+                  {active && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full bg-[#975ee2]" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -362,310 +504,75 @@ function ListDetailPage() {
         {/* TAB 1: THINGS */}
         {/* ========================================================================= */}
         {tab === "things" && (
-          <>
-            {/* Top 5-Item Dynamic Summary Ribbon */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-white shadow-xs">
-              {/* 1. Total Things */}
-              <div className="flex items-center gap-3 p-2.5 px-3.5">
-                <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-                  {thingsMetrics.total}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 leading-none">
-                    <FileText className="h-3.5 w-3.5 shrink-0 text-purple-600" />
-                    <span className="text-[10.5px] font-black text-purple-600 uppercase tracking-wide">TOTAL</span>
-                  </div>
-                  <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">All Things</span>
-                </div>
-              </div>
-
-              {/* 2. Waiting for catch */}
-              <div className="flex items-center gap-3 p-2.5 px-3.5">
-                <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-                  {thingsMetrics.waiting}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 leading-none">
-                    <Clock className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-                    <span className="text-[10.5px] font-black text-orange-600 uppercase tracking-wide">WAITING</span>
-                  </div>
-                  <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">For catch</span>
-                </div>
-              </div>
-
-              {/* 3. In progress */}
-              <div className="flex items-center gap-3 p-2.5 px-3.5">
-                <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-                  {thingsMetrics.inProgress}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 leading-none">
-                    <RefreshCw className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-                    <span className="text-[10.5px] font-black text-blue-600 uppercase tracking-wide">IN PROGRESS</span>
-                  </div>
-                  <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">Moving</span>
-                </div>
-              </div>
-
-              {/* 4. Completed */}
-              <div className="flex items-center gap-3 p-2.5 px-3.5">
-                <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-                  {thingsMetrics.completed}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 leading-none">
-                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                    <span className="text-[10.5px] font-black text-emerald-600 uppercase tracking-wide">COMPLETED</span>
-                  </div>
-                  <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">Sorted & done</span>
-                </div>
-              </div>
-
-              {/* 5. Collaborators */}
-              <div className="flex items-center gap-3 p-2.5 px-3.5">
-                <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-                  {thingsMetrics.collaboratorsCount}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 leading-none">
-                    <Users className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-                    <span className="text-[10.5px] font-black text-slate-600 uppercase tracking-wide">MEMBERS</span>
-                  </div>
-                  <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">Collaborators</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Status Filter Pills & Views */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(
-                  [
-                    ["all", "All"],
-                    ["mine", "Mine"],
-                    ["theirs", "Theirs"],
-                    ["waiting", "Waiting"],
-                    ["progress", "In Progress"],
-                    ["completed", "Completed"],
-                    ["cancelled", "Cancelled"],
-                    ["sorted", "● Sorted"],
-                  ] as const
-                ).map(([id, label]) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setThingsFilter(id)}
-                    className={cn(
-                      "inline-flex h-8 items-center rounded-full border px-3 text-[11.5px] font-medium transition-all duration-200",
-                      thingsFilter === id
-                        ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
-                        : "border-border/80 bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-border/80 bg-white px-3 text-[11.5px] font-medium text-foreground shadow-2xs hover:bg-muted/40"
-                    >
-                      <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
-                      <span>
-                        Sort: {sortOption === "due" ? "Due date" : sortOption === "importance" ? "Importance" : sortOption === "title" ? "Title (A-Z)" : "Updated"}
-                      </span>
-                      <ChevronDown className="h-3 w-3 text-muted-foreground" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-44 bg-white">
-                    <DropdownMenuRadioGroup
-                      value={sortOption}
-                      onValueChange={(v) => setSortOption(v as SortOption)}
-                    >
-                      <DropdownMenuRadioItem value="due" className="text-[12px]">
-                        Due date
-                      </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="importance" className="text-[12px]">
-                        Importance
-                      </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="title" className="text-[12px]">
-                        Title (A–Z)
-                      </DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="updated" className="text-[12px]">
-                        Recently updated
-                      </DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-
-            {/* People & Due Date Sub-Filter Row */}
-            <div className="flex flex-wrap items-center gap-6 rounded-xl border border-border/60 bg-muted/20 px-4 py-2 text-[11.5px]">
-              {/* People filter */}
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-muted-foreground">People</span>
-                <button
-                  type="button"
-                  onClick={() => setPersonFilter(null)}
-                  className={cn(
-                    "rounded-full px-2.5 py-0.5 font-medium transition-colors",
-                    personFilter === null
-                      ? "bg-purple-100 font-semibold text-purple-700"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  All
-                </button>
-                <div className="flex items-center -space-x-1 pl-1">
-                  {listCollaborators.map((person) => {
-                    const active =
-                      personFilter !== null &&
-                      (personFilter.toLowerCase() === person.name.toLowerCase() ||
-                        person.ids.has(personFilter));
-                    return (
-                      <button
-                        key={person.name}
-                        type="button"
-                        title={person.name}
-                        onClick={() => setPersonFilter(active ? null : person.name)}
-                        className={cn(
-                          "relative rounded-full transition-all outline-none cursor-pointer",
-                          active ? "ring-2 ring-primary ring-offset-1 scale-110" : "opacity-80 hover:opacity-100",
-                        )}
-                      >
-                        <PersonAvatar
-                          name={person.name}
-                          initials={person.initials}
-                          src={person.avatarUrl}
-                          size={22}
-                          className="ring-2 ring-white"
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <span className="h-4 w-px bg-border/80" />
-
-              {/* Due filter */}
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-muted-foreground">Due</span>
-                <button
-                  type="button"
-                  onClick={() => setDueFilter(dueFilter === "today" ? "all" : "today")}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-medium transition-colors",
-                    dueFilter === "today"
-                      ? "border-purple-300 bg-purple-50 text-purple-700 font-semibold"
-                      : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Calendar className="h-3 w-3" />
-                  Due today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDueFilter(dueFilter === "overdue" ? "all" : "overdue")}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-medium transition-colors",
-                    dueFilter === "overdue"
-                      ? "border-red-300 bg-red-50 text-red-700 font-semibold"
-                      : "border-border/80 bg-white text-red-600/80 hover:text-red-700",
-                  )}
-                >
-                  <Calendar className="h-3 w-3" />
-                  Overdue
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDueFilter(dueFilter === "no_due" ? "all" : "no_due")}
-                  className={cn(
-                    "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-medium transition-colors",
-                    dueFilter === "no_due"
-                      ? "border-purple-300 bg-purple-50 text-purple-700 font-semibold"
-                      : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  <Calendar className="h-3 w-3" />
-                  No due date
-                </button>
-              </div>
-            </div>
-
-            {/* Things Table with Inline Detail Workspace */}
-            <InlineThingDetailWorkspace
-              thing={selected}
-              onClose={() => setSelectedId(null)}
-              viewOnly={viewOnly}
-              backLabel={list.name}
-              items={filteredThings}
-              onSelectThing={(id) => setSelectedId(id)}
-              navTitle={list.name}
-            >
-              <div className="overflow-hidden rounded-2xl border border-border/70 bg-white shadow-2xs">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[760px] text-left">
-                  <thead>
-                    <tr className="border-b border-border/60 bg-muted/20 text-[11px] font-semibold tracking-wider text-muted-foreground uppercase">
-                      <th className="px-4 py-3 font-semibold whitespace-nowrap">Thing</th>
-                      <th className="px-3 py-3 font-semibold whitespace-nowrap">Owner Importance</th>
-                      <th className="px-3 py-3 font-semibold whitespace-nowrap">My Pace</th>
-                      <th className="px-3 py-3 font-semibold whitespace-nowrap">With</th>
-                      <th className="px-3 py-3 font-semibold whitespace-nowrap">Ack</th>
-                      <th className="px-3 py-3 font-semibold whitespace-nowrap">Status</th>
-                      <th className="px-3 py-3 font-semibold whitespace-nowrap">Due</th>
-                      <th className="px-3 py-3 font-semibold whitespace-nowrap">From</th>
-                      <th className="py-3 pr-4 text-right whitespace-nowrap" />
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/60 text-[12.5px]">
-                    {filteredThings.map((thing) => {
-                      const isWaiting = thing.acknowledgement === "waiting_for_catch";
-                      const importanceColor =
-                        thing.ownerImportance === "now"
-                          ? "text-red-600 font-bold"
-                          : thing.ownerImportance === "next"
-                            ? "text-blue-600 font-semibold"
-                            : "text-purple-600 font-semibold";
-                      const paceColor =
-                        thing.personalPace === "now"
-                          ? "text-red-600 font-bold"
-                          : thing.personalPace === "next"
-                            ? "text-blue-600 font-semibold"
-                            : thing.personalPace === "later"
-                              ? "text-purple-600 font-semibold"
-                              : "text-muted-foreground";
-
-                      const statusLabel =
-                        thing.workStatus === "sorted"
-                          ? "Sorted"
-                          : thing.workStatus === "cancelled"
-                            ? "Cancelled"
-                            : thing.workStatus === "under_progress"
-                              ? "Under progress"
-                              : "Not started";
-                      const statusDotColor =
-                        thing.workStatus === "sorted"
-                          ? "bg-emerald-500"
-                          : thing.workStatus === "under_progress"
-                            ? "bg-blue-500"
-                            : "bg-muted-foreground/60";
-
-                      const isSelected = selectedId === thing.id;
-
+              <div className="flex flex-col min-h-0 gap-3 h-[calc(100vh-9.5rem)]">
+                <div className="flex min-h-0 flex-1 gap-3">
+                {/* Navigator card */}
+                <aside className="flex w-[340px] shrink-0 flex-col min-h-0 overflow-hidden rounded-[10px] bg-white">
+                  <div className="flex items-center gap-5 border-b border-[#e2e4f5] px-5 pt-4">
+                    {laneTabs.map((lt) => {
+                      const active = navLane === lt.id;
                       return (
-                        <tr
-                          key={thing.id}
+                        <button
+                          key={lt.id}
+                          type="button"
+                          onClick={() => {
+                            setNavLane(lt.id);
+                            setSelectedId(null);
+                          }}
+                          style={{ color: lt.color }}
                           className={cn(
-                            "group cursor-pointer transition-colors hover:bg-muted/30",
-                            isSelected && "bg-primary/10 font-semibold border-l-4 border-l-primary",
+                            "relative pb-2.5 text-[15px] whitespace-nowrap transition-all cursor-pointer",
+                            active ? "font-medium" : "font-normal opacity-90 hover:opacity-100",
                           )}
+                        >
+                          <span>
+                            {lt.label} <span className="text-[12.5px]">{grouped[lt.id].length}</span>
+                          </span>
+                          {active && (
+                            <span
+                              className="absolute -bottom-px left-0 right-0 h-0.5 rounded-full"
+                              style={{ backgroundColor: lt.id === "now" ? "#fe0734" : lt.color }}
+                            />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="px-4 pt-3 pb-2">
+                    <div className="relative flex items-center">
+                      <Search className="absolute left-3 h-4 w-4 text-[#8487a7] pointer-events-none" />
+                      <input
+                        value={navSearch}
+                        onChange={(e) => setNavSearch(e.target.value)}
+                        placeholder="Search Things..."
+                        className="h-[40px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between border-b border-[#eef0f6] px-4 py-2 text-[11.5px]">
+                    <div className="flex items-center gap-1.5 font-medium text-[#8487a7]">
+                      <List className="h-3.5 w-3.5 text-[#5f5f90]" />
+                      <span>{laneThings.length} Things</span>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-auto min-h-0 p-2">
+                    {laneThings.map((thing) => {
+                      const isSelected = thing.id === activeThing?.id;
+                      const due = formatCourtDue(thing);
+                      const isSorted = thing.workStatus === "sorted";
+                      const inProgress =
+                        !isSorted &&
+                        thing.workStatus !== "cancelled" &&
+                        (thing.workStatus === "under_progress" || thing.acknowledgement === "caught");
+                      const isWaiting = thing.acknowledgement === "waiting_for_catch";
+                      return (
+                        <div
+                          key={thing.id}
+                          role="button"
+                          tabIndex={0}
                           onClick={() => setSelectedId(thing.id)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === " ") {
@@ -673,331 +580,375 @@ function ListDetailPage() {
                               setSelectedId(thing.id);
                             }
                           }}
-                          role="button"
-                          tabIndex={0}
+                          style={
+                            isSelected
+                              ? { backgroundColor: selTint.bg, borderColor: selTint.border }
+                              : undefined
+                          }
+                          className={cn(
+                            "relative flex items-start justify-between gap-2.5 rounded-[10px] p-3 transition-colors cursor-pointer",
+                            isSelected
+                              ? "border-l-[3px]"
+                              : "border-l-[3px] border-transparent hover:bg-[#f9f9fe]",
+                          )}
                         >
-                          {/* Title + Star */}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2.5">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toast.success(thing.starred ? "Unstarred" : "Starred");
-                                }}
-                                className="text-muted-foreground hover:text-amber-500"
-                              >
-                                <Star
-                                  className={cn(
-                                    "h-4 w-4",
-                                    thing.starred ? "fill-amber-400 text-amber-400" : "text-muted-foreground/50",
-                                  )}
-                                />
-                              </button>
-                              <span className="font-medium text-foreground truncate max-w-[220px]">
-                                {thing.title}
-                              </span>
-                            </div>
-                          </td>
-
-                          {/* Owner Importance */}
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <span className={cn("uppercase text-[11px]", importanceColor)}>
-                              {thing.ownerImportance}
-                            </span>
-                          </td>
-
-                          {/* My Pace */}
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <span className={cn("uppercase text-[11px]", paceColor)}>
-                              {thing.personalPace || "—"}
-                            </span>
-                          </td>
-
-                          {/* With */}
-                          <td className="px-3 py-3 whitespace-nowrap">
+                          <div className="flex min-w-0 flex-1 items-start gap-2.5">
                             <PersonAvatar
                               name={thing.assignee.name}
                               initials={thing.assignee.initials}
                               src={thing.assignee.avatarUrl}
-                              size={22}
+                              size={24}
                             />
-                          </td>
-
-                          {/* Ack */}
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            {isWaiting ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-orange-600">
-                                <Clock className="h-3.5 w-3.5 text-orange-500" />
-                                Waiting for catch
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[12.5px] font-medium leading-snug text-[#000533]">
+                                {thing.title}
+                              </p>
+                              <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
+                                {due.label && due.label !== "No due date" ? (
+                                  <span
+                                    className="font-medium"
+                                    style={{ color: due.urgent ? "#fe1e26" : "#525d87" }}
+                                  >
+                                    {due.label}
+                                  </span>
+                                ) : null}
+                                {(thing.unreadCommentCount ?? 0) > 0 ? (
+                                  <span className="font-medium text-[#0242f5]">
+                                    {thing.unreadCommentCount} new{" "}
+                                    {thing.unreadCommentCount === 1 ? "comment" : "comments"}
+                                  </span>
+                                ) : (thing.commentCount ?? 0) > 0 ? (
+                                  <span className="font-medium text-[#8487a7]">
+                                    {thing.commentCount}{" "}
+                                    {thing.commentCount === 1 ? "comment" : "comments"}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="shrink-0 pt-0.5">
+                            <span className="inline-flex items-center gap-1.5 text-[10px] text-[#8186a5]">
+                              <span
+                                className="h-3 w-3 rounded-full border-2 bg-white"
+                                style={{
+                                  borderColor: inProgress
+                                    ? "#247cfc"
+                                    : isWaiting
+                                      ? "#f59e0b"
+                                      : "#626d96",
+                                }}
+                              />
+                              <span>
+                                {isWaiting
+                                  ? "Waiting"
+                                  : inProgress
+                                    ? "Under Progress"
+                                    : isSorted
+                                      ? "Sorted"
+                                      : "Not Started"}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600">
-                                <Check className="h-3.5 w-3.5 text-emerald-500" />
-                                Caught
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-3 py-3 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1.5 text-[11.5px] font-medium text-foreground">
-                              <span className={cn("h-1.5 w-1.5 rounded-full", statusDotColor)} />
-                              {statusLabel}
                             </span>
-                          </td>
-
-                          {/* Due */}
-                          <td className="px-3 py-3 text-[11.5px] text-muted-foreground whitespace-nowrap">
-                            {thing.dueAt ? (
-                              <span className="inline-flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {new Date(thing.dueAt).toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                })}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                —
-                              </span>
-                            )}
-                          </td>
-
-                          {/* From */}
-                          <td className="px-3 py-3 text-[11.5px] text-muted-foreground whitespace-nowrap">
-                            {list.name}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="py-3 pr-4 text-right whitespace-nowrap">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground opacity-60 hover:bg-muted hover:opacity-100"
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-40 bg-white">
-                                <DropdownMenuItem onClick={() => setSelectedId(thing.id)}>
-                                  View Details
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
-                        </tr>
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+                    {laneThings.length === 0 && (
+                      <div className="py-8 text-center text-[11px] text-muted-foreground">
+                        No Things in this lane.
+                      </div>
+                    )}
+                  </div>
+                </aside>
 
-              {filteredThings.length === 0 ? (
-                <div className="py-12 text-center text-[13px] text-muted-foreground">
-                  No things found matching this filter.
+                {/* Right: detail | preview */}
+                <div className="flex flex-1 flex-col min-h-0 overflow-hidden rounded-[10px] bg-white">
+                  <div className="flex flex-1 flex-row min-h-0 overflow-hidden">
+                    <div className="flex-1 min-h-0 overflow-auto bg-[#fefdfd] px-8 pt-6 pb-8">
+                      <div className="mx-auto w-full max-w-3xl">
+                        {activeThing ? (
+                          <ThingDetailContent
+                            key={activeThing.id}
+                            initialThing={activeThing}
+                            headerAction={null}
+                            onAfterTerminalAction={() => setSelectedId(null)}
+                            variant="court"
+                            viewOnly={viewOnly}
+                            onFileSelect={(file) => setSelectedFile(file)}
+                          />
+                        ) : (
+                          <div className="flex min-h-[320px] items-center justify-center text-[12px] text-muted-foreground">
+                            No Things in this list yet.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    {selectedFile && (
+                      <PDFViewer
+                        file={selectedFile}
+                        addedByName={activeThing?.creator.name}
+                        addedLabel={
+                          activeThing?.updatedAt
+                            ? format(new Date(activeThing.updatedAt), "MMM d, h:mm a")
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
                 </div>
-              ) : null}
-
-              {/* Table Footer */}
-              <div className="flex items-center justify-between border-t border-border/60 px-5 py-3 text-[12px] text-muted-foreground">
-                <span>
-                  Showing 1–{filteredThings.length} of {listThings.length} things
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled
-                    className="flex h-7 w-7 items-center justify-center rounded border border-border bg-white text-muted-foreground opacity-50"
-                  >
-                    &lt;
-                  </button>
-                  <span className="flex h-7 min-w-7 items-center justify-center rounded bg-primary px-2 text-[11px] font-bold text-primary-foreground">
-                    1
-                  </span>
-                  <button
-                    type="button"
-                    disabled
-                    className="flex h-7 w-7 items-center justify-center rounded border border-border bg-white text-muted-foreground opacity-50"
-                  >
-                    &gt;
-                  </button>
                 </div>
-              </div>
-            </div>
 
-            </InlineThingDetailWorkspace>
-            {!viewOnly && !selectedId && <MagicBox listId={list.id} listName={list.name} desktop />}
-          </>
-        )}
+                {/* Toss composer — outside the detail container */}
+                {!viewOnly && (
+                  <div className="flex shrink-0 justify-center">
+                    <div className="w-full max-w-2xl">
+                      <MagicBox
+                        listId={list.id}
+                        listName={list.name}
+                        desktop
+                        extraPeople={list.members.map((m) => ({
+                          id: m.actorId || m.profileId || m.name,
+                          name: m.name,
+                          initials: m.initials,
+                          avatarUrl: m.avatarUrl,
+                          actorId: m.actorId,
+                          profileId: m.profileId,
+                        }))}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+          )}
 
         {/* ========================================================================= */}
         {/* TAB 2: CHAT */}
         {/* ========================================================================= */}
         {tab === "chat" && (
-          <div className="space-y-3">
-            {/* Compact Chat Meta Ribbon */}
-            <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-border/70 bg-white px-3.5 py-2 shadow-2xs">
-              <div className="flex items-center gap-3 text-[12px]">
-                <span className="flex items-center gap-1.5 font-bold text-foreground">
-                  <MessageSquare className="h-3.5 w-3.5 text-primary" />
-                  <span>{chat.messages.length} messages</span>
-                </span>
-                <span className="text-muted-foreground/50">•</span>
-                <span className="flex items-center gap-1.5 text-muted-foreground font-medium">
-                  <Users className="h-3.5 w-3.5 text-blue-500" />
-                  <span>{list.members.length} members</span>
-                </span>
-                <span className="text-muted-foreground/50">•</span>
-                <span className="inline-flex items-center rounded-full bg-purple-50 border border-purple-200/60 px-2 py-0.5 text-[10.5px] font-semibold text-purple-700 capitalize">
-                  {list.role.replace("_", " ")}
-                </span>
-              </div>
+          <div className="flex min-h-0 flex-col gap-3 h-[calc(100vh-9.5rem)] lg:flex-row">
+            {/* Left: List Chat panel */}
+            <div className="flex min-h-0 flex-1 flex-col rounded-[10px] bg-white p-5">
+              <h2 className="text-[19.75px] font-medium text-[#000533]">List Chat</h2>
+              <p className="mt-1 text-[12px] text-[#6a769c]">
+                Conversation for {list.name} • {list.members.length} members
+              </p>
 
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                  <Pin className="h-3 w-3 text-purple-600" />
-                  <span>List Chat is room conversation</span>
-                </span>
-              </div>
-            </div>
-
-            {/* Chat 2-Column Grid */}
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-              {/* Left Column: Chat Stream */}
-              <div className="flex flex-col justify-between rounded-xl border border-border/70 bg-white p-3.5 shadow-2xs lg:col-span-2 min-h-[440px]">
-                <div>
-                  {/* Top Bar with Filter */}
-                  <div className="mb-3 flex items-center justify-between gap-3 border-b border-border/50 pb-2.5">
-                    <span className="text-[12.5px] font-bold text-foreground">Room Conversation</span>
-
-                    <label className="flex h-7.5 w-48 items-center gap-1.5 rounded-lg border border-border bg-white px-2 focus-within:border-primary">
-                      <Search className="h-3 w-3 text-muted-foreground" />
-                      <input
-                        value={chatSearch}
-                        onChange={(e) => setChatSearch(e.target.value)}
-                        placeholder="Search messages..."
-                        className="min-w-0 flex-1 bg-transparent text-[11px] outline-none"
-                      />
-                    </label>
-                  </div>
-
-                  {/* Dynamic Message Thread */}
-                  <div className="space-y-3 max-h-[340px] overflow-y-auto pr-1.5">
-                    {filteredChatMessages.length === 0 ? (
-                      <div className="py-12 text-center">
-                        <MessageSquare className="mx-auto h-7 w-7 text-muted-foreground/30 mb-1.5" />
-                        <p className="text-[12.5px] font-semibold text-foreground">No messages yet</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {viewOnly
-                            ? "There are no messages in this room."
-                            : "Start the conversation with your team below."}
-                        </p>
-                      </div>
-                    ) : (
-                      filteredChatMessages.map((m) => (
-                        <div key={m.id} className="flex items-start gap-2.5">
-                          <PersonAvatar
-                            name={m.author}
-                            initials={m.author.slice(0, 2).toUpperCase()}
-                            size={26}
-                          />
-                          <div className="space-y-0.5 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11.5px] font-bold text-foreground">{m.author}</span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                            </div>
-                            <div className="rounded-xl rounded-tl-xs bg-muted/40 px-3 py-1.5 text-[12.5px] text-foreground inline-block">
-                              {m.body}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+              <div className="mt-4 mb-3">
+                <div className="relative flex items-center">
+                  <Search className="absolute left-3 h-4 w-4 text-[#8487a7] pointer-events-none" />
+                  <input
+                    value={chatSearch}
+                    onChange={(e) => setChatSearch(e.target.value)}
+                    placeholder="Search messages"
+                    className="h-[42px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
+                  />
                 </div>
+              </div>
 
-                {/* Floating Bottom Input Bar */}
-                {viewOnly ? (
-                  <p className="mt-3 rounded-xl bg-muted/30 p-2.5 text-center text-[11.5px] text-muted-foreground">
-                    View Only members can observe conversation and comment on Things.
-                  </p>
+              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                {filteredChatMessages.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <MessageSquare className="mx-auto mb-1.5 h-7 w-7 text-[#c5cae0]" />
+                    <p className="text-[12.5px] font-medium text-[#000533]">No messages yet</p>
+                    <p className="mt-0.5 text-[11px] text-[#6a769c]">
+                      {viewOnly ? "There are no messages in this room." : "Start the conversation below."}
+                    </p>
+                  </div>
                 ) : (
-                  <form
-                    className="mt-3 flex items-center gap-2 rounded-xl border border-border bg-muted/20 p-1 focus-within:border-primary focus-within:bg-white focus-within:ring-2 focus-within:ring-ring"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!msg.trim()) return;
-                      void chat.send.mutateAsync(msg.trim()).then(
-                        () => setMsg(""),
-                        (err) => toast.error(domainErrorMessage(err)),
-                      );
-                    }}
-                  >
-                    <input
-                      value={msg}
-                      onChange={(e) => setMsg(e.target.value)}
-                      placeholder={`Message ${list.name}...`}
-                      className="min-w-0 flex-1 bg-transparent px-2.5 text-[12.5px] outline-none placeholder:text-muted-foreground"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!msg.trim()}
-                      className="flex h-7.5 w-7.5 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-2xs transition-transform hover:scale-105 active:scale-95 disabled:opacity-40"
-                    >
-                      <Send className="h-3.5 w-3.5" />
-                    </button>
-                  </form>
+                  filteredChatMessages.map((m) => (
+                    <div key={m.id} className="flex items-start gap-3">
+                      <PersonAvatar
+                        name={m.author}
+                        initials={m.author.slice(0, 2).toUpperCase()}
+                        size={34}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-[12.5px] font-medium text-[#000533]">{m.author}</span>
+                          <span className="text-[11px] text-[#757b9e]">
+                            {new Date(m.at).toLocaleString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[12px] text-[#1a2345]">{m.body}</p>
+                      </div>
+                    </div>
+                  ))
                 )}
               </div>
 
-              {/* Right Column: Dynamic Room Collaborators & Guidelines */}
-              <div className="space-y-3">
-                {/* 1. Room Collaborators */}
-                <div className="rounded-xl border border-border/70 bg-white p-3.5 shadow-2xs">
-                  <div className="flex items-center justify-between mb-2.5">
-                    <div className="flex items-center gap-1.5 font-bold text-[12px] text-foreground">
-                      <Users className="h-3.5 w-3.5 text-primary" />
-                      <span>Room Members ({list.members.length})</span>
+              {viewOnly ? (
+                <p className="mt-3 rounded-[8px] bg-[#f6f8fd] p-2.5 text-center text-[11.5px] text-[#6a769c]">
+                  View-only members can observe the conversation and comment on Things.
+                </p>
+              ) : (
+                <form
+                  className="mt-4 flex items-center gap-2 rounded-[8px] border border-[#e5e7f6] bg-white px-3 py-2"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!msg.trim()) return;
+                    void chat.send.mutateAsync(msg.trim()).then(
+                      () => setMsg(""),
+                      (err) => toast.error(domainErrorMessage(err)),
+                    );
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer"
+                    aria-label="Attach file"
+                  >
+                    <Paperclip className="h-4 w-4" />
+                  </button>
+                  <input
+                    value={msg}
+                    onChange={(e) => setMsg(e.target.value)}
+                    placeholder={`Message ${list.name}....`}
+                    className="min-w-0 flex-1 bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#6a6b8e]"
+                  />
+                  <button
+                    type="button"
+                    className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer"
+                    aria-label="Mention"
+                  >
+                    <AtSign className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer"
+                    aria-label="Emoji"
+                  >
+                    <Smile className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!msg.trim()}
+                    className="inline-flex h-[34px] items-center rounded-[6px] bg-[#975ee2] px-4 text-[13px] font-medium text-white hover:brightness-95 transition disabled:opacity-40 cursor-pointer"
+                  >
+                    Send
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {/* Right: List info sidebar */}
+            <div className="w-full shrink-0 min-h-0 overflow-y-auto rounded-[10px] bg-white p-5 lg:w-[440px]">
+              <h2 className="text-[22px] font-medium text-[#000533]">{list.name}</h2>
+
+              <div className="mt-4 flex items-stretch">
+                <div className="flex-1 pr-4">
+                  <div className="text-[22px] font-medium text-[#000533]">{list.members.length}</div>
+                  <div className="text-[11.5px] text-[#6a769c]">members</div>
+                </div>
+                <div className="flex-1 border-l border-[#eef0f6] pl-4">
+                  <div className="text-[22px] font-medium text-[#000533]">{listThings.length}</div>
+                  <div className="text-[11.5px] text-[#6a769c]">Things</div>
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center -space-x-2">
+                {list.members.slice(0, 4).map((m) => (
+                  <PersonAvatar
+                    key={m.profileId || m.actorId || m.name}
+                    name={m.name}
+                    initials={m.initials}
+                    src={m.avatarUrl}
+                    size={40}
+                    className="ring-2 ring-white"
+                  />
+                ))}
+                {list.members.length > 4 && (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f0effe] text-[13px] font-medium text-[#975ee2] ring-2 ring-white">
+                    +{list.members.length - 4}
+                  </span>
+                )}
+              </div>
+
+              {/* Members */}
+              <div className="mt-6 flex items-center justify-between border-t border-[#eef0f6] pt-4">
+                <span className="text-[14.5px] font-medium text-[#000128]">Members</span>
+                <button
+                  type="button"
+                  onClick={() => setTab("members")}
+                  className="text-[12.5px] font-medium text-[#975ee2] hover:opacity-80 cursor-pointer"
+                >
+                  See all {list.members.length}
+                </button>
+              </div>
+              <div className="mt-3 space-y-3">
+                {list.members.slice(0, 3).map((m) => (
+                  <div
+                    key={m.profileId || m.actorId || m.name}
+                    className="flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={32} />
+                      <span className="text-[14px] font-medium text-[#000128]">{m.name}</span>
                     </div>
+                    <span
+                      className={cn(
+                        "text-[12.5px]",
+                        m.role === "owner" ? "font-medium text-[#975ee2]" : "text-[#717793]",
+                      )}
+                    >
+                      {m.role === "owner" ? "Owner" : m.role === "view_only" ? "View only" : "Collaborator"}
+                    </span>
                   </div>
-                  <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
-                    {list.members.map((m) => (
-                      <div
-                        key={m.profileId || m.actorId || m.name}
-                        className="flex items-center justify-between rounded-lg border border-border/50 p-2 hover:bg-muted/20"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={24} />
-                          <div className="truncate">
-                            <span className="font-semibold text-[11.5px] block truncate leading-tight">{m.name}</span>
-                            <span className="text-[10px] text-muted-foreground capitalize">
-                              {m.role ? m.role.replace("_", " ") : "Collaborator"}
+                ))}
+              </div>
+
+              {/* Recent Things */}
+              <div className="mt-6 flex items-center justify-between border-t border-[#eef0f6] pt-4">
+                <span className="text-[14.5px] font-medium text-[#000128]">Recent Things</span>
+                <button
+                  type="button"
+                  onClick={() => setTab("things")}
+                  className="text-[12.5px] font-medium text-[#975ee2] hover:opacity-80 cursor-pointer"
+                >
+                  See all
+                </button>
+              </div>
+              <div className="mt-3 space-y-2.5">
+                {listThings.slice(0, 2).map((thing) => {
+                  const due = formatCourtDue(thing);
+                  return (
+                    <button
+                      key={thing.id}
+                      type="button"
+                      onClick={() => {
+                        setTab("things");
+                        setSelectedId(thing.id);
+                      }}
+                      className="flex w-full items-center gap-3 rounded-[11px] border border-[#f3f6fb] bg-white p-3 text-left hover:bg-[#f9f9fe] transition-colors cursor-pointer"
+                    >
+                      <span className="h-5 w-5 shrink-0 rounded-full border-2 border-[#cfd6e6]" />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13.5px] font-medium text-[#000128]">
+                          {thing.title}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-[12px]">
+                          <span className="rounded-full bg-[#e6ecfd] px-2 py-0.5 text-[#975ee2]">
+                            {thing.workStatus === "sorted"
+                              ? "Sorted"
+                              : thing.acknowledgement === "caught" || thing.workStatus === "under_progress"
+                                ? "Under Progress"
+                                : "Not Started"}
+                          </span>
+                          {thing.dueAt && (
+                            <span className="inline-flex items-center gap-1 text-[#666e94]">
+                              <Calendar className="h-3 w-3" />
+                              Due {due.label}
                             </span>
-                          </div>
+                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 2. Room Guidelines */}
-                <div className="rounded-xl border border-purple-100 bg-purple-50/50 p-3">
-                  <div className="flex items-start gap-2">
-                    <Shield className="h-3.5 w-3.5 text-purple-700 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-[11.5px] font-bold text-purple-950">Room Privacy & Rules</h4>
-                      <p className="mt-0.5 text-[10.5px] text-purple-800/80 leading-relaxed">
-                        Messages are visible to list members. Thing comments stay attached to individual Things.
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                    </button>
+                  );
+                })}
+                {listThings.length === 0 && (
+                  <p className="text-[12px] text-[#6a769c]">No Things yet.</p>
+                )}
               </div>
             </div>
           </div>
@@ -1007,548 +958,248 @@ function ListDetailPage() {
         {/* TAB 3: MEMBERS & PERMISSIONS */}
         {/* ========================================================================= */}
         {tab === "members" && (
-          <div className="space-y-4">
-            {/* Top 5 Members Metrics (Purely Dynamic) */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-3.5 shadow-2xs">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-100 bg-purple-50 text-purple-600">
-                  <UserPlus className="h-5 w-5" />
+          <div>
+            <div className="flex flex-col gap-3 lg:flex-row">
+              {/* Left: members management card */}
+              <div className="flex-1 rounded-[10px] bg-white p-6">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-[19.75px] font-medium text-[#000533]">Members &amp; Permissions</h2>
+                    <p className="mt-1 text-[12px] font-medium text-[#6a769c]">
+                      Control who can see and move Things in {list.name}.
+                    </p>
+                  </div>
+                  {list.role === "owner" && (
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (typeof navigator !== "undefined" && navigator.clipboard) {
+                            void navigator.clipboard.writeText(window.location.href);
+                          }
+                          toast.success("Invite link copied");
+                        }}
+                        className="inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-[#ebf1fd] bg-[#f6f8fd] px-3.5 text-[12px] font-medium text-[#1b2031] hover:brightness-95 transition cursor-pointer"
+                      >
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Copy invite link
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setInviting(true)}
+                        className="inline-flex h-[42px] items-center gap-2 rounded-[10px] bg-[#1d2335] px-3.5 text-[12px] font-medium text-white hover:brightness-110 transition cursor-pointer"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Invite people
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div>
-                  <span className="text-2xl font-bold leading-none text-foreground">
-                    {list.members.length}
-                  </span>
-                  <span className="block text-[11px] font-medium text-muted-foreground mt-0.5">
-                    Total members
-                  </span>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-3.5 shadow-2xs">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-orange-100 bg-orange-50 text-orange-600">
-                  <Crown className="h-5 w-5" />
-                </div>
-                <div>
-                  <span className="text-2xl font-bold leading-none text-foreground">
-                    {list.members.filter((m) => m.role === "owner").length}
-                  </span>
-                  <span className="block text-[11px] font-medium text-muted-foreground mt-0.5">
-                    Owner
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-3.5 shadow-2xs">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-100 bg-blue-50 text-blue-600">
-                  <Users className="h-5 w-5" />
-                </div>
-                <div>
-                  <span className="text-2xl font-bold leading-none text-foreground">
-                    {list.members.filter((m) => m.role === "collaborator" || (!m.role && m.role !== "owner" && m.role !== "view_only")).length}
-                  </span>
-                  <span className="block text-[11px] font-medium text-muted-foreground mt-0.5">
-                    Collaborators
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-3.5 shadow-2xs">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-100 bg-emerald-50 text-emerald-600">
-                  <Eye className="h-5 w-5" />
-                </div>
-                <div>
-                  <span className="text-2xl font-bold leading-none text-foreground">
-                    {list.members.filter((m) => m.role === "view_only").length}
-                  </span>
-                  <span className="block text-[11px] font-medium text-muted-foreground mt-0.5">
-                    View only
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 rounded-2xl border border-border/70 bg-white p-3.5 shadow-2xs">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-100 bg-purple-50 text-purple-600">
-                  <Shield className="h-5 w-5" />
-                </div>
-                <div>
-                  <span className="text-2xl font-bold leading-none text-foreground capitalize">
-                    {list.role.replace("_", " ")}
-                  </span>
-                  <span className="block text-[11px] font-medium text-muted-foreground mt-0.5">
-                    Your Permission
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Main 2-Column Section */}
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
-              {/* Left Column: Dynamic Member Lists */}
-              <div className="space-y-4 lg:col-span-7">
-                {/* Search & Invite Bar */}
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <label className="flex h-9 flex-1 min-w-[200px] items-center gap-2 rounded-xl border border-border/80 bg-white px-3 shadow-2xs focus-within:border-primary">
-                    <Search className="h-4 w-4 text-muted-foreground" />
+                <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                  <label className="flex h-[42px] min-w-[220px] flex-1 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3">
+                    <Search className="h-4 w-4 text-[#8487a7]" />
                     <input
                       value={memberSearch}
                       onChange={(e) => setMemberSearch(e.target.value)}
-                      placeholder="Search members..."
-                      className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
+                      placeholder="Search members"
+                      className="min-w-0 flex-1 bg-transparent text-[12px] text-[#000533] outline-none placeholder:text-[#8487a7]"
                     />
                   </label>
-
-                  {list.role === "owner" && (
-                    <button
-                      type="button"
-                      onClick={() => setInviting(true)}
-                      className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-[12.5px] font-semibold text-primary-foreground shadow-xs hover:bg-primary/90"
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      Invite member
-                    </button>
-                  )}
-
-                  <div className="flex items-center gap-1">
-                    {(["all", "owner", "collaborator", "view_only"] as const).map((rf) => (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
                       <button
-                        key={rf}
                         type="button"
-                        onClick={() => setMemberRoleFilter(rf)}
-                        className={cn(
-                          "rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize transition-colors",
-                          memberRoleFilter === rf
-                            ? "border-primary bg-primary/10 font-semibold text-primary"
-                            : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-                        )}
+                        className="inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-[#ebf1fd] bg-[#f6f8fd] px-3.5 text-[12px] font-medium text-[#2548fb] cursor-pointer"
                       >
-                        {rf === "view_only" ? "View only" : rf}
+                        {memberRoleFilter === "all"
+                          ? "All Roles"
+                          : memberRoleFilter === "view_only"
+                            ? "View Only"
+                            : memberRoleFilter === "owner"
+                              ? "Owner"
+                              : "Collaborator"}
+                        <ChevronDown className="h-3.5 w-3.5" />
                       </button>
-                    ))}
-                  </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40 bg-white">
+                      <DropdownMenuRadioGroup
+                        value={memberRoleFilter}
+                        onValueChange={(v) => setMemberRoleFilter(v as typeof memberRoleFilter)}
+                      >
+                        <DropdownMenuRadioItem value="all" className="text-[12px]">All Roles</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="owner" className="text-[12px]">Owner</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="collaborator" className="text-[12px]">Collaborator</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="view_only" className="text-[12px]">View Only</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
 
-                {/* Member Cards List */}
-                <div className="space-y-4 rounded-2xl border border-border/70 bg-white p-4 shadow-2xs">
-                  {/* 1. Owner Section */}
-                  {ownerMembers.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                        <Crown className="h-3.5 w-3.5 text-amber-500" />
-                        Owner
-                      </span>
-                      {ownerMembers.map((m) => (
-                        <div
-                          key={m.profileId || m.actorId || m.name}
-                          className="flex items-center justify-between rounded-xl border border-border/60 p-3 hover:bg-muted/20"
-                        >
-                          <div className="flex items-center gap-3">
-                            <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={32} />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-[13px]">{m.name}</span>
-                                <span className="rounded-full bg-purple-100 px-2 py-0.2 text-[10px] font-bold text-purple-700">
-                                  Owner
+                {/* Member groups */}
+                <div className="mt-5 space-y-5">
+                  {(
+                    [
+                      { key: "owner", title: `Owner (${ownerMembers.length})`, members: ownerMembers },
+                      { key: "collaborator", title: `Collaborators (${collaboratorMembers.length})`, members: collaboratorMembers },
+                      { key: "view_only", title: `View Only (${viewOnlyMembers.length})`, members: viewOnlyMembers },
+                    ] as const
+                  ).map((group) =>
+                    group.members.length === 0 ? null : (
+                      <div key={group.key} className="space-y-2.5">
+                        <h3 className="text-[15px] font-medium text-[#000533]">{group.title}</h3>
+                        {group.members.map((m) => {
+                          const memberId = m.profileId || m.actorId || m.name;
+                          const role = group.key;
+                          const badge =
+                            role === "owner"
+                              ? { bg: "#edeafe", text: "#2a14a8", label: "Owner" }
+                              : role === "collaborator"
+                                ? { bg: "#e9f0fd", text: "#975ee2", label: "Collaborator" }
+                                : { bg: "#f2f2fb", text: "#484872", label: "View Only" };
+                          const capability =
+                            role === "owner"
+                              ? "Can manage list and members"
+                              : role === "collaborator"
+                                ? "Can create, edit, catch, pace and reassign Things"
+                                : "Can view list and Things";
+                          const rowBg =
+                            role === "owner" ? "bg-[#f9f9fe]" : role === "collaborator" ? "bg-[#fdfdfe]" : "bg-white";
+                          const canManage = list.role === "owner" && role !== "owner";
+                          return (
+                            <div
+                              key={memberId}
+                              className={cn(
+                                "flex items-center gap-3 rounded-[11px] border border-[#f4f4fc] px-4 py-2.5",
+                                rowBg,
+                              )}
+                            >
+                              <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={40} />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[12.5px] font-medium text-[#000533]">{m.name}</div>
+                                <div className="text-[11.4px] text-[#686c8d]">{capability}</div>
+                              </div>
+                              <span
+                                className="hidden shrink-0 rounded-[9px] px-3 py-1.5 text-[11.4px] sm:inline-block"
+                                style={{ backgroundColor: badge.bg, color: badge.text }}
+                              >
+                                {badge.label}
+                              </span>
+                              {canManage ? (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="inline-flex h-[38px] w-[124px] shrink-0 items-center justify-between rounded-[6px] border border-[#e8e9f7] bg-[#fdfdfe] px-3 text-[11.4px] text-[#686c8d] cursor-pointer"
+                                    >
+                                      {role === "collaborator" ? "Collaborator" : "View only"}
+                                      <ChevronDown className="h-3.5 w-3.5" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-48 bg-white">
+                                    <DropdownMenuItem
+                                      onClick={async () => {
+                                        try {
+                                          await rpcChangeListRole(
+                                            list.id,
+                                            memberId,
+                                            role === "collaborator" ? "view_only" : "collaborator",
+                                          );
+                                          toast.success(`Updated ${m.name}'s role`);
+                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
+                                          await qc.invalidateQueries({ queryKey: ["lists"] });
+                                        } catch (err: any) {
+                                          toast.error(err?.message || "Failed to update role");
+                                        }
+                                      }}
+                                      className="text-[12px]"
+                                    >
+                                      {role === "collaborator" ? (
+                                        <>
+                                          <Eye className="mr-2 h-3.5 w-3.5 text-emerald-500" /> Make View only
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Users className="mr-2 h-3.5 w-3.5 text-blue-500" /> Make Collaborator
+                                        </>
+                                      )}
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-[12px] text-destructive focus:text-destructive"
+                                      onClick={async () => {
+                                        try {
+                                          await rpcRemoveListMember(list.id, memberId);
+                                          toast.success(`Removed ${m.name} from list`);
+                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
+                                          await qc.invalidateQueries({ queryKey: ["lists"] });
+                                          await qc.invalidateQueries({ queryKey: ["assignable-people"] });
+                                        } catch (err: any) {
+                                          toast.error(err?.message || "Failed to remove member");
+                                        }
+                                      }}
+                                    >
+                                      <X className="mr-2 h-3.5 w-3.5 text-destructive" /> Remove from list
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              ) : (
+                                <span className="inline-flex h-[38px] w-[124px] shrink-0 items-center gap-1.5 rounded-[6px] border border-[#eeeffb] bg-[#f6f6fd] px-3 text-[11.4px] text-[#686c8d]">
+                                  <Crown className="h-3.5 w-3.5 text-[#d9a441]" />
+                                  {badge.label}
                                 </span>
-                              </div>
-                              <p className="text-[11px] text-muted-foreground">Full access & list management</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <button type="button" className="text-muted-foreground hover:text-foreground">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 2. Collaborators Section */}
-                  {collaboratorMembers.length > 0 && (
-                    <div className="space-y-2 pt-2 border-t border-border/60">
-                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                        <Users className="h-3.5 w-3.5 text-blue-500" />
-                        Collaborators
-                      </span>
-                      <div className="space-y-2">
-                        {collaboratorMembers.map((m) => (
-                          <div
-                            key={m.profileId || m.actorId || m.name}
-                            className="flex items-center justify-between rounded-xl border border-border/60 p-3 hover:bg-muted/20"
-                          >
-                            <div className="flex items-center gap-3">
-                              <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={32} />
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-[13px]">{m.name}</span>
-                                  <span className="rounded-full bg-blue-100 px-2 py-0.2 text-[10px] font-bold text-blue-700">
-                                    Collaborator
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground">Can add, edit, and pace Things</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {list.role === "owner" && (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
-                                    >
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem
-                                      onClick={async () => {
-                                        try {
-                                          await rpcChangeListRole(list.id, m.profileId || m.actorId || m.name, "view_only");
-                                          toast.success(`Updated ${m.name}'s role to View only`);
-                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
-                                          await qc.invalidateQueries({ queryKey: ["lists"] });
-                                        } catch (err: any) {
-                                          toast.error(err?.message || "Failed to update role");
-                                        }
-                                      }}
-                                    >
-                                      <Eye className="mr-2 h-3.5 w-3.5 text-emerald-500" />
-                                      Make View only
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={async () => {
-                                        try {
-                                          await rpcRemoveListMember(list.id, m.profileId || m.actorId || m.name);
-                                          toast.success(`Removed ${m.name} from list`);
-                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
-                                          await qc.invalidateQueries({ queryKey: ["lists"] });
-                                          await qc.invalidateQueries({ queryKey: ["assignable-people"] });
-                                        } catch (err: any) {
-                                          toast.error(err?.message || "Failed to remove member");
-                                        }
-                                      }}
-                                    >
-                                      <X className="mr-2 h-3.5 w-3.5 text-destructive" />
-                                      Remove from list
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
                               )}
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
-                    </div>
+                    ),
                   )}
-
-                  {/* 3. View only Section */}
-                  {viewOnlyMembers.length > 0 && (
-                    <div className="space-y-2 pt-2 border-t border-border/60">
-                      <span className="flex items-center gap-1.5 text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                        <Eye className="h-3.5 w-3.5 text-emerald-500" />
-                        View only
-                      </span>
-                      <div className="space-y-2">
-                        {viewOnlyMembers.map((m) => (
-                          <div
-                            key={m.profileId || m.actorId || m.name}
-                            className="flex items-center justify-between rounded-xl border border-border/60 p-3 hover:bg-muted/20"
-                          >
-                            <div className="flex items-center gap-3">
-                              <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={32} />
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-[13px]">{m.name}</span>
-                                  <span className="rounded-full bg-emerald-100 px-2 py-0.2 text-[10px] font-bold text-emerald-700">
-                                    View only
-                                  </span>
-                                </div>
-                                <p className="text-[11px] text-muted-foreground">Can view list and Things only</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              {list.role === "owner" && (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted/60 hover:text-foreground cursor-pointer transition-colors"
-                                    >
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem
-                                      onClick={async () => {
-                                        try {
-                                          await rpcChangeListRole(list.id, m.profileId || m.actorId || m.name, "collaborator");
-                                          toast.success(`Updated ${m.name}'s role to Collaborator`);
-                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
-                                          await qc.invalidateQueries({ queryKey: ["lists"] });
-                                        } catch (err: any) {
-                                          toast.error(err?.message || "Failed to update role");
-                                        }
-                                      }}
-                                    >
-                                      <Users className="mr-2 h-3.5 w-3.5 text-blue-500" />
-                                      Make Collaborator
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive focus:text-destructive"
-                                      onClick={async () => {
-                                        try {
-                                          await rpcRemoveListMember(list.id, m.profileId || m.actorId || m.name);
-                                          toast.success(`Removed ${m.name} from list`);
-                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
-                                          await qc.invalidateQueries({ queryKey: ["lists"] });
-                                          await qc.invalidateQueries({ queryKey: ["assignable-people"] });
-                                        } catch (err: any) {
-                                          toast.error(err?.message || "Failed to remove member");
-                                        }
-                                      }}
-                                    >
-                                      <X className="mr-2 h-3.5 w-3.5 text-destructive" />
-                                      Remove from list
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
+                  {filteredMembers.length === 0 && (
+                    <p className="py-8 text-center text-[12px] text-[#6a769c]">No members match this filter.</p>
                   )}
-
-                  {filteredMembers.length === 0 ? (
-                    <div className="py-8 text-center text-[12.5px] text-muted-foreground">
-                      No members found matching this filter.
-                    </div>
-                  ) : null}
                 </div>
               </div>
 
-              {/* Right Column: Permission Matrix & Info Card */}
-              <div className="space-y-4 lg:col-span-5">
-                {/* Permission Matrix Table */}
-                <div className="overflow-hidden rounded-2xl border border-border/80 bg-white p-5 shadow-2xs">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-100 text-purple-700">
-                        <ShieldCheck className="h-4 w-4" />
+              {/* Right: Permission Guide */}
+              <div className="w-full shrink-0 space-y-3 lg:w-[360px]">
+                <div className="rounded-[10px] bg-white p-5">
+                  <h3 className="text-[18px] font-medium text-[#000533]">Permission Guide</h3>
+                  <div className="mt-4 space-y-4">
+                    {[
+                      {
+                        icon: <Users className="h-5 w-5" />,
+                        circle: "bg-[#ede8fe] text-[#975ee2]",
+                        label: "Collaborator",
+                        desc: "Create, edit, catch pace and reassign Things",
+                      },
+                      {
+                        icon: <Eye className="h-5 w-5" />,
+                        circle: "bg-[#e6ecfd] text-[#3b6ff5]",
+                        label: "View Only",
+                        desc: "Read List and Things",
+                      },
+                      {
+                        icon: <Crown className="h-5 w-5" />,
+                        circle: "bg-[#fdeede] text-[#d9822b]",
+                        label: "Owner",
+                        desc: "Manage members, roles and list",
+                      },
+                    ].map((g) => (
+                      <div key={g.label} className="flex items-center gap-3">
+                        <span
+                          className={cn(
+                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
+                            g.circle,
+                          )}
+                        >
+                          {g.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-[14px] font-medium text-[#000533]">{g.label}</div>
+                          <div className="text-[11px] text-[#6a769c]">{g.desc}</div>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-bold text-[13.5px] text-foreground leading-none">
-                          Permission Matrix
-                        </h3>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          Capabilities and access rights by role
-                        </p>
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-purple-50 border border-purple-200/60 px-2.5 py-0.5 text-[10.5px] font-semibold text-purple-700">
-                      3 Roles
-                    </span>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-center text-[11.5px] border-collapse">
-                      <thead>
-                        <tr className="border-b border-border/60 text-muted-foreground pb-2">
-                          <th className="pb-3 text-left font-semibold text-[11px] uppercase tracking-wider text-muted-foreground">
-                            Role
-                          </th>
-                          <th className="pb-3 px-1.5 font-medium" title="View Things">
-                            <span className="flex flex-col items-center gap-1">
-                              <Eye className="h-3.5 w-3.5 text-muted-foreground/80" />
-                              <span className="text-[10px] font-semibold text-muted-foreground">View</span>
-                            </span>
-                          </th>
-                          <th className="pb-3 px-1.5 font-medium" title="Add Things">
-                            <span className="flex flex-col items-center gap-1">
-                              <PlusCircle className="h-3.5 w-3.5 text-muted-foreground/80" />
-                              <span className="text-[10px] font-semibold text-muted-foreground">Add</span>
-                            </span>
-                          </th>
-                          <th className="pb-3 px-1.5 font-medium" title="Edit Things">
-                            <span className="flex flex-col items-center gap-1">
-                              <Pencil className="h-3.5 w-3.5 text-muted-foreground/80" />
-                              <span className="text-[10px] font-semibold text-muted-foreground">Edit</span>
-                            </span>
-                          </th>
-                          <th className="pb-3 px-1.5 font-medium" title="Assign Things">
-                            <span className="flex flex-col items-center gap-1">
-                              <UserCheck className="h-3.5 w-3.5 text-muted-foreground/80" />
-                              <span className="text-[10px] font-semibold text-muted-foreground">Assign</span>
-                            </span>
-                          </th>
-                          <th className="pb-3 px-1.5 font-medium" title="Reassign Things">
-                            <span className="flex flex-col items-center gap-1">
-                              <RefreshCw className="h-3.5 w-3.5 text-muted-foreground/80" />
-                              <span className="text-[10px] font-semibold text-muted-foreground">Reassign</span>
-                            </span>
-                          </th>
-                          <th className="pb-3 px-1.5 font-medium" title="Manage Members & List">
-                            <span className="flex flex-col items-center gap-1">
-                              <Users className="h-3.5 w-3.5 text-muted-foreground/80" />
-                              <span className="text-[10px] font-semibold text-muted-foreground">Manage</span>
-                            </span>
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border/60">
-                        {/* 1. Owner */}
-                        <tr className="hover:bg-purple-50/20 transition-colors">
-                          <td className="py-3 text-left">
-                            <div className="flex items-center gap-2">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-purple-100 text-purple-700">
-                                <Crown className="h-3.5 w-3.5" />
-                              </span>
-                              <div>
-                                <span className="font-bold text-[12.5px] text-foreground">Owner</span>
-                                <span className="block text-[10px] text-muted-foreground">Full control</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                        </tr>
-
-                        {/* 2. Collaborator */}
-                        <tr className="hover:bg-blue-50/20 transition-colors">
-                          <td className="py-3 text-left">
-                            <div className="flex items-center gap-2">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
-                                <Users className="h-3.5 w-3.5" />
-                              </span>
-                              <div>
-                                <span className="font-bold text-[12.5px] text-foreground">Collaborator</span>
-                                <span className="block text-[10px] text-muted-foreground">Work & pace</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/40">
-                              <Minus className="h-2.5 w-2.5 stroke-[2]" />
-                            </span>
-                          </td>
-                        </tr>
-
-                        {/* 3. View only */}
-                        <tr className="hover:bg-emerald-50/20 transition-colors">
-                          <td className="py-3 text-left">
-                            <div className="flex items-center gap-2">
-                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
-                                <Eye className="h-3.5 w-3.5" />
-                              </span>
-                              <div>
-                                <span className="font-bold text-[12.5px] text-foreground">View only</span>
-                                <span className="block text-[10px] text-muted-foreground">Read & comment</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200/60 shadow-2xs">
-                              <Check className="h-3 w-3 stroke-[2.5]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/40">
-                              <Minus className="h-2.5 w-2.5 stroke-[2]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/40">
-                              <Minus className="h-2.5 w-2.5 stroke-[2]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/40">
-                              <Minus className="h-2.5 w-2.5 stroke-[2]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/40">
-                              <Minus className="h-2.5 w-2.5 stroke-[2]" />
-                            </span>
-                          </td>
-                          <td className="py-3 px-1.5">
-                            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted/40 text-muted-foreground/40">
-                              <Minus className="h-2.5 w-2.5 stroke-[2]" />
-                            </span>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Owner Governance Shield Banner */}
-                <div className="flex items-start gap-3 rounded-2xl border border-purple-200/70 bg-gradient-to-r from-purple-50/80 to-indigo-50/40 p-4 shadow-2xs">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-purple-100 text-purple-700">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-[13px] font-bold text-purple-950">
-                      Owner Governance
-                    </h4>
-                    <p className="mt-0.5 text-[11.5px] text-purple-900/80 leading-relaxed">
-                      Only list owners can invite members, remove members, or reassign permission roles. Collaborators can create, edit, catch, and pace Things.
-                    </p>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1767,6 +1418,7 @@ function ListDetailPage() {
           </div>
         )}
       </div>
+      <ListCallPanel call={call} selfName={selfName} />
     </AppShell>
   );
 }

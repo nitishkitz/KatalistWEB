@@ -1,11 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
-import type { Importance, Pace, WorkStatus } from "@/domain/thing";
+import type { Importance, Pace, ThingFile, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
+import { authedFetch } from "@/lib/authed-fetch";
 import { DEMO_ACTOR_BY_KEY } from "@/features/demo/identities";
 import {
   addCommentLocal,
   addListMemberLocal,
   addBucketRef,
+  addThingFileLocal,
   catchLocal,
   changeListRoleLocal,
   createBucketLocal,
@@ -26,6 +28,8 @@ import {
   reopenLocalThing,
   restoreLocal,
   shredLocal,
+  snoozeLocal,
+  unsnoozeLocal,
   tossLocalThing,
 } from "./local-state";
 
@@ -177,6 +181,15 @@ export async function rpcSetWorkStatus(thingId: string, status: MutableWorkStatu
   });
 }
 
+/**
+ * Catch a Thing and immediately mark it In Progress. In the product model,
+ * catching === starting work, so these always happen together.
+ */
+export async function rpcCatchAndStart(thingId: string, pace: Pace = "next") {
+  await rpcCatchThing(thingId, pace);
+  await rpcSetWorkStatus(thingId, "under_progress");
+}
+
 export async function rpcSetDue(thingId: string, dueAt: string, dueHasTime: boolean) {
   return runDomainMutation({
     thingId,
@@ -188,10 +201,51 @@ export async function rpcSetDue(thingId: string, dueAt: string, dueHasTime: bool
   });
 }
 
-export async function rpcNudgeThing(thingId: string) {
+/**
+ * Snooze a Thing privately until a future time (June BRD v1.1 swipe-left).
+ * Never mutates the shared Thing — writes only to the caller's thing_snooze row.
+ */
+export async function rpcSnoozeThing(thingId: string, snoozedUntil: Date) {
   return runDomainMutation({
     thingId,
-    live: () => liveRpc(() => supabase.rpc("nudge_thing", { p_thing_id: thingId })),
+    live: () =>
+      liveRpc(() =>
+        supabase.rpc("snooze_thing", {
+          p_thing_id: thingId,
+          p_snoozed_until: snoozedUntil.toISOString(),
+        }),
+      ),
+    preview: () => {
+      snoozeLocal(thingId, snoozedUntil.getTime());
+      return null as never;
+    },
+  });
+}
+
+/** Wake a snoozed Thing early. */
+export async function rpcUnsnoozeThing(thingId: string) {
+  return runDomainMutation({
+    thingId,
+    live: () => liveRpc(() => supabase.rpc("unsnooze_thing", { p_thing_id: thingId })),
+    preview: () => {
+      unsnoozeLocal(thingId);
+      return null as never;
+    },
+  });
+}
+
+export type NudgeReason = "waiting_for_catch" | "quiet" | "due_soon" | "stale" | "repeated_handoff";
+
+export async function rpcNudgeThing(thingId: string, reason?: NudgeReason) {
+  return runDomainMutation({
+    thingId,
+    live: () =>
+      liveRpc(() =>
+        supabase.rpc("nudge_thing", {
+          p_thing_id: thingId,
+          ...(reason ? { p_reason: reason } : {}),
+        }),
+      ),
     preview: () => {
       nudgeLocal(thingId);
       return null as never;
@@ -238,7 +292,7 @@ export async function rpcReopenThing(thingId: string) {
     live: async () => {
       try {
         if (typeof window !== "undefined") {
-          const res = await fetch("/api/things/reopen", {
+          const res = await authedFetch("/api/things/reopen", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ thingId }),
@@ -249,7 +303,7 @@ export async function rpcReopenThing(thingId: string) {
         // ignore and fallback to rpc
       }
       return liveRpc(() =>
-        supabase.rpc("reopen_thing", {
+        (supabase.rpc as any)("reopen_thing", {
           p_thing_id: thingId,
         }),
       );
@@ -269,10 +323,11 @@ export async function rpcCreateThing(input: {
   assigneeActorId?: string;
   dueAt?: string;
   dueHasTime?: boolean;
+  files?: ThingFile[];
 }) {
   return runDomainMutation({
-    live: () =>
-      liveRpc(() =>
+    live: async () => {
+      const created = await liveRpc(() =>
         supabase.rpc("create_thing", {
           p_title: input.title,
           p_context: input.context,
@@ -281,10 +336,18 @@ export async function rpcCreateThing(input: {
           p_assignee_actor_id: input.assigneeActorId,
           p_due_at: input.dueAt,
           p_due_has_time: input.dueHasTime,
+          p_notes: input.files?.length ? JSON.stringify({ files: input.files }) : undefined,
         }),
-      ),
+      );
+      if (input.files?.length && created?.id && getThing(created.id)) {
+        for (let i = 0; i < input.files.length; i++) {
+          addThingFileLocal(created.id, input.files[i]);
+        }
+      }
+      return created;
+    },
     preview: () => {
-      tossLocalThing({
+      const created = tossLocalThing({
         title: input.title,
         context: input.context,
         ownerImportance: input.ownerImportance,
@@ -292,8 +355,9 @@ export async function rpcCreateThing(input: {
         assigneeId: input.assigneeActorId,
         dueAt: input.dueAt,
         dueHasTime: input.dueHasTime,
+        files: input.files,
       });
-      return null as never;
+      return created as never;
     },
   });
 }
@@ -425,10 +489,43 @@ export async function rpcAssignOutsideKatalist(input: {
   };
 }
 
-export async function rpcCreateList(name: string, context: "work" | "home") {
+export async function rpcCreateList(input: {
+  name: string;
+  context: "work" | "home";
+  description?: string | null;
+}): Promise<{ id: string }> {
+  const { name, context, description } = input;
+  const params: Record<string, unknown> = { p_name: name, p_context: context };
+  if (description && description.trim()) params.p_description = description.trim();
+  return runDomainMutation<{ id: string }>({
+    live: () => liveRpc(() => supabase.rpc("create_list", params as never)) as Promise<{ id: string }>,
+    preview: () => createListLocal(name, context, description ?? undefined) as unknown as { id: string },
+  });
+}
+
+/**
+ * Attach (or clear) a List cover after creation. The cover path must be
+ * '<listId>/<filename>' to satisfy the lists_cover_private_path constraint,
+ * so this can only run once the List exists.
+ */
+export async function rpcSetListCover(listId: string, coverStoragePath: string | null) {
   return runDomainMutation({
-    live: () => liveRpc(() => supabase.rpc("create_list", { p_name: name, p_context: context })),
-    preview: () => createListLocal(name, context) as never,
+    live: () =>
+      liveRpc(() =>
+        supabase.rpc("set_list_cover", { p_list_id: listId, p_cover_storage_path: coverStoragePath ?? "" }),
+      ),
+    preview: () => null as never,
+  });
+}
+
+/** Update a List's description after creation (owner only). */
+export async function rpcSetListDescription(listId: string, description: string | null) {
+  return runDomainMutation({
+    live: () =>
+      liveRpc(() =>
+        supabase.rpc("set_list_description", { p_list_id: listId, p_description: description ?? "" }),
+      ),
+    preview: () => null as never,
   });
 }
 
@@ -497,7 +594,7 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
         return null as never;
       }
 
-      const res = await fetch("/api/buckets/add-item", {
+      const res = await authedFetch("/api/buckets/add-item", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ bucketId, thingId, listId }),
@@ -571,9 +668,33 @@ export async function rpcRestore(objectId: string, objectType: "thing" | "list" 
 
 const actorIdByProfileCache = new Map<string, string>();
 
-export async function rpcComment(thingId: string, body: string) {
+export async function rpcAddThingFile(thingId: string, file: ThingFile) {
+  if (getThing(thingId)) {
+    addThingFileLocal(thingId, file);
+  }
+  if (!isPreviewMode() && isUuid(thingId)) {
+    try {
+      const { data: existing } = await supabase.from("things").select("notes").eq("id", thingId).maybeSingle();
+      let files: ThingFile[] = [];
+      if (existing?.notes) {
+        try {
+          const parsed = JSON.parse(existing.notes);
+          if (Array.isArray(parsed.files)) files = parsed.files;
+        } catch {
+          // ignore
+        }
+      }
+      files.push(file);
+      await supabase.from("things").update({ notes: JSON.stringify({ files }) }).eq("id", thingId);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export async function rpcComment(thingId: string, body: string, attachments?: ThingFile[]) {
   if (isPreviewMode()) {
-    addCommentLocal(thingId, body);
+    addCommentLocal(thingId, body, undefined, attachments);
     return;
   }
   const { data: auth } = await supabase.auth.getUser();
@@ -592,9 +713,13 @@ export async function rpcComment(thingId: string, body: string) {
     actorIdByProfileCache.set(auth.user.id, actorId);
   }
 
+  const fullBody = attachments?.length
+    ? `${body}\n<!--attachments:${JSON.stringify(attachments)}-->`
+    : body;
+
   const { error } = await supabase.from("thing_comments").insert({
     thing_id: thingId,
-    body,
+    body: fullBody,
     author_actor_id: actorId,
   });
   if (error) throw error;
@@ -671,7 +796,7 @@ export async function rpcAddListMember(
 
       // 1. First try API endpoint backed by service role to properly resolve actors/demo personas
       try {
-        const res = await fetch("/api/lists/add-member", {
+        const res = await authedFetch("/api/lists/add-member", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ listId, personId: profileOrActorId, role }),
@@ -736,7 +861,7 @@ export async function rpcChangeListRole(
 
       // 1. First try API endpoint
       try {
-        const res = await fetch("/api/lists/change-role", {
+        const res = await authedFetch("/api/lists/change-role", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ listId, personId: profileOrActorId, role }),
@@ -788,7 +913,7 @@ export async function rpcRemoveListMember(listId: string, profileOrActorId: stri
 
       // 1. First try API endpoint
       try {
-        const res = await fetch("/api/lists/remove-member", {
+        const res = await authedFetch("/api/lists/remove-member", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ listId, personId: profileOrActorId }),

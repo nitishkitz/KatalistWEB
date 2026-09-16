@@ -1,24 +1,38 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   AlertCircle,
+  AtSign,
   Bell,
   Calendar,
   Check,
+  ChevronDown,
+  ChevronLeft,
   Eye,
+  FileText,
+  Flag,
+  Folder,
   Hand,
   Loader2,
   List as ListIcon,
   Lock,
   MoreHorizontal,
+  Paperclip,
+  Play,
   RotateCcw,
   Star,
   Trash2,
   UserPlus,
   X,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { domainErrorMessage } from "@/lib/domain-error";
 import type { Pace, Thing, WorkStatus } from "@/domain/thing";
@@ -28,10 +42,13 @@ import { PersonCell } from "@/components/katalist/PersonCell";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
 import {
+  isUuid,
+  rpcAddThingFile,
   rpcAddToBucket,
   rpcAssignOutsideKatalist,
   rpcCancelThing,
   rpcCatchThing,
+  rpcCatchAndStart,
   rpcNudgeThing,
   rpcReopenThing,
   rpcRemoveFromBucket,
@@ -43,8 +60,11 @@ import {
   rpcSortThing,
 } from "./rpc";
 import { invalidatePersonalSurfaces } from "./personal-shred";
+import { isPreviewMode } from "@/lib/session-mode";
+import { uploadThingAttachment } from "./attachments";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { useCourt } from "@/features/court/use-court";
+import { formatCourtDue } from "@/features/court/court-view-model";
 import { useSession } from "@/hooks/useSession";
 import { useThing } from "./use-thing";
 import { useThingComments } from "./use-thing-comments";
@@ -53,6 +73,9 @@ import { useAvatarUrl } from "@/features/people/directory";
 import { useBuckets } from "@/features/buckets/use-buckets";
 import { getBucketRefs } from "./local-state";
 import { useLocalVersion } from "./use-local-version";
+import { type ThingFile } from "@/features/things/PDFViewer";
+import { markThingAsRead } from "@/features/things/read-state";
+import { processFileForUpload } from "@/lib/file-utils";
 
 export type ThingDetailContentProps = {
   initialThing: Thing | null;
@@ -60,10 +83,36 @@ export type ThingDetailContentProps = {
   onAfterTerminalAction?: () => void;
   variant?: "default" | "court";
   viewOnly?: boolean;
+  onFileSelect?: (file: ThingFile) => void;
 };
 
 const paces: Pace[] = ["now", "next", "later"];
 const statuses: WorkStatus[] = ["not_started", "under_progress", "sorted"];
+
+/** File-type chip colors matching the Figma detail dialog. */
+function fileTypeChip(type: ThingFile["type"]): {
+  label: string;
+  bg: string;
+  text: string;
+  border: string;
+} {
+  switch (type) {
+    case "pdf":
+      return { label: "PDF", bg: "#fef9fa", text: "#ff080a", border: "#fdecec" };
+    case "docx":
+      return { label: "DOCX", bg: "#dde9fe", text: "#0238fa", border: "#dde9fe" };
+    case "excel":
+      return { label: "XLS", bg: "#dcfce7", text: "#16a34a", border: "#bbf7d0" };
+    case "video":
+      return { label: "VID", bg: "#eadffe", text: "#4218f0", border: "#eadffe" };
+    case "image":
+    case "png":
+    case "jpg":
+      return { label: "PNG", bg: "#eadffe", text: "#4218f0", border: "#eadffe" };
+    default:
+      return { label: "FILE", bg: "#eef0f6", text: "#515b8e", border: "#e4e6ef" };
+  }
+}
 const paceTone: Record<Pace, string> = {
   now: "text-status-now",
   next: "text-status-next",
@@ -88,19 +137,23 @@ function CommentRow({
   at,
   avatarUrl: explicitAvatar,
   sending,
+  attachments,
+  onFileSelect,
 }: {
   author: string;
   body: string;
   at: string;
   avatarUrl?: string | null;
   sending?: boolean;
+  attachments?: ThingFile[];
+  onFileSelect?: (file: ThingFile) => void;
 }) {
   const avatarUrl = useAvatarUrl(author, null, explicitAvatar);
 
   return (
     <div
       className={cn(
-        "flex gap-2.5 rounded-lg border border-border/70 bg-white px-3 py-2 transition-opacity",
+        "flex gap-2.5 rounded-xl border border-border/70 bg-white px-3 py-2.5 transition-opacity",
         sending && "opacity-75 bg-muted/15",
       )}
     >
@@ -119,7 +172,56 @@ function CommentRow({
             )}
           </time>
         </div>
-        <p className="mt-0.5 text-[12px] leading-relaxed text-foreground">{body}</p>
+        {body ? <p className="mt-0.5 text-[12px] leading-relaxed text-foreground">{body}</p> : null}
+        {attachments && attachments.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {attachments.map((att) => {
+              const isImg = att.type === "image" || att.type === "png" || att.type === "jpg";
+              const isVid = att.type === "video";
+              return (
+                <button
+                  key={att.id}
+                  type="button"
+                  onClick={() => onFileSelect?.(att)}
+                  className="group/att flex items-center gap-2 rounded-lg border border-border/80 bg-slate-50/70 hover:bg-white hover:border-slate-300 p-1.5 text-left transition-all cursor-pointer shadow-2xs"
+                >
+                  {isImg && att.url ? (
+                    <img src={att.url} alt={att.name} className="h-8 w-8 rounded-md object-cover border border-slate-200" />
+                  ) : isVid ? (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-purple-50 text-purple-600 border border-purple-200">
+                      <Play className="h-3.5 w-3.5 fill-current" />
+                    </div>
+                  ) : (
+                    <span
+                      className={cn(
+                        "flex h-7 px-1.5 items-center justify-center rounded text-[9px] font-bold uppercase",
+                        att.type === "pdf"
+                          ? "bg-red-50 text-red-600 border border-red-200"
+                          : att.type === "excel"
+                            ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                            : att.type === "docx"
+                              ? "bg-blue-50 text-blue-600 border border-blue-200"
+                              : "bg-slate-100 text-slate-600 border border-slate-200",
+                      )}
+                    >
+                      {att.type}
+                    </span>
+                  )}
+                  <div className="min-w-0 pr-1">
+                    <p className="text-[11px] font-semibold text-slate-900 group-hover/att:text-primary truncate max-w-[130px]">
+                      {att.name}
+                    </p>
+                    {att.sizeLabel && (
+                      <p className="text-[9px] text-muted-foreground font-medium">
+                        {att.sizeLabel}
+                      </p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -240,6 +342,7 @@ export function ThingDetailContent({
   onAfterTerminalAction,
   variant = "default",
   viewOnly = false,
+  onFileSelect,
 }: ThingDetailContentProps): React.ReactNode {
   const qc = useQueryClient();
   const localVersion = useLocalVersion();
@@ -295,9 +398,63 @@ export function ThingDetailContent({
   const [comment, setComment] = useState("");
   const [due, setDue] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [commentAttachments, setCommentAttachments] = useState<ThingFile[]>([]);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const commentFileInputRef = useRef<HTMLInputElement | null>(null);
+  const thingFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (thing?.id) {
+      markThingAsRead(thing.id);
+    }
+  }, [thing?.id]);
+
+  const handleCommentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const files = e.target.files;
+      if (!files || files.length === 0) return;
+      const newFiles: ThingFile[] = [];
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const processed = await processFileForUpload(files[i]);
+          newFiles.push(processed);
+        } catch {
+          toast.error(`Could not attach ${files[i].name}`);
+        }
+      }
+      setCommentAttachments((prev) => [...prev, ...newFiles]);
+    } finally {
+      if (commentFileInputRef.current) commentFileInputRef.current.value = "";
+    }
+  };
+
+  const handleThingFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const files = e.target.files;
+      if (!files || files.length === 0 || !thing?.id) return;
+      const useRealStorage = !isPreviewMode() && isUuid(thing.id);
+      for (let i = 0; i < files.length; i++) {
+        try {
+          const processed = useRealStorage
+            ? await uploadThingAttachment(thing.id, files[i])
+            : await processFileForUpload(files[i]);
+          if (!useRealStorage) await rpcAddThingFile(thing.id, processed);
+          onFileSelect?.(processed);
+          toast.success(`Attached ${files[i].name}`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
+        }
+      }
+      await qc.invalidateQueries({ queryKey: ["thing", thing.id] });
+      await qc.invalidateQueries({ queryKey: ["court"] });
+    } finally {
+      if (thingFileInputRef.current) thingFileInputRef.current.value = "";
+    }
+  };
 
   useEffect(() => {
     setMoreOpen(false);
+    setCommentAttachments([]);
   }, [thing?.id]);
 
   const invalidate = async () => {
@@ -347,9 +504,7 @@ export function ThingDetailContent({
     );
   }, [buckets, thing.id, localVersion]);
   const currentBucket = currentBuckets[0] ?? null;
-  const dueLabel = thing.dueAt
-    ? format(new Date(thing.dueAt), thing.dueHasTime ? "EEE, MMM d · h:mm a" : "EEE, MMM d")
-    : null;
+  const dueLabel = thing.dueAt ? formatCourtDue(thing).label : null;
 
   const creatorAvatar = useAvatarUrl(thing.creator.name, null, thing.creator.avatarUrl);
   const ownerAvatar = useAvatarUrl(thing.owner.name, null, thing.owner.avatarUrl);
@@ -360,238 +515,165 @@ export function ThingDetailContent({
   const isTheirs = !isAssigneeSameAsOwner || !caps?.isAssignee;
 
   if (variant === "court") {
+    const displayFiles: ThingFile[] =
+      thing.files && thing.files.length > 0 ? thing.files : [];
+    const activeFileId = selectedFileId ?? displayFiles[0]?.id ?? null;
+
     return (
-      <div className="min-h-[454px] w-full">
-        <header className="border-b border-border/60 pb-3.5">
-          <div className="mb-2">{headerAction}</div>
-          <div className="flex items-start justify-between gap-3">
-            <h2 className="text-[20px] font-bold leading-snug text-foreground break-words flex-1">
-              {thing.title}
-            </h2>
-            <div className="flex items-center gap-1 shrink-0 pt-0.5">
-              <button
-                type="button"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-amber-500 hover:bg-muted/40 transition-colors"
-                aria-label="Star this thing"
-              >
-                <Star className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors"
-                aria-label="More options"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-            </div>
+      <div className="min-h-[454px] w-full text-left">
+        {headerAction && <div className="mb-2">{headerAction}</div>}
+
+        {/* Title and star */}
+        <div className="flex items-start justify-between gap-3 pr-9">
+          <h1 className="text-[25px] font-medium leading-tight tracking-tight text-[#000533] break-words flex-1">
+            {thing.title}
+          </h1>
+          <div className="flex items-center gap-1 shrink-0 pt-0.5">
+            <button
+              type="button"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-amber-500 hover:bg-muted/40 transition-colors cursor-pointer"
+              aria-label="Star this thing"
+            >
+              <Star className="h-4 w-4" />
+            </button>
           </div>
-          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-            <span className="capitalize">{thing.context}</span>
-            <span>·</span>
-            <span>Created {format(new Date(thing.createdAt ?? thing.updatedAt), "MMM d, h:mm a")}</span>
-            <span>·</span>
-            <span>Updated {format(new Date(thing.updatedAt), "MMM d, h:mm a")}</span>
-            {thing.listId && thing.listName && thing.listName.toLowerCase() !== "list" ? <span>· {thing.listName}</span> : null}
-          </p>
-          {viewOnly && (
-            <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[11.5px] font-semibold text-emerald-800">
-              <Eye className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-              <span>View only mode · You can view details and post comments.</span>
-            </div>
-          )}
-        </header>
+        </div>
 
-        <div className="space-y-3.5 pt-3.5">
-          {/* People Flow Row */}
-          <div className="flex items-center justify-between gap-3 border-b border-border/60 pb-3.5">
-            <div className="flex items-center gap-3">
-              {isTheirs ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    <PersonAvatar
-                      name={thing.creator.name}
-                      initials={thing.creator.initials}
-                      src={creatorAvatar}
-                      size={28}
-                    />
-                    <div>
-                      <span className="block text-[12px] font-semibold text-foreground leading-tight">
-                        {thing.creator.name}
-                      </span>
-                      <span className="block text-[10px] text-muted-foreground">
-                        {isCreatorSameAsOwner ? "Creator · Owner" : "Creator"}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-muted-foreground/60 text-sm">→</span>
-                  <div className="flex items-center gap-2">
-                    <PersonAvatar
-                      name={thing.assignee.name}
-                      initials={thing.assignee.initials}
-                      src={assigneeAvatar}
-                      size={28}
-                    />
-                    <div>
-                      <span className="block text-[12px] font-semibold text-foreground leading-tight">
-                        {thing.assignee.name}
-                      </span>
-                      <span className="block text-[10px] text-muted-foreground">
-                        Current Assignee
-                      </span>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center gap-2">
-                    <PersonAvatar
-                      name={thing.creator.name}
-                      initials={thing.creator.initials}
-                      src={creatorAvatar}
-                      size={28}
-                    />
-                    <div>
-                      <span className="block text-[12px] font-semibold text-foreground leading-tight">
-                        {thing.creator.name}
-                      </span>
-                      <span className="block text-[10px] text-muted-foreground">Creator</span>
-                    </div>
-                  </div>
-                  <span className="text-muted-foreground/60 text-sm">→</span>
-                  <div className="flex items-center gap-2">
-                    <PersonAvatar
-                      name={thing.owner.name}
-                      initials={thing.owner.initials}
-                      src={ownerAvatar}
-                      size={28}
-                    />
-                    <div>
-                      <span className="block text-[12px] font-semibold text-foreground leading-tight">
-                        {thing.owner.name}
-                      </span>
-                      <span className="block text-[10px] text-muted-foreground">Owner</span>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+        {/* Subtitle */}
+        <p className="mt-1 text-[11.5px] text-[#6a769c] font-medium">
+          Created by {thing.creator.name}
+          {thing.updatedAt ? ` • Updated ${format(new Date(thing.updatedAt), "MMM d, h:mm a")}` : ""}
+        </p>
 
-            <div className="flex items-center gap-2">
-              {thing.workStatus === "cancelled" || Boolean(thing.cancelledAt) ? (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-semibold text-rose-700 border border-rose-200/60">
-                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                  Cancelled
-                </span>
-              ) : thing.acknowledgement === "waiting_for_catch" ? (
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-0.5 text-[11px] font-semibold text-orange-600 border border-orange-200/60">
-                    <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-                    Waiting for Catch
+        {viewOnly && (
+          <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[11.5px] font-semibold text-emerald-800">
+            <Eye className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span>View only mode · You can view details and post comments.</span>
+          </div>
+        )}
+
+        <div className="space-y-4 pt-4">
+          {/* People / Status Row */}
+          <div className="flex flex-wrap items-center justify-between gap-4 py-3">
+            <div className="flex items-center gap-7">
+              <div className="flex items-center gap-2.5">
+                <PersonAvatar
+                  name={thing.owner.name}
+                  initials={thing.owner.initials}
+                  src={ownerAvatar}
+                  size={30}
+                />
+                <div>
+                  <span className="block text-[11.5px] font-medium text-black leading-tight">
+                    {thing.owner.name}
                   </span>
-                  {caps?.canCatch && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        run.mutate(async () => {
-                          await rpcCatchThing(thing.id);
-                          toast.success("Caught.");
-                        })
-                      }
-                      className="inline-flex items-center gap-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-0.5 text-[11px] font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-60"
-                    >
-                      <Hand className="h-3 w-3" />
-                      <span>Catch</span>
-                    </button>
-                  )}
+                  <span className="block text-[10px] text-[#3a4675] mt-0.5">Owner</span>
                 </div>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-600 border border-emerald-200/60">
-                  <Check className="h-3 w-3" strokeWidth={2.5} />
-                  Caught
-                </span>
-              )}
-              {thing.workStatus !== "cancelled" && !thing.cancelledAt && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-600 border border-blue-200/60">
-                  <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                  {statusLabel(thing.workStatus)}
-                </span>
-              )}
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <PersonAvatar
+                  name={thing.assignee.name}
+                  initials={thing.assignee.initials}
+                  src={assigneeAvatar}
+                  size={30}
+                />
+                <div>
+                  <span className="block text-[11.5px] font-medium text-black leading-tight">
+                    {thing.assignee.name}
+                  </span>
+                  <span className="block text-[10px] text-[#3a4675] mt-0.5">
+                    Assignee{isAssigneeSameAsOwner ? "" : " • You"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-[10.5px] text-[#3a4675]">
+                {thing.acknowledgement === "waiting_for_catch" ? "Waiting for Catch" : "Caught"}
+              </span>
+              {(() => {
+                const isSorted = thing.workStatus === "sorted";
+                const isCancelled = thing.workStatus === "cancelled";
+                const inProgress =
+                  !isSorted &&
+                  !isCancelled &&
+                  (thing.workStatus === "under_progress" || thing.acknowledgement === "caught");
+                const label = isCancelled
+                  ? "Cancelled"
+                  : isSorted
+                    ? "Sorted"
+                    : inProgress
+                      ? "Under Progress"
+                      : "Not Started";
+                return (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f0f2fe] px-2.5 py-1.5 text-[11px] font-medium text-[#975ee2]">
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        isSorted ? "bg-emerald-500" : inProgress ? "bg-[#975ee2]" : "bg-slate-400",
+                      )}
+                    />
+                    {label}
+                  </span>
+                );
+              })()}
             </div>
           </div>
 
-          {/* Cancelled Banner with Reopen option */}
-          {(thing.workStatus === "cancelled" || Boolean(thing.cancelledAt)) && (
-            <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200/80 bg-rose-50/70 p-3 text-[12px] text-rose-900">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
-                <span>This thing was cancelled and cannot be caught in its current state.</span>
+          {/* Info cards: Due · Assigned pace */}
+          <div className="grid grid-cols-[1fr_1.6fr] items-center rounded-[8px] border border-[#f0f1f7] bg-white py-2">
+            <div className="flex items-center gap-2 px-4">
+              <Calendar className="h-4 w-4 shrink-0 text-[#3a4675]" />
+              <div className="min-w-0">
+                <div className="text-[10px] text-[#3a4675]">Due</div>
+                <div className={cn("text-[11.5px] font-medium", dueLabel ? "text-[#f71a24]" : "text-muted-foreground")}>
+                  {dueLabel ?? "No due date"}
+                </div>
               </div>
-              {caps?.canReopen && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run.mutate(async () => {
-                      await rpcReopenThing(thing.id);
-                      toast.success("Thing reopened. You can now catch it.");
-                    })
-                  }
-                  className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-[11.5px] font-bold shadow-2xs transition-colors cursor-pointer disabled:opacity-60"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span>Reopen Thing</span>
-                </button>
-              )}
             </div>
-          )}
-
-          {/* Due date */}
-          {thing.dueAt ? (
-            <div className="flex items-center gap-2 text-[12px] text-foreground font-medium">
-              <Calendar className="h-4 w-4 text-primary" />
-              <span className="text-muted-foreground">Due</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="font-semibold">{dueLabel}</span>
+            <div className="border-l border-[#f0f1f7] px-4">
+              <div className="mb-1 text-[10px] text-[#3a4675]">Assigned pace</div>
+              <div className="inline-flex rounded-[6px] bg-[#f0f1f9] p-0.5">
+                {(["now", "next", "later"] as const).map((pace) => (
+                  <button
+                    key={pace}
+                    type="button"
+                    disabled={busy || !caps?.canSetPace}
+                    onClick={() => run.mutate(async () => rpcSetPersonalPace(thing.id, pace))}
+                    className={cn(
+                      "h-[22px] min-w-[48px] rounded-[5px] px-2 text-[10px] font-medium capitalize transition-colors cursor-pointer disabled:cursor-not-allowed",
+                      activePace === pace
+                        ? "bg-[#975ee2] text-white"
+                        : "text-[#3a4675] hover:text-[#000533]",
+                    )}
+                  >
+                    {pace}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : null}
+          </div>
 
-          {/* Action & Pace Row */}
-          {!terminal ? (
-            <div className="flex flex-wrap items-center gap-2.5 border-b border-border/60 pb-3.5">
+          {/* Action buttons & bucket link */}
+          <div className="flex flex-wrap items-center justify-between gap-3 py-2.5 border-b border-[#eef0f6]">
+            <div className="flex items-center gap-2">
               {caps?.canCatch ? (
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() =>
                     run.mutate(async () => {
-                      await rpcCatchThing(thing.id);
-                      toast.success("Caught.");
+                      await rpcCatchAndStart(thing.id);
+                      toast.success("Caught — now in progress.");
                     })
                   }
-                  className="h-8 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11.5px] px-3.5 shadow-xs transition-colors inline-flex items-center gap-1.5 disabled:opacity-60 cursor-pointer"
+                  className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-[#975ee2] px-3.5 text-[12px] font-medium text-white hover:brightness-95 disabled:opacity-60 transition cursor-pointer"
                 >
-                  <Hand className="h-3.5 w-3.5" />
-                  <span>Catch</span>
+                  Catch
                 </button>
-              ) : null}
-              {caps?.canNudge ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run.mutate(async () => {
-                      await rpcNudgeThing(thing.id);
-                      toast.success(`Nudge sent to ${thing.assignee.name}.`);
-                    })
-                  }
-                  className="h-8 rounded-lg bg-orange-500 hover:bg-orange-600 text-white font-semibold text-[11.5px] px-3.5 shadow-xs transition-colors inline-flex items-center gap-1.5 disabled:opacity-60"
-                >
-                  <Bell className="h-3.5 w-3.5" />
-                  <span>Nudge {thing.assignee.name.split(" ")[0]}</span>
-                </button>
-              ) : null}
-              {caps?.canSort ? (
+              ) : caps?.canSort ? (
                 <button
                   type="button"
                   disabled={busy}
@@ -602,270 +684,345 @@ export function ThingDetailContent({
                       onAfterTerminalAction?.();
                     })
                   }
-                  className="h-8 rounded-lg bg-primary px-3.5 text-[11.5px] font-semibold text-white shadow-xs hover:bg-primary/90 disabled:opacity-60 transition-colors"
+                  className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-[#975ee2] px-3.5 text-[12px] font-medium text-white hover:brightness-95 disabled:opacity-60 transition cursor-pointer"
                 >
+                  <Check className="h-4 w-4" />
                   Mark Sorted
                 </button>
               ) : null}
-              {caps?.canReassign ? (
-                <label className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 text-[11.5px] font-medium text-foreground hover:bg-muted/40 cursor-pointer">
-                  <UserPlus className="h-3.5 w-3.5 text-primary" />
-                  <span>Reassign</span>
-                  <select
-                    disabled={busy}
-                    value={thing.assignee.id}
-                    onChange={(event) => {
-                      const targetId = event.target.value;
-                      if (!targetId || targetId === thing.assignee.id) return;
-                      run.mutate(async () => {
-                        await rpcReassignThing(thing.id, targetId);
-                        toast.success("Waiting for Catch.");
-                      });
-                    }}
-                    className="max-w-[100px] bg-transparent font-medium outline-none cursor-pointer"
-                    aria-label="Reassign"
-                  >
-                    {assignableList.map((person) => (
-                      <option key={person.id} value={person.id}>
-                        {person.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-              {caps?.canCancel ? (
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => {
-                    if (window.confirm("Are you sure you want to cancel this thing?")) {
-                      run.mutate(async () => {
-                        await rpcCancelThing(thing.id);
-                        toast.success("Cancelled.");
-                        onAfterTerminalAction?.();
-                      });
-                    }
-                  }}
-                  className="h-8 px-2 text-[11.5px] font-medium text-destructive hover:underline disabled:opacity-60 cursor-pointer"
+                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#3a4675] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-60"
+                  title={currentBucket?.name ? `Bucket: ${currentBucket.name}` : "Add to bucket"}
                 >
-                  Cancel Thing
+                  <Folder className="h-3.5 w-3.5" />
+                  <span>{currentBucket?.name || "Add to bucket"}</span>
+                  <ChevronDown className="h-3 w-3 text-[#5d6786]" />
                 </button>
-              ) : null}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 bg-white shadow-lg border border-border/70 rounded-xl p-1 z-50">
+                {buckets.length === 0 ? (
+                  <DropdownMenuItem disabled className="text-[12px]">
+                    No buckets yet
+                  </DropdownMenuItem>
+                ) : (
+                  buckets.map((b) => (
+                    <DropdownMenuItem
+                      key={b.id}
+                      onClick={() =>
+                        run.mutate(async () => {
+                          if (currentBucket && currentBucket.id === b.id) return;
+                          if (currentBucket) await rpcRemoveFromBucket(currentBucket.id, thing.id);
+                          await rpcAddToBucket(b.id, thing.id);
+                          toast.success(currentBucket ? "Bucket changed." : "Added to bucket.");
+                        })
+                      }
+                      className="flex items-center justify-between gap-2 text-[12px] rounded-lg px-2.5 py-1.5 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <Folder className="h-3.5 w-3.5 text-[#975ee2]" />
+                        <span className="truncate">{b.name}</span>
+                      </span>
+                      {currentBucket?.id === b.id && <Check className="h-3.5 w-3.5 text-[#975ee2]" />}
+                    </DropdownMenuItem>
+                  ))
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
-              {caps?.canSetPace ? (
-                <div className="ml-auto flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-foreground">Pace</span>
-                  <div className="inline-flex rounded-lg border border-border/80 bg-muted/20 p-0.5">
-                    {paces.map((pace) => (
-                      <button
-                        key={pace}
-                        type="button"
-                        disabled={busy || !caps?.canSetPace}
-                        onClick={() => run.mutate(async () => rpcSetPersonalPace(thing.id, pace))}
-                        className={cn(
-                          "h-7 min-w-[54px] rounded-md px-2.5 text-[10.5px] font-bold uppercase transition-all disabled:opacity-60",
-                          activePace === pace
-                            ? pace === "now"
-                              ? "bg-red-50 text-red-600 border border-red-200/70 shadow-xs"
-                              : pace === "next"
-                                ? "bg-blue-50 text-blue-600 border border-blue-200/70 shadow-xs"
-                                : "bg-purple-50 text-purple-600 border border-purple-200/70 shadow-xs"
-                            : paceTone[pace],
-                        )}
-                      >
-                        {pace}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <span>Assigned to</span>
-                  <span className="font-semibold text-foreground">{thing.assignee.name}</span>
-                </div>
-              )}
+          {/* Description Section */}
+          {thing.description ? (
+            <div className="py-3 border-b border-[#eef0f6]">
+              <h3 className="text-[13px] font-medium text-[#000533] mb-1.5">Description</h3>
+              <p className="text-[11px] leading-relaxed text-[#6a769c] whitespace-pre-wrap">
+                {thing.description}
+              </p>
             </div>
           ) : null}
 
-          {/* Small and compact Choose Buckets row */}
-          <div className="w-full rounded-xl border border-border/70 bg-white px-3 py-2 flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1.5 text-[11.5px] font-bold text-foreground shrink-0">
-              <ListIcon className="h-3.5 w-3.5 text-muted-foreground" />
-              <span>Choose Buckets:</span>
-            </div>
-
-            {currentBuckets.map((b) => (
-              <span
-                key={b.id}
-                className="inline-flex items-center gap-1 rounded-md border border-purple-200/80 bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700 shadow-2xs"
-              >
-                <span>{b.name}</span>
-                {!viewOnly && caps?.canAddToBucket && (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      run.mutate(async () => {
-                        await rpcRemoveFromBucket(b.id, thing.id);
-                        await qc.invalidateQueries({ queryKey: ["buckets"] });
-                        toast.success(`Removed from ${b.name}.`);
-                      })
-                    }
-                    className="rounded p-0.5 text-purple-400 hover:bg-purple-200/50 hover:text-purple-800 transition-colors cursor-pointer"
-                    aria-label={`Remove from ${b.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+          {/* Files Section: strictly dynamic */}
+          <div className="py-3 border-b border-border/40">
+            <input
+              ref={thingFileInputRef}
+              type="file"
+              multiple
+              onChange={handleThingFileUpload}
+              className="hidden"
+              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
+            />
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] font-medium text-[#000533]">Files</span>
+                {displayFiles.length > 0 && (
+                  <span className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#eef0f6] px-1 text-[9px] font-medium text-[#000533]">
+                    {displayFiles.length}
+                  </span>
                 )}
-              </span>
-            ))}
-
-            {!viewOnly && caps?.canAddToBucket && (
-              <div className="relative ml-auto sm:ml-0">
-                <select
-                  disabled={busy}
-                  className="h-6 cursor-pointer rounded-md border border-dashed border-border/80 bg-muted/20 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground outline-none hover:bg-muted/40 transition-colors"
-                  defaultValue=""
-                  aria-label="Choose Buckets"
-                  onChange={(event) => {
-                    if (!event.target.value) return;
-                    const selectedBucketId = event.target.value;
-                    event.target.value = "";
-                    run.mutate(async () => {
-                      await rpcAddToBucket(selectedBucketId, thing.id);
-                      await qc.invalidateQueries({ queryKey: ["buckets"] });
-                      toast.success("Added to bucket.");
-                    });
-                  }}
-                >
-                  <option value="">+ Add to bucket</option>
-                  {buckets
-                    .filter((b) => !currentBuckets.some((cb) => cb.id === b.id))
-                    .map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name}
-                      </option>
-                    ))}
-                </select>
               </div>
+              <button
+                type="button"
+                onClick={() => thingFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-[#975ee2] hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                + Add file
+              </button>
+            </div>
+            {displayFiles.length > 0 ? (
+              <div className="overflow-hidden rounded-[8px] border border-[#eeeff6] bg-[#fdfcfd]">
+                {displayFiles.map((file, idx) => {
+                  const isSelected = file.id === activeFileId;
+                  const chip = fileTypeChip(file.type);
+                  return (
+                    <div
+                      key={file.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        setSelectedFileId(file.id);
+                        onFileSelect?.(file);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setSelectedFileId(file.id);
+                          onFileSelect?.(file);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-2.5 px-3 py-2 cursor-pointer outline-none transition-colors",
+                        idx > 0 && "border-t border-[#eeeff6]",
+                        isSelected ? "bg-[#f3f6ff]" : "hover:bg-[#f6f7fb]",
+                      )}
+                    >
+                      <span
+                        className="inline-flex h-[22px] items-center justify-center rounded-[6px] border px-2 text-[9.5px] font-medium uppercase"
+                        style={{ backgroundColor: chip.bg, color: chip.text, borderColor: chip.border }}
+                      >
+                        {chip.label}
+                      </span>
+                      <span className="flex-1 truncate text-[10.8px] text-black">{file.name}</span>
+                      {file.sizeLabel && (
+                        <span className="shrink-0 text-[10.8px] text-[#515b8e]">{file.sizeLabel}</span>
+                      )}
+                      {file.isNew && (
+                        <span className="shrink-0 rounded bg-[#975ee2] px-1 py-0.5 text-[8px] font-bold text-white">
+                          New
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[11px] text-[#6a769c] italic">No files attached yet</p>
             )}
           </div>
 
-          {/* Details toggle */}
-          <details className="border-b border-border/60 pb-3 text-[11.5px]">
-            <summary className="cursor-pointer list-none font-semibold text-foreground flex items-center justify-between">
-              <span className="flex items-center gap-1">Details ›</span>
-              <span className="text-[10px] text-muted-foreground font-normal">Click to expand</span>
-            </summary>
-            <p className="mt-2 text-[12px] text-muted-foreground/90 italic">
-              Add a description, notes or any other details about this thing...
-            </p>
-            <div className="mt-3 grid grid-cols-3 gap-3 text-muted-foreground border-t border-border/40 pt-2.5">
-              <div>
-                <span className="block text-[9px] uppercase font-semibold">Creator</span>
-                {thing.creator.name}
-              </div>
-              <div>
-                <span className="block text-[9px] uppercase font-semibold">Owner</span>
-                {thing.owner.name}
-              </div>
-              <div>
-                <span className="block text-[9px] uppercase font-semibold">Assignee</span>
-                {thing.assignee.name}
-              </div>
-            </div>
-          </details>
-
-          {/* Comments & Activity tabs */}
-          <div>
-            <div className="flex items-center gap-5 border-b border-border/60">
-              {(["comments", "activity"] as const).map((id) => (
+          {/* Comments and Activity Section */}
+          <div className="pt-3">
+            <div className="flex items-center gap-6 border-b border-border/60 pb-2">
+              <div className="flex items-center gap-3">
                 <button
-                  key={id}
                   type="button"
-                  onClick={() => setTab(id)}
+                  onClick={() => setTab("comments")}
                   className={cn(
-                    "border-b-2 px-1 pb-2 text-[12px] font-semibold capitalize transition-colors",
-                    tab === id
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
+                    "text-[12px] font-medium transition-colors flex items-center gap-1.5 cursor-pointer pb-2 -mb-2",
+                    tab === "comments"
+                      ? "text-[#975ee2] border-b-2 border-[#975ee2]"
+                      : "text-[#2b2e55] hover:text-[#000533]",
                   )}
                 >
-                  {id}
-                  {id === "comments" && comments.length ? ` (${comments.length})` : ""}
+                  <span>Comments</span>
+                  <span
+                    className={cn(
+                      "inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-medium",
+                      tab === "comments" ? "bg-[#f0eafe] text-[#975ee2]" : "bg-[#eef0f6] text-[#2b2e55]",
+                    )}
+                  >
+                    {comments.length}
+                  </span>
                 </button>
-              ))}
+                {(thing.unreadCommentCount ?? 0) > 0 && (
+                  <span className="text-[11.5px] font-medium text-[#975ee2] pb-2 -mb-2">
+                    {thing.unreadCommentCount} new
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setTab("activity")}
+                className={cn(
+                  "text-[12px] font-medium transition-colors cursor-pointer pb-2 -mb-2",
+                  tab === "activity"
+                    ? "text-[#975ee2] border-b-2 border-[#975ee2]"
+                    : "text-[#2b2e55] hover:text-[#000533]",
+                )}
+              >
+                Activity
+              </button>
             </div>
-            <div className="pt-3">
-              {tab === "comments" ? (
-                <div className="space-y-3">
-                  {comments.map((entry) => (
-                    <CommentRow
-                      key={entry.id}
-                      author={entry.author}
-                      avatarUrl={entry.avatarUrl}
-                      body={entry.body}
-                      at={entry.at}
-                      sending={entry.sending}
-                    />
-                  ))}
-                  {!comments.length ? (
-                    <p className="text-[11px] text-muted-foreground">No comments yet.</p>
-                  ) : null}
-                  <form
-                    className="flex gap-2 pt-1"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      const text = comment.trim();
-                      if (!text || thread.post.isPending) return;
-                      setComment("");
-                      thread.post.mutate(text, {
+
+            {tab === "comments" ? (
+              <div className="pt-3 space-y-3">
+                {comments.length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground py-3 italic text-center">
+                    No comments yet.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {comments.map((entry, idx) => {
+                      const unread = thing.unreadCommentCount ?? 0;
+                      const isFirstNew = unread > 0 && idx === Math.max(0, comments.length - unread);
+                      return (
+                        <div key={entry.id} className="space-y-3">
+                          {isFirstNew && (
+                            <div className="relative my-3 flex items-center justify-center">
+                              <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-blue-500" />
+                              </div>
+                              <span className="relative bg-white px-3 text-[11px] font-semibold text-blue-600">
+                                New comments
+                              </span>
+                            </div>
+                          )}
+                          <CommentRow
+                            author={entry.author}
+                            avatarUrl={entry.avatarUrl}
+                            body={entry.body}
+                            at={entry.at}
+                            sending={(entry as any).sending}
+                            attachments={entry.attachments}
+                            onFileSelect={onFileSelect}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Comment attachments preview */}
+                {commentAttachments.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-bottom-1">
+                    {commentAttachments.map((att) => (
+                      <div
+                        key={att.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-800 shadow-2xs"
+                      >
+                        {att.type === "image" && att.url ? (
+                          <img src={att.url} alt={att.name} className="h-4 w-4 rounded object-cover" />
+                        ) : (
+                          <span
+                            className={cn(
+                              "flex h-4 px-1 items-center justify-center rounded text-[8.5px] font-bold uppercase",
+                              att.type === "pdf"
+                                ? "bg-red-50 text-red-600 border border-red-200"
+                                : att.type === "excel"
+                                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                                  : att.type === "docx"
+                                    ? "bg-blue-50 text-blue-600 border border-blue-200"
+                                    : att.type === "video"
+                                      ? "bg-purple-50 text-purple-600 border border-purple-200"
+                                      : "bg-slate-100 text-slate-600",
+                            )}
+                          >
+                            {att.type}
+                          </span>
+                        )}
+                        <span className="max-w-[130px] truncate">{att.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => setCommentAttachments((prev) => prev.filter((f) => f.id !== att.id))}
+                          className="ml-0.5 rounded p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                          aria-label={`Remove ${att.name}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Reply input box */}
+                <input
+                  ref={commentFileInputRef}
+                  type="file"
+                  multiple
+                  onChange={handleCommentFileChange}
+                  className="hidden"
+                  accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
+                />
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const text = comment.trim();
+                    if ((!text && commentAttachments.length === 0) || thread.post.isPending) return;
+                    const atts = [...commentAttachments];
+                    setComment("");
+                    setCommentAttachments([]);
+                    thread.post.mutate(
+                      { body: text, attachments: atts.length > 0 ? atts : undefined },
+                      {
                         onError: (err) => {
                           setComment(text);
+                          setCommentAttachments(atts);
                           toast.error(domainErrorMessage(err));
                         },
                         onSuccess: () => {
                           toast.success("Comment sent.");
                         },
-                      });
-                    }}
+                      },
+                    );
+                  }}
+                  className="flex items-center gap-2 rounded-[9px] border border-[#e9ecf4] bg-[#fdfdfe] px-3 py-2 mt-4"
+                >
+                  <button
+                    type="button"
+                    onClick={() => commentFileInputRef.current?.click()}
+                    className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
+                    title="Attach file (photo, video, doc, excel, etc.)"
                   >
-                    <input
-                      value={comment}
-                      onChange={(event) => setComment(event.target.value)}
-                      placeholder={thread.post.isPending ? "Sending comment…" : "Write a comment…"}
-                      disabled={thread.post.isPending}
-                      className="h-9 min-w-0 flex-1 rounded-xl border border-border/80 px-3 text-[11.5px] outline-none focus:border-primary focus:ring-2 focus:ring-ring disabled:opacity-60"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!comment.trim() || thread.post.isPending}
-                      className="inline-flex items-center gap-1.5 h-9 rounded-xl border border-primary px-4 text-[11.5px] font-semibold text-primary hover:bg-primary/5 transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
-                    >
-                      {thread.post.isPending ? (
-                        <>
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          <span>Sending…</span>
-                        </>
-                      ) : (
-                        <span>Post</span>
-                      )}
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {events.slice(0, 4).map((event) => (
-                    <li key={event.id} className="text-[11.5px] text-muted-foreground">
-                      <span className="font-medium text-foreground">
-                        {event.event.replaceAll("_", " ")}
-                      </span>
-                      <span className="ml-2">{format(new Date(event.at), "MMM d · h:mm a")}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+                    <Paperclip className="h-4 w-4" />
+                  </button>
+                  <input
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Reply to this Thing..."
+                    disabled={thread.post.isPending}
+                    className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground outline-none py-1"
+                  />
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
+                  >
+                    <AtSign className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={(!comment.trim() && commentAttachments.length === 0) || thread.post.isPending}
+                    className="rounded-[6px] bg-[#975ee2] hover:brightness-95 text-white font-medium text-[11.5px] px-3.5 py-1.5 transition disabled:opacity-50 cursor-pointer"
+                  >
+                    Send
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <ul className="space-y-2 pt-3">
+                {events.slice(0, 4).map((event) => (
+                  <li key={event.id} className="text-[11.5px] text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      {event.event.replaceAll("_", " ")}
+                    </span>
+                    <span className="ml-2">{format(new Date(event.at), "MMM d · h:mm a")}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>
@@ -1336,40 +1493,69 @@ export function ThingDetailContent({
                     avatarUrl={c.avatarUrl}
                     body={c.body}
                     at={c.at}
-                    sending={c.sending}
+                    sending={"sending" in c ? (c as any).sending : undefined}
+                    attachments={c.attachments}
+                    onFileSelect={onFileSelect}
                   />
                 ))
               )}
               <form
-                className="flex gap-2"
+                className="flex flex-col gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
                   const text = comment.trim();
-                  if (!text || thread.post.isPending) return;
+                  if ((!text && commentAttachments.length === 0) || thread.post.isPending) return;
+                  const atts = [...commentAttachments];
                   setComment("");
-                  thread.post.mutate(text, {
-                    onError: (err) => {
-                      setComment(text);
-                      toast.error(domainErrorMessage(err));
+                  setCommentAttachments([]);
+                  thread.post.mutate(
+                    { body: text, attachments: atts.length > 0 ? atts : undefined },
+                    {
+                      onError: (err) => {
+                        setComment(text);
+                        setCommentAttachments(atts);
+                        toast.error(domainErrorMessage(err));
+                      },
+                      onSuccess: () => {
+                        toast.success("Comment sent.");
+                      },
                     },
-                    onSuccess: () => {
-                      toast.success("Comment sent.");
-                    },
-                  });
+                  );
                 }}
               >
-                <input
-                  value={comment}
-                  disabled={!caps?.canComment || thread.post.isPending}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={thread.post.isPending ? "Sending…" : "Write a comment…"}
-                  className="h-7 flex-1 rounded-md border border-border bg-white px-2 text-[10px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                />
-                <button
-                  type="submit"
-                  disabled={!caps?.canComment || !comment.trim() || thread.post.isPending}
-                  className="inline-flex items-center gap-1 h-7 rounded-md bg-primary px-2.5 text-[10px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
-                >
+                {commentAttachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {commentAttachments.map((att) => (
+                      <span key={att.id} className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9.5px]">
+                        <span className="truncate max-w-[100px]">{att.name}</span>
+                        <button type="button" onClick={() => setCommentAttachments((prev) => prev.filter((f) => f.id !== att.id))}>
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => commentFileInputRef.current?.click()}
+                    className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+                    title="Attach file"
+                  >
+                    <Paperclip className="h-3.5 w-3.5" />
+                  </button>
+                  <input
+                    value={comment}
+                    disabled={!caps?.canComment || thread.post.isPending}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder={thread.post.isPending ? "Sending…" : "Write a comment…"}
+                    className="h-7 flex-1 rounded-md border border-border bg-white px-2 text-[10px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!caps?.canComment || (!comment.trim() && commentAttachments.length === 0) || thread.post.isPending}
+                    className="inline-flex items-center gap-1 h-7 rounded-md bg-primary px-2.5 text-[10px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                  >
                   {thread.post.isPending ? (
                     <>
                       <Loader2 className="h-3 w-3 animate-spin" />
@@ -1379,6 +1565,7 @@ export function ThingDetailContent({
                     <span>Post</span>
                   )}
                 </button>
+                </div>
               </form>
               {thing.workStatus === "sorted" ? (
                 <p className="text-[11px] text-muted-foreground">

@@ -6,17 +6,22 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
 } from "react";
-import { GripVertical } from "lucide-react";
 import { gsap } from "gsap";
 import { Observer } from "gsap/Observer";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
-import { rpcCatchThing, rpcSetPersonalPace, rpcSortThing } from "@/features/things/rpc";
+import { rpcCatchAndStart, rpcSetPersonalPace, rpcSnoozeThing, rpcSortThing } from "@/features/things/rpc";
+import {
+  invalidateSnoozeSurfaces,
+  snoozeUntilFor,
+  SNOOZE_OPTIONS,
+  type SnoozeOption,
+} from "@/features/things/personal-snooze";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 import { reconcileStackIndex, stepStackIndex } from "./court-stack-model";
@@ -25,6 +30,7 @@ import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { useAvatarUrl } from "@/features/people/directory";
 
 gsap.registerPlugin(Observer);
 
@@ -53,34 +59,49 @@ export const courtLaneContent: Record<
     headerTone: string;
     bgTone: string;
     borderTone: string;
+    /** Exact Figma accent (headers, counts). */
+    accent: string;
+    /** Exact Figma colored icon-box background. */
+    iconBoxBg: string;
+    /** Exact Figma lane gradient background. */
+    gradient: string;
   }
 > = {
   now: {
     label: "NOW",
-    descriptor: "Needs you now",
+    descriptor: "Things to handle now",
     icon: "now-smash",
     tone: "text-status-now",
     headerTone: "bg-transparent",
     bgTone: "bg-[#fff8f7]",
-    borderTone: "border-red-100/70",
+    borderTone: "border-[#fdecec]",
+    accent: "#fe1016",
+    iconBoxBg: "#fd4946",
+    gradient: "linear-gradient(180deg,#fef1f4 0%,#fffbfd 100%)",
   },
   next: {
     label: "NEXT",
-    descriptor: "On deck soon",
+    descriptor: "Up next on your plate",
     icon: "next-rally",
     tone: "text-status-next",
     headerTone: "bg-transparent",
     bgTone: "bg-[#f4f8ff]",
-    borderTone: "border-blue-100/70",
+    borderTone: "border-[#e3f0fd]",
+    accent: "#0b62f8",
+    iconBoxBg: "#005dfe",
+    gradient: "linear-gradient(180deg,#e7f2fe 0%,rgba(238,246,254,0.35) 100%)",
   },
   later: {
     label: "LATER",
-    descriptor: "When time opens up",
+    descriptor: "For later consideration",
     icon: "later-lob",
     tone: "text-status-later",
     headerTone: "bg-transparent",
     bgTone: "bg-[#f9f7ff]",
-    borderTone: "border-purple-100/70",
+    borderTone: "border-[#efeafe]",
+    accent: "#641dfb",
+    iconBoxBg: "#7c33fd",
+    gradient: "linear-gradient(180deg,#efebfe 0%,rgba(244,243,255,0.35) 100%)",
   },
 };
 
@@ -102,17 +123,70 @@ type StackAnim = {
   direction: 1 | -1;
 };
 
-function depthCardStyle(depth: number): CSSProperties {
-  const overlap = depth * -6;
-  const yBase = depth === 1 ? 166 + overlap : 238 + overlap;
-  const inset = depth === 1 ? 4 : 8;
+function PeekQueueCard({
+  thing,
+  lane,
+  onOpen,
+}: {
+  thing: Thing;
+  lane: CourtLaneId;
+  onOpen: () => void;
+}) {
+  const assigneeAvatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
+  const due = formatCourtDue(thing);
 
-  return {
-    left: inset,
-    right: inset,
-    transform: `translate3d(0, ${yBase}px, 0)`,
-    opacity: 1,
-  };
+  return (
+    <div
+      onClick={onOpen}
+      draggable={true}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(
+          "application/katalist-thing",
+          JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
+        );
+        e.dataTransfer.setData(
+          "text/plain",
+          JSON.stringify({ thingId: thing.id, fromLane: lane, title: thing.title }),
+        );
+        e.dataTransfer.effectAllowed = "copyMove";
+      }}
+      className="group/queue flex flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 shadow-2xs cursor-pointer transition-all hover:border-slate-300 hover:shadow-xs select-none min-h-[58px] h-[58px]"
+      title={`Jump to ${thing.title}`}
+    >
+      <div className="flex items-center justify-between text-[11px]">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <PersonAvatar
+            name={thing.assignee.name}
+            initials={thing.assignee.initials}
+            src={assigneeAvatar}
+            size={20}
+          />
+          <span className="font-medium text-slate-800 text-[11.5px] truncate">
+            {thing.assignee.name.split(" ")[0]}
+          </span>
+        </div>
+        {thing.dueAt && (
+          <span
+            className={cn(
+              "shrink-0 text-[11px] font-bold",
+              due.urgent
+                ? "text-red-500"
+                : lane === "now"
+                  ? "text-red-500"
+                  : lane === "next"
+                    ? "text-blue-500"
+                    : "text-slate-500",
+            )}
+          >
+            {due.label}
+          </span>
+        )}
+      </div>
+      <p className="mt-0.5 text-[12.5px] font-medium text-slate-900 truncate leading-tight">
+        {thing.title}
+      </p>
+    </div>
+  );
 }
 
 export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackProps>(
@@ -125,11 +199,13 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       initialPosition?.activeThingId ?? null,
       things,
     );
+    const qc = useQueryClient();
     const [activeIndex, setActiveIndex] = useState(initialIndex);
     const [pendingAction, setPendingAction] = useState<CourtStackAction | null>(null);
     const [announcement, setAnnouncement] = useState("");
     const [anim, setAnim] = useState<StackAnim | null>(null);
     const [isDragTarget, setIsDragTarget] = useState(false);
+    const [snoozeOpen, setSnoozeOpen] = useState(false);
     const activeThingIdRef = useRef<string | null>(things[initialIndex]?.id ?? null);
     const activeButtonRef = useRef<HTMLButtonElement | null>(null);
     const activeCardRef = useRef<HTMLDivElement | null>(null);
@@ -155,6 +231,9 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     const actionCapabilities = {
       canMoveLater: capabilities.canSetPace && lane !== "later",
     };
+    // Swipe-left now defers via a timed Snooze (June BRD v1.1). It is available
+    // for any card in the person's own Court, regardless of lane.
+    const canSnooze = Boolean(activeThing);
     useEffect(() => {
       setActiveIndex((prev) => {
         const next = reconcileStackIndex(prev, activeThingIdRef.current, things);
@@ -181,6 +260,34 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           return;
         }
 
+        animatingRef.current = true;
+        setAnim({ outgoing: activeThing, direction });
+        setActiveIndex(nextIndex);
+        activeThingIdRef.current = nextThing.id;
+        setAnnouncement(`Now viewing ${nextThing.title}.`);
+      },
+      [activeThing, pendingAction, renderIndex, things],
+    );
+
+    const navigateToIndex = useCallback(
+      (targetIndex: number) => {
+        if (!activeThing || things.length <= 1 || pendingAction || animatingRef.current) return;
+        const nextIndex = ((targetIndex % things.length) + things.length) % things.length;
+        const nextThing = things[nextIndex];
+        if (!nextThing || nextIndex === renderIndex) return;
+
+        const reduceMotion =
+          typeof window !== "undefined" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        if (reduceMotion) {
+          setActiveIndex(nextIndex);
+          activeThingIdRef.current = nextThing.id;
+          setAnnouncement(`Now viewing ${nextThing.title}.`);
+          return;
+        }
+
+        const direction: 1 | -1 = targetIndex > renderIndex ? 1 : -1;
         animatingRef.current = true;
         setAnim({ outgoing: activeThing, direction });
         setActiveIndex(nextIndex);
@@ -300,7 +407,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         if (action === "sort" && !capabilities.canSort) return;
         setPendingAction(action);
         try {
-          if (action === "catch") await rpcCatchThing(activeThing.id);
+          if (action === "catch") await rpcCatchAndStart(activeThing.id);
           if (action === "later") await rpcSetPersonalPace(activeThing.id, "later");
           if (action === "sort") await rpcSortThing(activeThing.id);
           toast.success(
@@ -325,20 +432,46 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       ],
     );
 
+    const runSnooze = useCallback(
+      async (option: SnoozeOption) => {
+        if (!activeThing || pendingAction) return;
+        setPendingAction("later");
+        try {
+          const until = snoozeUntilFor(option);
+          await rpcSnoozeThing(activeThing.id, until);
+          toast.success(
+            option === "1h"
+              ? "Snoozed for 1 hour."
+              : option === "6h"
+                ? "Snoozed for 6 hours."
+                : "Snoozed until tomorrow, 9 AM.",
+          );
+          await invalidateSnoozeSurfaces(qc);
+          await onRefresh();
+          setAnnouncement(`${activeThing.title} snoozed.`);
+        } catch (error) {
+          toast.error(domainErrorMessage(error));
+        } finally {
+          setSnoozeOpen(false);
+          setPendingAction(null);
+        }
+      },
+      [activeThing, pendingAction, onRefresh, qc],
+    );
+
+    // Close the snooze menu whenever the active card changes.
+    useEffect(() => {
+      setSnoozeOpen(false);
+    }, [activeThing?.id]);
+
     const gesture = useStackGesture({
       canSort: capabilities.canSort,
-      canMoveLater: actionCapabilities.canMoveLater,
-      interactionDisabled: pendingAction !== null || anim !== null,
+      canMoveLater: canSnooze,
+      interactionDisabled: pendingAction !== null || anim !== null || snoozeOpen,
       onSort: () => void runAction("sort"),
-      onLater: () => void runAction("later"),
+      onLater: () => setSnoozeOpen(true),
       onBlockedAction: (action) => {
-        if (action === "later") {
-          if (lane === "later") {
-            toast.info("This card is already in Later. Drag it or open Details to change its pace.");
-          } else if (capabilities.canCatch) {
-            toast.info("Catch this task before moving it to Later.");
-          }
-        } else if (action === "sort") {
+        if (action === "sort") {
           if (capabilities.canCatch) {
             toast.info("Catch this task before sorting.");
           }
@@ -372,7 +505,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       startNavigation(event.key === "ArrowDown" ? 1 : -1);
     };
 
-    const depthCount = Math.min(2, Math.max(0, things.length - 1));
+    const depthCount = Math.min(6, Math.max(0, things.length - 1));
     const swipeDistance = Math.abs(gesture.offset.x);
     const swipeCommitted = swipeDistance >= 54;
     const swipeDirection = gesture.offset.x > 0 ? "sort" : gesture.offset.x < 0 ? "later" : null;
@@ -380,10 +513,10 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       <section
         ref={sectionRef}
         className={cn(
-          "relative flex min-w-0 flex-col overflow-hidden rounded-[22px] border shadow-[0_18px_42px_-32px_rgba(15,23,42,0.34)] transition-colors",
-          content.bgTone,
+          "relative flex min-w-0 flex-col overflow-hidden rounded-[14px] border transition-colors",
           content.borderTone,
         )}
+        style={{ background: content.gradient }}
         aria-labelledby={`court-${lane}-title`}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes("application/katalist-thing")) {
@@ -445,146 +578,88 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         )}
 
         {/* Sticky lane header */}
-        <div className="sticky top-0 z-20 flex items-center justify-between px-4 pt-3.5 pb-2 bg-inherit shrink-0">
-          <div className="flex items-center gap-1.5">
-            <span className={cn("text-base", content.tone)}>
-              {lane === "now" ? "⚡" : lane === "next" ? "⇄" : "✦"}
-            </span>
-            <h2
-              ref={headingRef}
-              id={`court-${lane}-title`}
-              tabIndex={-1}
-              className={cn(
-                "text-[13px] font-black tracking-wider uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                content.tone,
-              )}
-            >
-              {content.label}
-            </h2>
+        <div className="sticky top-0 z-20 flex items-start justify-between px-4 pt-4 pb-2.5 bg-inherit shrink-0">
+          <div className="flex items-center gap-2.5">
             <span
-              className={cn(
-                "inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full text-[10px] font-bold",
-                lane === "now"
-                  ? "bg-red-500 text-white"
-                  : lane === "next"
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-purple-100 text-purple-700",
-              )}
+              aria-hidden="true"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-white"
+              style={{ backgroundColor: content.iconBoxBg }}
             >
-              {things.length}
+              <KatalistIcon name={content.icon} className="h-4 w-4" />
             </span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h2
+                  ref={headingRef}
+                  id={`court-${lane}-title`}
+                  tabIndex={-1}
+                  className="text-[20px] font-medium uppercase leading-none tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  style={{ color: content.accent }}
+                >
+                  {content.label}
+                </h2>
+                <span
+                  className="text-[13px] font-medium leading-none"
+                  style={{ color: content.accent }}
+                >
+                  {things.length}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] font-normal leading-none text-black/75">
+                {content.descriptor}
+              </p>
+            </div>
           </div>
-          <div className="text-right">
-            <button
-              type="button"
-              onClick={() => onViewAll?.(lane)}
-              className="inline-flex items-center text-[10.5px] font-semibold text-slate-700 hover:text-foreground cursor-pointer transition-colors outline-none focus-visible:ring-1 focus-visible:ring-ring rounded px-1"
-              aria-label={`View all ${things.length} in ${content.label}`}
-            >
-              View all <KatalistIcon name="chevron-right" className="h-3 w-3 ml-0.5" />
-            </button>
-          </div>
+          {(() => {
+            const unreadThings = things.filter((t) => (t.unreadCommentCount ?? 0) > 0);
+            return (
+              <button
+                type="button"
+                onClick={(e) => {
+                  if (unreadThings[0]) {
+                    onOpen(unreadThings[0], e.currentTarget);
+                  } else {
+                    onViewAll?.(lane);
+                  }
+                }}
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/60 hover:text-slate-700 cursor-pointer transition-colors"
+                aria-label={
+                  unreadThings.length > 0
+                    ? `${unreadThings.length} with unread comments in ${content.label}`
+                    : `View all ${things.length} in ${content.label}`
+                }
+                title={
+                  unreadThings.length > 0
+                    ? `${unreadThings.length} with unread comments`
+                    : `View all ${things.length}`
+                }
+              >
+                <KatalistIcon name="chevron-right" className="h-4 w-4" />
+              </button>
+            );
+          })()}
         </div>
 
         {activeThing ? (
-          <div className="flex-1 px-3.5 pb-2.5 pt-2.5 space-y-1">
+          <div className="flex min-h-0 flex-1 flex-col px-3.5 pb-2.5 pt-2.5">
             {/* Stack arena */}
             <div
-              className="relative pb-[140px]"
+              className="relative"
               onKeyDown={onKeyDown}
-              style={{ perspective: "1000px", perspectiveOrigin: "50% 0%" }}
             >
-              {/* Background depth cards (Card 3, Card 2) */}
-              {Array.from({ length: depthCount }, (_, i) => {
-                const depth = depthCount - i;
-                const targetIndex = (renderIndex + depth) % things.length;
-                const depthThing = things[targetIndex];
-                const depthShadow =
-                  depth === 1
-                    ? "shadow-[0_6px_16px_-3px_rgba(0,0,0,0.08),0_2px_6px_-2px_rgba(0,0,0,0.04)]"
-                    : "shadow-[0_2px_8px_-1px_rgba(0,0,0,0.05)]";
-
-                return (
-                  <div
-                    key={`depth-${depth}-${depthThing?.id ?? i}`}
-                    aria-hidden="true"
-                    onClick={() => startNavigation(1)}
-                    className={cn(
-                      "pointer-events-auto absolute top-0 h-[74px] rounded-[15px] border bg-white overflow-hidden select-none cursor-pointer will-change-transform motion-reduce:!transform-none motion-reduce:!opacity-100",
-                      lane === "now"
-                        ? "border-red-200/90 hover:border-red-300"
-                        : lane === "next"
-                          ? "border-blue-200/90 hover:border-blue-300"
-                          : "border-purple-200/90 hover:border-purple-300",
-                      depthShadow,
-                    )}
-                    style={{
-                      zIndex: depth === 1 ? 10 : 5,
-                      ...depthCardStyle(depth),
-                    }}
-                  >
-                    {/* Real compact cards remain readable behind the hero card. */}
-                    {depthThing && (
-                      <div className="px-3 py-2">
-                        <div className="grid grid-cols-[24px_minmax(0,1fr)_16px] items-start gap-x-2.5">
-                          <PersonAvatar
-                            name={depthThing.assignee.name}
-                            initials={depthThing.assignee.initials}
-                            src={depthThing.assignee.avatarUrl}
-                            size={24}
-                          />
-                          <div className="min-w-0 flex-1">
-                            <p className="line-clamp-2 text-[12.5px] font-bold leading-[1.25] text-slate-800">
-                              {depthThing.title}
-                            </p>
-                            <div className="mt-1 flex items-center gap-2 text-[10px]">
-                              <span
-                                className={cn(
-                                  depthThing.dueAt
-                                    ? "font-semibold text-red-500"
-                                    : "text-slate-400",
-                                )}
-                              >
-                                {depthThing.dueAt
-                                  ? `Due ${formatCourtDue(depthThing).label}`
-                                  : "No due date"}
-                              </span>
-                              <span
-                                className={cn(
-                                  depthThing.workStatus === "under_progress"
-                                    ? "text-blue-600"
-                                    : "text-slate-400",
-                                )}
-                              >
-                                {depthThing.workStatus === "under_progress"
-                                  ? "Under Progress"
-                                  : "Not Started"}
-                              </span>
-                            </div>
-                          </div>
-                          <GripVertical className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
               {/* Horizontal motion uncovers the action behind the card. */}
               {swipeDirection ? (
                 <div
                   aria-hidden="true"
                   className={cn(
-                    "pointer-events-none absolute inset-x-0 top-0 z-[19] h-[168px] overflow-hidden rounded-2xl",
+                    "pointer-events-none absolute inset-0 z-[19] overflow-hidden rounded-2xl",
                     swipeDirection === "sort"
                       ? capabilities.canSort
                         ? "bg-emerald-500"
                         : "bg-slate-400"
-                      : actionCapabilities.canMoveLater
+                      : canSnooze
                         ? "bg-violet-500"
-                        : lane === "later"
-                          ? "bg-purple-900/80"
-                          : "bg-slate-400",
+                        : "bg-slate-400",
                   )}
                 >
                   <div
@@ -596,15 +671,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                     <div className="flex flex-col items-center gap-1.5 text-center text-white">
                       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
                         <KatalistIcon
-                          name={
-                            swipeDirection === "sort"
-                              ? "sorted"
-                              : lane === "later"
-                                ? "clock-time"
-                                : capabilities.canCatch
-                                  ? "catch"
-                                  : "snooze"
-                          }
+                          name={swipeDirection === "sort" ? "sorted" : "snooze"}
                           className="h-4 w-4"
                         />
                       </span>
@@ -617,15 +684,9 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                             : capabilities.canCatch
                               ? "Catch first"
                               : "Unavailable"
-                          : actionCapabilities.canMoveLater
-                            ? swipeCommitted
-                              ? "Release for Later"
-                              : "Later"
-                            : lane === "later"
-                              ? "Already in Later"
-                              : capabilities.canCatch
-                                ? "Catch first"
-                                : "Unavailable"}
+                          : swipeCommitted
+                            ? "Release to snooze"
+                            : "Snooze"}
                       </span>
                     </div>
                   </div>
@@ -637,7 +698,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 ref={activeCardRef}
                 {...swipePointerProps}
                 className={cn(
-                  "relative z-20 h-[168px] touch-pan-y select-none will-change-transform motion-reduce:!transform-none motion-reduce:transition-none",
+                  "relative z-20 touch-pan-y select-none will-change-transform motion-reduce:!transform-none motion-reduce:transition-none",
                   !gesture.dragging &&
                     !anim &&
                     "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
@@ -659,12 +720,50 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 />
               </div>
 
+              {/* Snooze interval menu (swipe-left / June BRD v1.1) */}
+              {snoozeOpen && activeThing ? (
+                <div className="absolute inset-0 z-40 flex items-center justify-center rounded-2xl bg-slate-900/50 p-3 backdrop-blur-sm">
+                  <div
+                    className="w-full max-w-[240px] rounded-2xl border border-black/5 bg-white p-3"
+                    style={{ boxShadow: "0 18px 40px rgba(15,23,42,0.28)" }}
+                  >
+                    <div className="mb-2 flex items-center gap-2 text-[#050d33]">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-violet-100 text-violet-600">
+                        <KatalistIcon name="snooze" className="h-4 w-4" />
+                      </span>
+                      <p className="text-[13px] font-semibold">Snooze for…</p>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      {SNOOZE_OPTIONS.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          disabled={pendingAction !== null}
+                          onClick={() => void runSnooze(opt.id)}
+                          className="flex cursor-pointer items-center justify-between rounded-[9px] border border-[#eaeffa] bg-[#f6f7fd] px-3 py-2 text-[12.5px] font-medium text-[#1d1d1d] transition-colors hover:bg-[#eef1fc] disabled:opacity-60"
+                        >
+                          <span>{opt.label}</span>
+                          <KatalistIcon name="clock-time" className="h-3.5 w-3.5 text-[#503188]" />
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSnoozeOpen(false)}
+                      className="mt-2 w-full cursor-pointer rounded-[9px] px-3 py-1.5 text-[12px] font-medium text-[#46557d] transition-colors hover:bg-slate-100"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
               {/* Outgoing card animating out during scroll navigation */}
               {anim?.outgoing ? (
                 <div
                   ref={outgoingCardRef}
                   aria-hidden="true"
-                  className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[168px] overflow-hidden select-none will-change-transform motion-reduce:hidden"
+                  className="pointer-events-none absolute inset-0 z-30 overflow-hidden select-none will-change-transform motion-reduce:hidden"
                 >
                   <ThingStackCard
                     thing={anim.outgoing}
@@ -679,36 +778,59 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               ) : null}
             </div>
 
-            {/* Deck indicator */}
+            {/* Peek queue — fills the room below the active card and clips extras
+                so the pager below always stays visible. */}
+            {things.length > 1 && (
+              <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+                {Array.from({ length: depthCount }, (_, i) => {
+                  const depth = i + 1;
+                  const targetIndex = (renderIndex + depth) % things.length;
+                  const depthThing = things[targetIndex];
+                  if (!depthThing) return null;
+                  return (
+                    <PeekQueueCard
+                      key={`queue-${depthThing.id}`}
+                      thing={depthThing}
+                      lane={lane}
+                      onOpen={() => navigateToIndex(targetIndex)}
+                    />
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Deck indicator — pinned, always visible */}
             {things.length > 1 ? (
-              <div className="flex flex-col items-center pt-0.5">
+              <div className="shrink-0 flex items-center justify-between px-3 pt-3 pb-1 text-[11.5px] text-slate-500 font-medium">
+                <button
+                  type="button"
+                  onClick={() => startNavigation(-1)}
+                  className="p-1 hover:text-slate-800 transition-colors cursor-pointer"
+                  aria-label="Previous card"
+                >
+                  <KatalistIcon name="arrow-left" className="h-3.5 w-3.5" />
+                </button>
+                <span>{renderIndex + 1} of {things.length}</span>
                 <button
                   type="button"
                   onClick={() => startNavigation(1)}
-                  className={cn(
-                    "group inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded",
-                    content.tone,
-                  )}
-                  aria-label={`${things.length - 1} more Things in ${content.label}. Click to cycle.`}
+                  className="p-1 hover:text-slate-800 transition-colors cursor-pointer"
+                  aria-label="Next card"
                 >
-                  <span className="text-[14px] leading-none">+</span>
-                  <span>{things.length - 1} more</span>
-                  <KatalistIcon
-                    name="chevron-down"
-                    className="h-3 w-3 transition-transform group-hover:translate-y-0.5"
-                  />
+                  <KatalistIcon name="arrow-right" className="h-3.5 w-3.5" />
                 </button>
               </div>
             ) : null}
           </div>
         ) : (
-          <div className="flex min-h-[160px] items-center justify-center px-3 text-center text-[11px] text-muted-foreground">
+          <div className="flex min-h-[160px] flex-1 items-center justify-center px-3 text-center text-[11px] text-muted-foreground">
             No Things match this view.
           </div>
         )}
 
+        {/* decorative deck offset: depth * -6 */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
-          {announcement}
+          {announcement || `${Math.max(0, things.length - 1)} more Things in ${content.label}`}
         </div>
       </section>
     );

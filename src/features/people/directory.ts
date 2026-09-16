@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_PERSONAS } from "@/hooks/useSession";
+import { authedFetch } from "@/lib/authed-fetch";
 
 export type ProfileIdentity = {
   id: string;
@@ -15,7 +16,7 @@ export async function fetchProfileIdentities(): Promise<ProfileIdentity[]> {
 
   // 1. Try server directory endpoint (resolves all real profiles and actors via service role)
   try {
-    const res = await fetch("/api/people/directory");
+    const res = await authedFetch("/api/people/directory");
     if (res.ok) {
       const json = await res.json();
       for (const p of json.people ?? []) {

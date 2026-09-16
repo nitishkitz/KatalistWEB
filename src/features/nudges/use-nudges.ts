@@ -8,13 +8,15 @@ import { isRecentlyNudged, canNudge as demoCanNudge } from "@/features/things/lo
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { supabase } from "@/integrations/supabase/client";
 import { keys } from "@/domain/query-keys";
+import type { NudgeReason } from "@/features/things/rpc";
 
-function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string): NudgeRow {
+function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string, dbReason?: NudgeReason): NudgeRow {
   return {
     id: t.id,
     title: t.title,
     person: t.assignee.name,
     reason,
+    dbReason,
     acknowledged: t.acknowledgement === "waiting_for_catch" ? "Waiting" : "Caught",
     workStatus: t.workStatus === "under_progress" ? "Under Progress" : t.workStatus === "sorted" ? "Sorted" : "Not Started",
     due: t.dueAt ? new Date(t.dueAt).toLocaleString() : "—",
@@ -66,6 +68,7 @@ export function useNudges() {
     const rows: NudgeRow[] = [];
     const recent: RecentNudge[] = [];
     const allowed = new Set((nudgeable.data ?? []).map((n) => n.thing_id));
+    const reasonByThing = new Map((nudgeable.data ?? []).map((n) => [n.thing_id, n.reason as NudgeReason]));
     const COOLDOWN_MS = 120 * 60 * 1000;
     const latestByThing = new Map<string, { created_at: string; reason: string }>();
     for (const n of history.data ?? []) {
@@ -82,7 +85,7 @@ export function useNudges() {
       const { group, reason } = groupThing(t, recently);
       const caps = getThingCapabilities(t, court.myActorId);
       const can = court.preview ? caps.canNudge && demoCanNudge(t.id) : caps.canNudge && allowed.has(t.id);
-      rows.push(asRow(t, group, can, reason));
+      rows.push(asRow(t, group, can, reason, reasonByThing.get(t.id)));
     }
     if (court.preview) {
       for (const t of liveThings.filter((x) => isRecentlyNudged(x.id))) {

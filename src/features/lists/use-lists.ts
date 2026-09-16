@@ -20,7 +20,7 @@ import type { ListRow } from "./fixtures";
 async function fetchLists(profileId: string, context: "work" | "home"): Promise<ListRow[]> {
   const { data: lists, error } = await supabase
     .from("lists")
-    .select("id,name,context,owner_profile_id,updated_at")
+    .select("id,name,context,owner_profile_id,updated_at,description,cover_storage_path")
     .eq("context", context)
     .is("archived_at", null);
   if (error) throw error;
@@ -48,13 +48,18 @@ export function useLists() {
   }, [preview, query.data, context, version, shred]);
 
   const create = useMutation({
-    mutationFn: (name: string) => rpcCreateList(name, context),
+    mutationFn: (input: { name: string; description?: string | null }) =>
+      rpcCreateList({ ...input, context }),
     onSuccess: async () => {
       await qc.invalidateQueries({ queryKey: keys.lists(user?.id, context) });
     },
   });
 
-  return { lists, isLoading: !preview && query.isLoading, error: query.error, preview, create };
+  const refetch = async () => {
+    await qc.invalidateQueries({ queryKey: keys.lists(user?.id, context) });
+  };
+
+  return { lists, isLoading: !preview && query.isLoading, error: query.error, preview, create, refetch };
 }
 
 export function useList(listId: string | undefined) {

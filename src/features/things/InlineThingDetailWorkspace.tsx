@@ -1,10 +1,20 @@
-import { useEffect, type ReactNode } from "react";
-import { Calendar, ChevronLeft, FileText, X } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Calendar,
+  ChevronLeft,
+  FileText,
+  Search,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { format } from "date-fns";
 import type { Thing } from "@/domain/thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
 import { ThingDetailContent } from "./ThingDetailContent";
+import { formatCourtDue } from "@/features/court/court-view-model";
+import { MagicBox } from "@/features/court/MagicBox";
+import katalistMark from "@/assets/katalist-mark.png.asset.json";
 
 type InlineThingDetailWorkspaceProps = {
   thing: Thing | null;
@@ -17,141 +27,8 @@ type InlineThingDetailWorkspaceProps = {
   items?: Thing[];
   onSelectThing?: (thingId: string) => void;
   navTitle?: string;
+  magicBoxProps?: { listId?: string; listName?: string };
 };
-
-function ListThingNavigator({
-  things,
-  selectedThingId,
-  onSelect,
-  title = "Things",
-}: {
-  things: Thing[];
-  selectedThingId: string;
-  onSelect: (thingId: string) => void;
-  title?: string;
-}) {
-  return (
-    <nav
-      className="flex flex-col rounded-2xl border border-border/80 bg-white p-3.5 shadow-2xs w-full"
-      aria-label={`${title} Navigator`}
-    >
-      {/* Header */}
-      <div className="mb-3 flex items-center justify-between px-1">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <FileText className="h-4 w-4 text-primary shrink-0" />
-          <h2 className="truncate text-[12.5px] font-bold tracking-[0.04em] text-foreground">
-            {title}
-          </h2>
-        </div>
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary shrink-0">
-          {things.length}
-        </span>
-      </div>
-
-      {/* List Items */}
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto max-h-[calc(100vh-14rem)] pr-0.5">
-        {things.map((item) => {
-          const selected = selectedThingId === item.id;
-          const isWaiting = item.acknowledgement === "waiting_for_catch";
-          const isProgress = item.workStatus === "under_progress";
-          const isCompleted = item.workStatus === "sorted";
-
-          const statusText = isWaiting
-            ? "Waiting"
-            : isProgress
-              ? "In Progress"
-              : isCompleted
-                ? "Done"
-                : "Not Started";
-
-          const importanceColor =
-            item.ownerImportance === "now"
-              ? "text-red-600 bg-red-50 border-red-200"
-              : item.ownerImportance === "next"
-                ? "text-blue-600 bg-blue-50 border-blue-200"
-                : "text-purple-600 bg-purple-50 border-purple-200";
-
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={selected}
-              onClick={() => onSelect(item.id)}
-              className={cn(
-                "group w-full rounded-xl p-3 text-left shadow-2xs outline-none transition-all duration-200 focus-visible:ring-1 focus-visible:ring-primary cursor-pointer",
-                selected
-                  ? "border-2 border-primary bg-primary/5 ring-1 ring-primary/20 shadow-xs font-semibold"
-                  : "border border-border/70 bg-white hover:border-primary/40 hover:bg-muted/20",
-              )}
-            >
-              <div className="flex items-start justify-between gap-1.5">
-                <span className="block line-clamp-2 text-[12.5px] font-bold leading-snug text-foreground group-hover:text-primary transition-colors">
-                  {item.title}
-                </span>
-                <span
-                  className={cn(
-                    "shrink-0 rounded border px-1.5 py-0.2 text-[9.5px] font-bold uppercase",
-                    importanceColor,
-                  )}
-                >
-                  {item.ownerImportance}
-                </span>
-              </div>
-
-              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-1.5 text-[10.5px]">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <PersonAvatar
-                    name={item.assignee.name}
-                    initials={item.assignee.initials}
-                    src={item.assignee.avatarUrl}
-                    size={18}
-                  />
-                  <span className="truncate text-muted-foreground font-medium max-w-[90px]">
-                    {item.assignee.name}
-                  </span>
-                </div>
-
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1 font-medium text-[10px]",
-                    isWaiting
-                      ? "text-orange-600"
-                      : isProgress
-                        ? "text-blue-600"
-                        : isCompleted
-                          ? "text-emerald-600"
-                          : "text-muted-foreground",
-                  )}
-                >
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 rounded-full",
-                      isWaiting
-                        ? "bg-orange-500"
-                        : isProgress
-                          ? "bg-blue-500"
-                          : isCompleted
-                            ? "bg-emerald-500"
-                            : "bg-muted-foreground/60",
-                    )}
-                  />
-                  {statusText}
-                </span>
-              </div>
-
-              {item.dueAt ? (
-                <div className="mt-1.5 flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
-                  <Calendar className="h-3 w-3" />
-                  <span>{format(new Date(item.dueAt), "MMM d")}</span>
-                </div>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-    </nav>
-  );
-}
 
 export function InlineThingDetailWorkspace({
   thing,
@@ -164,7 +41,10 @@ export function InlineThingDetailWorkspace({
   items,
   onSelectThing,
   navTitle,
+  magicBoxProps,
 }: InlineThingDetailWorkspaceProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+
   useEffect(() => {
     if (!thing) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -176,32 +56,249 @@ export function InlineThingDetailWorkspace({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [thing, onClose]);
 
+  const hasNavigator = Boolean(items && items.length > 0 && onSelectThing);
+
+  const filteredItems = useMemo(() => {
+    if (!items) return [];
+    if (!searchQuery.trim()) return items;
+    const q = searchQuery.toLowerCase();
+    return items.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) ||
+        item.assignee.name.toLowerCase().includes(q),
+    );
+  }, [items, searchQuery]);
+
   if (!thing) return <>{children}</>;
 
   const headerAction = (
-    <div className="flex items-center justify-between w-full">
+    <div className="flex items-center justify-between w-full mb-2">
       <button
         type="button"
         onClick={onClose}
         className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-foreground hover:text-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-        aria-label={`Back to ${backLabel || "list"}`}
+        aria-label={`Back to ${backLabel || "List"}`}
       >
-        <ChevronLeft className="h-3.5 w-3.5 text-foreground" />
+        <ChevronLeft className="h-4 w-4 text-foreground" />
         Back to {backLabel || "List"}
       </button>
       <button
         type="button"
         onClick={onClose}
         aria-label="Close Thing details"
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground outline-none hover:border-primary/45 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring transition-colors cursor-pointer"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:bg-muted/30 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
       >
         <X className="h-3.5 w-3.5" />
       </button>
     </div>
   );
 
-  const hasNavigator = Boolean(items && items.length > 0 && onSelectThing);
+  // Full-screen focused workspace matching CourtFocusView when navigating items (Buckets & Lists)
+  if (hasNavigator) {
+    return (
+      <>
+        {/* Render base page content inert behind focus workspace */}
+        <div aria-hidden="true" className="contents">
+          {children}
+        </div>
 
+        <section
+          aria-label="Inline Thing details"
+          className="fixed inset-0 z-40 bg-[#fafafa] flex flex-col motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-[0.99] duration-[240ms] ease-out motion-reduce:transition-none motion-reduce:animate-none"
+        >
+          {/* Top Header Bar */}
+          <header className="h-14 shrink-0 border-b border-border/70 bg-white px-6 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <img
+                src={katalistMark?.url ?? "/katalist-mark-app.png"}
+                alt="Katalist"
+                className="h-6 w-6 object-contain"
+              />
+              <span className="text-[17px] font-bold text-foreground tracking-tight">Katalist</span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-[12.5px] font-semibold text-muted-foreground hidden sm:inline">
+                {navTitle || backLabel}
+              </span>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close Thing details"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:bg-muted/30 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </header>
+
+          {/* Main Content Split: Left Navigator + Right Thing Detail */}
+          <main className="flex-1 flex min-h-0 overflow-hidden">
+            {/* Left Column: Navigator + In-List Search + Things List */}
+            <aside className="w-[320px] shrink-0 border-r border-border/70 bg-white/75 backdrop-blur flex flex-col min-h-0">
+              {/* Header with Title and Count */}
+              <div className="p-3 border-b border-border/60 flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="h-4 w-4 text-primary shrink-0" />
+                  <h2 className="truncate text-[13px] font-bold text-foreground">
+                    {navTitle || backLabel || "Things"}
+                  </h2>
+                </div>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary shrink-0">
+                  {items!.length}
+                </span>
+              </div>
+
+              {/* In-List Search */}
+              <div className="px-3 pt-2.5 pb-2">
+                <div className="relative flex items-center">
+                  <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder={`Search in ${navTitle || backLabel || "Things"}...`}
+                    className="h-8 w-full rounded-lg border border-border/70 bg-muted/20 pl-8 pr-8 text-[12px] text-foreground outline-none focus:border-primary focus:bg-white transition-colors"
+                  />
+                  <SlidersHorizontal className="absolute right-2.5 h-3.5 w-3.5 text-muted-foreground cursor-pointer" />
+                </div>
+              </div>
+
+              {/* Scrollable Things List */}
+              <div className="flex-1 overflow-auto px-3 py-1.5 space-y-1.5 min-h-0">
+                {filteredItems.map((item) => {
+                  const isSelected = item.id === thing.id;
+                  const due = formatCourtDue(item);
+                  const isWaiting = item.acknowledgement === "waiting_for_catch";
+                  const isProgress = item.workStatus === "under_progress";
+                  const isCompleted = item.workStatus === "sorted";
+
+                  const statusText = isWaiting
+                    ? "Waiting"
+                    : isProgress
+                      ? "In Progress"
+                      : isCompleted
+                        ? "Completed"
+                        : "Not Started";
+
+                  if (isSelected) {
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => onSelectThing?.(item.id)}
+                        className="relative rounded-2xl border-2 border-primary/40 bg-primary/[0.04] p-3 transition-all cursor-pointer text-left shadow-xs"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                          <PersonAvatar
+                            name={item.assignee.name}
+                            initials={item.assignee.initials}
+                            src={item.assignee.avatarUrl}
+                            size={24}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[12.5px] font-bold leading-snug text-foreground line-clamp-2">
+                              {item.title}
+                            </p>
+                            <div className="mt-1 flex items-center justify-between gap-1.5 text-[10.5px]">
+                              <span className="font-medium text-muted-foreground">
+                                {statusText}
+                              </span>
+                              {due.label && due.label !== "No due date" ? (
+                                <span
+                                  className={cn(
+                                    "font-semibold shrink-0",
+                                    due.urgent ? "text-red-600" : "text-muted-foreground",
+                                  )}
+                                >
+                                  {due.label}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                        {/* Active connector badge pointing right into detail view */}
+                        <span className="absolute -right-[6px] top-1/2 -translate-y-1/2 h-4 w-2 rounded-l-full bg-primary/40 hidden md:block" />
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={item.id}
+                      onClick={() => onSelectThing?.(item.id)}
+                      className="rounded-xl border border-border/60 bg-white hover:bg-muted/30 p-3 transition-colors cursor-pointer text-left flex items-start gap-2.5 shadow-2xs"
+                    >
+                      <PersonAvatar
+                        name={item.assignee.name}
+                        initials={item.assignee.initials}
+                        src={item.assignee.avatarUrl}
+                        size={24}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12.5px] font-semibold leading-snug text-foreground line-clamp-2">
+                          {item.title}
+                        </p>
+                        <div className="mt-1 flex items-center justify-between gap-1.5 text-[10.5px]">
+                          <span className="font-medium text-muted-foreground">
+                            {statusText}
+                          </span>
+                          {due.label && due.label !== "No due date" ? (
+                            <span
+                              className={cn(
+                                "font-semibold shrink-0",
+                                due.urgent ? "text-red-600" : "text-muted-foreground",
+                              )}
+                            >
+                              {due.label}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {filteredItems.length === 0 && (
+                  <div className="py-8 text-center text-[11px] text-muted-foreground">
+                    No Things match search.
+                  </div>
+                )}
+              </div>
+            </aside>
+
+            {/* Right Column: Thing Detail Workspace */}
+            <div className="flex-1 flex flex-col min-h-0 overflow-auto bg-white">
+              <div className="w-full max-w-4xl mx-auto px-8 py-6 flex flex-col gap-6 flex-1">
+                <div
+                  key={`detail-${thing.id}`}
+                  className="w-full flex-1 motion-safe:animate-in motion-safe:fade-in-0 duration-[240ms] motion-reduce:transition-none motion-reduce:animate-none"
+                >
+                  <ThingDetailContent
+                    initialThing={thing}
+                    headerAction={headerAction}
+                    onAfterTerminalAction={onClose}
+                    variant="court"
+                    viewOnly={viewOnly}
+                  />
+                </div>
+
+                {magicBoxProps && !viewOnly && (
+                  <div className="mt-auto pt-6 pb-2 flex justify-center">
+                    <div className="w-full max-w-2xl">
+                      <MagicBox listId={magicBoxProps.listId} listName={magicBoxProps.listName} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </main>
+        </section>
+      </>
+    );
+  }
+
+  // Fallback inline workspace for callers without a list of items (e.g. mobile Court, Nudges, With Others)
   return (
     <section
       aria-label="Inline Thing details"
@@ -210,18 +307,7 @@ export function InlineThingDetailWorkspace({
         className,
       )}
     >
-      <div className={cn("min-w-0", sourceClassName)}>
-        {hasNavigator ? (
-          <ListThingNavigator
-            things={items!}
-            selectedThingId={thing.id}
-            onSelect={onSelectThing!}
-            title={navTitle || backLabel || "Things"}
-          />
-        ) : (
-          children
-        )}
-      </div>
+      <div className={cn("min-w-0", sourceClassName)}>{children}</div>
 
       <div className="min-w-0 rounded-2xl border border-border/80 bg-white p-6 md:p-8 shadow-xs motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
         <div className="max-h-[calc(100vh-10rem)] overflow-y-auto overscroll-contain">

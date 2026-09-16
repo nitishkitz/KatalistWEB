@@ -9,6 +9,9 @@ export const DEMO_ACTOR_BY_KEY: Record<string, { id: string; name: string; initi
   neha: { id: "p-neha", name: "Neha Rao", initials: "NR", avatarUrl: "/avatars/neha.jpg" },
   rahul: { id: "p-rahul", name: "Rahul Mehta", initials: "RM", avatarUrl: "/avatars/rahul.jpg" },
   sai: { id: "p-sai", name: "Sai", initials: "SA", avatarUrl: "/avatars/sai.jpg" },
+  nithesh: { id: "p-nithesh", name: "Nithesh", initials: "NI", avatarUrl: null },
+  sudheer: { id: "p-sudheer", name: "Sudheer", initials: "SU", avatarUrl: null },
+  rohit: { id: "p-rohit", name: "Rohit", initials: "RO", avatarUrl: null },
 };
 
 /** Test-only persona override. Null restores session-based resolution. */

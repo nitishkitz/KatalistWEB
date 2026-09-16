@@ -2,7 +2,7 @@ import type { Acknowledgement, Thing, WorkStatus } from "@/domain/thing";
 
 export type CourtLaneId = "now" | "next" | "later";
 export type CourtViewMode = CourtLaneId | null;
-export type CourtQuickFilter = "all" | "due" | "waiting" | "progress";
+export type CourtQuickFilter = "all" | "due" | "waiting" | "progress" | "unread_comments";
 export type CourtDueFilter = "any" | "overdue" | "today" | "this_week" | "no_due";
 export type CourtAcknowledgementFilter = "any" | Acknowledgement;
 export type CourtWorkStatusFilter = "any" | Extract<WorkStatus, "not_started" | "under_progress">;
@@ -76,6 +76,7 @@ export function filterCourtThings(
     if (filters.quick === "due" && !thing.dueAt) return false;
     if (filters.quick === "waiting" && thing.acknowledgement !== "waiting_for_catch") return false;
     if (filters.quick === "progress" && thing.workStatus !== "under_progress") return false;
+    if (filters.quick === "unread_comments" && !((thing.unreadCommentCount ?? 0) > 0)) return false;
     if (!matchesDueFilter(thing, filters.due, now)) return false;
     if (filters.acknowledgement !== "any" && thing.acknowledgement !== filters.acknowledgement)
       return false;
@@ -173,6 +174,9 @@ export function formatCourtDue(thing: Thing, now = new Date()) {
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (isSameLocalDay(due, tomorrow)) return { label: "Tomorrow", urgent: true };
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (isSameLocalDay(due, yesterday)) return { label: "Yesterday", urgent: true };
   return {
     label: due.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     urgent: due.getTime() < now.getTime(),

@@ -1,5 +1,5 @@
 // react import moved to use-local-version.ts
-import { isActiveThing, type Importance, type Pace, type Person, type Thing, type WorkStatus } from "@/domain/thing";
+import { isActiveThing, type Importance, type Pace, type Person, type Thing, type ThingFile, type WorkStatus } from "@/domain/thing";
 import { courtFixtures } from "@/features/court/fixtures";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { currentDemoActorId, currentDemoPerson, demoDirectory } from "@/features/demo/identities";
@@ -7,7 +7,13 @@ import { canDemoActorViewThing, projectDemoList, roleForDemoList } from "@/featu
 import { listFixtures, type ListRow } from "@/features/lists/fixtures";
 import { bucketFixtures, type BucketCard } from "@/features/buckets/fixtures";
 
-export type LocalComment = { id: string; body: string; author: string; at: string };
+export type LocalComment = {
+  id: string;
+  body: string;
+  author: string;
+  at: string;
+  attachments?: ThingFile[];
+};
 export type LocalActivity = { id: string; event: string; at: string; detail?: string };
 export type LocalMessage = { id: string; body: string; author: string; at: string };
 export type LocalNotification = {
@@ -47,6 +53,8 @@ const bucketNameById = new Map<string, string>();
 const deletedBucketIdsByActor = new Map<string, Set<string>>();
 const recentlyNudged = new Set<string>();
 const nudgeCooldownUntil = new Map<string, number>();
+// actorId -> (thingId -> snoozed_until epoch ms)
+const snoozedByActor = new Map<string, Map<string, number>>();
 let extraNotifications: LocalNotification[] = [];
 /** Persona-scoped Ghost dismissals: actorId → set of thing ids. */
 const ghostDismissedByActor = new Map<string, Set<string>>();
@@ -174,6 +182,7 @@ export function tossLocalThing(input: {
   assigneeId?: string;
   dueAt?: string;
   dueHasTime?: boolean;
+  files?: ThingFile[];
 }): Thing {
   const people = directoryPeople();
   const me = currentDemoPerson();
@@ -212,6 +221,8 @@ export function tossLocalThing(input: {
     sortedAt: null,
     caughtAt: null,
     updatedAt: new Date().toISOString(),
+    files: input.files,
+    attachmentCount: input.files?.length,
   };
   extras = [thing, ...extras];
   bump({ id: crypto.randomUUID(), event: "created", at: thing.updatedAt, thingId: thing.id });
@@ -336,13 +347,64 @@ export function getShredded(): ShreddedItem[] {
   return shreddedLogByActor.get(currentDemoActorId()) ?? [];
 }
 
-export function addCommentLocal(thingId: string, body: string, author?: string) {
+function snoozeMapFor(actorId: string): Map<string, number> {
+  let m = snoozedByActor.get(actorId);
+  if (!m) {
+    m = new Map();
+    snoozedByActor.set(actorId, m);
+  }
+  return m;
+}
+
+export function snoozeLocal(id: string, untilMs: number) {
+  snoozeMapFor(currentDemoActorId()).set(id, untilMs);
+  bump({ id: crypto.randomUUID(), event: "snoozed", at: new Date().toISOString(), thingId: id });
+}
+
+export function unsnoozeLocal(id: string) {
+  snoozeMapFor(currentDemoActorId()).delete(id);
+  bump({ id: crypto.randomUUID(), event: "restored", at: new Date().toISOString(), thingId: id });
+}
+
+/** Currently-active snoozes for the demo actor (expired entries are pruned). */
+export function getSnoozedIds(): Set<string> {
+  const m = snoozeMapFor(currentDemoActorId());
+  const now = Date.now();
+  const set = new Set<string>();
+  for (const [id, until] of m) {
+    if (until > now) set.add(id);
+    else m.delete(id);
+  }
+  return set;
+}
+
+export function addThingFileLocal(thingId: string, file: ThingFile) {
+  const thing = getThing(thingId);
+  if (!thing) return;
+  const nextFiles = [...(thing.files ?? []), file];
+  patchThing(
+    thingId,
+    {
+      files: nextFiles,
+      attachmentCount: nextFiles.length,
+    },
+    "file_added" as never,
+  );
+}
+
+export function addCommentLocal(
+  thingId: string,
+  body: string,
+  author?: string,
+  attachments?: ThingFile[],
+) {
   if (!getThing(thingId)) throw new Error("That Thing isn’t available.");
   const row: LocalComment = {
     id: crypto.randomUUID(),
     body,
     author: author ?? currentDemoPerson().name,
     at: new Date().toISOString(),
+    attachments,
   };
   comments.set(thingId, [row, ...(comments.get(thingId) ?? [])]);
   bump({ id: crypto.randomUUID(), event: "commented", at: row.at, thingId });
@@ -379,12 +441,13 @@ export function accessibleDemoThings(context?: "work" | "home"): Thing[] {
     .filter((t) => canDemoActorViewThing(t, me, lists));
 }
 
-export function createListLocal(name: string, context: "work" | "home"): ListRow {
+export function createListLocal(name: string, context: "work" | "home", description?: string): ListRow {
   const me = currentDemoPerson();
   const row: ListRow = {
     id: `list-${crypto.randomUUID()}`,
     name,
     context,
+    description: description?.trim() || null,
     role: "owner",
     ownerActorId: me.id,
     ownerLine: "Owned by you",

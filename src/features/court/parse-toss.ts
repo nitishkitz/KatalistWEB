@@ -6,21 +6,6 @@ export type TossChip = {
   value: string;
 };
 
-function levenshteinDistance(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
-  for (let i = 0; i <= m; i++) dp[i][0] = i;
-  for (let j = 0; j <= n; j++) dp[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
-    }
-  }
-  return dp[m][n];
-}
-
 const COMMON_STOP_WORDS = new Set([
   "the", "for", "and", "with", "from", "now", "next", "later", "today", "tomorrow",
   "this", "that", "get", "got", "send", "call", "talk", "chat", "meet", "meeting",
@@ -42,22 +27,21 @@ export function findFuzzyPersonMatch(
       const firstName = p.name.split(" ")[0].toLowerCase();
       const fullName = p.name.toLowerCase();
 
-      // Exact match
+      // Exact match on first or full name.
       if (clean === firstName || clean === fullName) {
         return { person: p, matchedWord: token };
       }
 
-      // Prefix match (e.g. "priy" -> "priya", "arju" -> "arjun")
-      if (clean.length >= 3 && (firstName.startsWith(clean) || clean.startsWith(firstName))) {
+      // Strong prefix match only: the typed word is a near-complete prefix of the
+      // first name (e.g. "priy" -> "priya"). Requires 4+ chars and covers most of
+      // the name, so ordinary words no longer trigger a suggestion.
+      if (
+        clean.length >= 4 &&
+        firstName.length >= 4 &&
+        firstName.startsWith(clean) &&
+        clean.length >= firstName.length - 2
+      ) {
         return { person: p, matchedWord: token };
-      }
-
-      // Typo distance 1 (e.g. "roht" -> "rohit", "ohit" -> "rohit")
-      if (firstName.length >= 3 && Math.abs(clean.length - firstName.length) <= 1) {
-        const dist = levenshteinDistance(clean, firstName);
-        if (dist === 1) {
-          return { person: p, matchedWord: token };
-        }
       }
     }
   }
@@ -163,7 +147,7 @@ export function parseToss(
     chips.push({ kind: "importance", label: "NEXT", value: "next" });
   }
 
-  const dateMatch = title.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday)\b/i);
+  const dateMatch = title.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
   let dueAt: string | undefined;
   let dueHasTime: boolean | undefined;
   if (dateMatch) {
@@ -215,8 +199,7 @@ export function parseToss(
 }
 
 export function tossBlockedByPerson(chips: TossChip[]): boolean {
-  // Block if there's an unresolved @mention OR an unconfirmed fuzzy-name suggestion
-  return chips.some(
-    (c) => (c.kind === "unresolved" && c.value === "person") || c.kind === "suggestion",
-  );
+  // Only block on an unresolved @mention. A fuzzy-name suggestion is a soft hint
+  // — the user can toss without dismissing it.
+  return chips.some((c) => c.kind === "unresolved" && c.value === "person");
 }

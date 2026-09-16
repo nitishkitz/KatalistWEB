@@ -11,7 +11,30 @@ export type DbListRow = {
   context: "work" | "home";
   owner_profile_id: string;
   updated_at: string;
+  description?: string | null;
+  cover_storage_path?: string | null;
 };
+
+const COVER_BUCKET = "list-covers";
+const COVER_URL_TTL_SECONDS = 60 * 60; // 1 hour
+
+/** Batch-sign the private cover paths into displayable URLs. */
+async function signCoverUrls(paths: string[]): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  const unique = [...new Set(paths.filter(Boolean))];
+  if (!unique.length) return map;
+  try {
+    const { data } = await supabase.storage
+      .from(COVER_BUCKET)
+      .createSignedUrls(unique, COVER_URL_TTL_SECONDS);
+    for (const entry of data ?? []) {
+      if (entry.path && entry.signedUrl) map.set(entry.path, entry.signedUrl);
+    }
+  } catch {
+    // Covers are decorative — never block the list on a signing failure.
+  }
+  return map;
+}
 
 function initialsFrom(name: string) {
   return name
@@ -39,6 +62,9 @@ const DEFAULT_PERSONAS = [
 export async function mapDbListRows(profileId: string, lists: DbListRow[]): Promise<ListRow[]> {
   if (!lists.length) return [];
   const ids = lists.map((l) => l.id);
+  const coverUrls = await signCoverUrls(
+    lists.map((l) => l.cover_storage_path).filter((p): p is string => Boolean(p)),
+  );
   const { data: members } = await supabase.from("list_members").select("list_id,profile_id,role").in("list_id", ids);
   const { data: things } = await supabase.from("things").select("id,list_id,work_status").in("list_id", ids);
 
@@ -169,6 +195,8 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
       name: l.name,
       context: l.context,
       role,
+      description: l.description ?? null,
+      coverUrl: l.cover_storage_path ? (coverUrls.get(l.cover_storage_path) ?? null) : null,
       ownerLine,
       ownerActorId: l.owner_profile_id,
       members: allMembers,

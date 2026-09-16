@@ -10,7 +10,32 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -52,6 +77,13 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "actors_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
             referencedColumns: ["id"]
           },
         ]
@@ -267,6 +299,7 @@ export type Database = {
           id: string
           name: string
           owner_profile_id: string
+          pinned_at: string | null
           updated_at: string
         }
         Insert: {
@@ -276,6 +309,7 @@ export type Database = {
           id?: string
           name: string
           owner_profile_id: string
+          pinned_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -285,6 +319,7 @@ export type Database = {
           id?: string
           name?: string
           owner_profile_id?: string
+          pinned_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -293,6 +328,13 @@ export type Database = {
             columns: ["owner_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "buckets_owner_profile_id_fkey"
+            columns: ["owner_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
             referencedColumns: ["id"]
           },
         ]
@@ -343,6 +385,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "contacts_owner_profile_id_fkey"
+            columns: ["owner_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
         ]
       }
       doorman_state: {
@@ -388,6 +437,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "doorman_state_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "doorman_state_thing_id_fkey"
             columns: ["thing_id"]
             isOneToOne: false
@@ -396,6 +452,48 @@ export type Database = {
           },
           {
             foreignKeyName: "doorman_state_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "things"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      thing_snooze: {
+        Row: {
+          created_at: string
+          id: string
+          profile_id: string
+          snoozed_until: string
+          thing_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          profile_id: string
+          snoozed_until: string
+          thing_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_id?: string
+          snoozed_until?: string
+          thing_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thing_snooze_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "thing_snooze_thing_id_fkey"
             columns: ["thing_id"]
             isOneToOne: false
             referencedRelation: "things"
@@ -442,6 +540,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "external_identities_claimed_profile_id_fkey"
+            columns: ["claimed_profile_id"]
+            isOneToOne: true
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
         ]
       }
       list_members: {
@@ -481,6 +586,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "list_members_added_by_profile_id_fkey"
+            columns: ["added_by_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "list_members_list_id_fkey"
             columns: ["list_id"]
             isOneToOne: false
@@ -499,6 +611,13 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
             referencedColumns: ["id"]
           },
         ]
@@ -540,6 +659,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "list_messages_author_profile_id_fkey"
+            columns: ["author_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "list_messages_list_id_fkey"
             columns: ["list_id"]
             isOneToOne: false
@@ -559,7 +685,9 @@ export type Database = {
         Row: {
           archived_at: string | null
           context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
           created_at: string
+          description: string | null
           id: string
           name: string
           owner_profile_id: string
@@ -568,7 +696,9 @@ export type Database = {
         Insert: {
           archived_at?: string | null
           context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path?: string | null
           created_at?: string
+          description?: string | null
           id?: string
           name: string
           owner_profile_id: string
@@ -577,7 +707,9 @@ export type Database = {
         Update: {
           archived_at?: string | null
           context?: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path?: string | null
           created_at?: string
+          description?: string | null
           id?: string
           name?: string
           owner_profile_id?: string
@@ -589,6 +721,13 @@ export type Database = {
             columns: ["owner_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lists_owner_profile_id_fkey"
+            columns: ["owner_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
             referencedColumns: ["id"]
           },
         ]
@@ -663,6 +802,13 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
             referencedColumns: ["id"]
           },
           {
@@ -776,6 +922,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "private_activity_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profile_object_state: {
@@ -814,38 +967,51 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "profile_object_state_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
         Row: {
           active_context: Database["public"]["Enums"]["context_kind"]
+          age: number | null
           avatar_url: string | null
           created_at: string
           display_name: string
           email: string | null
           id: string
+          occupation: string | null
           phone_e164: string | null
           timezone: string
           updated_at: string
         }
         Insert: {
           active_context?: Database["public"]["Enums"]["context_kind"]
+          age?: number | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string
           email?: string | null
           id: string
+          occupation?: string | null
           phone_e164?: string | null
           timezone?: string
           updated_at?: string
         }
         Update: {
           active_context?: Database["public"]["Enums"]["context_kind"]
+          age?: number | null
           avatar_url?: string | null
           created_at?: string
           display_name?: string
           email?: string | null
           id?: string
+          occupation?: string | null
           phone_e164?: string | null
           timezone?: string
           updated_at?: string
@@ -962,6 +1128,73 @@ export type Database = {
             columns: ["thing_id"]
             isOneToOne: false
             referencedRelation: "things"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      thing_attachments: {
+        Row: {
+          byte_size: number
+          client_id: string
+          created_at: string
+          file_name: string
+          finalized_at: string | null
+          id: string
+          mime_type: string
+          staging_key: string
+          status: string
+          storage_key: string | null
+          thing_id: string
+          uploaded_by_actor_id: string
+        }
+        Insert: {
+          byte_size: number
+          client_id: string
+          created_at?: string
+          file_name: string
+          finalized_at?: string | null
+          id?: string
+          mime_type: string
+          staging_key: string
+          status: string
+          storage_key?: string | null
+          thing_id: string
+          uploaded_by_actor_id: string
+        }
+        Update: {
+          byte_size?: number
+          client_id?: string
+          created_at?: string
+          file_name?: string
+          finalized_at?: string | null
+          id?: string
+          mime_type?: string
+          staging_key?: string
+          status?: string
+          storage_key?: string | null
+          thing_id?: string
+          uploaded_by_actor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thing_attachments_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "thing_list_label"
+            referencedColumns: ["thing_id"]
+          },
+          {
+            foreignKeyName: "thing_attachments_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "things"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "thing_attachments_uploaded_by_actor_id_fkey"
+            columns: ["uploaded_by_actor_id"]
+            isOneToOne: false
+            referencedRelation: "actors"
             referencedColumns: ["id"]
           },
         ]
@@ -1134,18 +1367,19 @@ export type Database = {
     Views: {
       public_identities: {
         Row: {
-          id: string | null
-          display_name: string | null
           avatar_url: string | null
+          display_name: string | null
+          id: string | null
         }
-        Relationships: []
-      }
-      public_profiles: {
-        Row: {
-          id: string | null
-          email: string | null
-          display_name: string | null
-          avatar_url: string | null
+        Insert: {
+          avatar_url?: string | null
+          display_name?: string | null
+          id?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          display_name?: string | null
+          id?: string | null
         }
         Relationships: []
       }
@@ -1160,6 +1394,41 @@ export type Database = {
       }
     }
     Functions: {
+      abandon_pending_attachment: {
+        Args: { p_client_id: string; p_staging_key: string; p_thing_id: string }
+        Returns: boolean
+      }
+      accept_list_invitation_server: {
+        Args: { p_accepting_profile_id: string; p_token_hash: string }
+        Returns: string
+      }
+      accept_team_invitation_server: {
+        Args: { p_accepting_profile_id: string; p_token_hash: string }
+        Returns: boolean
+      }
+      accept_team_request: { Args: { p_request_id: string }; Returns: boolean }
+      add_connected_list_member: {
+        Args: {
+          p_list_id: string
+          p_profile_id: string
+          p_role?: Database["public"]["Enums"]["list_role"]
+        }
+        Returns: {
+          added_by_profile_id: string | null
+          created_at: string
+          id: string
+          list_id: string
+          profile_id: string
+          role: Database["public"]["Enums"]["list_role"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "list_members"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       add_list_member: {
         Args: {
           p_list_id: string
@@ -1199,6 +1468,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      assign_outside_katalist: {
+        Args: {
+          p_display_name: string
+          p_email?: string
+          p_phone_e164?: string
+          p_thing_id: string
+        }
+        Returns: {
+          actor_id: string
+          expires_at: string
+          token: string
+        }[]
+      }
       assign_thing: {
         Args: { p_assignee_actor_id: string; p_thing_id: string }
         Returns: {
@@ -1229,19 +1511,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      assign_outside_katalist: {
-        Args: {
-          p_display_name: string
-          p_email?: string
-          p_phone_e164?: string
-          p_thing_id: string
-        }
-        Returns: {
-          actor_id: string
-          expires_at: string
-          token: string
-        }[]
       }
       bridge_act: {
         Args: { p_action: string; p_session_token: string }
@@ -1364,6 +1633,57 @@ export type Database = {
         Args: { p_phone_e164: string }
         Returns: string
       }
+      claim_notification_deliveries: {
+        Args: { p_lease_seconds: number; p_limit: number }
+        Returns: {
+          attempt_count: number
+          body: string
+          delivery_id: string
+          fcm_token: string
+          kind: string
+          list_id: string
+          notification_id: string
+          path: string
+          subscription_id: string
+          thing_id: string
+          title: string
+        }[]
+      }
+      complete_thing_attachment: {
+        Args: { p_attachment_id: string; p_storage_key: string }
+        Returns: {
+          byte_size: number
+          client_id: string
+          created_at: string
+          file_name: string
+          finalized_at: string | null
+          id: string
+          mime_type: string
+          staging_key: string
+          status: string
+          storage_key: string | null
+          thing_id: string
+          uploaded_by_actor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "thing_attachments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      consume_magic_box_ai_budget: {
+        Args: { p_operation: string; p_user_id: string }
+        Returns: boolean
+      }
+      consume_uat_auth_rate_limit: {
+        Args: {
+          p_limit: number
+          p_scope_hash: string
+          p_window_seconds: number
+        }
+        Returns: boolean
+      }
       create_bucket: {
         Args: {
           p_context?: Database["public"]["Enums"]["context_kind"]
@@ -1376,6 +1696,7 @@ export type Database = {
           id: string
           name: string
           owner_profile_id: string
+          pinned_at: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -1384,10 +1705,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      delete_bucket: {
-        Args: { p_bucket_id: string }
-        Returns: boolean
       }
       create_external_actor: {
         Args: {
@@ -1413,12 +1730,16 @@ export type Database = {
       create_list: {
         Args: {
           p_context?: Database["public"]["Enums"]["context_kind"]
+          p_cover_storage_path?: string
+          p_description?: string
           p_name: string
         }
         Returns: {
           archived_at: string | null
           context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
           created_at: string
+          description: string | null
           id: string
           name: string
           owner_profile_id: string
@@ -1430,6 +1751,53 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      create_list_invitation_server: {
+        Args: {
+          p_expires_at: string
+          p_invitee_profile_id: string
+          p_list_id: string
+          p_phone_hash: string
+          p_phone_last4: string
+          p_requester_profile_id: string
+          p_role: Database["public"]["Enums"]["list_role"]
+          p_token_hash: string
+        }
+        Returns: string
+      }
+      create_list_v2: {
+        Args: {
+          p_context?: Database["public"]["Enums"]["context_kind"]
+          p_description?: string
+          p_name: string
+        }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lists"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_team_invitation_server: {
+        Args: {
+          p_expires_at: string
+          p_phone_hash: string
+          p_phone_last4: string
+          p_requester_profile_id: string
+          p_token_hash: string
+        }
+        Returns: string
       }
       create_thing: {
         Args: {
@@ -1472,6 +1840,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      delete_bucket: { Args: { p_bucket_id: string }; Returns: boolean }
       dismiss_breakthrough: {
         Args: { p_thing_id: string }
         Returns: {
@@ -1512,6 +1881,18 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      finish_notification_delivery: {
+        Args: {
+          p_delivery_id: string
+          p_error_code?: string
+          p_error_detail?: string
+          p_fcm_message_id?: string
+          p_next_attempt_at?: string
+          p_result: string
+          p_revoke?: boolean
+        }
+        Returns: boolean
+      }
       get_thing_list_label: {
         Args: { p_thing_id: string }
         Returns: {
@@ -1528,6 +1909,14 @@ export type Database = {
           token: string
         }[]
       }
+      list_assignable_people: {
+        Args: never
+        Returns: {
+          actor_id: string
+          avatar_url: string
+          display_name: string
+        }[]
+      }
       list_bridge_grants: {
         Args: { p_thing_id: string }
         Returns: {
@@ -1540,12 +1929,14 @@ export type Database = {
           revoked_reason: string
         }[]
       }
-      list_assignable_people: {
-        Args: never
+      list_list_roster: {
+        Args: { p_list_id: string }
         Returns: {
-          actor_id: string
-          avatar_url: string | null
+          avatar_url: string
           display_name: string
+          is_owner: boolean
+          profile_id: string
+          role: string
         }[]
       }
       list_nudgeable_things: {
@@ -1556,6 +1947,83 @@ export type Database = {
           thing_id: string
           title: string
           to_actor_id: string
+        }[]
+      }
+      list_pending_list_invitations: {
+        Args: { p_list_id: string }
+        Returns: {
+          created_at: string
+          expires_at: string
+          invitation_id: string
+          phone_last4: string
+          role: string
+        }[]
+      }
+      list_stale_pending_attachments: {
+        Args: { p_older_than?: string }
+        Returns: {
+          id: string
+          staging_key: string
+        }[]
+      }
+      list_team_directory: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          display_name: string
+          phone_e164: string
+          profile_id: string
+        }[]
+      }
+      list_team_invitations: {
+        Args: never
+        Returns: {
+          created_at: string
+          expires_at: string
+          invitation_id: string
+          phone_last4: string
+        }[]
+      }
+      list_team_requests: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          created_at: string
+          direction: string
+          display_name: string
+          profile_id: string
+          request_id: string
+        }[]
+      }
+      list_thing_attachments: {
+        Args: { p_thing_id: string }
+        Returns: {
+          byte_size: number
+          client_id: string
+          created_at: string
+          file_name: string
+          finalized_at: string | null
+          id: string
+          mime_type: string
+          staging_key: string
+          status: string
+          storage_key: string | null
+          thing_id: string
+          uploaded_by_actor_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "thing_attachments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      list_visible_profile_identities: {
+        Args: never
+        Returns: {
+          avatar_url: string
+          display_name: string
+          id: string
         }[]
       }
       mark_all_notifications_read: { Args: never; Returns: number }
@@ -1581,6 +2049,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      notification_delivery_status: {
+        Args: { p_notification_id: string }
+        Returns: {
+          delivery_id: string
+          fcm_message_id: string
+          status: string
+        }[]
       }
       nudge_thing: {
         Args: {
@@ -1657,12 +2133,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      register_push_subscription: {
+        Args: {
+          p_fcm_token: string
+          p_profile_id: string
+          p_user_agent?: string
+        }
+        Returns: string
+      }
       remove_from_bucket: {
         Args: { p_bucket_id: string; p_list_id?: string; p_thing_id?: string }
         Returns: boolean
       }
       remove_list_member: {
         Args: { p_list_id: string; p_profile_id: string }
+        Returns: boolean
+      }
+      remove_team_connection: {
+        Args: { p_profile_id: string }
         Returns: boolean
       }
       rename_bucket: {
@@ -1674,6 +2162,7 @@ export type Database = {
           id: string
           name: string
           owner_profile_id: string
+          pinned_at: string | null
           updated_at: string
         }
         SetofOptions: {
@@ -1683,14 +2172,62 @@ export type Database = {
           isSetofReturn: false
         }
       }
-      resolve_actor_identities: {
+      replace_list_invitation_server: {
         Args: {
-          p_actor_ids: string[]
+          p_expires_at: string
+          p_invitation_id: string
+          p_list_id: string
+          p_requester_profile_id: string
+          p_token_hash: string
+        }
+        Returns: string
+      }
+      request_team_connection: {
+        Args: { p_recipient_profile_id: string }
+        Returns: string
+      }
+      reserve_thing_attachment: {
+        Args: {
+          p_client_id: string
+          p_file_name: string
+          p_staging_key: string
+          p_thing_id: string
         }
         Returns: {
+          byte_size: number
+          client_id: string
+          created_at: string
+          file_name: string
+          finalized_at: string | null
+          id: string
+          mime_type: string
+          staging_key: string
+          status: string
+          storage_key: string | null
+          thing_id: string
+          uploaded_by_actor_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "thing_attachments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      resolve_actor_identities: {
+        Args: { p_actor_ids: string[] }
+        Returns: {
           actor_id: string
-          display_name: string | null
-          avatar_url: string | null
+          avatar_url: string
+          display_name: string
+        }[]
+      }
+      resolve_profile_identities: {
+        Args: { p_profile_ids: string[] }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          id: string
         }[]
       }
       restore_for_me: {
@@ -1715,6 +2252,14 @@ export type Database = {
         }
       }
       revoke_bridge_grant: { Args: { p_grant_id: string }; Returns: boolean }
+      revoke_list_invitation: {
+        Args: { p_invitation_id: string; p_list_id: string }
+        Returns: boolean
+      }
+      revoke_push_subscription: {
+        Args: { p_fcm_token: string; p_profile_id: string }
+        Returns: boolean
+      }
       run_backend_tests: {
         Args: never
         Returns: {
@@ -1722,6 +2267,25 @@ export type Database = {
           ok: boolean
           test: string
         }[]
+      }
+      set_bucket_pinned: {
+        Args: { p_bucket_id: string; p_pinned: boolean }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          created_at: string
+          id: string
+          name: string
+          owner_profile_id: string
+          pinned_at: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "buckets"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_due: {
         Args: { p_due_at: string; p_due_has_time?: boolean; p_thing_id: string }
@@ -1784,6 +2348,54 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "things"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_list_cover: {
+        Args: { p_cover_storage_path: string; p_list_id: string }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lists"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      run_daily_maintenance: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      run_nudge_escalation: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      set_list_description: {
+        Args: { p_description: string; p_list_id: string }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lists"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -1897,6 +2509,27 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      snooze_thing: {
+        Args: { p_snoozed_until: string; p_thing_id: string }
+        Returns: {
+          created_at: string
+          id: string
+          profile_id: string
+          snoozed_until: string
+          thing_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "thing_snooze"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      unsnooze_thing: {
+        Args: { p_thing_id: string }
+        Returns: undefined
+      }
       sort_thing: {
         Args: { p_thing_id: string }
         Returns: {
@@ -1953,6 +2586,31 @@ export type Database = {
       }
       test_bridge_state: { Args: { p_thing_id: string }; Returns: Json }
       unread_notification_count: { Args: never; Returns: number }
+      update_list_metadata: {
+        Args: {
+          p_cover_storage_path?: string
+          p_description?: string
+          p_list_id: string
+          p_name: string
+        }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lists"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       acknowledgement_state: "waiting_for_catch" | "caught"
@@ -2008,12 +2666,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2037,11 +2695,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2062,11 +2720,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2087,11 +2745,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2104,11 +2762,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2118,6 +2776,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       acknowledgement_state: ["waiting_for_catch", "caught"],

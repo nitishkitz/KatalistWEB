@@ -3,26 +3,28 @@ import type { MutableRefObject } from "react";
 import type { Thing } from "@/domain/thing";
 import { CourtFocusView } from "./CourtFocusView";
 import { CourtLaneStack, type CourtLaneStackHandle } from "./CourtLaneStack";
-import type { CourtFocusSelection } from "./court-stack-model";
+import type { CourtFocusSelection, FocusViewTabId } from "./court-stack-model";
 import type { CourtLaneId } from "./court-view-model";
 
 type CourtWorkspaceProps = {
   selection: CourtFocusSelection | null;
   lanes: Record<CourtLaneId, Thing[]>;
+  theirs?: Thing[];
   myActorId: string | null;
   initialPositions: Partial<Record<CourtLaneId, { activeIndex: number; activeThingId: string | null }>>;
   laneRefs: MutableRefObject<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>;
-  onOpen: (lane: CourtLaneId, thing: Thing, origin: HTMLElement) => void;
+  onOpen: (lane: FocusViewTabId, thing: Thing, origin: HTMLElement) => void;
   onSelectThing: (thingId: string) => void;
   onClose: () => void;
   onRefresh: () => unknown;
-  onViewAll?: (lane: CourtLaneId) => void;
+  onViewAll?: (lane: FocusViewTabId) => void;
   heroRect?: { top: number; left: number; width: number; height: number } | null;
 };
 
 export function CourtWorkspace({
   selection,
   lanes,
+  theirs,
   myActorId,
   initialPositions,
   laneRefs,
@@ -38,8 +40,9 @@ export function CourtWorkspace({
       <CourtFocusView
         selection={selection}
         lanes={lanes}
+        theirs={theirs}
         onSelectThing={onSelectThing}
-        onOpen={onOpen}
+        onOpen={onOpen as any}
         onClose={onClose}
         heroRect={heroRect}
       />
@@ -47,7 +50,7 @@ export function CourtWorkspace({
   }
 
   return (
-    <div className="grid min-w-0 grid-cols-3 items-start gap-3 overflow-hidden">
+    <div className="grid min-h-0 w-full min-w-0 flex-1 grid-cols-3 grid-rows-1 items-stretch gap-3">
       {(["now", "next", "later"] as const).map((lane) => (
         <CourtLaneStack
           key={lane}

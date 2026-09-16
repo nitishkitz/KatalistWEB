@@ -1,17 +1,14 @@
-import { defineEventHandler, createError } from "h3";
-import { createClient } from "@supabase/supabase-js";
+import { defineEventHandler } from "h3";
+import { requireUser } from "../../lib/require-user";
+import { getSupabaseAdmin } from "../../lib/supabase-admin";
 
-export default defineEventHandler(async () => {
-  const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://dyxqlgnbwtbxxdfoiqva.supabase.co";
-  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5eHFsZ25id3RieHhkZm9pcXZhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzA1Mjg3OCwiZXhwIjoyMTAyNjI4ODc4fQ.INa1hOmRJVNbj7TBGOqRpYEmT4oA9ij8MI_5M77vyG4";
-
-  if (!SUPABASE_SERVICE_ROLE_KEY) {
-    throw createError({ statusCode: 500, message: "SUPABASE_SERVICE_ROLE_KEY is not configured." });
-  }
-
-  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false },
-  });
+// A cross-user team directory cannot be served through a plain user-scoped
+// client: profiles/actors RLS restricts each row to its own owner. The admin
+// client is a deliberate, narrow exception for this read - gated on a valid
+// session so it can no longer be reached anonymously.
+export default defineEventHandler(async (event) => {
+  await requireUser(event);
+  const admin = getSupabaseAdmin();
 
   const [{ data: profiles }, { data: actors }] = await Promise.all([
     admin.from("profiles").select("id, email, display_name, avatar_url"),

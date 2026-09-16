@@ -1,15 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeftRight,
-  CalendarCheck,
   ChevronRight,
   Clock,
-  FileText,
   FolderPlus,
   GripVertical,
   RotateCw,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import type { Thing } from "@/domain/thing";
 import { theirStateFor } from "@/domain/thing";
@@ -22,7 +18,10 @@ import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import type { CourtLaneStackHandle } from "./CourtLaneStack";
 import { CourtWorkspace } from "./CourtWorkspace";
 import { CourtBucketsSidePanel } from "./CourtBucketsSidePanel";
+import { CourtWithOthersSidebar } from "./CourtWithOthersSidebar";
+import { CourtDetailModal } from "./CourtDetailModal";
 import type { CourtFocusSelection } from "./court-stack-model";
+import type { FocusViewTabId } from "./court-stack-model";
 import { KatalistIcon } from "./KatalistIcon";
 import {
   DEFAULT_COURT_FILTERS,
@@ -62,11 +61,12 @@ type CourtDesktopProps = {
   onSelect: (thing: Thing) => void;
 };
 
+// Supported quick filter presets: "All", "Due", "Waiting", "In Progress"
 const quickFilters: Array<[CourtQuickFilter, string]> = [
   ["all", "All"],
   ["due", "Due"],
-  ["waiting", "Waiting"],
-  ["progress", "In Progress"],
+  ["progress", "In progress"],
+  ["unread_comments", "Unread comments"],
 ];
 
 const sortLabels: Record<CourtSort, string> = {
@@ -185,13 +185,14 @@ export function CourtDesktop({
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<CourtSort>("due");
   const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
+  const [modalSelection, setModalSelection] = useState<{ lane: FocusViewTabId; thing: Thing } | null>(null);
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
   const [theirSelectedId, setTheirSelectedId] = useState<string | null>(null);
   const [heroRect, setHeroRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const directory = useProfileDirectory();
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{
-    lane: CourtLaneId;
+    lane: FocusViewTabId;
     thingId: string;
     element: HTMLElement;
     restoreFocus: boolean;
@@ -244,31 +245,40 @@ export function CourtDesktop({
     if (!origin?.restoreFocus) return;
 
     window.requestAnimationFrame(() => {
-      laneRefs.current[origin.lane]?.focusThing(origin.thingId);
       window.requestAnimationFrame(() => {
-        if (origin.element.isConnected) {
+        if (!origin.element.isConnected) return;
+        if (origin.element.matches(":focus-visible")) return;
+        if (origin.element.tabIndex >= 0) {
           origin.element.focus();
           return;
         }
-        laneRefs.current[origin.lane]?.focusThing(origin.thingId);
+        if (origin.lane !== "theirs") {
+          laneRefs.current[origin.lane]?.focusThing(origin.thingId);
+        }
       });
     });
   }, []);
 
   const handleViewAll = useCallback(
-    (lane: CourtLaneId) => {
+    (lane: FocusViewTabId) => {
       setHeroRect(null);
-      const laneThings = view[lane];
-      const activePosition = savedPositionsRef.current[lane];
+      const laneThings = lane === "theirs" ? view.theirs : view[lane];
+      const activePosition = lane === "theirs" ? undefined : savedPositionsRef.current[lane];
       const activeId = activePosition?.activeThingId ?? laneThings[0]?.id;
       if (activeId) {
         setFocusSelection({ lane, thingId: activeId });
+      } else {
+        setFocusSelection({ lane, thingId: "" });
       }
     },
     [view],
   );
 
-  const selectedLaneThings = focusSelection ? view[focusSelection.lane] : null;
+  const selectedLaneThings = focusSelection
+    ? focusSelection.lane === "theirs"
+      ? view.theirs
+      : view[focusSelection.lane]
+    : null;
 
   useEffect(() => {
     if (!focusSelection || !selectedLaneThings) return;
@@ -316,7 +326,7 @@ export function CourtDesktop({
     setFilters((current) => ({ ...current, [key]: value }));
   };
 
-  const handleOpen = (lane: CourtLaneId, thing: Thing, element: HTMLElement) => {
+  const handleOpen = (lane: FocusViewTabId, thing: Thing, element: HTMLElement) => {
     const savedPositions: Partial<
       Record<CourtLaneId, { activeIndex: number; activeThingId: string | null }>
     > = {};
@@ -329,9 +339,10 @@ export function CourtDesktop({
       lane,
       thingId: thing.id,
       element,
-      restoreFocus: element.matches(":focus-visible"),
+      restoreFocus: element?.matches ? element.matches(":focus-visible") : false,
     };
-    focusIndexRef.current = view[lane].findIndex((candidate) => candidate.id === thing.id);
+    const list = lane === "theirs" ? view.theirs : view[lane];
+    focusIndexRef.current = list.findIndex((candidate) => candidate.id === thing.id);
     const cardEl = element?.closest ? (element.closest("article") ?? element) : element;
     if (cardEl?.getBoundingClientRect) {
       const rect = cardEl.getBoundingClientRect();
@@ -344,7 +355,7 @@ export function CourtDesktop({
     } else {
       setHeroRect(null);
     }
-    setFocusSelection({ lane, thingId: thing.id });
+    setModalSelection({ lane, thing });
   };
 
   const [showBucketsPanel, setShowBucketsPanel] = useState(false);
@@ -413,116 +424,36 @@ export function CourtDesktop({
   }
 
   return (
-    <div className="hidden lg:block max-w-[1380px] mx-auto">
-      <MagicBox desktop />
-
+    <div className="hidden lg:block w-full min-w-0 px-6 py-3">
       {isLoading ? (
         <p className="mb-2 text-[11px] text-muted-foreground" aria-live="polite">
           Loading your Court…
         </p>
       ) : null}
 
-      {/* Top 5-Item Summary Ribbon */}
-      <div className="mb-3.5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-border/60 overflow-hidden rounded-xl border border-border/70 bg-white shadow-xs">
-        {/* NOW */}
-        <div className="flex items-center gap-3 p-2.5 px-3.5">
-          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-            {view.counts.now}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 leading-none">
-              <Zap className="h-3.5 w-3.5 shrink-0 text-red-500 fill-red-500/20" />
-              <span className="text-[10.5px] font-black text-red-600 uppercase tracking-wide">NOW</span>
-            </div>
-            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
-              Needs you now
-            </span>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-3.5 border-r border-border/70 pr-4">
+            {quickFilters.map(([id, label]) => {
+              const isActive = filters.quick === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => setDetailedFilter("quick", id)}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-[13px] transition-colors outline-none cursor-pointer",
+                    isActive
+                      ? "bg-[#ece7fe] text-[#503188] font-medium"
+                      : "text-[#1d1d1d] hover:text-[#503188] font-normal",
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
-        </div>
-
-        {/* NEXT */}
-        <div className="flex items-center gap-3 p-2.5 px-3.5">
-          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-            {view.counts.next}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 leading-none">
-              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-blue-500" />
-              <span className="text-[10.5px] font-black text-blue-600 uppercase tracking-wide">NEXT</span>
-            </div>
-            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
-              On deck soon
-            </span>
-          </div>
-        </div>
-
-        {/* LATER */}
-        <div className="flex items-center gap-3 p-2.5 px-3.5">
-          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-            {view.counts.later}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 leading-none">
-              <Sparkles className="h-3.5 w-3.5 shrink-0 text-purple-500" />
-              <span className="text-[10.5px] font-black text-purple-600 uppercase tracking-wide">LATER</span>
-            </div>
-            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
-              When time opens up
-            </span>
-          </div>
-        </div>
-
-        {/* COMPLETED */}
-        <div className="flex items-center gap-3 p-2.5 px-3.5">
-          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-            {completedCount ?? 0}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 leading-none">
-              <CalendarCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-              <span className="text-[10.5px] font-black text-emerald-600 uppercase tracking-wide">COMPLETED</span>
-            </div>
-            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
-              Done
-            </span>
-          </div>
-        </div>
-
-        {/* WAITING */}
-        <div className="flex items-center gap-3 p-2.5 px-3.5">
-          <span className="text-2xl font-black text-foreground tabular-nums leading-none shrink-0 min-w-[24px]">
-            {view.counts.theirs}
-          </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 leading-none">
-              <FileText className="h-3.5 w-3.5 shrink-0 text-orange-500" />
-              <span className="text-[10.5px] font-black text-orange-600 uppercase tracking-wide">WAITING</span>
-            </div>
-            <span className="mt-1 block truncate text-[10.5px] text-muted-foreground font-medium">
-              On others
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="mb-3.5 flex items-center gap-2.5">
-        <div className="flex items-center gap-1.5">
-          {quickFilters.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={filters.quick === id}
-              onClick={() => setDetailedFilter("quick", id)}
-              className={cn(
-                "inline-flex h-7.5 items-center rounded-full border px-3 text-[11px] font-medium outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring",
-                filters.quick === id
-                  ? "border-purple-300 text-purple-700 bg-purple-50/60 font-semibold"
-                  : "border-border/80 bg-white text-muted-foreground hover:border-primary/45 hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
 
           {collaborators.length > 0 ? (
             <div className="ml-2 flex items-center gap-1">
@@ -542,20 +473,21 @@ export function CourtDesktop({
                       }));
                     }}
                     className={cn(
-                      "relative rounded-full transition-all duration-200 outline-none cursor-pointer",
+                      "flex items-center gap-1.5 rounded-full border px-2 py-1 !rounded-full h-7 transition-all duration-200 outline-none cursor-pointer",
                       isActive
-                        ? "ring-2 ring-primary ring-offset-2 scale-110 shadow-xs"
-                        : "opacity-75 hover:opacity-100 hover:scale-105",
+                        ? "border-primary bg-primary/10 ring-2 ring-primary ring-offset-2 scale-110 shadow-xs"
+                        : "border-border/80 hover:border-primary/45 opacity-75 hover:opacity-100 hover:scale-105",
                     )}
                   >
                     <PersonAvatar
                       name={person.name}
                       initials={person.initials}
                       src={person.avatarUrl}
-                      size={24}
+                      size={20}
                     />
+                    <span className="text-[11px] font-medium pr-0.5">{person.name.split(' ')[0]}</span>
                     {isActive ? (
-                      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white" />
+                      <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white hidden" />
                     ) : null}
                   </button>
                 );
@@ -574,13 +506,13 @@ export function CourtDesktop({
           ) : null}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <label className="flex h-8 w-48 items-center gap-2 rounded-lg border border-border bg-white px-2.5 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring">
             <KatalistIcon name="search" className="h-3.5 w-3.5 text-muted-foreground" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search"
+              placeholder="Search Court"
               className="min-w-0 flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground"
               aria-label="Search Court"
             />
@@ -605,7 +537,7 @@ export function CourtDesktop({
                 aria-label={`Sort Court: ${sortLabels[sort]}`}
               >
                 <KatalistIcon name="sort" className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Sort: {sortLabels[sort]}</span>
+                <span>Order: {sortLabels[sort]}</span>
                 <KatalistIcon
                   name="chevron-down"
                   className="ml-auto h-3 w-3 text-muted-foreground"
@@ -705,29 +637,16 @@ export function CourtDesktop({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-
-          <button
-            type="button"
-            onClick={() => setShowBucketsPanel((v) => !v)}
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[11.5px] font-bold outline-none transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
-              showBucketsPanel
-                ? "border-primary bg-primary/10 text-primary shadow-2xs"
-                : "border-border bg-white text-slate-700 hover:text-foreground hover:border-slate-300",
-            )}
-            title="Toggle Buckets side panel"
-          >
-            <FolderPlus className="h-3.5 w-3.5" />
-            <span>Buckets</span>
-          </button>
         </div>
       </div>
 
-      <div className="flex min-w-0 items-start gap-4">
-        <div className="min-w-0 flex-1">
+      <div className="flex w-full min-w-0 items-start gap-4">
+        {/* Lanes */}
+        <div className="min-w-0 flex-1 flex flex-col h-[calc(100vh-8rem)]">
           <CourtWorkspace
             selection={focusSelection}
             lanes={{ now: view.now, next: view.next, later: view.later }}
+            theirs={view.theirs}
             myActorId={myActorId}
             initialPositions={savedPositionsRef.current}
             laneRefs={laneRefs}
@@ -740,216 +659,52 @@ export function CourtDesktop({
             onRefresh={refetch}
             onViewAll={handleViewAll}
           />
+          {!focusSelection && (
+            <div className="z-30 flex shrink-0 justify-center w-full mt-3 pt-1">
+              <div className="w-full max-w-2xl">
+                <MagicBox desktop extraPeople={collaborators} />
+              </div>
+            </div>
+          )}
         </div>
 
+        {/* Buckets side panel shown while dragging */}
         {showBucketsPanel && (
           <CourtBucketsSidePanel onClose={() => setShowBucketsPanel(false)} />
         )}
+
+        {/* WITH OTHERS permanent right sidebar — hidden while buckets panel is open
+            Section groups: "Needs Attention", "Waiting for Catch", "Moving"
+            Selected detail renders InlineThingDetailWorkspace with theirSelectedId / setTheirSelectedId(selectedThing.id) */}
+        {!showBucketsPanel && (
+          <CourtWithOthersSidebar
+            theirGroups={theirGroups}
+            theirFocus={theirFocus}
+            setTheirFocus={setTheirFocus}
+            theirs={view.theirs}
+            onOpenThing={(thing, origin) => handleOpen("theirs", thing, origin)}
+            onViewAllTheirs={() => handleViewAll("theirs")}
+            theirSelectedId={theirSelectedId}
+            setTheirSelectedId={setTheirSelectedId}
+            directory={directory}
+          />
+        )}
       </div>
 
-      <section
-        className="mt-8 border-t border-border/70 pt-5 pb-6"
-        aria-labelledby="theirs-title"
-      >
-        <div className="mb-3 flex items-center justify-between px-1">
-          <h2 id="theirs-title" className="text-[11.5px] font-bold tracking-[0.08em] text-muted-foreground uppercase">
-            WITH OTHERS
-          </h2>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <TheirSummaryCard
-            active={theirFocus === "waiting_for_catch"}
-            icon="waiting"
-            label="Waiting for Catch"
-            description="Tasks waiting for others"
-            count={theirGroups.waiting_for_catch.length}
-            tone="bg-orange-50 text-orange-500 border border-orange-100"
-            onClick={() =>
-              setTheirFocus((current) => toggleTheirsFocus(current, "waiting_for_catch"))
-            }
-          />
-          <TheirSummaryCard
-            active={theirFocus === "moving"}
-            icon="moving"
-            label="Moving"
-            description="Tasks in motion"
-            count={theirGroups.moving.length}
-            tone="bg-blue-50 text-blue-500 border border-blue-100"
-            onClick={() => setTheirFocus((current) => toggleTheirsFocus(current, "moving"))}
-          />
-          <TheirSummaryCard
-            active={theirFocus === "needs_attention"}
-            icon="needs_attention"
-            label="Needs Attention"
-            description="Tasks need attention"
-            count={theirGroups.needs_attention.length}
-            tone="bg-purple-50 text-purple-500 border border-purple-100"
-            onClick={() =>
-              setTheirFocus((current) => toggleTheirsFocus(current, "needs_attention"))
-            }
-          />
-        </div>
-
-        {/* Selected / Highlighted Tasks List under With Others with spacious padding */}
-        <InlineThingDetailWorkspace
-          thing={theirSelectedThing}
-          onClose={() => setTheirSelectedId(null)}
-          className="mt-5"
-        >
-          <div className="space-y-3 max-h-[560px] overflow-y-auto px-1.5 py-2 pr-2">
-            {(theirFocus ? theirGroups[theirFocus] : view.theirs).map((thing) => {
-              const isSelected = theirSelectedId === thing.id;
-              const creatorAvatar = thing.creator.avatarUrl || matchProfile(directory, thing.creator.name)?.avatar_url;
-              const assigneeAvatar = thing.assignee.avatarUrl || matchProfile(directory, thing.assignee.name)?.avatar_url;
-              const state = theirStateFor(thing);
-              const isWaiting = state === "waiting_for_catch";
-
-              if (theirSelectedThing) {
-                // Compact Card style when detail panel is open on the right
-                return (
-                  <div
-                    key={thing.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => {
-                      const selectedThing = thing;
-                      if (isSelected) {
-                        setTheirSelectedId(null);
-                      } else {
-                        setTheirSelectedId(selectedThing.id);
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        const selectedThing = thing;
-                        if (isSelected) {
-                          setTheirSelectedId(null);
-                        } else {
-                          setTheirSelectedId(selectedThing.id);
-                        }
-                      }
-                    }}
-                    className={cn(
-                      "w-full rounded-2xl p-4 text-left shadow-2xs outline-none transition-all duration-200 cursor-pointer",
-                      isSelected
-                        ? "border-2 border-primary bg-primary/5 ring-1 ring-primary/30 shadow-xs"
-                        : "border border-border/60 bg-white hover:border-border",
-                    )}
-                  >
-                    <span className="block line-clamp-2 text-[13.5px] font-bold leading-snug text-foreground">
-                      {thing.title}
-                    </span>
-                    <div className="mt-3 flex items-center justify-between gap-2 text-[11px]">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <PersonAvatar
-                          name={thing.assignee.name}
-                          initials={thing.assignee.initials}
-                          src={assigneeAvatar}
-                          size={22}
-                        />
-                        <span className="truncate font-semibold text-foreground max-w-[110px]">
-                          {thing.assignee.name}
-                        </span>
-                      </div>
-                      <span
-                        className={cn(
-                          "inline-flex items-center gap-1.5 shrink-0 font-medium",
-                          isWaiting ? "text-orange-600" : state === "moving" ? "text-blue-600" : "text-red-600",
-                        )}
-                      >
-                        <span
-                          className={cn(
-                            "h-1.5 w-1.5 rounded-full",
-                            isWaiting ? "bg-orange-500" : state === "moving" ? "bg-blue-500" : "bg-red-500",
-                          )}
-                        />
-                        {isWaiting ? "Waiting for Catch" : state === "moving" ? "Moving" : "Needs Attention"}
-                      </span>
-                    </div>
-                  </div>
-                );
-              }
-
-              // Full Width Row style when detail panel is closed
-              return (
-                <div
-                  key={thing.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => {
-                    setTheirSelectedId(thing.id);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      setTheirSelectedId(thing.id);
-                    }
-                  }}
-                  className="flex items-center justify-between gap-4 rounded-2xl border border-border/60 bg-white px-5 py-3.5 shadow-2xs transition-all duration-200 hover:border-border hover:shadow-xs cursor-pointer outline-none focus-visible:ring-1 focus-visible:ring-primary/40"
-                >
-                  {/* Left: People Flow */}
-                  <div className="flex items-center gap-2.5 min-w-[200px] shrink-0">
-                    <PersonAvatar
-                      name={thing.creator.name}
-                      initials={thing.creator.initials}
-                      src={creatorAvatar}
-                      size={26}
-                    />
-                    <span className="text-[12.5px] font-semibold text-foreground truncate max-w-[80px]">
-                      {thing.creator.name}
-                    </span>
-                    <span className="text-muted-foreground/60 text-xs">→</span>
-                    <PersonAvatar
-                      name={thing.assignee.name}
-                      initials={thing.assignee.initials}
-                      src={assigneeAvatar}
-                      size={26}
-                    />
-                    <span className="text-[12.5px] font-semibold text-foreground truncate max-w-[80px]">
-                      {thing.assignee.name}
-                    </span>
-                  </div>
-
-                  {/* Center: Title */}
-                  <span className="flex-1 text-[13.5px] font-medium text-foreground px-4 truncate">
-                    {thing.title}
-                  </span>
-
-                  {/* Right: Status badge & Drag handle */}
-                  <div className="flex items-center gap-3 shrink-0">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border",
-                        isWaiting
-                          ? "bg-orange-50 text-orange-600 border-orange-200/60"
-                          : state === "moving"
-                            ? "bg-blue-50 text-blue-600 border-blue-200/60"
-                            : "bg-purple-50 text-purple-600 border-purple-200/60",
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          "h-1.5 w-1.5 rounded-full",
-                          isWaiting ? "bg-orange-500" : state === "moving" ? "bg-blue-500" : "bg-purple-500",
-                        )}
-                      />
-                      {isWaiting ? "Waiting for Catch" : state === "moving" ? "Moving" : "Needs Attention"}
-                    </span>
-                    <GripVertical className="h-3.5 w-3.5 text-muted-foreground/40" />
-                  </div>
-                </div>
-              );
-            })}
-            {view.theirs.length === 0 ? (
-              <div className="flex min-h-[80px] items-center justify-center rounded-xl border border-dashed border-border/70 bg-white text-[11.5px] text-muted-foreground">
-                No Things with others.
-              </div>
-            ) : null}
-          </div>
-        </InlineThingDetailWorkspace>
-      </section>
+      {modalSelection && (
+        <CourtDetailModal
+          thing={modalSelection.thing}
+          lane={modalSelection.lane}
+          isOpen={Boolean(modalSelection)}
+          onClose={() => setModalSelection(null)}
+          onOpenFullView={() => {
+            const { lane, thing } = modalSelection;
+            setModalSelection(null);
+            setFocusSelection({ lane, thingId: thing.id });
+          }}
+          onRefresh={refetch}
+        />
+      )}
     </div>
   );
 }

@@ -15,16 +15,22 @@ export type Ghost = {
   thingId: string;
 };
 
+export function isDoormanEnabled(): boolean {
+  if (typeof window === "undefined") return true;
+  return localStorage.getItem("katalist.doorman_enabled") !== "0";
+}
+
 export function useDoorman() {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
   const { context } = useAppContext();
   const qc = useQueryClient();
   useLocalVersion();
+  const doormanEnabled = isDoormanEnabled();
 
   const query = useQuery({
     queryKey: ["doorman", user?.id, context],
-    enabled: Boolean(user) && !preview,
+    enabled: Boolean(user) && !preview && doormanEnabled,
     staleTime: 20_000,
     queryFn: async (): Promise<Ghost | null> => {
       const { data: rows, error } = await supabase
@@ -77,11 +83,13 @@ export function useDoorman() {
   });
 
   let ghost: Ghost | null = null;
-  if (preview) {
-    const g = getGhostCandidate(context);
-    ghost = g ? { id: g.id, title: g.title, context: g.context, thingId: g.id } : null;
-  } else {
-    ghost = query.data ?? null;
+  if (doormanEnabled) {
+    if (preview) {
+      const g = getGhostCandidate(context);
+      ghost = g ? { id: g.id, title: g.title, context: g.context, thingId: g.id } : null;
+    } else {
+      ghost = query.data ?? null;
+    }
   }
 
   return { ghost, snooze, dismiss, preview };

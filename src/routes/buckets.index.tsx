@@ -99,13 +99,12 @@ function PinnedBucketCard({ bucket }: { bucket: BucketCard }) {
         </div>
       </div>
 
-      {/* Footer: Collaborators Avatar Stack + View bucket link */}
+      {/* Footer: people connected to what's inside this bucket (its Things'
+          assignees/owners, its Lists' members) - never fabricated, and never
+          people with access to the bucket itself, which has no such concept. */}
       <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3">
         <div className="flex items-center -space-x-1.5 overflow-hidden">
-          {(bucket.collaborators && bucket.collaborators.length > 0 ? bucket.collaborators : [
-            { id: "c1", name: "Priya Sharma", avatarUrl: "/avatars/priya.jpg", initials: "PS" },
-            { id: "c2", name: "Arjun Mehta", avatarUrl: "/avatars/arjun.jpg", initials: "AM" },
-          ]).slice(0, 3).map((collab) => (
+          {(bucket.collaborators ?? []).slice(0, 3).map((collab) => (
             <PersonAvatar
               key={collab.id}
               name={collab.name}
@@ -115,15 +114,11 @@ function PinnedBucketCard({ bucket }: { bucket: BucketCard }) {
               className="ring-2 ring-white"
             />
           ))}
-          {(bucket.collaborators?.length ?? 2) > 3 ? (
+          {(bucket.collaborators?.length ?? 0) > 3 ? (
             <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
               +{bucket.collaborators!.length - 3}
             </span>
-          ) : (
-            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
-              +1
-            </span>
-          )}
+          ) : null}
         </div>
 
         <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary group-hover:underline">
@@ -182,12 +177,9 @@ function AllBucketRow({ bucket }: { bucket: BucketCard }) {
       </div>
 
       <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border/50">
-        {/* Collaborators Avatar Stack */}
+        {/* People connected to what's inside this bucket - never fabricated */}
         <div className="flex items-center -space-x-1.5 overflow-hidden">
-          {(bucket.collaborators && bucket.collaborators.length > 0 ? bucket.collaborators : [
-            { id: "c1", name: "Priya Sharma", avatarUrl: "/avatars/priya.jpg", initials: "PS" },
-            { id: "c2", name: "Arjun Mehta", avatarUrl: "/avatars/arjun.jpg", initials: "AM" },
-          ]).slice(0, 3).map((collab) => (
+          {(bucket.collaborators ?? []).slice(0, 3).map((collab) => (
             <PersonAvatar
               key={collab.id}
               name={collab.name}
@@ -197,15 +189,11 @@ function AllBucketRow({ bucket }: { bucket: BucketCard }) {
               className="ring-2 ring-white"
             />
           ))}
-          {(bucket.collaborators?.length ?? 2) > 3 ? (
+          {(bucket.collaborators?.length ?? 0) > 3 ? (
             <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
               +{bucket.collaborators!.length - 3}
             </span>
-          ) : (
-            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
-              +1
-            </span>
-          )}
+          ) : null}
         </div>
 
         <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-primary group-hover:underline">
