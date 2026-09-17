@@ -27,7 +27,10 @@ messaging.onBackgroundMessage((payload) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || "/";
+  const data = event.notification.data || {};
+  // For incoming calls, land on the list and auto-join the call.
+  const base = data.url || "/";
+  const url = data.kind === "incoming_call" ? `${base}?call=1` : base;
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const client of list) {

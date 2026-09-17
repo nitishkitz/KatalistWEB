@@ -154,14 +154,20 @@ function ListDetailPage() {
     }
   };
 
-  // Auto-join when arriving from an incoming-call ring (handoff via sessionStorage).
+  // Auto-join when arriving from an incoming-call ring: either the in-app ring
+  // (sessionStorage handoff) or a push-notification click (?call=1 in the URL).
   useEffect(() => {
-    let flag: string | null = null;
+    let flag = false;
     try {
-      flag = sessionStorage.getItem(`katalist.autojoin.${listId}`);
-      if (flag) sessionStorage.removeItem(`katalist.autojoin.${listId}`);
+      if (sessionStorage.getItem(`katalist.autojoin.${listId}`)) {
+        sessionStorage.removeItem(`katalist.autojoin.${listId}`);
+        flag = true;
+      }
     } catch {
-      flag = null;
+      /* ignore */
+    }
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("call") === "1") {
+      flag = true;
     }
     if (flag && !call.joined && !call.connecting) void call.join();
     // eslint-disable-next-line react-hooks/exhaustive-deps

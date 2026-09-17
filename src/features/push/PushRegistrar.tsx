@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
@@ -13,6 +14,7 @@ import { firebaseConfig, VAPID_KEY } from "./push-config";
  */
 export function PushRegistrar() {
   const { user } = useSession();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const uid = user?.id;
@@ -50,7 +52,27 @@ export function PushRegistrar() {
         onMessage(messaging, (payload) => {
           const title = payload.notification?.title || payload.data?.title || "Katalist";
           const body = payload.notification?.body || payload.data?.body || "";
-          toast(title, { description: body });
+          const data = payload.data ?? {};
+          if (data.kind === "incoming_call" && data.listId) {
+            const listId = data.listId;
+            toast(title, {
+              description: body,
+              duration: 30000,
+              action: {
+                label: "Join",
+                onClick: () => {
+                  try {
+                    sessionStorage.setItem(`katalist.autojoin.${listId}`, "1");
+                  } catch {
+                    /* ignore */
+                  }
+                  void navigate({ to: "/lists/$listId", params: { listId } });
+                },
+              },
+            });
+          } else {
+            toast(title, { description: body });
+          }
         });
       } catch {
         // Push is optional; never block the app on it.
