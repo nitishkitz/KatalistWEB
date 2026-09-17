@@ -450,13 +450,13 @@ function BucketDetailPage() {
           <table className="w-full min-w-[820px] text-left">
             <thead>
               <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
-                <th className="px-3 py-2 font-semibold">Thing</th>
-                <th className="px-3 py-2 font-semibold">Assignee</th>
-                <th className="px-3 py-2 font-semibold">Status</th>
-                <th className="px-3 py-2 font-semibold">Due</th>
-                <th className="px-3 py-2 font-semibold">Comments</th>
-                <th className="px-3 py-2 font-semibold">Files</th>
-                <th className="px-3 py-2 font-semibold">Updated</th>
+                <th className="px-3 py-1.5 font-semibold">Thing</th>
+                <th className="px-3 py-1.5 font-semibold">Assignee</th>
+                <th className="px-3 py-1.5 font-semibold">Status</th>
+                <th className="px-3 py-1.5 font-semibold">Due</th>
+                <th className="px-3 py-1.5 font-semibold">Comments</th>
+                <th className="px-3 py-1.5 font-semibold">Files</th>
+                <th className="px-3 py-1.5 font-semibold">Updated</th>
                 <th className="py-2 pr-2" />
               </tr>
             </thead>
@@ -468,43 +468,46 @@ function BucketDetailPage() {
                 const files = t.attachmentCount ?? t.files?.length ?? 0;
                 return (
                   <tr key={item.thingId} className="border-b border-[#f2f3f9] last:border-0 hover:bg-[#faf9fe]">
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <button
                         type="button"
                         onClick={() => setSelectedId(item.thingId)}
-                        className="flex items-center gap-2 text-left"
+                        title={t.title}
+                        className="flex max-w-[420px] items-center gap-2 text-left"
                       >
                         <FileText className="h-4 w-4 shrink-0 text-[#8487a7]" />
-                        <span className="text-[13px] font-medium text-[#000533] hover:text-[#975ee2]">{t.title}</span>
+                        <span className="truncate text-[13px] font-medium text-[#000533] hover:text-[#975ee2]">
+                          {t.title}
+                        </span>
                       </button>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <div className="flex items-center gap-2">
                         <PersonAvatar name={t.assignee.name} src={t.assignee.avatarUrl} initials={t.assignee.initials} size={24} />
                         <span className="text-[12.5px] text-[#3d3f74]">{t.assignee.name}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: st.color }}>
                         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: st.color }} />
                         {st.label}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-[12.5px] text-[#3d3f74]">{formatDue(t.dueAt)}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5 text-[12.5px] text-[#3d3f74]">{formatDue(t.dueAt)}</td>
+                    <td className="px-3 py-1.5">
                       <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#6a769c]">
                         <MessageSquare className="h-3.5 w-3.5" />
                         {comments}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-1.5">
                       <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#6a769c]">
                         <Paperclip className="h-3.5 w-3.5" />
                         {files}
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-[12.5px] text-[#6a769c]">{relativeUpdated(t.updatedAt)}</td>
-                    <td className="py-2 pr-2 text-right">
+                    <td className="px-3 py-1.5 text-[12.5px] text-[#6a769c]">{relativeUpdated(t.updatedAt)}</td>
+                    <td className="py-1.5 pr-2 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
@@ -770,7 +773,7 @@ function BucketDetailPage() {
             onChange={(e) => setNoteBody(e.target.value)}
             placeholder="Start writing…"
             rows={8}
-            className="mt-2.5 w-full resize-none rounded-xl border border-border px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+            className="mt-2.5 w-full resize-none rounded-xl border border-border px-3 py-1.5.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-ring"
           />
           <DialogFooter className="mt-4 items-center justify-between gap-2 sm:justify-between">
             <div>
