@@ -2,9 +2,6 @@ import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   Briefcase,
-  CheckSquare,
-  Filter,
-  FolderOpen,
   Home,
   LayoutGrid,
   List as ListIcon,
@@ -12,7 +9,6 @@ import {
   MoreHorizontal,
   Plus,
   Search,
-  Users,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { BucketsSkeleton } from "@/components/katalist/ScreenSkeletons";
@@ -51,30 +47,6 @@ const SQUARE_TINTS = [
 function squareTint(name: string): string {
   const code = (name.charCodeAt(0) || 0) % SQUARE_TINTS.length;
   return SQUARE_TINTS[code]!;
-}
-
-function StatCard({
-  icon: Icon,
-  value,
-  label,
-  tint,
-}: {
-  icon: typeof Briefcase;
-  value: number;
-  label: string;
-  tint: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-[#eef0f6] bg-white p-4">
-      <span className={cn("flex h-10 w-10 items-center justify-center rounded-[10px]", tint)}>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div>
-        <div className="text-[18px] font-bold leading-none text-[#000533]">{value}</div>
-        <div className="mt-1 text-[11.5px] text-[#6a769c]">{label}</div>
-      </div>
-    </div>
-  );
 }
 
 function BucketMenu({ onOpen }: { onOpen: () => void }) {
@@ -245,7 +217,6 @@ function BucketsPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [personFilter, setPersonFilter] = useState<string | null>(null);
-  const [pinnedOnly, setPinnedOnly] = useState(false);
   const [view, setView] = useState<"grid" | "list">("grid");
 
   // People involved across all buckets (their Things' assignees/owners, their
@@ -269,17 +240,10 @@ function BucketsPage() {
     return Array.from(map.values());
   }, [buckets]);
 
-  const stats = useMemo(() => {
-    const totalThings = buckets.reduce((s, b) => s + b.thingCount, 0);
-    const totalLists = buckets.reduce((s, b) => s + b.listCount, 0);
-    return { buckets: buckets.length, things: totalThings, lists: totalLists, collaborators: people.length };
-  }, [buckets, people.length]);
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let source = buckets.filter((b) => {
       if (q && !b.name.toLowerCase().includes(q) && !b.description.toLowerCase().includes(q)) return false;
-      if (pinnedOnly && !b.pinned) return false;
       if (personFilter) {
         const has = (b.collaborators ?? []).some(
           (c) => c.name.toLowerCase() === personFilter.toLowerCase() || c.id === personFilter,
@@ -291,40 +255,19 @@ function BucketsPage() {
     // Pinned first, then most recent by name fallback.
     source = [...source].sort((a, b) => Number(b.pinned) - Number(a.pinned));
     return source;
-  }, [buckets, query, pinnedOnly, personFilter]);
+  }, [buckets, query, personFilter]);
 
   if (isLoading) {
     return (
-      <AppShell title="Buckets" subtitle="Your private focus spaces">
+      <AppShell>
         <BucketsSkeleton />
       </AppShell>
     );
   }
 
   return (
-    <AppShell
-      title="Buckets"
-      subtitle="Your private focus spaces"
-      actions={
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          Create Bucket
-        </button>
-      }
-    >
-      {/* Stat cards */}
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard icon={FolderOpen} value={stats.buckets} label="Total Buckets" tint="bg-[#e9e2fb] text-[#6638ec]" />
-        <StatCard icon={CheckSquare} value={stats.things} label="Total Things" tint="bg-[#e4fcf0] text-[#12a15f]" />
-        <StatCard icon={ListIcon} value={stats.lists} label="Total Lists" tint="bg-[#e0edff] text-[#2874f4]" />
-        <StatCard icon={Users} value={stats.collaborators} label="Collaborators" tint="bg-[#ffe6ec] text-[#e0466b]" />
-      </div>
-
-      {/* Toolbar: search, people avatars (instead of a sort dropdown), filter */}
+    <AppShell>
+      {/* Toolbar: search, people avatars (instead of a sort dropdown), create */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <label className="flex h-10 flex-1 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-white px-3 sm:max-w-md">
           <Search className="h-4 w-4 text-[#8487a7]" />
@@ -371,14 +314,11 @@ function BucketsPage() {
 
         <button
           type="button"
-          className={cn(
-            "inline-flex h-10 items-center gap-1.5 rounded-[10px] border px-3 text-[12.5px] font-medium transition-colors",
-            pinnedOnly ? "border-[#975ee2] bg-[#f5f1fe] text-[#975ee2]" : "border-[#ebecf7] bg-white text-[#3d3f74] hover:bg-muted/40",
-          )}
-          onClick={() => setPinnedOnly((v) => !v)}
+          onClick={() => setCreating(true)}
+          className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#975ee2] px-4 text-[13px] font-medium text-white transition hover:brightness-95"
         >
-          <Filter className="h-3.5 w-3.5" />
-          <span>{pinnedOnly ? "Pinned" : "Filter"}</span>
+          <Plus className="h-4 w-4" />
+          Create Bucket
         </button>
       </div>
 
