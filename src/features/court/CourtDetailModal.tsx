@@ -88,7 +88,7 @@ export function CourtDetailModal({
 
         {/* Modal Body: Left Detail Content + Right PDFViewer (if files attached) */}
         <div className="flex flex-1 min-h-0 flex-row overflow-hidden bg-white">
-          <div className="flex-1 min-h-0 overflow-y-auto bg-[#fefdfd] px-8 py-6">
+          <div className="flex-1 min-w-[360px] min-h-0 overflow-y-auto bg-[#fefdfd] px-8 py-6">
             <div className="w-full max-w-3xl mx-auto">
               <ThingDetailContent
                 initialThing={thing}

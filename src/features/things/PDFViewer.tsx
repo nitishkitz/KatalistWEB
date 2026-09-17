@@ -73,7 +73,7 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
   };
 
   return (
-    <aside className="flex flex-col w-[420px] lg:w-[460px] xl:w-[500px] shrink-0 border-l border-[#eef0f6] bg-[#f6f6fa] h-full">
+    <aside className="flex flex-col w-[420px] lg:w-[460px] xl:w-[500px] min-w-[300px] border-l border-[#eef0f6] bg-[#f6f6fa] h-full">
       {/* Header */}
       <div className="flex items-center gap-3 px-5 pt-4 pb-2">
         <span className="flex h-[40px] w-[38px] shrink-0 items-center justify-center rounded-[6px] border border-[#ebedf3] bg-[#fafafd] text-[#975ee2]">
