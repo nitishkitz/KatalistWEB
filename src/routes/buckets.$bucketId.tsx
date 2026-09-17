@@ -649,7 +649,7 @@ function BucketDetailPage() {
               </div>
             ) : (
               <div className="space-y-8">
-                {(detailTab === "things" || detailTab === "lists") && linkedListsSection}
+                {detailTab === "lists" && linkedListsSection}
                 {detailTab === "things" && thingsSection}
               </div>
             )}
