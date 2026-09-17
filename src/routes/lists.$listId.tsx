@@ -529,11 +529,26 @@ function ListDetailPage() {
               </Link>
               <div className="h-8 w-px bg-[#eef0f6]" />
               <div className="flex items-center gap-2.5">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[6px] bg-[#fee19c] text-[12px] font-medium text-black">
-                  {listInitials}
-                </span>
+                {list.coverUrl ? (
+                  <img
+                    src={list.coverUrl}
+                    alt=""
+                    className="h-11 w-11 shrink-0 rounded-[6px] object-cover"
+                    style={{ viewTransitionName: `list-cover-${list.id}` }}
+                  />
+                ) : (
+                  <span
+                    className="flex h-11 w-11 items-center justify-center rounded-[6px] bg-[#fee19c] text-[12px] font-medium text-black"
+                    style={{ viewTransitionName: `list-cover-${list.id}` }}
+                  >
+                    {listInitials}
+                  </span>
+                )}
                 <div className="min-w-0">
-                  <div className="text-[15px] font-medium text-black leading-tight truncate max-w-[220px]">
+                  <div
+                    className="text-[15px] font-medium text-black leading-tight truncate max-w-[220px]"
+                    style={{ viewTransitionName: `list-title-${list.id}` }}
+                  >
                     {list.name}
                   </div>
                   <div className="text-[12px] text-[#6a769c]">{list.ownerLine}</div>

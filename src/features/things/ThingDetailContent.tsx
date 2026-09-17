@@ -22,7 +22,6 @@ import {
   Paperclip,
   Play,
   RotateCcw,
-  Star,
   Trash2,
   UserPlus,
   X,
@@ -523,20 +522,11 @@ export function ThingDetailContent({
       <div className="min-h-[454px] w-full text-left">
         {headerAction && <div className="mb-2">{headerAction}</div>}
 
-        {/* Title and star */}
+        {/* Title */}
         <div className="flex items-start justify-between gap-3 pr-9">
           <h1 className="text-[25px] font-medium leading-tight tracking-tight text-[#000533] break-words flex-1">
             {thing.title}
           </h1>
-          <div className="flex items-center gap-1 shrink-0 pt-0.5">
-            <button
-              type="button"
-              className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-amber-500 hover:bg-muted/40 transition-colors cursor-pointer"
-              aria-label="Star this thing"
-            >
-              <Star className="h-4 w-4" />
-            </button>
-          </div>
         </div>
 
         {/* Subtitle */}

@@ -284,3 +284,18 @@
     animation: none;
   }
 }
+
+/* Hero (shared-element) transition, e.g. a list cover morphing from the Lists
+   table into the list detail header. Names are set per element in JSX. */
+::view-transition-group(*) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}

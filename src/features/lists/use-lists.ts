@@ -67,11 +67,23 @@ export function useList(listId: string | undefined) {
   const preview = isPreviewSession(session);
   const shred = usePersonalShred();
   const hidden = isPersonallyShreddedList(listId, shred);
+  const qc = useQueryClient();
   useLocalVersion();
 
   const byId = useQuery({
     queryKey: ["list", listId],
     enabled: Boolean(listId) && Boolean(user) && !preview && !hidden,
+    // Seed from the Lists cache so the detail renders instantly (no skeleton
+    // flash) and the shared-element hero transition has its target present.
+    initialData: (): ListRow | null | undefined => {
+      const entries = qc.getQueriesData<ListRow[]>({ queryKey: ["lists"] });
+      for (const [, data] of entries) {
+        const found = data?.find((l) => l.id === listId);
+        if (found) return found;
+      }
+      return undefined;
+    },
+    initialDataUpdatedAt: 0,
     queryFn: async (): Promise<ListRow | null> => {
       const { data, error } = await supabase
         .from("lists")

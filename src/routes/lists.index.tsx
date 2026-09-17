@@ -142,12 +142,12 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                   className="group cursor-pointer transition-colors hover:bg-muted/35"
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("[data-stop-nav]")) return;
-                    void navigate({ to: "/lists/$listId", params: { listId: row.id } });
+                    void navigate({ to: "/lists/$listId", params: { listId: row.id }, viewTransition: true });
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      void navigate({ to: "/lists/$listId", params: { listId: row.id } });
+                      void navigate({ to: "/lists/$listId", params: { listId: row.id }, viewTransition: true });
                     }
                   }}
                   role="link"
@@ -161,6 +161,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                           src={row.coverUrl}
                           alt=""
                           className="h-10 w-10 shrink-0 rounded-full object-cover"
+                          style={{ viewTransitionName: `list-cover-${row.id}` }}
                         />
                       ) : (
                         <span
@@ -168,13 +169,17 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                             "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[14px] font-semibold text-white",
                             colorClass,
                           )}
+                          style={{ viewTransitionName: `list-cover-${row.id}` }}
                         >
                           {row.name.trim().slice(0, 1).toUpperCase()}
                         </span>
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="truncate text-[13.5px] font-bold text-foreground">
+                          <span
+                            className="truncate text-[13.5px] font-bold text-foreground"
+                            style={{ viewTransitionName: `list-title-${row.id}` }}
+                          >
                             {row.name}
                           </span>
                         </div>
@@ -240,7 +245,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
-                              void navigate({ to: "/lists/$listId", params: { listId: row.id } });
+                              void navigate({ to: "/lists/$listId", params: { listId: row.id }, viewTransition: true });
                             }}
                             className="text-[12.5px] cursor-pointer"
                           >
