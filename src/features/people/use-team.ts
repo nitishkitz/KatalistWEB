@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { matchAvatarByName } from "@/features/people/directory";
+import { fetchProfileIdentities, matchAvatarByName } from "@/features/people/directory";
 
 export type TeamMember = {
   id: string;
@@ -44,26 +44,39 @@ export function useTeam() {
     enabled: Boolean(user) && !preview,
     staleTime: 30_000,
     queryFn: async (): Promise<TeamMember[]> => {
-      const { data, error } = await supabase
+      // Roster of people you can see (not RLS-locked to self): the shared
+      // directory aggregates public_identities + assignable people + profiles.
+      const identities = await fetchProfileIdentities();
+
+      // Contact details live in `profiles`, which RLS scopes to rows you may
+      // read (typically your own). Enrich where available; others fall back to
+      // "—" rather than fabricated values.
+      const { data: profRows } = await supabase
         .from("profiles")
-        .select("id, display_name, avatar_url, email, phone_e164, occupation, created_at")
-        .order("display_name", { ascending: true });
-      if (error) throw error;
-      return (data ?? [])
-        .filter((r) => r.display_name && r.display_name.trim().toLowerCase() !== "someone")
-        .map((r) => {
-          const name = r.display_name?.trim() || "Member";
-          return {
-            id: r.id,
-            name,
-            initials: initialsOf(name),
-            avatarUrl: r.avatar_url || matchAvatarByName(name),
-            role: r.occupation?.trim() || null,
-            email: r.email?.trim() || null,
-            phone: r.phone_e164?.trim() || null,
-            connectedSince: r.created_at ?? null,
-          } satisfies TeamMember;
+        .select("id, email, phone_e164, occupation, created_at");
+      const detailById = new Map((profRows ?? []).map((r) => [r.id, r]));
+
+      const seen = new Set<string>();
+      const members: TeamMember[] = [];
+      for (const p of identities) {
+        if (!p.id || seen.has(p.id)) continue;
+        const name = (p.display_name || "").trim();
+        if (!name || name.toLowerCase() === "someone") continue;
+        seen.add(p.id);
+        const d = detailById.get(p.id);
+        members.push({
+          id: p.id,
+          name,
+          initials: initialsOf(name),
+          avatarUrl: p.avatar_url || matchAvatarByName(name),
+          role: d?.occupation?.trim() || null,
+          email: d?.email?.trim() || null,
+          phone: d?.phone_e164?.trim() || null,
+          connectedSince: d?.created_at ?? null,
         });
+      }
+      members.sort((a, b) => a.name.localeCompare(b.name));
+      return members;
     },
   });
 
