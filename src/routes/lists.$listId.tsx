@@ -593,19 +593,6 @@ function ListDetailPage() {
               {call.joined ? <PhoneOff className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
               <span>{call.connecting ? "Connecting…" : call.joined ? "Leave call" : "Call"}</span>
             </button>
-            {!viewOnly && (
-              <button
-                type="button"
-                onClick={() => {
-                  setTab("things");
-                  setSelectedId(null);
-                }}
-                className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-[#975ee2] px-4 text-[14px] font-medium text-white hover:brightness-95 transition cursor-pointer"
-              >
-                <Plus className="h-4 w-4" />
-                <span>New Thing</span>
-              </button>
-            )}
           </div>
 
           {/* Tabs */}

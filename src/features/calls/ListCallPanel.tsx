@@ -16,6 +16,10 @@ import {
   Hand,
   Phone,
   FileText,
+  Maximize,
+  Minimize,
+  Link2,
+  Check,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
@@ -98,10 +102,52 @@ export function ListCallPanel({
   const [draft, setDraft] = useState("");
   const chat = useListMessages(listId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (chatOpen && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [chatOpen, chat.messages.length]);
+
+  // Call-duration timer (starts once connected).
+  useEffect(() => {
+    if (!call.joined) {
+      setElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [call.joined]);
+
+  // Track fullscreen state (also updates if the user presses Esc).
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const formatDuration = (s: number) =>
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  const toggleFullscreen = () => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) void el.requestFullscreen?.().catch(() => {});
+    else void document.exitFullscreen?.().catch(() => {});
+  };
+
+  const copyInviteLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard may be unavailable
+    }
+  };
 
   if (!call.joined && !call.connecting) return null;
 
@@ -151,14 +197,39 @@ export function ListCallPanel({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-border/70 bg-white/95 backdrop-blur-sm">
+    <div ref={rootRef} className="fixed inset-x-0 bottom-0 z-50 border-t border-border/70 bg-white/95 backdrop-blur-sm">
       <div className="mx-auto max-w-6xl px-4 py-3">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-[13px] font-semibold text-foreground">
-            Call · {count} {count === 1 ? "person" : "people"}
-            {call.connecting ? " · connecting…" : ""}
+          <p className="flex items-center gap-2 text-[13px] font-semibold text-foreground">
+            <span>
+              Call · {count} {count === 1 ? "person" : "people"}
+            </span>
+            {call.connecting ? (
+              <span className="text-[12px] font-normal text-muted-foreground">connecting…</span>
+            ) : call.joined ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#e4fcf0] px-2 py-0.5 text-[11px] font-medium text-[#12a15f]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#12a15f]" />
+                {formatDuration(elapsed)}
+              </span>
+            ) : null}
           </p>
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => void copyInviteLink()}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+              title={copied ? "Link copied" : "Copy invite link"}
+            >
+              {copied ? <Check className="h-4 w-4 text-[#12a15f]" /> : <Link2 className="h-4 w-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+              title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+            </button>
             <button
               type="button"
               onClick={() => setMinimized(true)}

@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
@@ -100,6 +102,29 @@ export function useListMessages(listId: string) {
     void qc.invalidateQueries({ queryKey: ["lists"] });
   };
 
+  // Live chat: a per-list broadcast channel guarantees every viewer refetches
+  // the moment a message is posted (postgres_changes can be filtered out by RLS
+  // at the realtime layer, so broadcast is the reliable path here).
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  useEffect(() => {
+    if (!listId || preview || hidden) return;
+    const channel = supabase
+      .channel(`list-chat:${listId}`)
+      .on("broadcast", { event: "changed" }, () => {
+        void qc.invalidateQueries({ queryKey: ["list-messages", listId] });
+      })
+      .subscribe();
+    channelRef.current = channel;
+    return () => {
+      channelRef.current = null;
+      void supabase.removeChannel(channel);
+    };
+  }, [listId, preview, hidden, qc]);
+
+  const broadcastChange = () => {
+    void channelRef.current?.send({ type: "broadcast", event: "changed", payload: {} });
+  };
+
   const send = useMutation({
     mutationFn: async (input: string | { body: string; attachment?: ChatAttachment | null }) => {
       const body = typeof input === "string" ? input : input.body;
@@ -119,7 +144,10 @@ export function useListMessages(listId: string) {
       });
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      broadcastChange();
+    },
   });
 
   /** Post a system entry (e.g. "started a call") that renders inline with a timestamp. */
@@ -134,7 +162,10 @@ export function useListMessages(listId: string) {
       });
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onSuccess: () => {
+      invalidate();
+      broadcastChange();
+    },
   });
 
   /** Upload a file to the private chat bucket and return its descriptor. */
