@@ -4,6 +4,7 @@ import { Phone, PhoneOff } from "lucide-react";
 import { useSession } from "@/hooks/useSession";
 import { subscribeToRings, getDeviceId, type RingPayload } from "./call-lobby";
 import { createRingtone, unlockAudio, type Ringtone } from "./ringtone";
+import { requestAutojoin } from "./autojoin-signal";
 
 const RING_TTL_MS = 30_000;
 
@@ -69,18 +70,13 @@ export function CallRingProvider() {
     const listId = ring.listId;
     // Unlock audio/mic within this click gesture (iOS Safari requires it).
     unlockAudio();
+    // Durable in-memory signal: consumed by the list page as soon as it is
+    // ready (covers navigating in), and delivered live to it if already open.
+    requestAutojoin(listId);
     try {
       sessionStorage.setItem(`katalist.autojoin.${listId}`, "1");
     } catch {
-      // sessionStorage may be unavailable; the list page just won't auto-join.
-    }
-    // Fire a direct signal so the list page joins immediately even if we're
-    // already on it (navigating to the same route won't remount / re-run the
-    // mount effect). This also preserves the user gesture for getUserMedia.
-    try {
-      window.dispatchEvent(new CustomEvent("katalist:call-join", { detail: { listId } }));
-    } catch {
-      // CustomEvent unsupported; the sessionStorage handoff still covers navigation.
+      // sessionStorage may be unavailable; the in-memory signal still covers it.
     }
     dismiss();
     void navigate({ to: "/lists/$listId", params: { listId } });

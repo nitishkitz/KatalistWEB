@@ -49,6 +49,7 @@ import { AppShell } from "@/components/layout/AppShell";
 import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
+import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
 import { useSession } from "@/hooks/useSession";
 import { supabase } from "@/integrations/supabase/client";
 import { MagicBox } from "@/features/court/MagicBox";
@@ -194,34 +195,37 @@ function ListDetailPage() {
   // Auto-join when arriving from an incoming-call ring: either the in-app ring
   // (sessionStorage handoff) or a push-notification click (?call=1 in the URL).
   useEffect(() => {
-    let flag = false;
+    // Wait until the session identity is ready so the call joins with a real
+    // selfId (not "anon"); this effect retries when user?.id arrives.
+    const ready = Boolean(user?.id || myActorId);
+    if (!ready || call.joined || call.connecting) return;
+
+    let wanted = consumeAutojoin(listId);
     try {
       if (sessionStorage.getItem(`katalist.autojoin.${listId}`)) {
         sessionStorage.removeItem(`katalist.autojoin.${listId}`);
-        flag = true;
+        wanted = true;
       }
     } catch {
       /* ignore */
     }
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("call") === "1") {
-      flag = true;
+      wanted = true;
     }
-    if (flag && !call.joined && !call.connecting) void call.join();
+    if (wanted) void call.join();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listId]);
+  }, [listId, user?.id, myActorId, call.joined, call.connecting]);
 
-  // Join immediately when the ring banner's "Join" is tapped while this list is
-  // already open (navigating to the same route won't re-run the effect above).
-  // Runs synchronously in the click stack so the user gesture reaches
-  // getUserMedia (required by iOS Safari).
+  // Live delivery: when the ring banner's "Join" is tapped while this list is
+  // already open, join immediately (navigating to the same route would not
+  // remount the page, so we cannot rely on the effect above).
   useEffect(() => {
-    const onJoin = (e: Event) => {
-      const detail = (e as CustomEvent<{ listId?: string }>).detail;
-      if (detail?.listId !== listId) return;
+    const off = onAutojoin((id) => {
+      if (id !== listId) return;
+      consumeAutojoin(listId);
       if (!call.joined && !call.connecting) void call.join();
-    };
-    window.addEventListener("katalist:call-join", onJoin as EventListener);
-    return () => window.removeEventListener("katalist:call-join", onJoin as EventListener);
+    });
+    return off;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId, call.joined, call.connecting]);
   const assignablePeople = useAssignablePeople();
