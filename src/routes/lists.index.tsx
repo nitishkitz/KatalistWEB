@@ -185,9 +185,11 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                         </div>
                         {row.description ? (
                           <p className="truncate text-[11.5px] text-muted-foreground">{row.description}</p>
-                        ) : (
+                        ) : row.role !== "owner" ? (
+                          // For lists you own, the "Owned by Me" group already
+                          // conveys ownership, so the redundant owner line is hidden.
                           <p className="text-[11.5px] text-muted-foreground">{row.ownerLine}</p>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                   </td>
