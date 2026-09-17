@@ -23,6 +23,7 @@ import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
+import { Route as ApiCallsRingRouteImport } from './routes/api/calls/ring'
 import { Route as ApiJobsDailyMaintenanceRouteImport } from './routes/api/jobs/daily-maintenance'
 import { Route as ApiJobsEscalateNudgesRouteImport } from './routes/api/jobs/escalate-nudges'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
@@ -100,6 +101,11 @@ const ListsListIdRoute = ListsListIdRouteImport.update({
   path: '/$listId',
   getParentRoute: () => ListsRoute,
 } as any)
+const ApiCallsRingRoute = ApiCallsRingRouteImport.update({
+  id: '/api/calls/ring',
+  path: '/api/calls/ring',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiJobsDailyMaintenanceRoute = ApiJobsDailyMaintenanceRouteImport.update({
   id: '/api/jobs/daily-maintenance',
   path: '/api/jobs/daily-maintenance',
@@ -146,6 +152,7 @@ export interface FileRoutesByFullPath {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
@@ -166,6 +173,7 @@ export interface FileRoutesByTo {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets': typeof BucketsIndexRoute
   '/lists': typeof ListsIndexRoute
+  '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
@@ -189,6 +197,7 @@ export interface FileRoutesById {
   '/lists/$listId': typeof ListsListIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
@@ -213,6 +222,7 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/calls/ring'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/public/bridge/act'
@@ -233,6 +243,7 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets'
     | '/lists'
+    | '/api/calls/ring'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/public/bridge/act'
@@ -255,6 +266,7 @@ export interface FileRouteTypes {
     | '/lists/$listId'
     | '/buckets/'
     | '/lists/'
+    | '/api/calls/ring'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/public/bridge/act'
@@ -274,6 +286,7 @@ export interface RootRouteChildren {
   TeamRoute: typeof TeamRoute
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
+  ApiCallsRingRoute: typeof ApiCallsRingRoute
   ApiJobsDailyMaintenanceRoute: typeof ApiJobsDailyMaintenanceRoute
   ApiJobsEscalateNudgesRoute: typeof ApiJobsEscalateNudgesRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
@@ -382,6 +395,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListsListIdRouteImport
       parentRoute: typeof ListsRoute
     }
+    '/api/calls/ring': {
+      id: '/api/calls/ring'
+      path: '/api/calls/ring'
+      fullPath: '/api/calls/ring'
+      preLoaderRoute: typeof ApiCallsRingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/jobs/daily-maintenance': {
       id: '/api/jobs/daily-maintenance'
       path: '/api/jobs/daily-maintenance'
@@ -463,6 +483,7 @@ const rootRouteChildren: RootRouteChildren = {
   TeamRoute: TeamRoute,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
+  ApiCallsRingRoute: ApiCallsRingRoute,
   ApiJobsDailyMaintenanceRoute: ApiJobsDailyMaintenanceRoute,
   ApiJobsEscalateNudgesRoute: ApiJobsEscalateNudgesRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,

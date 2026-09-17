@@ -50,6 +50,7 @@ import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall } from "@/features/calls/call-lobby";
 import { useSession } from "@/hooks/useSession";
+import { supabase } from "@/integrations/supabase/client";
 import { MagicBox } from "@/features/court/MagicBox";
 import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
@@ -137,6 +138,20 @@ function ListDetailPage() {
       fromName: selfName,
       memberIds,
     });
+    // Also push to members who don't have the app open (best-effort).
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const at = sess.session?.access_token;
+      if (at) {
+        void fetch("/api/calls/ring", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
+          body: JSON.stringify({ listId }),
+        });
+      }
+    } catch {
+      // push is best-effort
+    }
   };
 
   // Auto-join when arriving from an incoming-call ring (handoff via sessionStorage).
