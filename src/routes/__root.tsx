@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { ProfileDirectoryProvider } from "@/features/people/ProfileDirectoryProvider";
 import { AppContextProvider } from "@/features/context/AppContextProvider";
+import { CallRingProvider } from "@/features/calls/CallRingProvider";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -138,6 +139,7 @@ function RootComponent() {
       <AppContextProvider>
         <ProfileDirectoryProvider>
           <Outlet />
+          <CallRingProvider />
           <Toaster />
         </ProfileDirectoryProvider>
       </AppContextProvider>

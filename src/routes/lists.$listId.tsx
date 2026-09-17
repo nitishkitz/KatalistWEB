@@ -48,6 +48,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
+import { announceCall } from "@/features/calls/call-lobby";
 import { useSession } from "@/hooks/useSession";
 import { MagicBox } from "@/features/court/MagicBox";
 import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
@@ -117,6 +118,39 @@ function ListDetailPage() {
     user?.email?.split("@")[0] ||
     "You";
   const call = useListCall(listId, selfId, selfName);
+
+  // Start (or leave) a call. Starting also rings the list's other members.
+  const startOrJoinCall = async () => {
+    if (call.joined) {
+      call.leave();
+      return;
+    }
+    const ok = await call.join();
+    if (!ok) return;
+    const memberIds = (list?.members ?? [])
+      .map((m) => m.profileId)
+      .filter((x): x is string => Boolean(x));
+    void announceCall({
+      listId,
+      listName: list?.name ?? "a list",
+      fromId: user?.id ?? "",
+      fromName: selfName,
+      memberIds,
+    });
+  };
+
+  // Auto-join when arriving from an incoming-call ring (handoff via sessionStorage).
+  useEffect(() => {
+    let flag: string | null = null;
+    try {
+      flag = sessionStorage.getItem(`katalist.autojoin.${listId}`);
+      if (flag) sessionStorage.removeItem(`katalist.autojoin.${listId}`);
+    } catch {
+      flag = null;
+    }
+    if (flag && !call.joined && !call.connecting) void call.join();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listId]);
   const assignablePeople = useAssignablePeople();
 
   const [tab, setTab] = useState<TabType>("things");
@@ -442,7 +476,7 @@ function ListDetailPage() {
             </div>
             <button
               type="button"
-              onClick={() => (call.joined ? call.leave() : void call.join())}
+              onClick={() => void startOrJoinCall()}
               disabled={call.connecting}
               className={cn(
                 "inline-flex h-[42px] items-center gap-2 rounded-[9px] px-4 text-[14px] font-medium transition cursor-pointer disabled:opacity-60",

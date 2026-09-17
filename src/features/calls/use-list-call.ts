@@ -10,7 +10,7 @@ export type ListCallControls = {
   muted: boolean;
   cameraOff: boolean;
   sharing: boolean;
-  join: () => Promise<void>;
+  join: () => Promise<boolean>;
   leave: () => void;
   toggleMute: () => void;
   toggleCamera: () => void;
@@ -40,11 +40,11 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setSharing(false);
   }, []);
 
-  const join = useCallback(async () => {
-    if (roomRef.current || connecting) return;
+  const join = useCallback(async (): Promise<boolean> => {
+    if (roomRef.current || connecting) return false;
     if (!selfId) {
       toast.error("Sign in to start a call.");
-      return;
+      return false;
     }
     setConnecting(true);
     const room = new CallRoom({
@@ -58,6 +58,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       const stream = await room.join({ audio: true, video: true });
       setLocalStream(stream);
       setJoined(true);
+      return true;
     } catch (err) {
       roomRef.current = null;
       toast.error(
@@ -65,6 +66,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
           ? "Camera and microphone permission is required to join the call."
           : "Could not start the call on this device.",
       );
+      return false;
     } finally {
       setConnecting(false);
     }
