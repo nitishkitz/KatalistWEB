@@ -73,12 +73,21 @@ export function CallRingProvider() {
     // Durable in-memory signal: consumed by the list page as soon as it is
     // ready (covers navigating in), and delivered live to it if already open.
     requestAutojoin(listId);
+    dismiss();
+    // Only navigate if we are NOT already on this list. Navigating to the same
+    // route re-mounts the list page and would tear down the call that the live
+    // autojoin listener just started (that is why it only worked after a
+    // manual refresh when the call came from the list already open).
+    const alreadyHere =
+      typeof window !== "undefined" && window.location.pathname.includes(`/lists/${listId}`);
+    if (alreadyHere) return;
+    // Persist a one-shot flag the destination page consumes on mount (belt-and-
+    // suspenders alongside the in-memory signal, which survives SPA navigation).
     try {
       sessionStorage.setItem(`katalist.autojoin.${listId}`, "1");
     } catch {
       // sessionStorage may be unavailable; the in-memory signal still covers it.
     }
-    dismiss();
     void navigate({ to: "/lists/$listId", params: { listId } });
   };
 
