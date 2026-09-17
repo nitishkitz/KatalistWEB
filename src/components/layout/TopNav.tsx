@@ -36,7 +36,7 @@ export function TopNav() {
     { title: "Lists", to: "/lists" },
     { title: "Buckets", to: "/buckets" },
     { title: "Team", to: "/team" },
-    { title: "Nudges", to: "/nudges", badge: 4 },
+    { title: "Nudges", to: "/nudges" },
     { title: "Me", to: "/me" },
   ];
 
@@ -64,11 +64,6 @@ export function TopNav() {
               )}
             >
               {item.title}
-              {item.badge && (
-                <span className="ml-1.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[#ebe6ff] px-1 text-[10px] font-semibold text-[#503188]">
-                  {item.badge}
-                </span>
-              )}
               {isActive && (
                 <span
                   className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full"

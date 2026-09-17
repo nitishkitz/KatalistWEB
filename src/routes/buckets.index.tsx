@@ -210,7 +210,7 @@ function BucketsPage() {
   return (
     <AppShell>
       {/* Toolbar: search, people avatars (instead of a sort dropdown), create */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="-mt-2 mb-3 flex flex-wrap items-center gap-3">
         <label className="flex h-10 flex-1 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-white px-3 sm:max-w-md">
           <Search className="h-4 w-4 text-[#8487a7]" />
           <input
@@ -254,50 +254,45 @@ function BucketsPage() {
           </div>
         ) : null}
 
-        <button
-          type="button"
-          onClick={() => setCreating(true)}
-          className="ml-auto inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#975ee2] px-4 text-[13px] font-medium text-white transition hover:brightness-95"
-        >
-          <Plus className="h-4 w-4" />
-          Create Bucket
-        </button>
+        {/* View toggle + Create Bucket, side by side */}
+        <div className="ml-auto flex items-center gap-2">
+          <div className="flex items-center gap-0.5 rounded-[10px] border border-[#ebecf7] bg-white p-0.5">
+            <button
+              type="button"
+              onClick={() => setView("grid")}
+              aria-label="Grid view"
+              className={cn(
+                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                view === "grid" ? "bg-[#f0e9fb] text-[#6638ec]" : "text-[#8487a7] hover:bg-muted",
+              )}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("list")}
+              aria-label="List view"
+              className={cn(
+                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+                view === "list" ? "bg-[#f0e9fb] text-[#6638ec]" : "text-[#8487a7] hover:bg-muted",
+              )}
+            >
+              <ListIcon className="h-4 w-4" />
+            </button>
+          </div>
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#975ee2] px-4 text-[13px] font-medium text-white transition hover:brightness-95"
+          >
+            <Plus className="h-4 w-4" />
+            Create Bucket
+          </button>
+        </div>
       </div>
 
-      {/* All Buckets card */}
-      <div className="rounded-[14px] bg-white p-5" style={{ boxShadow: "0 1px 2px rgba(11,12,41,0.05)" }}>
-        <div className="mb-4 flex items-center justify-end gap-3">
-          <div className="flex shrink-0 items-center gap-2">
-            <span className="text-[12px] text-[#6a769c]">
-              {filtered.length} {filtered.length === 1 ? "bucket" : "buckets"}
-            </span>
-            <div className="flex items-center gap-0.5 rounded-lg border border-[#ebecf7] p-0.5">
-              <button
-                type="button"
-                onClick={() => setView("grid")}
-                aria-label="Grid view"
-                className={cn(
-                  "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-                  view === "grid" ? "bg-[#f0e9fb] text-[#6638ec]" : "text-[#8487a7] hover:bg-muted",
-                )}
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setView("list")}
-                aria-label="List view"
-                className={cn(
-                  "inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors",
-                  view === "list" ? "bg-[#f0e9fb] text-[#6638ec]" : "text-[#8487a7] hover:bg-muted",
-                )}
-              >
-                <ListIcon className="h-4 w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-
+      {/* Buckets */}
+      <div className="rounded-[14px] bg-white p-4" style={{ boxShadow: "0 1px 2px rgba(11,12,41,0.05)" }}>
         {filtered.length === 0 ? (
           <p className="py-12 text-center text-[13px] text-[#6a769c]">No buckets found.</p>
         ) : view === "grid" ? (
