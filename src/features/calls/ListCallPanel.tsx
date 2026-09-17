@@ -14,6 +14,8 @@ import {
   Heart,
   PartyPopper,
   Hand,
+  Phone,
+  FileText,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
@@ -210,12 +212,34 @@ export function ListCallPanel({
                 {chat.messages.length === 0 ? (
                   <p className="text-[11px] text-muted-foreground">No messages yet.</p>
                 ) : (
-                  chat.messages.map((m) => (
-                    <div key={m.id} className="text-[12px]">
-                      <span className="font-semibold text-[#000533]">{m.author}: </span>
-                      <span className="text-[#3d3f74]">{m.body}</span>
-                    </div>
-                  ))
+                  chat.messages.map((m) =>
+                    m.kind === "system" ? (
+                      <div key={m.id} className="flex items-center justify-center gap-1 py-0.5 text-center text-[10.5px] text-[#6a769c]">
+                        <Phone className="h-2.5 w-2.5 text-[#12a15f]" />
+                        <span className="font-medium text-[#000533]">{m.author}</span> {m.body}
+                      </div>
+                    ) : (
+                      <div key={m.id} className="flex items-start gap-2">
+                        <PersonAvatar name={m.author} initials={m.author.slice(0, 2).toUpperCase()} src={m.avatarUrl} size={24} />
+                        <div className="min-w-0 flex-1 text-[12px]">
+                          <span className="font-semibold text-[#000533]">{m.author}</span>
+                          {m.body ? <span className="text-[#3d3f74]"> {m.body}</span> : null}
+                          {m.attachment ? (
+                            m.attachment.mime?.startsWith("image/") && m.attachment.url ? (
+                              <a href={m.attachment.url} target="_blank" rel="noreferrer" className="mt-1 block w-fit">
+                                <img src={m.attachment.url} alt={m.attachment.name} className="max-h-24 max-w-full rounded-md border border-[#eef0f6] object-cover" />
+                              </a>
+                            ) : (
+                              <a href={m.attachment.url} target="_blank" rel="noreferrer" className="mt-1 flex items-center gap-1.5 rounded-md border border-[#eef0f6] bg-[#f9f9fe] px-2 py-1 text-[11px] text-[#000533] hover:border-[#975ee2]">
+                                <FileText className="h-3 w-3 shrink-0 text-[#6a769c]" />
+                                <span className="truncate">{m.attachment.name}</span>
+                              </a>
+                            )
+                          ) : null}
+                        </div>
+                      </div>
+                    ),
+                  )
                 )}
               </div>
               <form

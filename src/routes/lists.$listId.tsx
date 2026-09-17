@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -61,7 +61,8 @@ import { format } from "date-fns";
 import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { useListMessages } from "@/features/lists/use-list-messages";
+import { useListMessages, type ChatAttachment } from "@/features/lists/use-list-messages";
+import { formatFileSize } from "@/lib/file-utils";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -95,6 +96,40 @@ type QuickFilterType =
   | "sorted";
 type DueFilterType = "all" | "today" | "overdue" | "no_due";
 type SortOption = "due" | "updated" | "importance" | "title";
+
+/** Renders a chat attachment: an inline preview for images, a file chip otherwise. */
+function ChatAttachmentView({ attachment }: { attachment: ChatAttachment }) {
+  const isImage = (attachment.mime ?? "").startsWith("image/");
+  const sizeLabel = attachment.size ? formatFileSize(attachment.size) : null;
+  if (isImage && attachment.url) {
+    return (
+      <a href={attachment.url} target="_blank" rel="noreferrer" className="mt-1.5 block w-fit">
+        <img
+          src={attachment.url}
+          alt={attachment.name}
+          className="max-h-56 max-w-[260px] rounded-[10px] border border-[#ebecf7] object-cover"
+        />
+      </a>
+    );
+  }
+  return (
+    <a
+      href={attachment.url}
+      target="_blank"
+      rel="noreferrer"
+      className="mt-1.5 inline-flex max-w-[280px] items-center gap-2.5 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 py-2 transition-colors hover:border-[#975ee2]"
+    >
+      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef0f6] text-[#6a769c]">
+        <FileText className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[12px] font-medium text-[#000533]">{attachment.name}</span>
+        {sizeLabel ? <span className="block text-[10.5px] text-[#8487a7]">{sizeLabel}</span> : null}
+      </span>
+      <Download className="h-3.5 w-3.5 shrink-0 text-[#8487a7]" />
+    </a>
+  );
+}
 
 function ListDetailPage() {
   const { listId } = Route.useParams();
@@ -138,6 +173,8 @@ function ListDetailPage() {
       fromName: selfName,
       memberIds,
     });
+    // Record a call-history entry that renders inline in the chat timeline.
+    chat.sendSystem.mutate("started a call");
     // Also push to members who don't have the app open (best-effort).
     try {
       const { data: sess } = await supabase.auth.getSession();
@@ -203,7 +240,10 @@ function ListDetailPage() {
 
   // Chat tab state
   const [chatSearch, setChatSearch] = useState("");
+  const [chatSearchOpen, setChatSearchOpen] = useState(false);
   const [msg, setMsg] = useState("");
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const chatFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Members tab state
   const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | "owner" | "collaborator" | "view_only">("all");
@@ -338,14 +378,38 @@ function ListDetailPage() {
     return { total, waiting, inProgress, completed, collaboratorsCount };
   }, [listThings, listCollaborators]);
 
-  // Chat search & filter
+  // Chat search & filter (system call-history entries are always shown)
   const filteredChatMessages = useMemo(() => {
     if (!chatSearch.trim()) return chat.messages;
     const query = chatSearch.toLowerCase();
     return chat.messages.filter(
-      (m) => m.body.toLowerCase().includes(query) || m.author.toLowerCase().includes(query),
+      (m) =>
+        m.kind === "system" ||
+        m.body.toLowerCase().includes(query) ||
+        m.author.toLowerCase().includes(query),
     );
   }, [chat.messages, chatSearch]);
+
+  // Upload a chat attachment (any file type) and post it as a message.
+  const handleChatFile = async (file: File | null | undefined) => {
+    if (!file) return;
+    const MAX_BYTES = 50 * 1024 * 1024; // 50 MB
+    if (file.size > MAX_BYTES) {
+      toast.error("That file is larger than 50 MB.");
+      return;
+    }
+    setUploadingFile(true);
+    try {
+      const attachment = await chat.uploadAttachment(file);
+      await chat.send.mutateAsync({ body: msg.trim(), attachment });
+      setMsg("");
+    } catch (err) {
+      toast.error(domainErrorMessage(err));
+    } finally {
+      setUploadingFile(false);
+      if (chatFileInputRef.current) chatFileInputRef.current.value = "";
+    }
+  };
 
   // Members search & filter
   const filteredMembers = useMemo(() => {
@@ -797,24 +861,55 @@ function ListDetailPage() {
           <div className="flex min-h-0 flex-col gap-3 h-[calc(100vh-9.5rem)] lg:flex-row">
             {/* Left: List Chat panel */}
             <div className="flex min-h-0 flex-1 flex-col rounded-[10px] bg-white p-5">
-              <h2 className="text-[19.75px] font-medium text-[#000533]">List Chat</h2>
-              <p className="mt-1 text-[12px] text-[#6a769c]">
-                Conversation for {list.name} • {list.members.length} members
-              </p>
-
-              <div className="mt-4 mb-3">
-                <div className="relative flex items-center">
-                  <Search className="absolute left-3 h-4 w-4 text-[#8487a7] pointer-events-none" />
-                  <input
-                    value={chatSearch}
-                    onChange={(e) => setChatSearch(e.target.value)}
-                    placeholder="Search messages"
-                    className="h-[42px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
-                  />
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h2 className="text-[19.75px] font-medium text-[#000533]">List Chat</h2>
+                  <p className="mt-1 text-[12px] text-[#6a769c]">
+                    Conversation for {list.name} • {list.members.length} members
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChatSearchOpen((o) => {
+                      if (o) setChatSearch("");
+                      return !o;
+                    });
+                  }}
+                  title="Search messages"
+                  aria-label="Search messages"
+                  aria-pressed={chatSearchOpen}
+                  className={cn(
+                    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+                    chatSearchOpen ? "bg-[#f0e9fb] text-[#975ee2]" : "text-[#8487a7] hover:bg-[#f4f5fb]",
+                  )}
+                >
+                  <Search className="h-4 w-4" />
+                </button>
               </div>
 
-              <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+              {chatSearchOpen && (
+                <div className="mt-3">
+                  <div className="relative flex items-center">
+                    <Search className="absolute left-3 h-4 w-4 text-[#8487a7] pointer-events-none" />
+                    <input
+                      autoFocus
+                      value={chatSearch}
+                      onChange={(e) => setChatSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          setChatSearch("");
+                          setChatSearchOpen(false);
+                        }
+                      }}
+                      placeholder="Search messages"
+                      className="h-[38px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
                 {filteredChatMessages.length === 0 ? (
                   <div className="py-12 text-center">
                     <MessageSquare className="mx-auto mb-1.5 h-7 w-7 text-[#c5cae0]" />
@@ -824,27 +919,40 @@ function ListDetailPage() {
                     </p>
                   </div>
                 ) : (
-                  filteredChatMessages.map((m) => (
-                    <div key={m.id} className="flex items-start gap-3">
-                      <PersonAvatar
-                        name={m.author}
-                        initials={m.author.slice(0, 2).toUpperCase()}
-                        size={34}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-[12.5px] font-medium text-[#000533]">{m.author}</span>
-                          <span className="text-[11px] text-[#757b9e]">
-                            {new Date(m.at).toLocaleString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
+                  filteredChatMessages.map((m) =>
+                    m.kind === "system" ? (
+                      <div key={m.id} className="flex items-center justify-center gap-2 py-1">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5fb] px-3 py-1 text-[11px] text-[#6a769c]">
+                          <Phone className="h-3 w-3 text-[#12a15f]" />
+                          <span className="font-medium text-[#000533]">{m.author}</span>
+                          {m.body}
+                          <span className="text-[#a3a9c9]">
+                            ·{" "}
+                            {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
                           </span>
-                        </div>
-                        <p className="mt-0.5 text-[12px] text-[#1a2345]">{m.body}</p>
+                        </span>
                       </div>
-                    </div>
-                  ))
+                    ) : (
+                      <div key={m.id} className="flex items-start gap-3">
+                        <PersonAvatar
+                          name={m.author}
+                          initials={m.author.slice(0, 2).toUpperCase()}
+                          src={m.avatarUrl}
+                          size={34}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[12.5px] font-medium text-[#000533]">{m.author}</span>
+                            <span className="text-[11px] text-[#757b9e]">
+                              {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </div>
+                          {m.body ? <p className="mt-0.5 text-[12px] text-[#1a2345]">{m.body}</p> : null}
+                          {m.attachment ? <ChatAttachmentView attachment={m.attachment} /> : null}
+                        </div>
+                      </div>
+                    ),
+                  )
                 )}
               </div>
 
@@ -864,17 +972,26 @@ function ListDetailPage() {
                     );
                   }}
                 >
+                  <input
+                    ref={chatFileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => void handleChatFile(e.target.files?.[0])}
+                  />
                   <button
                     type="button"
-                    className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer"
+                    onClick={() => chatFileInputRef.current?.click()}
+                    disabled={uploadingFile}
+                    className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-40"
                     aria-label="Attach file"
+                    title="Attach a file"
                   >
                     <Paperclip className="h-4 w-4" />
                   </button>
                   <input
                     value={msg}
                     onChange={(e) => setMsg(e.target.value)}
-                    placeholder={`Message ${list.name}....`}
+                    placeholder={uploadingFile ? "Uploading file…" : `Message ${list.name}....`}
                     className="min-w-0 flex-1 bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#6a6b8e]"
                   />
                   <button

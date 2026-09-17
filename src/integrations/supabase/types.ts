@@ -648,29 +648,35 @@ export type Database = {
       }
       list_messages: {
         Row: {
+          attachment: Json | null
           author_profile_id: string
           body: string
           created_at: string
           deleted_at: string | null
           id: string
+          kind: string
           list_id: string
           updated_at: string
         }
         Insert: {
+          attachment?: Json | null
           author_profile_id: string
           body: string
           created_at?: string
           deleted_at?: string | null
           id?: string
+          kind?: string
           list_id: string
           updated_at?: string
         }
         Update: {
+          attachment?: Json | null
           author_profile_id?: string
           body?: string
           created_at?: string
           deleted_at?: string | null
           id?: string
+          kind?: string
           list_id?: string
           updated_at?: string
         }
