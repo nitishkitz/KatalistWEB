@@ -204,30 +204,8 @@ function NudgesPage() {
                 ))}
               </div>
               {(() => {
-                const meta = GROUPS.find((g) => g.id === active)!;
                 return (
                   <>
-                    <div className="mb-4 flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px]", meta.tile)}>
-                          <meta.Icon className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <h2 className="text-[16px] font-semibold text-black">
-                            {meta.label} ({counts[active]})
-                          </h2>
-                          <p className="text-[13px] text-[#6a769c]">{meta.blurb}</p>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        className="inline-flex h-9 shrink-0 items-center gap-2 rounded-[9px] border border-[#ebecf7] bg-[#f9f9fe] px-3 text-[12.5px] text-[#12143c]"
-                      >
-                        <span className="text-[rgba(18,20,60,0.4)]">Sort by</span> Priority
-                        <ChevronDown className="h-3.5 w-3.5 text-[#6a769c]" />
-                      </button>
-                    </div>
-
                     {/* Table */}
                     <div className="overflow-x-auto rounded-[5px] border border-black/[0.04]">
                       <table className="w-full min-w-[760px] text-left">

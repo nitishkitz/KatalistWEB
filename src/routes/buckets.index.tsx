@@ -6,7 +6,6 @@ import {
   LayoutGrid,
   List as ListIcon,
   Lock,
-  MoreHorizontal,
   Plus,
   Search,
 } from "lucide-react";
@@ -19,12 +18,6 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/buckets/")({
   head: () => ({
@@ -47,35 +40,6 @@ const SQUARE_TINTS = [
 function squareTint(name: string): string {
   const code = (name.charCodeAt(0) || 0) % SQUARE_TINTS.length;
   return SQUARE_TINTS[code]!;
-}
-
-function BucketMenu({ onOpen }: { onOpen: () => void }) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          type="button"
-          data-stop-nav
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Bucket actions"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8487a7] hover:bg-muted hover:text-foreground"
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40 bg-white">
-        <DropdownMenuItem
-          className="text-[12.5px] cursor-pointer"
-          onSelect={(e) => {
-            e.preventDefault();
-            onOpen();
-          }}
-        >
-          Open bucket
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
 }
 
 function CollaboratorStack({ bucket }: { bucket: BucketCard }) {
@@ -106,15 +70,11 @@ function BucketGridCard({ bucket }: { bucket: BucketCard }) {
   const navigate = useNavigate();
   const open = () => void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
   const Icon = bucket.context === "home" ? Home : Briefcase;
-  const tags = bucket.tags ?? [];
   return (
     <article
       role="link"
       tabIndex={0}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("[data-stop-nav]")) return;
-        open();
-      }}
+      onClick={open}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
@@ -123,12 +83,9 @@ function BucketGridCard({ bucket }: { bucket: BucketCard }) {
       }}
       className="group flex cursor-pointer flex-col rounded-[14px] border border-[#eef0f6] bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
     >
-      <div className="flex items-start justify-between">
-        <span className={cn("flex h-11 w-11 items-center justify-center rounded-[12px]", squareTint(bucket.name))}>
-          <Icon className="h-5 w-5" />
-        </span>
-        <BucketMenu onOpen={open} />
-      </div>
+      <span className={cn("flex h-11 w-11 items-center justify-center rounded-[12px]", squareTint(bucket.name))}>
+        <Icon className="h-5 w-5" />
+      </span>
 
       <div className="mt-3 flex items-center gap-1.5">
         <h3 className="text-[15px] font-bold text-[#000533] transition-colors group-hover:text-[#975ee2]">
@@ -142,71 +99,56 @@ function BucketGridCard({ bucket }: { bucket: BucketCard }) {
         {bucket.thingCount} Things • {bucket.listCount} {bucket.listCount === 1 ? "List" : "Lists"}
       </p>
 
-      {tags.length > 0 ? (
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-          {tags.slice(0, 3).map((tag) => (
-            <span
-              key={tag}
-              className="rounded-md bg-[#f1ecff] px-2 py-0.5 text-[10.5px] font-medium text-[#6638ec]"
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
-      ) : null}
-
       <div className="mt-4 flex items-center justify-between border-t border-[#f2f3f9] pt-3">
         <CollaboratorStack bucket={bucket} />
-        <div className="flex items-center gap-4">
-          <span className="whitespace-nowrap text-[11px] text-[#a3a9c9]">Updated {bucket.updatedAt}</span>
-          <span className="text-[12px] font-semibold text-[#975ee2] group-hover:underline">Open bucket</span>
-        </div>
+        <span className="whitespace-nowrap text-[11px] text-[#a3a9c9]">Updated {bucket.updatedAt}</span>
       </div>
     </article>
   );
 }
 
-function BucketListRow({ bucket }: { bucket: BucketCard }) {
+function BucketTableRow({ bucket }: { bucket: BucketCard }) {
   const navigate = useNavigate();
   const open = () => void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
   const Icon = bucket.context === "home" ? Home : Briefcase;
   return (
-    <div
+    <tr
       role="link"
       tabIndex={0}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("[data-stop-nav]")) return;
-        open();
-      }}
+      onClick={open}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           open();
         }
       }}
-      className="group flex cursor-pointer flex-col items-start justify-between gap-3 rounded-[12px] border border-[#eef0f6] bg-white p-4 transition-all duration-200 hover:bg-[#faf9fe] sm:flex-row sm:items-center"
+      className="group cursor-pointer border-b border-[#f2f3f9] last:border-0 hover:bg-[#faf9fe]"
     >
-      <div className="flex min-w-0 items-center gap-3">
-        <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px]", squareTint(bucket.name))}>
-          <Icon className="h-5 w-5" />
-        </span>
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h3 className="truncate text-[13.5px] font-bold text-[#000533] group-hover:text-[#975ee2]">{bucket.name}</h3>
-            <Lock className="h-3 w-3 shrink-0 text-[#8487a7]" />
+      <td className="px-3 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]", squareTint(bucket.name))}>
+            <Icon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-[13px] font-semibold text-[#000533] group-hover:text-[#975ee2]">
+                {bucket.name}
+              </span>
+              <Lock className="h-3 w-3 shrink-0 text-[#8487a7]" />
+            </div>
+            {bucket.description ? (
+              <p className="truncate max-w-[360px] text-[11.5px] text-[#6a769c]">{bucket.description}</p>
+            ) : null}
           </div>
-          <p className="text-[11.5px] text-[#6a769c]">
-            {bucket.thingCount} Things • {bucket.listCount} {bucket.listCount === 1 ? "List" : "Lists"}
-          </p>
-          <p className="mt-0.5 truncate text-[11.5px] text-[#6a769c]">{bucket.description}</p>
         </div>
-      </div>
-      <div className="flex w-full items-center justify-between gap-6 border-t border-[#f2f3f9] pt-2 sm:w-auto sm:justify-end sm:border-t-0 sm:pt-0">
+      </td>
+      <td className="px-3 py-3">
         <CollaboratorStack bucket={bucket} />
-        <span className="whitespace-nowrap text-[11px] text-[#a3a9c9]">Updated {bucket.updatedAt}</span>
-        <span className="text-[12px] font-semibold text-[#975ee2] group-hover:underline">Open bucket</span>
-      </div>
-    </div>
+      </td>
+      <td className="px-3 py-3 text-[12.5px] text-[#3d3f74]">{bucket.thingCount}</td>
+      <td className="px-3 py-3 text-[12.5px] text-[#3d3f74]">{bucket.listCount}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-[11.5px] text-[#a3a9c9]">{bucket.updatedAt}</td>
+    </tr>
   );
 }
 
@@ -324,13 +266,7 @@ function BucketsPage() {
 
       {/* All Buckets card */}
       <div className="rounded-[14px] bg-white p-5" style={{ boxShadow: "0 1px 2px rgba(11,12,41,0.05)" }}>
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h2 className="text-[16px] font-bold text-[#000533]">All Buckets</h2>
-            <p className="mt-0.5 text-[12px] text-[#6a769c]">
-              All your focus spaces. Create, organize, and make progress.
-            </p>
-          </div>
+        <div className="mb-4 flex items-center justify-end gap-3">
           <div className="flex shrink-0 items-center gap-2">
             <span className="text-[12px] text-[#6a769c]">
               {filtered.length} {filtered.length === 1 ? "bucket" : "buckets"}
@@ -371,10 +307,23 @@ function BucketsPage() {
             ))}
           </div>
         ) : (
-          <div className="space-y-3">
-            {filtered.map((b) => (
-              <BucketListRow key={b.id} bucket={b} />
-            ))}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-left">
+              <thead>
+                <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                  <th className="px-3 py-2.5 font-semibold">Bucket</th>
+                  <th className="px-3 py-2.5 font-semibold">Members</th>
+                  <th className="px-3 py-2.5 font-semibold">Things</th>
+                  <th className="px-3 py-2.5 font-semibold">Lists</th>
+                  <th className="px-3 py-2.5 font-semibold">Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((b) => (
+                  <BucketTableRow key={b.id} bucket={b} />
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
