@@ -1,19 +1,14 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { format } from "date-fns";
+import { format, formatDistanceToNowStrict, isToday } from "date-fns";
 import {
-  ArrowDownUp,
-  Briefcase,
-  Calendar,
+  ArrowLeft,
   ChevronDown,
-  Clock,
   FileText,
-  Filter,
-  Home,
-  Info,
-  List as ListIcon,
   Lock,
-  MoreHorizontal,
+  MessageSquare,
+  MoreVertical,
+  Paperclip,
   Plus,
   Search,
 } from "lucide-react";
@@ -27,6 +22,7 @@ import {
 } from "@/features/buckets/use-bucket-items";
 import { bucketItemsSurface } from "@/features/buckets/bucket-items-surface";
 import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
+import { ListDetailSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useThing } from "@/features/things/use-thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -54,6 +50,29 @@ export const Route = createFileRoute("/buckets/$bucketId")({
   component: BucketDetailPage,
 });
 
+/** Status label + colour for a Thing, matching the bucket-detail table design. */
+function thingStatusMeta(t: Thing): { label: string; color: string } {
+  if (t.workStatus === "cancelled") return { label: "Cancelled", color: "#8487a7" };
+  if (t.workStatus === "sorted") return { label: "Sorted", color: "#12a15f" };
+  if (t.acknowledgement === "waiting_for_catch") return { label: "Waiting for catch", color: "#e0a422" };
+  if (t.workStatus === "under_progress") return { label: "Under Progress", color: "#7c33fd" };
+  return { label: "Not Started", color: "#8487a7" };
+}
+
+function formatDue(dueAt: string | null): string {
+  if (!dueAt) return "—";
+  const d = new Date(dueAt);
+  return isToday(d) ? "Today" : format(d, "d MMM");
+}
+
+function relativeUpdated(iso: string): string {
+  try {
+    return `${formatDistanceToNowStrict(new Date(iso))} ago`;
+  } catch {
+    return "—";
+  }
+}
+
 function matchesQuery(q: string, thing?: Thing, list?: ListRow) {
   if (!q) return true;
   const n = q.toLowerCase();
@@ -70,184 +89,6 @@ function matchesQuery(q: string, thing?: Thing, list?: ListRow) {
   return false;
 }
 
-function BucketThingCardRow({
-  thing,
-  isSelected,
-  onOpen,
-  onRemove,
-}: {
-  thing: Thing;
-  isSelected?: boolean;
-  onOpen: () => void;
-  onRemove: () => void;
-}) {
-  const isWaiting = thing.acknowledgement === "waiting_for_catch";
-
-  const importanceBadge =
-    thing.ownerImportance === "now" ? (
-      <span className="rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[10.5px] font-bold text-red-600">
-        NOW
-      </span>
-    ) : thing.ownerImportance === "next" ? (
-      <span className="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10.5px] font-semibold text-blue-600">
-        NEXT
-      </span>
-    ) : (
-      <span className="rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10.5px] font-semibold text-purple-600">
-        LATER
-      </span>
-    );
-
-  const statusBadge = isWaiting ? (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-2 py-0.5 text-[11px] font-medium text-orange-700">
-      <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-      Waiting for catch
-    </span>
-  ) : thing.workStatus === "sorted" ? (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-      Completed
-    </span>
-  ) : thing.workStatus === "under_progress" ? (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-      <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-      Under progress
-    </span>
-  ) : thing.workStatus === "cancelled" ? (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-700">
-      <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-      Cancelled
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60" />
-      Not started
-    </span>
-  );
-
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
-      className={cn(
-        "group flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border border-border/70 bg-white p-4 shadow-2xs hover:bg-muted/20 transition-all duration-200 cursor-pointer",
-        isSelected && "border-l-4 border-l-primary bg-primary/5 font-semibold",
-      )}
-    >
-      <div className="min-w-0 flex-1">
-        <h4 className="text-[13.5px] font-bold text-foreground group-hover:text-primary transition-colors truncate">
-          {thing.title}
-        </h4>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {importanceBadge}
-          {statusBadge}
-          <span className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground">
-            {thing.listName ?? "Standalone"}
-          </span>
-          <div className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground">
-            <PersonAvatar
-              name={thing.assignee.name}
-              src={thing.assignee.avatarUrl}
-              initials={thing.assignee.initials}
-              size={18}
-            />
-            <span>{thing.assignee.name}</span>
-          </div>
-          {thing.dueAt ? (
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground font-medium">
-              <Calendar className="h-3 w-3" />
-              {format(new Date(thing.dueAt), "MMM d, yyyy")}
-            </span>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-end shrink-0">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          className="text-[12.5px] font-semibold text-primary hover:underline cursor-pointer"
-        >
-          Remove
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function BucketListCardRow({
-  list,
-  onRemove,
-}: {
-  list: ListRow;
-  onRemove: () => void;
-}) {
-  const navigate = useNavigate();
-  const letter = list.name.slice(0, 1).toUpperCase();
-  const pastelStyles = [
-    { bg: "bg-purple-100", text: "text-purple-800" },
-    { bg: "bg-sky-100", text: "text-sky-800" },
-    { bg: "bg-emerald-100", text: "text-emerald-800" },
-    { bg: "bg-amber-100", text: "text-amber-800" },
-  ];
-  const charCode = (list.name.charCodeAt(0) || 0) % pastelStyles.length;
-  const { bg, text } = pastelStyles[charCode]!;
-
-  return (
-    <div className="group flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border border-border/70 bg-white p-4 shadow-2xs hover:bg-muted/20 transition-all duration-200">
-      <div className="flex items-center gap-3.5 min-w-0">
-        <span
-          className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[15px] font-bold",
-            bg,
-            text,
-          )}
-        >
-          {letter}
-        </span>
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="text-[13.5px] font-bold text-foreground truncate">{list.name}</h4>
-            <span className="rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium capitalize text-muted-foreground">
-              {list.context}
-            </span>
-          </div>
-          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-            {list.ownerLine} · {list.thingCount} Things · {list.doneCount} done
-          </p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-4 justify-end shrink-0">
-        <button
-          type="button"
-          onClick={() => void navigate({ to: "/lists/$listId", params: { listId: list.id } })}
-          className="text-[12.5px] font-semibold text-primary hover:underline cursor-pointer"
-        >
-          Open list
-        </button>
-        <button
-          type="button"
-          onClick={onRemove}
-          className="text-[12.5px] font-semibold text-primary hover:underline cursor-pointer"
-        >
-          Remove
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function BucketDetailPage() {
   const { bucketId } = Route.useParams();
   const navigate = useNavigate();
@@ -257,8 +98,8 @@ function BucketDetailPage() {
   const lists = useAccessibleLists();
 
   const [q, setQ] = useState("");
-  const [personFilter, setPersonFilter] = useState<string | null>(null);
-  const [viewTab, setViewTab] = useState<"all" | "things" | "lists">("all");
+  const [personFilter] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<"things" | "lists" | "notes">("things");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<"recent" | "title">("recent");
 
@@ -279,46 +120,24 @@ function BucketDetailPage() {
   const referencedThingIds = new Set(thingItemsAll.map((i) => i.thingId));
   const referencedListIds = new Set(listItemsAll.map((i) => i.listId));
 
-  // Extract unique collaborators for person filter (deduped by person name)
   const collaborators = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; avatarUrl?: string | null; initials: string; ids: Set<string> }>();
-
-    const recordPerson = (person?: { id?: string; name?: string; avatarUrl?: string | null; initials?: string }) => {
-      if (!person || !person.name || person.name === "Someone" || person.name.trim() === "") return;
-      const normKey = person.name.trim().toLowerCase();
-      const existing = map.get(normKey);
+    const map = new Map<string, { id: string; name: string; ids: Set<string> }>();
+    const record = (person?: { id?: string; name?: string }) => {
+      if (!person?.name || person.name === "Someone" || person.name.trim() === "") return;
+      const key = person.name.trim().toLowerCase();
+      const existing = map.get(key);
       if (existing) {
         if (person.id) existing.ids.add(person.id);
-        if (!existing.avatarUrl && person.avatarUrl) existing.avatarUrl = person.avatarUrl;
       } else {
-        map.set(normKey, {
-          id: person.id || normKey,
-          name: person.name.trim(),
-          avatarUrl: person.avatarUrl,
-          initials: person.initials || person.name.trim().slice(0, 2).toUpperCase(),
-          ids: new Set(person.id ? [person.id] : []),
-        });
+        map.set(key, { id: person.id || key, name: person.name.trim(), ids: new Set(person.id ? [person.id] : []) });
       }
     };
-
     for (const it of thingItemsAll) {
-      recordPerson(it.thing.assignee);
-      recordPerson(it.thing.owner);
-    }
-    for (const it of listItemsAll) {
-      if (it.list.members) {
-        for (const m of it.list.members) {
-          recordPerson({
-            id: m.actorId || m.profileId,
-            name: m.name,
-            avatarUrl: m.avatarUrl,
-            initials: m.initials,
-          });
-        }
-      }
+      record(it.thing.assignee);
+      record(it.thing.owner);
     }
     return Array.from(map.values());
-  }, [thingItemsAll, listItemsAll]);
+  }, [thingItemsAll]);
 
   const visible = useMemo(() => {
     return items.filter((item) => {
@@ -332,17 +151,12 @@ function BucketDetailPage() {
             item.thing.assignee &&
             (item.thing.assignee.name.toLowerCase() === personFilter.toLowerCase() ||
               (collab?.ids && collab.ids.has(item.thing.assignee.id)));
-          const matchesOwner =
-            item.thing.owner &&
-            (item.thing.owner.name.toLowerCase() === personFilter.toLowerCase() ||
-              (collab?.ids && collab.ids.has(item.thing.owner.id)));
-          if (!matchesAssignee && !matchesOwner) return false;
+          if (!matchesAssignee) return false;
         }
         if (statusFilter) {
           if (statusFilter === "waiting_for_catch" && item.thing.acknowledgement !== "waiting_for_catch")
             return false;
-          if (statusFilter === "under_progress" && item.thing.workStatus !== "under_progress")
-            return false;
+          if (statusFilter === "under_progress" && item.thing.workStatus !== "under_progress") return false;
           if (statusFilter === "completed" && item.thing.workStatus !== "sorted") return false;
           if (statusFilter === "cancelled" && item.thing.workStatus !== "cancelled") return false;
         }
@@ -350,18 +164,6 @@ function BucketDetailPage() {
       }
       if (item.kind === "list") {
         if (statusFilter) return false;
-        if (personFilter) {
-          const collab = collaborators.find(
-            (c) => c.name.toLowerCase() === personFilter.toLowerCase() || c.ids.has(personFilter),
-          );
-          const hasMember = item.list.members?.some(
-            (m) =>
-              m.name.toLowerCase() === personFilter.toLowerCase() ||
-              (m.actorId && collab?.ids.has(m.actorId)) ||
-              (m.profileId && collab?.ids.has(m.profileId)),
-          );
-          if (!hasMember) return false;
-        }
         return matchesQuery(q, undefined, item.list);
       }
       return true;
@@ -385,8 +187,8 @@ function BucketDetailPage() {
 
   if (isLoading) {
     return (
-      <AppShell title="Bucket" subtitle="Loading">
-        <p className="text-sm text-muted-foreground">Opening this Bucket…</p>
+      <AppShell noPadding>
+        <ListDetailSkeleton />
       </AppShell>
     );
   }
@@ -402,446 +204,458 @@ function BucketDetailPage() {
     );
   }
 
-  const itemsSurface = bucketItemsSurface({
-    itemsLoading,
-    itemsError,
-    itemCount: items.length,
-  });
+  const itemsSurface = bucketItemsSurface({ itemsLoading, itemsError, itemCount: items.length });
 
-  return (
-    <AppShell
-      title={
-        <div className="flex items-center gap-2">
-          <span>{bucket.name}</span>
-          <Lock className="h-4 w-4 text-muted-foreground/80" />
-        </div>
-      }
-      subtitle="Private focus space for references only"
-      actions={
-        <div className="flex items-center gap-2">
-          <Popover open={addOpen} onOpenChange={setAddOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[13px] font-medium text-primary-foreground hover:bg-primary/90 shadow-2xs cursor-pointer"
-              >
-                <Plus className="h-4 w-4" />
-                Add reference
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-80 rounded-2xl border border-border/80 bg-white p-3 shadow-xl">
-              <div className="mb-2.5 flex gap-1 rounded-xl bg-muted p-1">
-                <button
-                  type="button"
-                  className={cn(
-                    "flex-1 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
-                    addTab === "things" ? "bg-white text-foreground shadow-2xs font-semibold" : "text-muted-foreground",
-                  )}
-                  onClick={() => setAddTab("things")}
-                >
-                  Things
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex-1 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
-                    addTab === "lists" ? "bg-white text-foreground shadow-2xs font-semibold" : "text-muted-foreground",
-                  )}
-                  onClick={() => setAddTab("lists")}
-                >
-                  Lists
-                </button>
-              </div>
-              <input
-                value={addQ}
-                onChange={(e) => setAddQ(e.target.value)}
-                placeholder={addTab === "things" ? "Search Things…" : "Search Lists…"}
-                className="mb-2 h-8.5 w-full rounded-lg border border-border bg-background px-2.5 text-[12.5px] outline-none"
-              />
-              <ul className="max-h-56 space-y-1 overflow-y-auto">
-                {addTab === "things"
-                  ? addThings.slice(0, 40).map((t) => (
-                      <li key={t.id}>
-                        <button
-                          type="button"
-                          className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-medium hover:bg-muted transition-colors cursor-pointer"
-                          onClick={() => {
-                            void add.mutateAsync({ thingId: t.id }).then(
-                              () => {
-                                toast.success("Referenced. The Thing itself did not change.");
-                                setAddOpen(false);
-                              },
-                              (err) => toast.error(domainErrorMessage(err)),
-                            );
-                          }}
-                        >
-                          {t.title}
-                        </button>
-                      </li>
-                    ))
-                  : addLists.map((l) => (
-                      <li key={l.id}>
-                        <button
-                          type="button"
-                          className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-medium hover:bg-muted transition-colors cursor-pointer"
-                          onClick={() => {
-                            void add.mutateAsync({ listId: l.id }).then(
-                              () => {
-                                toast.success("List referenced. Ownership unchanged.");
-                                setAddOpen(false);
-                              },
-                              (err) => toast.error(domainErrorMessage(err)),
-                            );
-                          }}
-                        >
-                          {l.name}
-                        </button>
-                      </li>
-                    ))}
-                {(addTab === "things" ? addThings : addLists).length === 0 ? (
-                  <li className="px-2 py-4 text-center text-[12px] text-muted-foreground">
-                    Nothing else to add.
-                  </li>
-                ) : null}
-              </ul>
-            </PopoverContent>
-          </Popover>
+  const bucketInitials =
+    bucket.name
+      .split(" ")
+      .map((w) => w[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "B";
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                aria-label="Bucket settings"
-                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/80 bg-white text-muted-foreground hover:bg-muted hover:text-foreground shadow-2xs"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40 rounded-xl bg-white p-1">
-              <DropdownMenuItem
-                className="text-[12.5px] font-medium cursor-pointer"
-                onSelect={() => {
-                  setRenameValue(bucket.name);
-                  setRenameOpen(true);
-                }}
-              >
-                Rename
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-[12.5px] font-medium text-destructive focus:text-destructive cursor-pointer"
-                onSelect={() => setDeleteOpen(true)}
-              >
-                Delete Bucket
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      }
-    >
-      {/* Top Meta Ribbon */}
-      <div className="mb-5 flex flex-wrap items-center gap-3 text-[12px] text-muted-foreground">
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-white px-2 py-1 font-medium shadow-2xs">
-          {bucket.context === "home" ? (
-            <Home className="h-3.5 w-3.5 text-muted-foreground" />
-          ) : (
-            <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
-          )}
-          <span className="capitalize">{bucket.context}</span>
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-white px-2 py-1 font-medium shadow-2xs">
-          <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-          Private
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-white px-2 py-1 font-medium shadow-2xs">
-          <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-          {thingItemsAll.length} Things
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-white px-2 py-1 font-medium shadow-2xs">
-          <ListIcon className="h-3.5 w-3.5 text-muted-foreground" />
-          {listItemsAll.length} Lists
-        </span>
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/70 bg-white px-2 py-1 font-medium shadow-2xs">
-          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-          Updated recently
-        </span>
-      </div>
+  const sortedThingItems = [...thingItems].sort((a, b) =>
+    sortOption === "title"
+      ? a.thing.title.localeCompare(b.thing.title)
+      : new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime(),
+  );
 
-      {/* Search Bar */}
-      <div className="mb-4">
-        <label className="flex h-9 w-full items-center gap-2 rounded-xl border border-border/80 bg-white px-3 shadow-2xs">
-          <Search className="h-4 w-4 text-muted-foreground shrink-0" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search in this bucket..."
-            className="w-full bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
-          />
-        </label>
-      </div>
-
-      {/* People Filter Row */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 text-[12px]">
-        <span className="font-semibold text-muted-foreground mr-1">People</span>
+  // "New Thing" adds a reference to an existing Thing/List (Buckets never own or
+  // create Things — they are private reference groupings).
+  const addReference = (
+    <Popover open={addOpen} onOpenChange={setAddOpen}>
+      <PopoverTrigger asChild>
         <button
           type="button"
-          onClick={() => setPersonFilter(null)}
-          className={cn(
-            "inline-flex h-7 items-center rounded-full border px-3 text-[11px] font-medium transition-colors cursor-pointer",
-            personFilter === null
-              ? "border-primary bg-primary/10 font-semibold text-primary"
-              : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-          )}
+          className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-[#975ee2] px-4 text-[14px] font-medium text-white transition hover:brightness-95"
         >
-          All
+          <Plus className="h-4 w-4" />
+          <span>New Thing</span>
         </button>
-        {collaborators.map((c) => (
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 rounded-2xl border border-border/80 bg-white p-3 shadow-xl">
+        <div className="mb-2.5 flex gap-1 rounded-xl bg-muted p-1">
           <button
-            key={c.name}
             type="button"
-            onClick={() => setPersonFilter(personFilter === c.name ? null : c.name)}
             className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors cursor-pointer",
-              personFilter === c.name
-                ? "border-primary bg-primary/10 font-semibold text-primary"
-                : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
+              "flex-1 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
+              addTab === "things" ? "bg-white text-foreground shadow-2xs font-semibold" : "text-muted-foreground",
             )}
+            onClick={() => setAddTab("things")}
           >
-            <PersonAvatar name={c.name} src={c.avatarUrl} initials={c.initials} size={16} />
-            <span>{c.name}</span>
+            Things
           </button>
-        ))}
-      </div>
-
-      {/* Segmented Filter Pills & Toolbar */}
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Things / Lists Switch */}
-          <div className="flex items-center rounded-xl border border-border/80 bg-white p-0.5 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setViewTab("things")}
-              className={cn(
-                "rounded-lg px-3 py-1 text-[11.5px] font-medium transition-colors cursor-pointer",
-                viewTab === "things"
-                  ? "bg-primary/10 font-semibold text-primary shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Things
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewTab("lists")}
-              className={cn(
-                "rounded-lg px-3 py-1 text-[11.5px] font-medium transition-colors cursor-pointer",
-                viewTab === "lists"
-                  ? "bg-primary/10 font-semibold text-primary shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              Lists
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewTab("all")}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-[11.5px] font-medium transition-colors cursor-pointer",
-                viewTab === "all"
-                  ? "bg-primary/10 font-semibold text-primary shadow-2xs"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              All
-            </button>
-          </div>
-
-          {/* Status Pills */}
           <button
             type="button"
-            onClick={() =>
-              setStatusFilter(statusFilter === "waiting_for_catch" ? null : "waiting_for_catch")
-            }
             className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-medium transition-colors cursor-pointer",
-              statusFilter === "waiting_for_catch"
-                ? "border-orange-300 bg-orange-50 font-semibold text-orange-700"
-                : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
+              "flex-1 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
+              addTab === "lists" ? "bg-white text-foreground shadow-2xs font-semibold" : "text-muted-foreground",
             )}
+            onClick={() => setAddTab("lists")}
           >
-            <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
-            Waiting for catch
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              setStatusFilter(statusFilter === "under_progress" ? null : "under_progress")
-            }
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-medium transition-colors cursor-pointer",
-              statusFilter === "under_progress"
-                ? "border-blue-300 bg-blue-50 font-semibold text-blue-700"
-                : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-            Under progress
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              setStatusFilter(statusFilter === "completed" ? null : "completed")
-            }
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-medium transition-colors cursor-pointer",
-              statusFilter === "completed"
-                ? "border-emerald-300 bg-emerald-50 font-semibold text-emerald-700"
-                : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Completed
-          </button>
-
-          <button
-            type="button"
-            onClick={() =>
-              setStatusFilter(statusFilter === "cancelled" ? null : "cancelled")
-            }
-            className={cn(
-              "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11.5px] font-medium transition-colors cursor-pointer",
-              statusFilter === "cancelled"
-                ? "border-slate-300 bg-slate-50 font-semibold text-slate-700"
-                : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
-            Cancelled
+            Lists
           </button>
         </div>
+        <input
+          value={addQ}
+          onChange={(e) => setAddQ(e.target.value)}
+          placeholder={addTab === "things" ? "Search Things…" : "Search Lists…"}
+          className="mb-2 h-8.5 w-full rounded-lg border border-border bg-background px-2.5 text-[12.5px] outline-none"
+        />
+        <ul className="max-h-56 space-y-1 overflow-y-auto">
+          {addTab === "things"
+            ? addThings.slice(0, 40).map((t) => (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-medium hover:bg-muted transition-colors cursor-pointer"
+                    onClick={() => {
+                      void add.mutateAsync({ thingId: t.id }).then(
+                        () => {
+                          toast.success("Referenced. The Thing itself did not change.");
+                          setAddOpen(false);
+                        },
+                        (err) => toast.error(domainErrorMessage(err)),
+                      );
+                    }}
+                  >
+                    {t.title}
+                  </button>
+                </li>
+              ))
+            : addLists.map((l) => (
+                <li key={l.id}>
+                  <button
+                    type="button"
+                    className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-medium hover:bg-muted transition-colors cursor-pointer"
+                    onClick={() => {
+                      void add.mutateAsync({ listId: l.id }).then(
+                        () => {
+                          toast.success("List referenced. Ownership unchanged.");
+                          setAddOpen(false);
+                        },
+                        (err) => toast.error(domainErrorMessage(err)),
+                      );
+                    }}
+                  >
+                    {l.name}
+                  </button>
+                </li>
+              ))}
+          {(addTab === "things" ? addThings : addLists).length === 0 ? (
+            <li className="px-2 py-4 text-center text-[12px] text-muted-foreground">Nothing else to add.</li>
+          ) : null}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
 
-        <div className="flex items-center gap-2">
-          <label className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-border/80 bg-white px-3 text-[11.5px] text-foreground shadow-2xs">
-            <ArrowDownUp className="h-3 w-3 text-muted-foreground" />
-            <select
-              value={sortOption}
-              onChange={(e) => setSortOption(e.target.value as "recent" | "title")}
-              className="appearance-none bg-transparent pr-4 text-[11.5px] outline-none font-medium"
-              aria-label="Sort bucket items"
-            >
-              <option value="recent">Sort: Recently updated</option>
-              <option value="title">Sort: Title</option>
-            </select>
-            <ChevronDown className="pointer-events-none -ml-5 h-3 w-3 text-muted-foreground" />
-          </label>
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-border/80 bg-white px-3 text-[11.5px] font-medium text-foreground shadow-2xs hover:bg-muted/40"
-          >
-            <Filter className="h-3 w-3 text-muted-foreground" />
-            <span>Filter</span>
-          </button>
+  const settingsMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Bucket settings"
+          className="flex h-[42px] w-[42px] items-center justify-center rounded-[9px] border border-[#ebecf7] bg-white text-[#8487a7] hover:bg-muted hover:text-foreground"
+        >
+          <MoreVertical className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40 rounded-xl bg-white p-1">
+        <DropdownMenuItem
+          className="text-[12.5px] font-medium cursor-pointer"
+          onSelect={() => {
+            setRenameValue(bucket.name);
+            setRenameOpen(true);
+          }}
+        >
+          Rename
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-[12.5px] font-medium text-destructive focus:text-destructive cursor-pointer"
+          onSelect={() => setDeleteOpen(true)}
+        >
+          Delete Bucket
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+
+  const linkedListsSection =
+    listItems.length > 0 ? (
+      <section>
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+          Linked Lists - {listItems.length}
+        </h3>
+        <div className="divide-y divide-[#f2f3f9]">
+          {listItems.map((item) => {
+            const l = item.list;
+            const open = Math.max(0, l.thingCount - l.doneCount);
+            const pct = l.thingCount ? Math.round((l.doneCount / l.thingCount) * 100) : 0;
+            const owner = l.members?.find((m) => m.role === "owner");
+            return (
+              <div
+                key={item.listId}
+                className="grid grid-cols-1 items-center gap-3 py-3 sm:grid-cols-[minmax(0,1.6fr)_1fr_0.7fr_1.4fr_auto] sm:gap-4"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#efeafe] text-[13px] font-semibold text-[#6638ec]">
+                    {l.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-[13px] font-semibold text-[#000533]">{l.name}</div>
+                    {l.description ? (
+                      <div className="truncate text-[11.5px] text-[#6a769c]">{l.description}</div>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {owner ? (
+                    <PersonAvatar name={owner.name} src={owner.avatarUrl} initials={owner.initials} size={24} />
+                  ) : null}
+                  <div className="leading-tight">
+                    <div className="text-[12px] font-medium text-[#000533]">{owner?.name ?? l.ownerLine}</div>
+                    <div className="text-[11px] text-[#8487a7]">Owner</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 text-[12px] text-[#3d3f74]">
+                  <FileText className="h-3.5 w-3.5 text-[#8487a7]" />
+                  <span>{l.thingCount} Things</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#eef0f6]">
+                    <div className="h-full rounded-full bg-[#7c33fd]" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="whitespace-nowrap text-[11.5px] text-[#6a769c]">
+                    {l.doneCount} done • {open} open
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void navigate({ to: "/lists/$listId", params: { listId: l.id } })}
+                  className="justify-self-start text-[12.5px] font-semibold text-[#975ee2] hover:underline sm:justify-self-end"
+                >
+                  Open List
+                </button>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      </section>
+    ) : detailTab === "lists" ? (
+      <p className="py-8 text-center text-[12.5px] text-[#6a769c]">No Lists linked to this bucket.</p>
+    ) : null;
 
-      {/* Main Workspace (Things & Lists with Inline Detail) */}
-      <InlineThingDetailWorkspace
-        thing={selectedThing}
-        onClose={() => setSelectedId(null)}
-        backLabel={bucket.name}
-        items={bucketThings}
-        onSelectThing={(id) => setSelectedId(id)}
-        navTitle={bucket.name}
-      >
-        {itemsSurface === "loading" ? (
-          <p className="text-sm text-muted-foreground">Loading references…</p>
-        ) : itemsSurface === "error" ? (
-          <p className="text-sm text-muted-foreground">{domainErrorMessage(itemsError)}</p>
-        ) : itemsSurface === "empty" ? (
-          <div className="rounded-2xl border border-dashed border-border bg-white px-5 py-12 text-center shadow-2xs">
-            <p className="text-[15px] font-bold text-foreground">This Bucket is empty.</p>
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              Add a Thing or List you already have access to.
-            </p>
-            <button
-              type="button"
-              className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3.5 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
-              onClick={() => setAddOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Add reference
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-7">
-            {/* Things Section */}
-            {(viewTab === "all" || viewTab === "things") && (
-              <section>
-                <h3 className="mb-3 text-[14.5px] font-bold text-foreground">
-                  Things ({thingItems.length})
-                </h3>
-                {thingItems.length > 0 ? (
-                  <div className="space-y-2.5">
-                    {thingItems.map((item) => (
-                      <BucketThingCardRow
-                        key={item.thingId}
-                        thing={item.thing}
-                        isSelected={selectedId === item.thingId}
-                        onOpen={() => setSelectedId(item.thingId)}
-                        onRemove={() =>
-                          void remove.mutateAsync({ thingId: item.thingId }).then(
-                            () => toast.success("Removed from this Bucket. The Thing is unchanged."),
-                            (err) => toast.error(domainErrorMessage(err)),
-                          )
-                        }
-                      />
-                    ))}
+  const thingsSection = (
+    <section>
+      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+        Things - {sortedThingItems.length}
+      </h3>
+      {sortedThingItems.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#e3e5ef] py-10 text-center text-[12.5px] text-[#6a769c]">
+          No Things in this bucket yet.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-left">
+            <thead>
+              <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                <th className="px-3 py-2.5 font-semibold">Thing</th>
+                <th className="px-3 py-2.5 font-semibold">Assignee</th>
+                <th className="px-3 py-2.5 font-semibold">Status</th>
+                <th className="px-3 py-2.5 font-semibold">Due</th>
+                <th className="px-3 py-2.5 font-semibold">Comments</th>
+                <th className="px-3 py-2.5 font-semibold">Files</th>
+                <th className="px-3 py-2.5 font-semibold">Updated</th>
+                <th className="py-2.5 pr-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {sortedThingItems.map((item) => {
+                const t = item.thing;
+                const st = thingStatusMeta(t);
+                const comments = t.commentCount ?? t.unreadCommentCount ?? 0;
+                const files = t.attachmentCount ?? t.files?.length ?? 0;
+                return (
+                  <tr key={item.thingId} className="border-b border-[#f2f3f9] last:border-0 hover:bg-[#faf9fe]">
+                    <td className="px-3 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedId(item.thingId)}
+                        className="flex items-center gap-2 text-left"
+                      >
+                        <FileText className="h-4 w-4 shrink-0 text-[#8487a7]" />
+                        <span className="text-[13px] font-medium text-[#000533] hover:text-[#975ee2]">{t.title}</span>
+                      </button>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <PersonAvatar name={t.assignee.name} src={t.assignee.avatarUrl} initials={t.assignee.initials} size={24} />
+                        <span className="text-[12.5px] text-[#3d3f74]">{t.assignee.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: st.color }}>
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: st.color }} />
+                        {st.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-[12.5px] text-[#3d3f74]">{formatDue(t.dueAt)}</td>
+                    <td className="px-3 py-3">
+                      <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#6a769c]">
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        {comments}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#6a769c]">
+                        <Paperclip className="h-3.5 w-3.5" />
+                        {files}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-[12.5px] text-[#6a769c]">{relativeUpdated(t.updatedAt)}</td>
+                    <td className="py-3 pr-2 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8487a7] hover:bg-muted"
+                            aria-label="Thing actions"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44 bg-white">
+                          <DropdownMenuItem className="text-[12.5px] cursor-pointer" onSelect={() => setSelectedId(item.thingId)}>
+                            Open
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-[12.5px] cursor-pointer"
+                            onSelect={() =>
+                              void remove.mutateAsync({ thingId: item.thingId }).then(
+                                () => toast.success("Removed from this Bucket. The Thing is unchanged."),
+                                (err) => toast.error(domainErrorMessage(err)),
+                              )
+                            }
+                          >
+                            Remove from bucket
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+
+  return (
+    <AppShell noPadding>
+      <div className="min-h-screen space-y-3 bg-[#edf2fe] px-4 py-3 pb-20">
+        {/* Sub-header + tabs card */}
+        <div className="rounded-[10px] bg-white">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-5 pt-4 pb-3">
+            <div className="flex flex-wrap items-center gap-4">
+              <Link
+                to="/buckets"
+                className="inline-flex items-center gap-2 rounded-full text-[12.5px] font-medium text-[#6a769c] transition-colors hover:text-[#000533]"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Back to Bucket</span>
+              </Link>
+              <div className="h-8 w-px bg-[#eef0f6]" />
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-11 w-11 items-center justify-center rounded-[6px] bg-[#fee19c] text-[12px] font-medium text-black">
+                  {bucketInitials}
+                </span>
+                <div className="min-w-0">
+                  <div className="max-w-[240px] truncate text-[15px] font-medium leading-tight text-black">
+                    {bucket.name}
                   </div>
-                ) : (
-                  <p className="text-[13px] text-muted-foreground">No matching Things in this bucket.</p>
-                )}
-              </section>
-            )}
-
-            {/* Lists Section */}
-            {(viewTab === "all" || viewTab === "lists") && (
-              <section>
-                <h3 className="mb-3 text-[14.5px] font-bold text-foreground">
-                  Lists ({listItems.length})
-                </h3>
-                {listItems.length > 0 ? (
-                  <div className="space-y-2.5">
-                    {listItems.map((item) => (
-                      <BucketListCardRow
-                        key={item.listId}
-                        list={item.list}
-                        onRemove={() =>
-                          void remove.mutateAsync({ listId: item.listId }).then(
-                            () => toast.success("Removed from this Bucket. The List is unchanged."),
-                            (err) => toast.error(domainErrorMessage(err)),
-                          )
-                        }
-                      />
-                    ))}
+                  <div className="flex items-center gap-1 text-[12px] text-[#6a769c]">
+                    <Lock className="h-3 w-3" />
+                    Private Bucket • Only visible to you
                   </div>
-                ) : (
-                  <p className="text-[13px] text-muted-foreground">No matching Lists in this bucket.</p>
-                )}
-              </section>
-            )}
-
-            {/* Bottom Disclaimer Banner */}
-            <div className="flex items-center gap-2.5 rounded-2xl border border-purple-100 bg-purple-50/50 p-4 text-[12.5px] text-purple-950 shadow-2xs">
-              <Info className="h-4 w-4 shrink-0 text-primary" />
-              <span>
-                Buckets are private focus spaces. Removing an item from a Bucket does not delete the
-                original Thing or List.
-              </span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {addReference}
+              {settingsMenu}
             </div>
           </div>
-        )}
-      </InlineThingDetailWorkspace>
+          <div className="flex items-center gap-8 border-t border-[#eef0f6] px-5">
+            {(
+              [
+                ["things", "Things"],
+                ["lists", "Lists"],
+                ["notes", "Notes"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setDetailTab(id)}
+                className={cn(
+                  "relative -mb-px border-b-2 py-3 text-[13px] font-medium transition-colors",
+                  detailTab === id
+                    ? "border-[#975ee2] text-[#000533]"
+                    : "border-transparent text-[#6a769c] hover:text-[#000533]",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content card */}
+        <div className="rounded-[10px] bg-white p-5">
+          {/* Toolbar */}
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <label className="flex h-10 w-full max-w-[320px] items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 focus-within:border-[#975ee2]">
+              <Search className="h-4 w-4 text-[#8487a7]" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search messages"
+                className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#000533] outline-none placeholder:text-[#8487a7]"
+              />
+            </label>
+            <label className="relative inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] bg-white px-3 text-[12.5px] text-[#3d3f74]">
+              <select
+                value={sortOption}
+                onChange={(e) => setSortOption(e.target.value as "recent" | "title")}
+                className="appearance-none bg-transparent pr-5 outline-none"
+                aria-label="Sort"
+              >
+                <option value="recent">Recently updated</option>
+                <option value="title">Title</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-[#8487a7]" />
+            </label>
+            <label className="relative inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] bg-white px-3 text-[12.5px] text-[#3d3f74]">
+              <select
+                value={statusFilter ?? "all"}
+                onChange={(e) => setStatusFilter(e.target.value === "all" ? null : e.target.value)}
+                className="appearance-none bg-transparent pr-5 outline-none"
+                aria-label="Status"
+              >
+                <option value="all">All statuses</option>
+                <option value="waiting_for_catch">Waiting for catch</option>
+                <option value="under_progress">Under Progress</option>
+                <option value="completed">Sorted</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-[#8487a7]" />
+            </label>
+          </div>
+
+          <InlineThingDetailWorkspace
+            thing={selectedThing}
+            onClose={() => setSelectedId(null)}
+            backLabel={bucket.name}
+            items={bucketThings}
+            onSelectThing={(id) => setSelectedId(id)}
+            navTitle={bucket.name}
+          >
+            {itemsSurface === "loading" ? (
+              <p className="text-sm text-muted-foreground">Loading references…</p>
+            ) : itemsSurface === "error" ? (
+              <p className="text-sm text-muted-foreground">{domainErrorMessage(itemsError)}</p>
+            ) : detailTab === "notes" ? (
+              <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-[#e3e5ef] text-center">
+                <FileText className="h-8 w-8 text-[#c5cae0]" />
+                <p className="mt-2 text-[13px] font-semibold text-[#000533]">No notes yet</p>
+                <p className="mt-1 text-[11.5px] text-[#6a769c]">Notes for this bucket will appear here.</p>
+              </div>
+            ) : itemsSurface === "empty" ? (
+              <div className="rounded-2xl border border-dashed border-[#e3e5ef] px-5 py-12 text-center">
+                <p className="text-[15px] font-bold text-[#000533]">This Bucket is empty.</p>
+                <p className="mt-1 text-[13px] text-[#6a769c]">Add a Thing or List you already have access to.</p>
+                <button
+                  type="button"
+                  className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#975ee2] px-3.5 text-[13px] font-medium text-white"
+                  onClick={() => setAddOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add reference
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {(detailTab === "things" || detailTab === "lists") && linkedListsSection}
+                {detailTab === "things" && thingsSection}
+              </div>
+            )}
+          </InlineThingDetailWorkspace>
+        </div>
+      </div>
 
       {/* Rename Dialog */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
