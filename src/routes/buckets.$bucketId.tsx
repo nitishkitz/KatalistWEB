@@ -698,15 +698,9 @@ function BucketDetailPage() {
                   <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-[#e3e5ef] text-center">
                     <FileText className="h-8 w-8 text-[#c5cae0]" />
                     <p className="mt-2 text-[13px] font-semibold text-[#000533]">No notes yet</p>
-                    <p className="mt-1 text-[11.5px] text-[#6a769c]">Jot down anything for this bucket.</p>
-                    <button
-                      type="button"
-                      onClick={() => openNoteEditor()}
-                      className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#975ee2] px-3.5 text-[13px] font-medium text-white"
-                    >
-                      <Plus className="h-4 w-4" />
-                      New Note
-                    </button>
+                    <p className="mt-1 text-[11.5px] text-[#6a769c]">
+                      Use “New Note” above to jot down anything for this bucket.
+                    </p>
                   </div>
                 ) : (
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
