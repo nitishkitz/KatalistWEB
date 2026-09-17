@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
+import { MeSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useSession } from "@/hooks/useSession";
 import { useQueryClient } from "@tanstack/react-query";
@@ -52,7 +53,7 @@ function MePage() {
   const { user, signOut } = useSession();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { data: profile } = useProfile();
+  const { data: profile, isLoading: profileLoading } = useProfile();
   const uploadAvatar = useUploadAvatar();
   const { stats, restore } = useTrophy();
   const { context } = useAppContext();
@@ -110,6 +111,14 @@ function MePage() {
     qc.clear();
     toast.success("Signed out");
     await navigate({ to: "/auth", replace: true });
+  }
+
+  if (profileLoading) {
+    return (
+      <AppShell>
+        <MeSkeleton />
+      </AppShell>
+    );
   }
 
   return (

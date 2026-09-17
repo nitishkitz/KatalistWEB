@@ -10,6 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { BucketsSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { type BucketCard } from "@/features/buckets/fixtures";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useBuckets } from "@/features/buckets/use-buckets";
@@ -206,7 +207,7 @@ function AllBucketRow({ bucket }: { bucket: BucketCard }) {
 
 function BucketsPage() {
   useLocalVersion();
-  const { buckets, create } = useBuckets();
+  const { buckets, create, isLoading } = useBuckets();
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -225,6 +226,14 @@ function BucketsPage() {
 
   const pinned = filtered.filter((b) => b.pinned);
   const rest = filtered.filter((b) => !b.pinned);
+
+  if (isLoading) {
+    return (
+      <AppShell title="Buckets" subtitle="Your private focus spaces">
+        <BucketsSkeleton />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell

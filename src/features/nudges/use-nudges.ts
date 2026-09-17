@@ -120,5 +120,7 @@ export function useNudges() {
     return map;
   }, [derived.rows]);
 
-  return { ...derived, counts, preview: court.preview };
+  const isLoading = !court.preview && (nudgeable.isLoading || history.isLoading);
+
+  return { ...derived, counts, preview: court.preview, isLoading };
 }

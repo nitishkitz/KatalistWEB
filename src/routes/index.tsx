@@ -10,6 +10,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { CourtSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { MagicBox } from "@/features/court/MagicBox";
 import { CourtDesktop } from "@/features/court/CourtDesktop";
 import { useCourt } from "@/features/court/use-court";
@@ -215,6 +216,16 @@ function CourtPage() {
   const progress = now.filter((t) => t.workStatus === "under_progress").length;
   const emptyCourt = now.length + next.length + later.length + theirs.length === 0;
   const emptyFilter = !emptyCourt && fNow.length + fNext.length + fLater.length === 0;
+
+  if (isLoading) {
+    return (
+      <AppShell noPadding>
+        <div className="px-5 py-5">
+          <CourtSkeleton />
+        </div>
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell noPadding>

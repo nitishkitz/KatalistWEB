@@ -1,9 +1,12 @@
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { useIsFetching } from "@tanstack/react-query";
 import { Users, UserPlus, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useAssignablePeople } from "@/features/people/use-assignable";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
+import { TeamSkeleton } from "@/components/katalist/ScreenSkeletons";
 
 export const Route = createFileRoute("/team")({
   head: () => ({
@@ -38,21 +41,35 @@ function TeamMemberRow({ person }: { person: { id: string; name: string; initial
 
 function TeamPage() {
   const people = useAssignablePeople();
+  // The hook always returns fallback directory people, so gate the shimmer on
+  // the underlying query's first fetch instead of on an empty result.
+  const fetching = useIsFetching({ queryKey: ["assignable-people"] }) > 0;
+  const [everLoaded, setEverLoaded] = useState(false);
+  useEffect(() => {
+    if (!fetching) setEverLoaded(true);
+  }, [fetching]);
+  const showSkeleton = fetching && !everLoaded;
+
+  const actions = (
+    <button
+      type="button"
+      className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-primary/90 transition-colors"
+    >
+      <UserPlus className="h-4 w-4" />
+      Add Teammate
+    </button>
+  );
+
+  if (showSkeleton) {
+    return (
+      <AppShell title="Team" subtitle="People you collaborate with on Katalist." actions={actions}>
+        <TeamSkeleton />
+      </AppShell>
+    );
+  }
 
   return (
-    <AppShell
-      title="Team"
-      subtitle="People you collaborate with on Katalist."
-      actions={
-        <button
-          type="button"
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-xs font-semibold text-white shadow-xs hover:bg-primary/90 transition-colors"
-        >
-          <UserPlus className="h-4 w-4" />
-          Add Teammate
-        </button>
-      }
-    >
+    <AppShell title="Team" subtitle="People you collaborate with on Katalist." actions={actions}>
       <div className="mx-auto max-w-4xl pt-4">
         <div className="space-y-3">
           {people.map((person) => (

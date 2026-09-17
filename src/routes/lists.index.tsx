@@ -16,6 +16,7 @@ import {
   Pencil,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { ListsSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { supabase } from "@/integrations/supabase/client";
 import { rpcSetListCover, rpcSetListDescription } from "@/features/things/rpc";
 import { isPreviewMode } from "@/lib/session-mode";
@@ -314,7 +315,7 @@ function GroupSection({
 
 function ListsPage() {
   useLocalVersion();
-  const { lists, create, refetch: refetchLists } = useLists();
+  const { lists, create, refetch: refetchLists, isLoading } = useLists();
   const { context: appContext } = useAppContext();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
@@ -479,6 +480,14 @@ function ListsPage() {
     things: "Things count",
     progress: "Progress",
   };
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <ListsSkeleton />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>

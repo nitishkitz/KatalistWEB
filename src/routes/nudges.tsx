@@ -13,6 +13,7 @@ import {
   ListFilter,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { NudgesSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { type NudgeGroup } from "@/features/nudges/fixtures";
 import { useNudges } from "@/features/nudges/use-nudges";
 import { useCourt } from "@/features/court/use-court";
@@ -93,7 +94,7 @@ function NudgesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [nudgingId, setNudgingId] = useState<string | null>(null);
-  const { rows: allRows, recent, counts } = useNudges();
+  const { rows: allRows, recent, counts, isLoading } = useNudges();
   const court = useCourt();
   const live = useThing(selectedId);
   const selected = live.thing;
@@ -124,6 +125,14 @@ function NudgesPage() {
       },
     );
   };
+
+  if (isLoading) {
+    return (
+      <AppShell>
+        <NudgesSkeleton />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
