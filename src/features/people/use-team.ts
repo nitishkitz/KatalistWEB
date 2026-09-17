@@ -56,13 +56,20 @@ export function useTeam() {
         .select("id, email, phone_e164, occupation, created_at");
       const detailById = new Map((profRows ?? []).map((r) => [r.id, r]));
 
-      const seen = new Set<string>();
+      // Placeholder/default display names carried by unnamed or seeded accounts.
+      const GENERIC_NAMES = new Set(["someone", "member", "katalist user", "unknown", "guest", "user"]);
+      const seenIds = new Set<string>();
+      const seenNames = new Set<string>();
       const members: TeamMember[] = [];
       for (const p of identities) {
-        if (!p.id || seen.has(p.id)) continue;
+        if (!p.id || seenIds.has(p.id)) continue;
         const name = (p.display_name || "").trim();
-        if (!name || name.toLowerCase() === "someone") continue;
-        seen.add(p.id);
+        const key = name.toLowerCase();
+        if (!name || GENERIC_NAMES.has(key)) continue;
+        // Collapse duplicate default names (e.g. two unnamed "Priya Sharma").
+        if (seenNames.has(key)) continue;
+        seenIds.add(p.id);
+        seenNames.add(key);
         const d = detailById.get(p.id);
         members.push({
           id: p.id,
