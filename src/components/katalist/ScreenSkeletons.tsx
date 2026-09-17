@@ -153,6 +153,53 @@ export function NudgesSkeleton() {
   );
 }
 
+/** List detail: sub-header card (back + identity + tabs) then a toolbar + rows. */
+export function ListDetailSkeleton() {
+  return (
+    <div className="min-h-screen animate-in fade-in bg-[#edf2fe] px-4 py-3">
+      {/* Sub-header + tabs card */}
+      <div className="rounded-[10px] bg-white">
+        <div className="flex flex-wrap items-center justify-between gap-4 px-5 pt-4 pb-3">
+          <div className="flex items-center gap-4">
+            <Shimmer className="h-4 w-24" />
+            <div className="h-8 w-px bg-[#eef0f6]" />
+            <Shimmer className="h-11 w-11 rounded-[6px]" />
+            <div className="space-y-2">
+              <Shimmer className="h-4 w-40" />
+              <Shimmer className="h-3 w-24" />
+            </div>
+          </div>
+          <Shimmer className="h-10 w-24 rounded-[9px]" />
+        </div>
+        <div className="flex items-center gap-8 border-t border-[#eef0f6] px-5 py-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Shimmer key={i} className="h-4 w-16" />
+          ))}
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="mt-3 flex items-center gap-2">
+        <Shimmer className="h-10 w-64 rounded-[10px]" />
+        <Shimmer className="h-10 w-28 rounded-[10px]" />
+        <Shimmer className="h-10 w-28 rounded-[10px]" />
+      </div>
+
+      {/* Rows */}
+      <div className="mt-3 space-y-2 rounded-[10px] bg-white p-4">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 border-b border-[#f4f5fb] py-3 last:border-0">
+            <Shimmer className="h-8 w-8 rounded-full" />
+            <Shimmer className="h-4 flex-1" />
+            <Shimmer className="h-4 w-24" />
+            <Shimmer className="h-4 w-16" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Me: an identity header + a couple of setting sections. */
 export function MeSkeleton() {
   return (

@@ -50,6 +50,7 @@ import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
 import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
+import { ListDetailSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useSession } from "@/hooks/useSession";
 import { supabase } from "@/integrations/supabase/client";
 import { MagicBox } from "@/features/court/MagicBox";
@@ -472,8 +473,8 @@ function ListDetailPage() {
 
   if (isLoading) {
     return (
-      <AppShell title="List" subtitle="Loading">
-        <p className="text-sm text-muted-foreground">Opening this List…</p>
+      <AppShell noPadding hideTopNav>
+        <ListDetailSkeleton />
       </AppShell>
     );
   }
