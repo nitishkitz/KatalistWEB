@@ -48,7 +48,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
-import { announceCall } from "@/features/calls/call-lobby";
+import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
 import { useSession } from "@/hooks/useSession";
 import { supabase } from "@/integrations/supabase/client";
 import { MagicBox } from "@/features/court/MagicBox";
@@ -134,7 +134,7 @@ function ListDetailPage() {
     void announceCall({
       listId,
       listName: list?.name ?? "a list",
-      fromId: user?.id ?? "",
+      fromDeviceId: getDeviceId(),
       fromName: selfName,
       memberIds,
     });
@@ -172,6 +172,21 @@ function ListDetailPage() {
     if (flag && !call.joined && !call.connecting) void call.join();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listId]);
+
+  // Join immediately when the ring banner's "Join" is tapped while this list is
+  // already open (navigating to the same route won't re-run the effect above).
+  // Runs synchronously in the click stack so the user gesture reaches
+  // getUserMedia (required by iOS Safari).
+  useEffect(() => {
+    const onJoin = (e: Event) => {
+      const detail = (e as CustomEvent<{ listId?: string }>).detail;
+      if (detail?.listId !== listId) return;
+      if (!call.joined && !call.connecting) void call.join();
+    };
+    window.addEventListener("katalist:call-join", onJoin as EventListener);
+    return () => window.removeEventListener("katalist:call-join", onJoin as EventListener);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listId, call.joined, call.connecting]);
   const assignablePeople = useAssignablePeople();
 
   const [tab, setTab] = useState<TabType>("things");

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Phone, PhoneOff } from "lucide-react";
 import { useSession } from "@/hooks/useSession";
-import { subscribeToRings, type RingPayload } from "./call-lobby";
-import { createRingtone, type Ringtone } from "./ringtone";
+import { subscribeToRings, getDeviceId, type RingPayload } from "./call-lobby";
+import { createRingtone, unlockAudio, type Ringtone } from "./ringtone";
 
 const RING_TTL_MS = 30_000;
 
@@ -23,7 +23,7 @@ export function CallRingProvider() {
   useEffect(() => {
     const selfId = user?.id;
     if (!selfId) return;
-    const unsubscribe = subscribeToRings(selfId, (p) => {
+    const unsubscribe = subscribeToRings(selfId, getDeviceId(), (p) => {
       setRing(p);
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => setRing(null), RING_TTL_MS);
@@ -33,6 +33,21 @@ export function CallRingProvider() {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [user?.id]);
+
+  // Unlock audio on the first user gesture so the ringtone can actually play
+  // later (browsers keep AudioContext suspended until a gesture).
+  useEffect(() => {
+    const handler = () => unlockAudio();
+    const opts = { passive: true } as AddEventListenerOptions;
+    window.addEventListener("pointerdown", handler, opts);
+    window.addEventListener("touchstart", handler, opts);
+    window.addEventListener("keydown", handler);
+    return () => {
+      window.removeEventListener("pointerdown", handler);
+      window.removeEventListener("touchstart", handler);
+      window.removeEventListener("keydown", handler);
+    };
+  }, []);
 
   // Play a looping ringtone while an incoming call is showing.
   useEffect(() => {
@@ -51,13 +66,24 @@ export function CallRingProvider() {
   };
 
   const join = () => {
+    const listId = ring.listId;
+    // Unlock audio/mic within this click gesture (iOS Safari requires it).
+    unlockAudio();
     try {
-      sessionStorage.setItem(`katalist.autojoin.${ring.listId}`, "1");
+      sessionStorage.setItem(`katalist.autojoin.${listId}`, "1");
     } catch {
       // sessionStorage may be unavailable; the list page just won't auto-join.
     }
+    // Fire a direct signal so the list page joins immediately even if we're
+    // already on it (navigating to the same route won't remount / re-run the
+    // mount effect). This also preserves the user gesture for getUserMedia.
+    try {
+      window.dispatchEvent(new CustomEvent("katalist:call-join", { detail: { listId } }));
+    } catch {
+      // CustomEvent unsupported; the sessionStorage handoff still covers navigation.
+    }
     dismiss();
-    void navigate({ to: "/lists/$listId", params: { listId: ring.listId } });
+    void navigate({ to: "/lists/$listId", params: { listId } });
   };
 
   return (

@@ -49,7 +49,12 @@ function VideoTile({
 }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
-    if (ref.current && stream) ref.current.srcObject = stream;
+    const el = ref.current;
+    if (!el || !stream) return;
+    el.srcObject = stream;
+    // iOS Safari does not always honor autoPlay for a freshly attached
+    // MediaStream; kick playback explicitly (rejection is harmless).
+    void el.play?.().catch(() => {});
   }, [stream]);
   const hasVideo = Boolean(stream && stream.getVideoTracks().some((t) => t.enabled)) && !cameraOff;
   return (
