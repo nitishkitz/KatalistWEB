@@ -8,6 +8,7 @@ import { useSession } from "@/hooks/useSession";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 import { GhostCard } from "@/features/doorman/GhostCard";
 import { useRealtimeInvalidation } from "@/features/realtime/use-realtime";
+import { usePresence } from "@/features/people/presence";
 
 interface AppShellProps {
   title?: ReactNode;
@@ -23,6 +24,8 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
   const { session, loading } = useSession();
   const navigate = useNavigate();
   useRealtimeInvalidation();
+  // Track this client as online app-wide so the Team screen's presence is real.
+  usePresence();
 
   useEffect(() => {
     if (!loading && !session) {
