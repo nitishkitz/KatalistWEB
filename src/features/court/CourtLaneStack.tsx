@@ -605,6 +605,9 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   {things.length}
                 </span>
               </div>
+              <p className="mt-1 text-[11px] font-normal leading-none text-black/75">
+                {content.descriptor}
+              </p>
             </div>
           </div>
           {(() => {
