@@ -105,9 +105,6 @@ export function CourtWithOthersSidebar({
             <h2 className="text-[20px] font-medium uppercase leading-none tracking-tight text-[#050d33]">
               With Others
             </h2>
-            <p className="mt-1 text-[11px] font-normal leading-none text-[#46557d]">
-              Collaborating with the team
-            </p>
           </div>
         </div>
         {/* Underline Tabs */}

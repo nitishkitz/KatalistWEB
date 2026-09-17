@@ -9,7 +9,6 @@ import {
   MoreHorizontal,
   X,
   ChevronDown,
-  ChevronRight,
   Copy,
   ExternalLink,
   ImagePlus,
@@ -229,6 +228,8 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
+                            data-stop-nav
+                            onClick={(e) => e.stopPropagation()}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground opacity-60 transition-all hover:bg-muted hover:text-foreground hover:opacity-100 group-hover:opacity-100"
                             aria-label="List actions"
                           >
@@ -237,9 +238,10 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44 bg-white">
                           <DropdownMenuItem
-                            onClick={() =>
-                              void navigate({ to: "/lists/$listId", params: { listId: row.id } })
-                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void navigate({ to: "/lists/$listId", params: { listId: row.id } });
+                            }}
                             className="text-[12.5px] cursor-pointer"
                           >
                             <ExternalLink className="mr-2 h-3.5 w-3.5" />
@@ -247,7 +249,10 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                           </DropdownMenuItem>
                           {row.role === "owner" && onEdit ? (
                             <DropdownMenuItem
-                              onClick={() => onEdit(row)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onEdit(row);
+                              }}
                               className="text-[12.5px] cursor-pointer"
                             >
                               <Pencil className="mr-2 h-3.5 w-3.5" />
@@ -255,7 +260,8 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                             </DropdownMenuItem>
                           ) : null}
                           <DropdownMenuItem
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               void navigator.clipboard.writeText(
                                 `${window.location.origin}/lists/${row.id}`,
                               );
@@ -283,13 +289,11 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
 function GroupSection({
   title,
   count,
-  hint,
   rows,
   onEdit,
 }: {
   title: string;
   count: number;
-  hint: string;
   rows: ListRow[];
   onEdit?: (list: ListRow) => void;
 }) {
@@ -302,10 +306,6 @@ function GroupSection({
           <span className="inline-flex h-[25px] min-w-[25px] items-center justify-center rounded-full bg-[#f1ecff] px-2 text-[13px] font-semibold text-[#6638ec]">
             {count}
           </span>
-        </div>
-        <div className="flex items-center gap-1 text-[#6f7d94]">
-          <span className="text-[12px] font-medium">{hint}</span>
-          <ChevronRight className="h-4 w-4" />
         </div>
       </div>
       <ListTable rows={rows} onEdit={onEdit} />
@@ -627,9 +627,9 @@ function ListsPage() {
             </div>
           ) : (
             <>
-              <GroupSection title="Owned by Me" count={owned.length} hint="Lists you own and manage" rows={owned} onEdit={openEditList} />
-              <GroupSection title="Collaborating" count={collab.length} hint="Lists you’re collaborating on" rows={collab} />
-              <GroupSection title="View Only" count={viewOnly.length} hint="Lists you can view" rows={viewOnly} />
+              <GroupSection title="Owned by Me" count={owned.length} rows={owned} onEdit={openEditList} />
+              <GroupSection title="Collaborating" count={collab.length} rows={collab} />
+              <GroupSection title="View Only" count={viewOnly.length} rows={viewOnly} />
             </>
           )}
         </div>
