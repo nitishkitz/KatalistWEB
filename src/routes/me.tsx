@@ -84,20 +84,6 @@ function MePage() {
     : "";
   const demoSession = user?.app_metadata?.provider === "demo";
 
-  const headerStats: { icon: typeof Flame; tint: string; value: string; label: string }[] = [
-    { icon: Flame, tint: "bg-[#fef0e4] text-[#fd983f]", value: stats.streak, label: "Day streak" },
-    { icon: Crown, tint: "bg-[#f0ebfd] text-[#975ee2]", value: String(stats.sorted), label: "Things sorted" },
-    { icon: BarChart3, tint: "bg-[#e6fcf0] text-[#12a15f]", value: String(stats.caught), label: "Caught" },
-  ];
-
-  const trophyTiles: { label: string; value: string }[] = [
-    { label: "Things sorted", value: String(stats.sorted) },
-    { label: "Things caught", value: String(stats.caught) },
-    { label: "Current streak", value: stats.streak },
-    { label: "This week", value: String(stats.weekly) },
-    { label: "Recent achievement", value: stats.achievement },
-  ];
-
   const aboutRows: { icon: typeof Mail; label: string; value: string }[] = [
     ...(email ? [{ icon: Mail, label: "Email", value: email }] : []),
     ...(phone ? [{ icon: Phone, label: "Phone", value: phone }] : []),
@@ -121,151 +107,154 @@ function MePage() {
     );
   }
 
+  const avatarNode = (
+    <PersonAvatar name={name} initials={initials} src={avatarUrl} size={104} />
+  );
+
   return (
     <AppShell>
       <div className="space-y-5">
-        {/* Header band: identity + trophy summary */}
-        <div className="flex flex-wrap items-start justify-between gap-5">
-          <div className="flex items-center gap-4">
-            {demoSession ? (
-              <PersonAvatar name={name} initials={initials} src={avatarUrl} size={92} />
-            ) : (
-              <label className="cursor-pointer" title="Change photo">
-                <PersonAvatar name={name} initials={initials} src={avatarUrl} size={92} />
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    uploadAvatar.mutate(file, {
-                      onSuccess: () => toast.success("Photo updated."),
-                      onError: (err) =>
-                        toast.error(err instanceof Error ? err.message : "Couldn’t save photo."),
-                    });
-                  }}
-                />
-              </label>
-            )}
-            <div className="min-w-0">
-              <h1 className="text-[26px] font-medium leading-tight text-black">{name}</h1>
-              <p className="mt-0.5 text-[16px] text-[#6a769c]">{role}</p>
-              <div className="mt-2 flex flex-wrap items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-[#ede9ff] px-2.5 py-1 text-[11px] font-medium text-[#975ee2] capitalize">
-                  {context === "home" ? <Home className="h-3.5 w-3.5" /> : <Briefcase className="h-3.5 w-3.5" />}
-                  {context} mode
-                </span>
-                {email ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-[5px] bg-[#f2f2fd] px-2.5 py-1 text-[11px] font-medium text-black/40">
-                    <Mail className="h-3.5 w-3.5" />
-                    {email}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          {/* 3-stat trophy summary */}
-          <div className="flex items-center gap-2 rounded-[10px] bg-white px-4 py-3" style={{ boxShadow: CARD_SHADOW }}>
-            {headerStats.map((s, i) => (
-              <div key={s.label} className="flex items-center gap-3">
-                {i > 0 ? <span className="mx-1 h-10 w-px bg-[#eef0f6]" /> : null}
-                <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", s.tint)}>
-                  <s.icon className="h-5 w-5" />
-                </span>
-                <div className="pr-1">
-                  <div className="text-[22px] font-semibold leading-none text-black">{s.value}</div>
-                  <div className="mt-1 text-[13px] text-[#6a769c]">{s.label}</div>
+        {/* Hero: gradient cover + overlapping avatar */}
+        <div className="overflow-hidden rounded-[16px] bg-white" style={{ boxShadow: CARD_SHADOW }}>
+          <div className="h-28 bg-gradient-to-r from-[#7c4ddb] via-[#8b5cf0] to-[#5b8def]" />
+          <div className="px-6 pb-5">
+            <div className="-mt-12 flex flex-wrap items-end justify-between gap-4">
+              <div className="flex items-end gap-4">
+                {demoSession ? (
+                  <span className="inline-block rounded-full ring-4 ring-white">{avatarNode}</span>
+                ) : (
+                  <label className="inline-block cursor-pointer rounded-full ring-4 ring-white" title="Change photo">
+                    {avatarNode}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="sr-only"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        uploadAvatar.mutate(file, {
+                          onSuccess: () => toast.success("Photo updated."),
+                          onError: (err) =>
+                            toast.error(err instanceof Error ? err.message : "Couldn’t save photo."),
+                        });
+                      }}
+                    />
+                  </label>
+                )}
+                <div className="min-w-0 pb-1">
+                  <h1 className="text-[26px] font-semibold leading-tight text-black">{name}</h1>
+                  <p className="mt-0.5 text-[15px] text-[#6a769c]">{role}</p>
                 </div>
               </div>
-            ))}
+              <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#ede9ff] px-3 py-1.5 text-[12px] font-medium capitalize text-[#975ee2]">
+                {context === "home" ? <Home className="h-4 w-4" /> : <Briefcase className="h-4 w-4" />}
+                {context} Mode
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Body: main + sidebar */}
-        <div className="grid gap-5 lg:grid-cols-[1fr_372px]">
-          <div className="space-y-5">
-            {/* Trophy */}
-            <section className="rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-[16px] font-semibold text-black">Trophy</h2>
-                <span className="text-[12px] text-[#6a769c]">Personal movement only</span>
+        {/* Trophy stat strip */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {(
+            [
+              { icon: Crown, tint: "bg-[#f0ebfd] text-[#975ee2]", value: String(stats.sorted), label: "Things sorted" },
+              { icon: BarChart3, tint: "bg-[#e6fcf0] text-[#12a15f]", value: String(stats.caught), label: "Things caught" },
+              { icon: Flame, tint: "bg-[#fef0e4] text-[#fd983f]", value: stats.streak, label: "Current streak" },
+              { icon: Calendar, tint: "bg-[#eef1ff] text-[#2874f4]", value: String(stats.weekly), label: "This week" },
+            ] as const
+          ).map((s) => (
+            <div
+              key={s.label}
+              className="flex items-center gap-3 rounded-[14px] bg-white p-4"
+              style={{ boxShadow: CARD_SHADOW }}
+            >
+              <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", s.tint)}>
+                <s.icon className="h-5 w-5" />
+              </span>
+              <div>
+                <div className="text-[22px] font-semibold leading-none text-black">{s.value}</div>
+                <div className="mt-1 text-[12px] text-[#6a769c]">{s.label}</div>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {trophyTiles.map((t) => (
-                  <div key={t.label} className="rounded-[8px] border border-[#eef0f6] bg-[#fbfbfe] px-3 py-3">
-                    <p className="text-[11px] text-[#6a769c]">{t.label}</p>
-                    <p className="mt-1 text-[18px] font-semibold text-black">{t.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {stats.achievement ? (
+          <div
+            className="flex items-center gap-2 rounded-[12px] bg-white px-5 py-3"
+            style={{ boxShadow: CARD_SHADOW }}
+          >
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0ebfd] text-[#975ee2]">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <span className="text-[12px] text-[#6a769c]">Recent achievement</span>
+            <span className="text-[13px] font-semibold text-black">{stats.achievement}</span>
+          </div>
+        ) : null}
+
+        {/* Two columns: About + Settings */}
+        <div className="grid gap-5 lg:grid-cols-2">
+          {/* About / contact */}
+          <section className="rounded-[14px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
+            <h2 className="mb-2 text-[16px] font-semibold text-black">About</h2>
+            {aboutRows.length === 0 ? (
+              <p className="py-4 text-[13px] text-[#6a769c]">No contact details on your profile yet.</p>
+            ) : (
+              <div className="divide-y divide-[#eef0f6]">
+                {aboutRows.map((r) => (
+                  <div key={r.label} className="flex items-center gap-3 py-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+                      <r.icon className="h-4 w-4" />
+                    </span>
+                    <span className="w-28 shrink-0 text-[12px] text-[#6a769c]">{r.label}</span>
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-black">{r.value}</span>
                   </div>
                 ))}
               </div>
-            </section>
+            )}
+          </section>
 
-            {/* About / contact */}
-            <section className="rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
-              <h2 className="mb-2 text-[16px] font-semibold text-black">About</h2>
-              {aboutRows.length === 0 ? (
-                <p className="py-4 text-[13px] text-[#6a769c]">No contact details on your profile yet.</p>
-              ) : (
-                <div className="divide-y divide-[#eef0f6]">
-                  {aboutRows.map((r) => (
-                    <div key={r.label} className="flex items-center gap-3 py-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-                        <r.icon className="h-4 w-4" />
-                      </span>
-                      <span className="w-28 shrink-0 text-[12px] text-[#6a769c]">{r.label}</span>
-                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-black">{r.value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-
-          {/* Right sidebar */}
-          <div className="space-y-5">
-            {/* Settings & Preferences */}
-            <section className="rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
-              <h2 className="mb-2 text-[16px] font-semibold text-black">Settings &amp; Preferences</h2>
-              <div className="divide-y divide-[#eef0f6]">
-                {settingsRows.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setPanel(s.id)}
-                    className="flex w-full items-center gap-3 py-3 text-left"
-                  >
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-                      <s.icon className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13px] font-medium text-black">{s.title}</span>
-                      <span className="block text-[11px] text-[#6a769c]">{s.body}</span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-[#6a769c]" />
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-[#eef0f6] pt-3">
+          {/* Settings & Preferences */}
+          <section className="rounded-[14px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
+            <h2 className="mb-2 text-[16px] font-semibold text-black">Settings &amp; Preferences</h2>
+            <div className="divide-y divide-[#eef0f6]">
+              {settingsRows.map((s) => (
                 <button
+                  key={s.id}
                   type="button"
-                  onClick={() => setPanel("shredded")}
-                  className="rounded-lg border border-border px-3 py-2 text-[12px] text-foreground hover:bg-muted"
+                  onClick={() => setPanel(s.id)}
+                  className="flex w-full items-center gap-3 py-3 text-left"
                 >
-                  Recently Shredded{stats.shredded.length ? ` (${stats.shredded.length})` : ""}
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+                    <s.icon className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-medium text-black">{s.title}</span>
+                    <span className="block text-[11px] text-[#6a769c]">{s.body}</span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-[#6a769c]" />
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] text-destructive hover:bg-destructive/10"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign out
-                </button>
-              </div>
-            </section>
-          </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-[#eef0f6] pt-3">
+              <button
+                type="button"
+                onClick={() => setPanel("shredded")}
+                className="rounded-lg border border-border px-3 py-2 text-[12px] text-foreground hover:bg-muted"
+              >
+                Recently Shredded{stats.shredded.length ? ` (${stats.shredded.length})` : ""}
+              </button>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-[12px] text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
+            </div>
+          </section>
         </div>
       </div>
 
