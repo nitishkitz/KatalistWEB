@@ -110,16 +110,20 @@ export class CallRoom {
   private resolvedIce: RTCIceServer[] | null = null;
   private closed = false;
 
+  private readonly onReaction?: (p: { from: string; emoji: string }) => void;
+
   constructor(opts: {
     listId: string;
     selfId: string;
     selfName: string;
     onState: (state: CallRoomState) => void;
+    onReaction?: (p: { from: string; emoji: string }) => void;
   }) {
     this.listId = opts.listId;
     this.selfId = opts.selfId;
     this.selfName = opts.selfName;
     this.onState = opts.onState;
+    this.onReaction = opts.onReaction;
   }
 
   /** Acquire local media and join the room. */
@@ -136,6 +140,9 @@ export class CallRoom {
     channel
       .on("broadcast", { event: "sdp" }, ({ payload }) => void this.onSdp(payload as SdpMsg))
       .on("broadcast", { event: "ice" }, ({ payload }) => void this.onIce(payload as IceMsg))
+      .on("broadcast", { event: "reaction" }, ({ payload }) =>
+        this.onReaction?.(payload as { from: string; emoji: string }),
+      )
       .on("presence", { event: "sync" }, () => this.syncPeers())
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -276,6 +283,14 @@ export class CallRoom {
     this.screenStream?.getTracks().forEach((t) => t.stop());
     this.screenStream = null;
     await this.replaceVideoTrack(this.cameraTrack);
+  }
+
+  sendReaction(emoji: string) {
+    void this.channel?.send({
+      type: "broadcast",
+      event: "reaction",
+      payload: { from: this.selfName, emoji },
+    });
   }
 
   setMuted(muted: boolean) {

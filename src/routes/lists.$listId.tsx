@@ -1473,7 +1473,7 @@ function ListDetailPage() {
           </div>
         )}
       </div>
-      <ListCallPanel call={call} selfName={selfName} />
+      <ListCallPanel call={call} selfName={selfName} listId={listId} />
     </AppShell>
   );
 }
