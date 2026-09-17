@@ -608,65 +608,67 @@ function BucketDetailPage() {
 
         {/* Content card */}
         <div className="rounded-[10px] bg-white p-5">
-          {/* Toolbar */}
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <label className="flex h-10 w-full max-w-[320px] items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 focus-within:border-[#975ee2]">
-              <Search className="h-4 w-4 text-[#8487a7]" />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search messages"
-                className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#000533] outline-none placeholder:text-[#8487a7]"
-              />
-            </label>
-            <label className="relative inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] bg-white px-3 text-[12.5px] text-[#3d3f74]">
-              <select
-                value={statusFilter ?? "all"}
-                onChange={(e) => setStatusFilter(e.target.value === "all" ? null : e.target.value)}
-                className="appearance-none bg-transparent pr-5 outline-none"
-                aria-label="Status"
-              >
-                <option value="all">All statuses</option>
-                <option value="waiting_for_catch">Waiting for catch</option>
-                <option value="under_progress">Under Progress</option>
-                <option value="completed">Sorted</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-[#8487a7]" />
-            </label>
+          {/* Toolbar (not shown on the Notes tab) */}
+          {detailTab !== "notes" ? (
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <label className="flex h-10 w-full max-w-[320px] items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 focus-within:border-[#975ee2]">
+                <Search className="h-4 w-4 text-[#8487a7]" />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search messages"
+                  className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#000533] outline-none placeholder:text-[#8487a7]"
+                />
+              </label>
+              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] bg-white px-3 text-[12.5px] text-[#3d3f74]">
+                <select
+                  value={statusFilter ?? "all"}
+                  onChange={(e) => setStatusFilter(e.target.value === "all" ? null : e.target.value)}
+                  className="appearance-none bg-transparent pr-5 outline-none"
+                  aria-label="Status"
+                >
+                  <option value="all">All statuses</option>
+                  <option value="waiting_for_catch">Waiting for catch</option>
+                  <option value="under_progress">Under Progress</option>
+                  <option value="completed">Sorted</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-[#8487a7]" />
+              </label>
 
-            {/* Assignee avatar filters */}
-            {assignees.length > 0 ? (
-              <div className="ml-auto flex items-center -space-x-1.5">
-                {assignees.map((a) => {
-                  const active = assigneeFilter?.toLowerCase() === a.name.toLowerCase();
-                  return (
+              {/* Assignee avatar filters */}
+              {assignees.length > 0 ? (
+                <div className="ml-auto flex items-center -space-x-1.5">
+                  {assignees.map((a) => {
+                    const active = assigneeFilter?.toLowerCase() === a.name.toLowerCase();
+                    return (
+                      <button
+                        key={a.name}
+                        type="button"
+                        title={a.name}
+                        onClick={() => setAssigneeFilter(active ? null : a.name)}
+                        className={cn(
+                          "rounded-full ring-2 transition-transform hover:z-10 hover:-translate-y-0.5",
+                          active ? "z-10 ring-[#975ee2]" : "ring-white",
+                        )}
+                      >
+                        <PersonAvatar name={a.name} src={a.avatarUrl} initials={a.initials} size={28} />
+                      </button>
+                    );
+                  })}
+                  {assigneeFilter ? (
                     <button
-                      key={a.name}
                       type="button"
-                      title={a.name}
-                      onClick={() => setAssigneeFilter(active ? null : a.name)}
-                      className={cn(
-                        "rounded-full ring-2 transition-transform hover:z-10 hover:-translate-y-0.5",
-                        active ? "z-10 ring-[#975ee2]" : "ring-white",
-                      )}
+                      onClick={() => setAssigneeFilter(null)}
+                      className="ml-3 text-[12px] font-medium text-[#975ee2] hover:underline"
                     >
-                      <PersonAvatar name={a.name} src={a.avatarUrl} initials={a.initials} size={28} />
+                      Clear
                     </button>
-                  );
-                })}
-                {assigneeFilter ? (
-                  <button
-                    type="button"
-                    onClick={() => setAssigneeFilter(null)}
-                    className="ml-3 text-[12px] font-medium text-[#975ee2] hover:underline"
-                  >
-                    Clear
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           <InlineThingDetailWorkspace
             thing={selectedThing}

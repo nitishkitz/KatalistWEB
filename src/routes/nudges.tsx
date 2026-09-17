@@ -6,7 +6,6 @@ import {
   Hand,
   TrendingUp,
   AlertTriangle,
-  ChevronRight,
   ChevronDown,
   Search,
   Settings2,
@@ -178,6 +177,32 @@ function NudgesPage() {
           <div className="grid gap-5 xl:grid-cols-[1fr_372px]">
             {/* Main */}
             <div className="rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
+              {/* Group tabs (switch like Court / Lists / Buckets) */}
+              <div className="mb-4 flex items-center gap-6 overflow-x-auto border-b border-[#eef0f6] no-scrollbar">
+                {GROUPS.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    onClick={() => setActive(g.id)}
+                    className={cn(
+                      "relative -mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 pb-3 text-[13px] font-medium transition-colors",
+                      active === g.id
+                        ? "border-[#975ee2] text-[#000533]"
+                        : "border-transparent text-[#6a769c] hover:text-[#000533]",
+                    )}
+                  >
+                    {g.label}
+                    <span
+                      className={cn(
+                        "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10.5px] font-semibold",
+                        active === g.id ? "bg-[#ece5fb] text-[#6638ec]" : "bg-[#eef0f6] text-[#6a769c]",
+                      )}
+                    >
+                      {counts[g.id]}
+                    </span>
+                  </button>
+                ))}
+              </div>
               {(() => {
                 const meta = GROUPS.find((g) => g.id === active)!;
                 return (
@@ -305,28 +330,6 @@ function NudgesPage() {
                       </table>
                     </div>
 
-                    {/* Other groups (collapsed) */}
-                    <div className="mt-4 space-y-3">
-                      {GROUPS.filter((g) => g.id !== active).map((g) => (
-                        <button
-                          key={g.id}
-                          type="button"
-                          onClick={() => setActive(g.id)}
-                          className="flex w-full items-center gap-3 rounded-[5px] border border-black/[0.04] px-3 py-3 text-left transition-colors hover:bg-muted/30"
-                        >
-                          <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px]", g.tile)}>
-                            <g.Icon className="h-4 w-4" />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <span className="text-[16px] font-semibold text-black">
-                              {g.label} ({counts[g.id]})
-                            </span>
-                          </div>
-                          <span className="hidden text-[14px] text-[#6a769c] sm:block">{g.blurb}</span>
-                          <ChevronRight className="h-4 w-4 shrink-0 text-[#6a769c]" />
-                        </button>
-                      ))}
-                    </div>
                   </>
                 );
               })()}
