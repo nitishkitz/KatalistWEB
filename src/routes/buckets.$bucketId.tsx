@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useBucket } from "@/features/buckets/use-buckets";
+import { useBucketNotes } from "@/features/buckets/use-bucket-notes";
 import {
   useAccessibleLists,
   useAccessibleThings,
@@ -98,10 +99,9 @@ function BucketDetailPage() {
   const lists = useAccessibleLists();
 
   const [q, setQ] = useState("");
-  const [personFilter] = useState<string | null>(null);
+  const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
   const [detailTab, setDetailTab] = useState<"things" | "lists" | "notes">("things");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
-  const [sortOption, setSortOption] = useState<"recent" | "title">("recent");
 
   const [addOpen, setAddOpen] = useState(false);
   const [addTab, setAddTab] = useState<"things" | "lists">("things");
@@ -110,6 +110,13 @@ function BucketDetailPage() {
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // Notes (Apple-Notes style, opened in a dialog)
+  const notesApi = useBucketNotes(bucketId);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteBody, setNoteBody] = useState("");
 
   const liveThing = useThing(selectedId);
   const thingItemsAll = items.filter((i): i is Extract<BucketItem, { kind: "thing" }> => i.kind === "thing");
@@ -120,21 +127,20 @@ function BucketDetailPage() {
   const referencedThingIds = new Set(thingItemsAll.map((i) => i.thingId));
   const referencedListIds = new Set(listItemsAll.map((i) => i.listId));
 
-  const collaborators = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; ids: Set<string> }>();
-    const record = (person?: { id?: string; name?: string }) => {
-      if (!person?.name || person.name === "Someone" || person.name.trim() === "") return;
-      const key = person.name.trim().toLowerCase();
-      const existing = map.get(key);
-      if (existing) {
-        if (person.id) existing.ids.add(person.id);
-      } else {
-        map.set(key, { id: person.id || key, name: person.name.trim(), ids: new Set(person.id ? [person.id] : []) });
-      }
-    };
+  // Unique assignees (shown as avatar filter chips in the toolbar).
+  const assignees = useMemo(() => {
+    const map = new Map<string, { name: string; avatarUrl?: string | null; initials: string }>();
     for (const it of thingItemsAll) {
-      record(it.thing.assignee);
-      record(it.thing.owner);
+      const a = it.thing.assignee;
+      if (!a?.name || a.name === "Someone" || a.name.trim() === "") continue;
+      const key = a.name.trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, {
+          name: a.name.trim(),
+          avatarUrl: a.avatarUrl,
+          initials: a.initials || a.name.trim().slice(0, 2).toUpperCase(),
+        });
+      }
     }
     return Array.from(map.values());
   }, [thingItemsAll]);
@@ -143,15 +149,9 @@ function BucketDetailPage() {
     return items.filter((item) => {
       if (item.kind === "thing") {
         if (!matchesQuery(q, item.thing)) return false;
-        if (personFilter) {
-          const collab = collaborators.find(
-            (c) => c.name.toLowerCase() === personFilter.toLowerCase() || c.ids.has(personFilter),
-          );
-          const matchesAssignee =
-            item.thing.assignee &&
-            (item.thing.assignee.name.toLowerCase() === personFilter.toLowerCase() ||
-              (collab?.ids && collab.ids.has(item.thing.assignee.id)));
-          if (!matchesAssignee) return false;
+        if (assigneeFilter) {
+          if (!item.thing.assignee || item.thing.assignee.name.toLowerCase() !== assigneeFilter.toLowerCase())
+            return false;
         }
         if (statusFilter) {
           if (statusFilter === "waiting_for_catch" && item.thing.acknowledgement !== "waiting_for_catch")
@@ -168,7 +168,7 @@ function BucketDetailPage() {
       }
       return true;
     });
-  }, [items, q, personFilter, statusFilter, collaborators]);
+  }, [items, q, assigneeFilter, statusFilter]);
 
   const thingItems = visible.filter((i): i is Extract<BucketItem, { kind: "thing" }> => i.kind === "thing");
   const listItems = visible.filter((i): i is Extract<BucketItem, { kind: "list" }> => i.kind === "list");
@@ -215,11 +215,32 @@ function BucketDetailPage() {
       .join("")
       .toUpperCase() || "B";
 
-  const sortedThingItems = [...thingItems].sort((a, b) =>
-    sortOption === "title"
-      ? a.thing.title.localeCompare(b.thing.title)
-      : new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime(),
+  const sortedThingItems = [...thingItems].sort(
+    (a, b) => new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime(),
   );
+
+  const openNoteEditor = (note?: { id: string; title: string; body: string }) => {
+    setEditingNoteId(note?.id ?? null);
+    setNoteTitle(note?.title ?? "");
+    setNoteBody(note?.body ?? "");
+    setNoteOpen(true);
+  };
+
+  const saveNote = () => {
+    const title = noteTitle.trim();
+    const body = noteBody.trim();
+    if (!title && !body) {
+      setNoteOpen(false);
+      return;
+    }
+    const done = () => setNoteOpen(false);
+    const fail = (err: unknown) => toast.error(domainErrorMessage(err));
+    if (editingNoteId) {
+      void notesApi.update.mutateAsync({ id: editingNoteId, title, body }).then(done, fail);
+    } else {
+      void notesApi.create.mutateAsync({ title, body }).then(done, fail);
+    }
+  };
 
   // "New Thing" adds a reference to an existing Thing/List (Buckets never own or
   // create Things — they are private reference groupings).
@@ -360,9 +381,17 @@ function BucketDetailPage() {
                 className="grid grid-cols-1 items-center gap-3 py-3 sm:grid-cols-[minmax(0,1.6fr)_1fr_0.7fr_1.4fr_auto] sm:gap-4"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#efeafe] text-[13px] font-semibold text-[#6638ec]">
-                    {l.name.slice(0, 1).toUpperCase()}
-                  </span>
+                  {l.coverUrl ? (
+                    <img
+                      src={l.coverUrl}
+                      alt=""
+                      className="h-9 w-9 shrink-0 rounded-[8px] object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-[#efeafe] text-[13px] font-semibold text-[#6638ec]">
+                      {l.name.slice(0, 1).toUpperCase()}
+                    </span>
+                  )}
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-semibold text-[#000533]">{l.name}</div>
                     {l.description ? (
@@ -421,14 +450,14 @@ function BucketDetailPage() {
           <table className="w-full min-w-[820px] text-left">
             <thead>
               <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
-                <th className="px-3 py-2.5 font-semibold">Thing</th>
-                <th className="px-3 py-2.5 font-semibold">Assignee</th>
-                <th className="px-3 py-2.5 font-semibold">Status</th>
-                <th className="px-3 py-2.5 font-semibold">Due</th>
-                <th className="px-3 py-2.5 font-semibold">Comments</th>
-                <th className="px-3 py-2.5 font-semibold">Files</th>
-                <th className="px-3 py-2.5 font-semibold">Updated</th>
-                <th className="py-2.5 pr-2" />
+                <th className="px-3 py-2 font-semibold">Thing</th>
+                <th className="px-3 py-2 font-semibold">Assignee</th>
+                <th className="px-3 py-2 font-semibold">Status</th>
+                <th className="px-3 py-2 font-semibold">Due</th>
+                <th className="px-3 py-2 font-semibold">Comments</th>
+                <th className="px-3 py-2 font-semibold">Files</th>
+                <th className="px-3 py-2 font-semibold">Updated</th>
+                <th className="py-2 pr-2" />
               </tr>
             </thead>
             <tbody>
@@ -439,7 +468,7 @@ function BucketDetailPage() {
                 const files = t.attachmentCount ?? t.files?.length ?? 0;
                 return (
                   <tr key={item.thingId} className="border-b border-[#f2f3f9] last:border-0 hover:bg-[#faf9fe]">
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-2">
                       <button
                         type="button"
                         onClick={() => setSelectedId(item.thingId)}
@@ -449,33 +478,33 @@ function BucketDetailPage() {
                         <span className="text-[13px] font-medium text-[#000533] hover:text-[#975ee2]">{t.title}</span>
                       </button>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
                         <PersonAvatar name={t.assignee.name} src={t.assignee.avatarUrl} initials={t.assignee.initials} size={24} />
                         <span className="text-[12.5px] text-[#3d3f74]">{t.assignee.name}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: st.color }}>
                         <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: st.color }} />
                         {st.label}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-[12.5px] text-[#3d3f74]">{formatDue(t.dueAt)}</td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-2 text-[12.5px] text-[#3d3f74]">{formatDue(t.dueAt)}</td>
+                    <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#6a769c]">
                         <MessageSquare className="h-3.5 w-3.5" />
                         {comments}
                       </span>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5 text-[12.5px] text-[#6a769c]">
                         <Paperclip className="h-3.5 w-3.5" />
                         {files}
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-[12.5px] text-[#6a769c]">{relativeUpdated(t.updatedAt)}</td>
-                    <td className="py-3 pr-2 text-right">
+                    <td className="px-3 py-2 text-[12.5px] text-[#6a769c]">{relativeUpdated(t.updatedAt)}</td>
+                    <td className="py-2 pr-2 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
@@ -589,18 +618,6 @@ function BucketDetailPage() {
             </label>
             <label className="relative inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] bg-white px-3 text-[12.5px] text-[#3d3f74]">
               <select
-                value={sortOption}
-                onChange={(e) => setSortOption(e.target.value as "recent" | "title")}
-                className="appearance-none bg-transparent pr-5 outline-none"
-                aria-label="Sort"
-              >
-                <option value="recent">Recently updated</option>
-                <option value="title">Title</option>
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-[#8487a7]" />
-            </label>
-            <label className="relative inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] bg-white px-3 text-[12.5px] text-[#3d3f74]">
-              <select
                 value={statusFilter ?? "all"}
                 onChange={(e) => setStatusFilter(e.target.value === "all" ? null : e.target.value)}
                 className="appearance-none bg-transparent pr-5 outline-none"
@@ -614,6 +631,38 @@ function BucketDetailPage() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-[#8487a7]" />
             </label>
+
+            {/* Assignee avatar filters */}
+            {assignees.length > 0 ? (
+              <div className="ml-auto flex items-center -space-x-1.5">
+                {assignees.map((a) => {
+                  const active = assigneeFilter?.toLowerCase() === a.name.toLowerCase();
+                  return (
+                    <button
+                      key={a.name}
+                      type="button"
+                      title={a.name}
+                      onClick={() => setAssigneeFilter(active ? null : a.name)}
+                      className={cn(
+                        "rounded-full ring-2 transition-transform hover:z-10 hover:-translate-y-0.5",
+                        active ? "z-10 ring-[#975ee2]" : "ring-white",
+                      )}
+                    >
+                      <PersonAvatar name={a.name} src={a.avatarUrl} initials={a.initials} size={28} />
+                    </button>
+                  );
+                })}
+                {assigneeFilter ? (
+                  <button
+                    type="button"
+                    onClick={() => setAssigneeFilter(null)}
+                    className="ml-3 text-[12px] font-medium text-[#975ee2] hover:underline"
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <InlineThingDetailWorkspace
@@ -629,10 +678,58 @@ function BucketDetailPage() {
             ) : itemsSurface === "error" ? (
               <p className="text-sm text-muted-foreground">{domainErrorMessage(itemsError)}</p>
             ) : detailTab === "notes" ? (
-              <div className="flex min-h-[220px] flex-col items-center justify-center rounded-xl border border-dashed border-[#e3e5ef] text-center">
-                <FileText className="h-8 w-8 text-[#c5cae0]" />
-                <p className="mt-2 text-[13px] font-semibold text-[#000533]">No notes yet</p>
-                <p className="mt-1 text-[11.5px] text-[#6a769c]">Notes for this bucket will appear here.</p>
+              <div>
+                <div className="mb-4 flex items-center justify-between">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                    Notes - {notesApi.notes.length}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => openNoteEditor()}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-[9px] bg-[#975ee2] px-3.5 text-[13px] font-medium text-white transition hover:brightness-95"
+                  >
+                    <Plus className="h-4 w-4" />
+                    New Note
+                  </button>
+                </div>
+                {notesApi.isLoading ? (
+                  <p className="text-sm text-muted-foreground">Loading notes…</p>
+                ) : notesApi.notes.length === 0 ? (
+                  <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-[#e3e5ef] text-center">
+                    <FileText className="h-8 w-8 text-[#c5cae0]" />
+                    <p className="mt-2 text-[13px] font-semibold text-[#000533]">No notes yet</p>
+                    <p className="mt-1 text-[11.5px] text-[#6a769c]">Jot down anything for this bucket.</p>
+                    <button
+                      type="button"
+                      onClick={() => openNoteEditor()}
+                      className="mt-4 inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#975ee2] px-3.5 text-[13px] font-medium text-white"
+                    >
+                      <Plus className="h-4 w-4" />
+                      New Note
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {notesApi.notes.map((n) => (
+                      <button
+                        key={n.id}
+                        type="button"
+                        onClick={() => openNoteEditor(n)}
+                        className="flex h-40 flex-col rounded-[12px] border border-[#eef0f6] bg-[#fffdf5] p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[#f0d888] hover:shadow-sm"
+                      >
+                        <div className="truncate text-[13.5px] font-semibold text-[#000533]">
+                          {n.title.trim() || "Untitled note"}
+                        </div>
+                        <p className="mt-1.5 flex-1 overflow-hidden text-[12px] leading-relaxed text-[#6a769c] whitespace-pre-wrap">
+                          {n.body || "No additional text"}
+                        </p>
+                        <div className="mt-2 text-[11px] text-[#a3a9c9]">
+                          {format(new Date(n.updatedAt), "d MMM yyyy, h:mm a")}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ) : itemsSurface === "empty" ? (
               <div className="rounded-2xl border border-dashed border-[#e3e5ef] px-5 py-12 text-center">
@@ -656,6 +753,71 @@ function BucketDetailPage() {
           </InlineThingDetailWorkspace>
         </div>
       </div>
+
+      {/* Note editor dialog */}
+      <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
+        <DialogContent className="rounded-2xl bg-white p-5 shadow-xl sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-[15px] font-bold">
+              {editingNoteId ? "Edit note" : "New note"}
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px]">
+              Private to this bucket. Only you can see it.
+            </DialogDescription>
+          </DialogHeader>
+          <input
+            value={noteTitle}
+            onChange={(e) => setNoteTitle(e.target.value)}
+            placeholder="Title"
+            className="mt-3 h-10 w-full rounded-xl border border-border px-3 text-[14px] font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+          />
+          <textarea
+            value={noteBody}
+            onChange={(e) => setNoteBody(e.target.value)}
+            placeholder="Start writing…"
+            rows={8}
+            className="mt-2.5 w-full resize-none rounded-xl border border-border px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+          />
+          <DialogFooter className="mt-4 items-center justify-between gap-2 sm:justify-between">
+            <div>
+              {editingNoteId ? (
+                <button
+                  type="button"
+                  className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-destructive hover:bg-destructive/10"
+                  onClick={() => {
+                    const id = editingNoteId;
+                    void notesApi.remove.mutateAsync(id).then(
+                      () => {
+                        toast.success("Note deleted.");
+                        setNoteOpen(false);
+                      },
+                      (err) => toast.error(domainErrorMessage(err)),
+                    );
+                  }}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-muted"
+                onClick={() => setNoteOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded-lg bg-primary px-4 py-1.5 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
+                onClick={saveNote}
+              >
+                Save
+              </button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Rename Dialog */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>

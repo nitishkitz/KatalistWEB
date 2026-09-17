@@ -291,6 +291,39 @@ export type Database = {
           },
         ]
       }
+      bucket_notes: {
+        Row: {
+          author_profile_id: string
+          body: string
+          bucket_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_profile_id?: string
+          body?: string
+          bucket_id: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          title?: string
+          updated_at?: string
+        }
+        Update: {
+          author_profile_id?: string
+          body?: string
+          bucket_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       buckets: {
         Row: {
           archived_at: string | null
