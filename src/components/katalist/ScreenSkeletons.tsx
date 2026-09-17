@@ -127,27 +127,63 @@ export function TeamSkeleton() {
   );
 }
 
-/** Nudges: a group tab row + a list of nudge rows. */
+/** Nudges: header + group tabs + a table-style list view. */
 export function NudgesSkeleton() {
   return (
     <div className="animate-in fade-in">
-      <HeaderShimmer />
-      <div className="mb-5 flex gap-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Shimmer key={i} className="h-8 w-28 rounded-full" />
-        ))}
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <div className="space-y-2">
+          <Shimmer className="h-6 w-32" />
+          <Shimmer className="h-3.5 w-56" />
+        </div>
+        <div className="flex gap-2">
+          <Shimmer className="h-9 w-52 rounded-[10px]" />
+          <Shimmer className="h-9 w-24 rounded-[10px]" />
+        </div>
       </div>
-      <div className="space-y-3">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 rounded-[12px] border border-[#eef0f6] bg-white p-4">
-            <Shimmer className="h-10 w-10 rounded-full" />
-            <div className="flex-1 space-y-2">
-              <Shimmer className="h-4 w-1/3" />
-              <Shimmer className="h-3 w-1/2" />
-            </div>
-            <Shimmer className="h-9 w-24 rounded-[9px]" />
+
+      <div className="grid gap-5 xl:grid-cols-[1fr_372px]">
+        <div className="rounded-[6px] bg-white p-5">
+          {/* Group tabs */}
+          <div className="mb-4 flex gap-6 border-b border-[#eef0f6] pb-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Shimmer key={i} className="h-4 w-24" />
+            ))}
           </div>
-        ))}
+          {/* Table header */}
+          <div className="mb-2 flex items-center gap-4 px-1">
+            {["w-40", "w-24", "w-20", "w-28", "w-20", "w-16"].map((w, i) => (
+              <Shimmer key={i} className={cn("h-3", w)} />
+            ))}
+          </div>
+          {/* Rows */}
+          <div className="space-y-1">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-4 border-b border-[#f2f3f9] py-3 last:border-0">
+                <Shimmer className="h-9 w-9 shrink-0 rounded-full" />
+                <Shimmer className="h-4 flex-1" />
+                <Shimmer className="h-4 w-20" />
+                <Shimmer className="h-6 w-6 rounded-full" />
+                <Shimmer className="h-4 w-24" />
+                <Shimmer className="h-5 w-16 rounded-[5px]" />
+                <Shimmer className="h-8 w-20 rounded-[5px]" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-[6px] bg-white p-5">
+          <Shimmer className="h-4 w-40" />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <Shimmer className="h-8 w-8 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Shimmer className="h-3.5 w-2/3" />
+                <Shimmer className="h-3 w-1/3" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ export type ProfileRow = {
   created_at?: string | null;
   timezone?: string | null;
   occupation?: string | null;
+  cover_theme?: string | null;
 };
 
 export function useProfile() {
@@ -49,13 +50,38 @@ export function useProfile() {
       }
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, display_name, avatar_url, email, phone_e164, active_context, created_at, timezone, occupation")
+        .select("id, display_name, avatar_url, email, phone_e164, active_context, created_at, timezone, occupation, cover_theme")
         .eq("id", user!.id)
         .maybeSingle();
       if (error) throw error;
       return data;
     },
     staleTime: 15_000,
+  });
+}
+
+/** Update editable profile fields (name, occupation, cover wallpaper theme). */
+export function useUpdateProfile() {
+  const { user } = useSession();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (patch: { display_name?: string; occupation?: string | null; cover_theme?: string }) => {
+      if (!user?.id) throw new Error("Sign in with a live account to edit your profile.");
+      if (user.app_metadata?.provider === "demo") {
+        throw new Error("Profile edits are demo-only and aren’t saved to a live profile.");
+      }
+      const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["profile", user?.id] });
+      void qc.invalidateQueries({ queryKey: ["profile-directory"] });
+      void qc.invalidateQueries({ queryKey: ["assignable-people"] });
+      void qc.invalidateQueries({ queryKey: ["team-members"] });
+      void qc.invalidateQueries({ queryKey: ["court"] });
+      void qc.invalidateQueries({ queryKey: ["lists"] });
+    },
   });
 }
 

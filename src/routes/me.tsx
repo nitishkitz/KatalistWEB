@@ -16,6 +16,10 @@ import {
   Phone,
   Calendar,
   Clock,
+  Pencil,
+  ImagePlus,
+  Check,
+  Camera,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -24,7 +28,9 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useSession } from "@/hooks/useSession";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "@/features/context/use-app-context";
-import { useProfile, useUploadAvatar } from "@/features/me/use-profile";
+import { useProfile, useUploadAvatar, useUpdateProfile } from "@/features/me/use-profile";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useTrophy } from "@/features/me/use-trophy";
 import { useAvatarUrl } from "@/features/people/directory";
 import { isDoormanEnabled } from "@/features/doorman/use-doorman";
@@ -42,6 +48,19 @@ export const Route = createFileRoute("/me")({
 
 const CARD_SHADOW = "0 3px 9.4px 0 rgba(0,0,0,0.05)";
 
+/** Selectable profile cover wallpapers (gradient presets). */
+const COVER_THEMES: { key: string; label: string; className: string }[] = [
+  { key: "violet", label: "Violet", className: "bg-gradient-to-r from-[#7c4ddb] via-[#8b5cf0] to-[#5b8def]" },
+  { key: "sunset", label: "Sunset", className: "bg-gradient-to-r from-[#ff7e5f] to-[#feb47b]" },
+  { key: "ocean", label: "Ocean", className: "bg-gradient-to-r from-[#2193b0] to-[#6dd5ed]" },
+  { key: "forest", label: "Forest", className: "bg-gradient-to-r from-[#11998e] to-[#38ef7d]" },
+  { key: "berry", label: "Berry", className: "bg-gradient-to-r from-[#c31432] to-[#240b36]" },
+  { key: "peach", label: "Peach", className: "bg-gradient-to-r from-[#f6d365] to-[#fda085]" },
+  { key: "slate", label: "Slate", className: "bg-gradient-to-r from-[#334155] to-[#64748b]" },
+  { key: "aurora", label: "Aurora", className: "bg-gradient-to-r from-[#a18cd1] to-[#fbc2eb]" },
+];
+const DEFAULT_COVER = COVER_THEMES[0]!.className;
+
 const settingsRows = [
   { id: "preferences", title: "Work / Home Context", body: "Doorman breakthroughs", icon: Sparkles },
   { id: "notifications", title: "Notifications", body: "What you're notified about", icon: Bell },
@@ -55,10 +74,15 @@ function MePage() {
   const qc = useQueryClient();
   const { data: profile, isLoading: profileLoading } = useProfile();
   const uploadAvatar = useUploadAvatar();
+  const updateProfile = useUpdateProfile();
   const { stats, restore } = useTrophy();
   const { context } = useAppContext();
 
   const [panel, setPanel] = useState<string | null>(null);
+  const [coverOpen, setCoverOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editOccupation, setEditOccupation] = useState("");
   const [reduced, setReduced] = useState(() =>
     typeof window === "undefined" ? false : localStorage.getItem("katalist.reduced_motion") === "1",
   );
@@ -111,33 +135,109 @@ function MePage() {
     <PersonAvatar name={name} initials={initials} src={avatarUrl} size={104} />
   );
 
+  const coverClass = COVER_THEMES.find((c) => c.key === profile?.cover_theme)?.className ?? DEFAULT_COVER;
+
+  const onAvatarFile = (file?: File | null) => {
+    if (!file) return;
+    uploadAvatar.mutate(file, {
+      onSuccess: () => toast.success("Photo updated."),
+      onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn’t save photo."),
+    });
+  };
+  const saveCover = (key: string) => {
+    setCoverOpen(false);
+    updateProfile.mutate(
+      { cover_theme: key },
+      { onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn’t save cover.") },
+    );
+  };
+  const openEdit = () => {
+    setEditName(name);
+    setEditOccupation(profile?.occupation ?? "");
+    setEditOpen(true);
+  };
+  const saveEdit = () => {
+    const dn = editName.trim();
+    if (!dn) {
+      toast.error("Name can’t be empty.");
+      return;
+    }
+    updateProfile.mutate(
+      { display_name: dn, occupation: editOccupation.trim() || null },
+      {
+        onSuccess: () => {
+          toast.success("Profile updated.");
+          setEditOpen(false);
+        },
+        onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn’t save."),
+      },
+    );
+  };
+
   return (
     <AppShell>
       <div className="space-y-5">
-        {/* Hero: gradient cover + overlapping avatar */}
+        {/* Hero: chosen wallpaper cover + overlapping avatar */}
         <div className="overflow-hidden rounded-[16px] bg-white" style={{ boxShadow: CARD_SHADOW }}>
-          <div className="h-28 bg-gradient-to-r from-[#7c4ddb] via-[#8b5cf0] to-[#5b8def]" />
+          <div className={cn("relative h-32", coverClass)}>
+            {!demoSession ? (
+              <Popover open={coverOpen} onOpenChange={setCoverOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-black/25 px-3 py-1.5 text-[12px] font-medium text-white backdrop-blur-sm hover:bg-black/35"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    Change cover
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 rounded-2xl border border-border/80 bg-white p-3 shadow-xl">
+                  <p className="mb-2 text-[12px] font-semibold text-[#000533]">Choose a wallpaper</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {COVER_THEMES.map((c) => {
+                      const active = (profile?.cover_theme ?? "violet") === c.key;
+                      return (
+                        <button
+                          key={c.key}
+                          type="button"
+                          title={c.label}
+                          onClick={() => saveCover(c.key)}
+                          className={cn(
+                            "relative h-10 w-full rounded-lg ring-2 transition-transform hover:scale-105",
+                            c.className,
+                            active ? "ring-[#975ee2]" : "ring-transparent",
+                          )}
+                        >
+                          {active ? (
+                            <Check className="absolute inset-0 m-auto h-4 w-4 text-white drop-shadow" />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            ) : null}
+          </div>
           <div className="px-6 pb-5">
             <div className="-mt-12 flex flex-wrap items-end justify-between gap-4">
               <div className="flex items-end gap-4">
                 {demoSession ? (
                   <span className="inline-block rounded-full ring-4 ring-white">{avatarNode}</span>
                 ) : (
-                  <label className="inline-block cursor-pointer rounded-full ring-4 ring-white" title="Change photo">
+                  <label
+                    className="group/av relative inline-block cursor-pointer rounded-full ring-4 ring-white"
+                    title="Change photo"
+                  >
                     {avatarNode}
+                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-opacity group-hover/av:bg-black/35 group-hover/av:opacity-100">
+                      <Camera className="h-5 w-5" />
+                    </span>
                     <input
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
                       className="sr-only"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        uploadAvatar.mutate(file, {
-                          onSuccess: () => toast.success("Photo updated."),
-                          onError: (err) =>
-                            toast.error(err instanceof Error ? err.message : "Couldn’t save photo."),
-                        });
-                      }}
+                      onChange={(e) => onAvatarFile(e.target.files?.[0])}
                     />
                   </label>
                 )}
@@ -146,10 +246,22 @@ function MePage() {
                   <p className="mt-0.5 text-[15px] text-[#6a769c]">{role}</p>
                 </div>
               </div>
-              <span className="mb-1 inline-flex items-center gap-1.5 rounded-full bg-[#ede9ff] px-3 py-1.5 text-[12px] font-medium capitalize text-[#975ee2]">
-                {context === "home" ? <Home className="h-4 w-4" /> : <Briefcase className="h-4 w-4" />}
-                {context} Mode
-              </span>
+              <div className="mb-1 flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ede9ff] px-3 py-1.5 text-[12px] font-medium capitalize text-[#975ee2]">
+                  {context === "home" ? <Home className="h-4 w-4" /> : <Briefcase className="h-4 w-4" />}
+                  {context} Mode
+                </span>
+                {!demoSession ? (
+                  <button
+                    type="button"
+                    onClick={openEdit}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[#ebecf7] bg-white px-3 py-1.5 text-[12px] font-medium text-[#3d3f74] hover:bg-muted"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit profile
+                  </button>
+                ) : null}
+              </div>
             </div>
           </div>
         </div>
@@ -257,6 +369,66 @@ function MePage() {
           </section>
         </div>
       </div>
+
+      {/* Edit profile dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="rounded-2xl bg-white p-5 shadow-xl sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[15px] font-bold">Edit profile</DialogTitle>
+            <DialogDescription className="text-[12.5px]">
+              Update your photo, name, and role.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-3 flex items-center gap-4">
+            <label className="group/av relative inline-block cursor-pointer rounded-full" title="Change photo">
+              <PersonAvatar name={name} initials={initials} src={avatarUrl} size={64} />
+              <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-opacity group-hover/av:bg-black/35 group-hover/av:opacity-100">
+                <Camera className="h-4 w-4" />
+              </span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                onChange={(e) => onAvatarFile(e.target.files?.[0])}
+              />
+            </label>
+            <span className="text-[12px] text-muted-foreground">Tap the photo to upload a new one.</span>
+          </div>
+          <label className="mt-4 block text-[12px] font-medium text-[#3d3f74]">
+            Name
+            <input
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              className="mt-1 h-10 w-full rounded-xl border border-border px-3 text-[13px] font-normal outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+            />
+          </label>
+          <label className="mt-3 block text-[12px] font-medium text-[#3d3f74]">
+            Role / occupation
+            <input
+              value={editOccupation}
+              onChange={(e) => setEditOccupation(e.target.value)}
+              placeholder="e.g. Mobile Application Developer"
+              className="mt-1 h-10 w-full rounded-xl border border-border px-3 text-[13px] font-normal outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+            />
+          </label>
+          <DialogFooter className="mt-4 gap-2">
+            <button
+              type="button"
+              className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-muted"
+              onClick={() => setEditOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={saveEdit}
+              className="rounded-lg bg-primary px-4 py-1.5 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Save
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {panel ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4" onClick={() => setPanel(null)}>

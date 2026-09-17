@@ -1043,6 +1043,7 @@ export type Database = {
         Row: {
           active_context: Database["public"]["Enums"]["context_kind"]
           age: number | null
+          cover_theme: string | null
           avatar_url: string | null
           created_at: string
           display_name: string
@@ -1057,6 +1058,7 @@ export type Database = {
           active_context?: Database["public"]["Enums"]["context_kind"]
           age?: number | null
           avatar_url?: string | null
+          cover_theme?: string | null
           created_at?: string
           display_name?: string
           email?: string | null
@@ -1070,6 +1072,7 @@ export type Database = {
           active_context?: Database["public"]["Enums"]["context_kind"]
           age?: number | null
           avatar_url?: string | null
+          cover_theme?: string | null
           created_at?: string
           display_name?: string
           email?: string | null
