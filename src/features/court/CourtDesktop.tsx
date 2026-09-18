@@ -8,7 +8,10 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { Thing } from "@/domain/thing";
-import { theirStateFor } from "@/domain/thing";
+import { laneOf, theirStateFor } from "@/domain/thing";
+import { useCatchup } from "@/features/catchup/use-catchup";
+import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
+import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { matchProfile, useProfileDirectory } from "@/features/people/directory";
@@ -189,6 +192,8 @@ export function CourtDesktop({
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
   const [theirSelectedId, setTheirSelectedId] = useState<string | null>(null);
   const [heroRect, setHeroRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [catchUpOpen, setCatchUpOpen] = useState(false);
+  const catchup = useCatchup();
   const directory = useProfileDirectory();
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{
@@ -355,6 +360,15 @@ export function CourtDesktop({
     } else {
       setHeroRect(null);
     }
+    setModalSelection({ lane, thing });
+  };
+
+  // Open a Thing from the Catch Up overlay. Closes the overlay and opens the
+  // usual detail modal; no hero animation (the origin card lives in the overlay).
+  const openCatchUpThing = (thing: Thing) => {
+    setCatchUpOpen(false);
+    setHeroRect(null);
+    const lane: FocusViewTabId = thing.assignee.id === myActorId ? laneOf(thing) : "theirs";
     setModalSelection({ lane, thing });
   };
 
@@ -640,6 +654,10 @@ export function CourtDesktop({
         </div>
       </div>
 
+      {!focusSelection && catchup.count > 0 ? (
+        <CatchUpBanner moments={catchup.moments} onReview={() => setCatchUpOpen(true)} />
+      ) : null}
+
       <div className="flex w-full min-w-0 items-start gap-4">
         {/* Lanes */}
         <div className="min-w-0 flex-1 flex flex-col h-[calc(100vh-8rem)]">
@@ -705,6 +723,19 @@ export function CourtDesktop({
           onRefresh={refetch}
         />
       )}
+
+      <CatchUpOverlay
+        open={catchUpOpen}
+        onClose={() => setCatchUpOpen(false)}
+        moments={catchup.moments}
+        myActorId={myActorId}
+        surfaceMoment={catchup.surfaceMoment}
+        onOpenThing={openCatchUpThing}
+        onRefresh={() => {
+          refetch();
+          catchup.refresh();
+        }}
+      />
     </div>
   );
 }

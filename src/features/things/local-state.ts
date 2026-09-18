@@ -58,6 +58,8 @@ const snoozedByActor = new Map<string, Map<string, number>>();
 let extraNotifications: LocalNotification[] = [];
 /** Persona-scoped Ghost dismissals: actorId → set of thing ids. */
 const ghostDismissedByActor = new Map<string, Set<string>>();
+/** Persona-scoped Catch Up receipts: actorId → set of surfaced moment keys. */
+const catchupSurfacedByActor = new Map<string, Set<string>>();
 let version = 0;
 
 function bump(event?: LocalActivity & { thingId?: string }) {
@@ -366,16 +368,48 @@ export function unsnoozeLocal(id: string) {
   bump({ id: crypto.randomUUID(), event: "restored", at: new Date().toISOString(), thingId: id });
 }
 
-/** Currently-active snoozes for the demo actor (expired entries are pruned). */
+/**
+ * Currently-active snoozes for the demo actor. Expired entries are retained (not
+ * pruned) so Catch Up can surface them once as "snooze ended" moments.
+ */
 export function getSnoozedIds(): Set<string> {
   const m = snoozeMapFor(currentDemoActorId());
   const now = Date.now();
   const set = new Set<string>();
   for (const [id, until] of m) {
     if (until > now) set.add(id);
-    else m.delete(id);
   }
   return set;
+}
+
+/**
+ * Snoozes whose wake time has passed for the demo actor. Basis for Catch Up
+ * "snooze ended" moments in preview mode (mirrors the live thing_snooze query).
+ */
+export function getEndedSnoozeEntries(): { thingId: string; untilMs: number }[] {
+  const m = snoozeMapFor(currentDemoActorId());
+  const now = Date.now();
+  const windowMs = 3 * 24 * 60 * 60 * 1000;
+  const out: { thingId: string; untilMs: number }[] = [];
+  for (const [id, until] of m) {
+    if (until <= now && until > now - windowMs) out.push({ thingId: id, untilMs: until });
+  }
+  return out;
+}
+
+// ── Catch Up surfaced receipts (demo/preview) ────────────────────────────────
+function catchupSurfacedSetFor(actorId: string): Set<string> {
+  if (!catchupSurfacedByActor.has(actorId)) catchupSurfacedByActor.set(actorId, new Set());
+  return catchupSurfacedByActor.get(actorId)!;
+}
+
+export function surfaceCatchupLocal(momentKey: string) {
+  catchupSurfacedSetFor(currentDemoActorId()).add(momentKey);
+  bump();
+}
+
+export function getCatchupSurfaced(): Set<string> {
+  return new Set(catchupSurfacedSetFor(currentDemoActorId()));
 }
 
 export function addThingFileLocal(thingId: string, file: ThingFile) {
@@ -798,6 +832,7 @@ export function resetDemoLocalStateForTests() {
   nudgeCooldownUntil.clear();
   extraNotifications = [];
   ghostDismissedByActor.clear();
+  catchupSurfacedByActor.clear();
   notificationReadByActor.clear();
   version += 1;
   emit();
