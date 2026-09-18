@@ -31,7 +31,7 @@ export type CourtFocusViewProps = {
   selection: CourtFocusSelection;
   lanes: Record<CourtLaneId, Thing[]>;
   theirs?: Thing[];
-  onSelectThing: (thingId: string) => void;
+  onSelectThing: (thingId: string, lane?: FocusViewTabId) => void;
   onOpen?: (lane: CourtLaneId, thing: Thing, origin: HTMLElement) => void;
   onClose: () => void;
   heroRect?: { top: number; left: number; width: number; height: number } | null;
@@ -182,7 +182,9 @@ export function CourtFocusView({
       const laneThings = lane === "theirs" ? (theirs ?? []) : (lanes[lane] ?? []);
       if (laneThings && laneThings.length > 0) {
         const first = laneThings[0];
-        onSelectThing(first.id);
+        // Report the lane too, so the detail follows the active tab instead of
+        // snapping back to the originally-opened lane.
+        onSelectThing(first.id, lane);
       }
     },
     [lanes, theirs, onSelectThing],
@@ -190,9 +192,9 @@ export function CourtFocusView({
 
   const handleSelect = useCallback(
     (thing: Thing) => {
-      onSelectThing(thing.id);
+      onSelectThing(thing.id, activeLane);
     },
-    [onSelectThing],
+    [onSelectThing, activeLane],
   );
 
   const laneTabs: Array<{ id: FocusViewTabId; label: string; count: number }> = [

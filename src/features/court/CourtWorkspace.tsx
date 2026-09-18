@@ -14,7 +14,7 @@ type CourtWorkspaceProps = {
   initialPositions: Partial<Record<CourtLaneId, { activeIndex: number; activeThingId: string | null }>>;
   laneRefs: MutableRefObject<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>;
   onOpen: (lane: FocusViewTabId, thing: Thing, origin: HTMLElement) => void;
-  onSelectThing: (thingId: string) => void;
+  onSelectThing: (thingId: string, lane?: FocusViewTabId) => void;
   onClose: () => void;
   onRefresh: () => unknown;
   onViewAll?: (lane: FocusViewTabId) => void;

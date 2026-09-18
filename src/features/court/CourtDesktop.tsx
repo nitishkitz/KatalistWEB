@@ -670,8 +670,10 @@ export function CourtDesktop({
             laneRefs={laneRefs}
             heroRect={heroRect}
             onOpen={handleOpen}
-            onSelectThing={(thingId) =>
-              setFocusSelection((current) => (current ? { lane: current.lane, thingId } : current))
+            onSelectThing={(thingId, lane) =>
+              setFocusSelection((current) =>
+                current ? { lane: lane ?? current.lane, thingId } : current,
+              )
             }
             onClose={closeFocus}
             onRefresh={refetch}
