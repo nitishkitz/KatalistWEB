@@ -41,25 +41,16 @@ export function CatchUpStack({
   const [busy, setBusy] = useState(false);
   const doorman = useDoorman();
 
-  const visitedRef = useRef<Set<string>>(new Set());
-  const surfaceRef = useRef(surfaceMoment);
-  surfaceRef.current = surfaceMoment;
   const refreshRef = useRef(onRefresh);
   refreshRef.current = onRefresh;
 
   const current = deck[index];
 
-  // Record the active card as visited.
-  useEffect(() => {
-    if (current) visitedRef.current.add(current.momentKey);
-  }, [current]);
-
-  // On unmount (any close path — finish, X, Esc, overlay click), surface only
-  // the cards actually visited, then refresh the Court. Viewing never mutates a
-  // Thing; it only writes receipts.
+  // On unmount (any close path — finish, X, Esc, overlay click), refresh the
+  // Court so any actions taken are reflected. Viewing, paging, and closing never
+  // dismiss a moment — only an explicit action writes a receipt (see runAction).
   useEffect(() => {
     return () => {
-      for (const key of visitedRef.current) surfaceRef.current(key);
       refreshRef.current();
     };
   }, []);
@@ -125,10 +116,8 @@ export function CatchUpStack({
   );
 
   const goPrev = useCallback(() => setIndex((i) => Math.max(0, i - 1)), []);
-  const goNext = useCallback(() => {
-    if (current) surfaceMoment(current.momentKey);
-    advance();
-  }, [advance, current, surfaceMoment]);
+  // Paging never dismisses — it only navigates the deck.
+  const goNext = useCallback(() => advance(), [advance]);
 
   if (!current) return null;
 
