@@ -606,6 +606,123 @@ export type Database = {
           },
         ]
       }
+      contact_requests: {
+        Row: {
+          addressee_profile_id: string
+          created_at: string
+          id: string
+          requester_profile_id: string
+          responded_at: string | null
+          status: string
+        }
+        Insert: {
+          addressee_profile_id: string
+          created_at?: string
+          id?: string
+          requester_profile_id: string
+          responded_at?: string | null
+          status?: string
+        }
+        Update: {
+          addressee_profile_id?: string
+          created_at?: string
+          id?: string
+          requester_profile_id?: string
+          responded_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          id: string
+          inviter_profile_id: string
+          status: string
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          inviter_profile_id: string
+          status?: string
+          token: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          inviter_profile_id?: string
+          status?: string
+          token?: string
+        }
+        Relationships: []
+      }
+      hub_files: {
+        Row: {
+          created_at: string
+          created_by: string
+          deleted_at: string | null
+          id: string
+          is_folder: boolean
+          list_id: string
+          mime: string | null
+          name: string
+          parent_id: string | null
+          size: number | null
+          storage_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          deleted_at?: string | null
+          id?: string
+          is_folder?: boolean
+          list_id: string
+          mime?: string | null
+          name: string
+          parent_id?: string | null
+          size?: number | null
+          storage_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          deleted_at?: string | null
+          id?: string
+          is_folder?: boolean
+          list_id?: string
+          mime?: string | null
+          name?: string
+          parent_id?: string | null
+          size?: number | null
+          storage_path?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hub_files_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hub_files_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "hub_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       list_members: {
         Row: {
           added_by_profile_id: string | null
@@ -752,6 +869,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          kind: string
           name: string
           owner_profile_id: string
           updated_at: string
@@ -763,6 +881,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          kind?: string
           name: string
           owner_profile_id: string
           updated_at?: string
@@ -774,6 +893,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          kind?: string
           name?: string
           owner_profile_id?: string
           updated_at?: string

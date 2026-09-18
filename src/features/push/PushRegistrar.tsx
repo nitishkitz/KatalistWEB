@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
+import { requestAutojoin } from "@/features/calls/autojoin-signal";
 import { firebaseConfig, VAPID_KEY } from "./push-config";
 
 /**
@@ -55,6 +56,7 @@ export function PushRegistrar() {
           const data = payload.data ?? {};
           if (data.kind === "incoming_call" && data.listId) {
             const listId = data.listId;
+            const isHub = data.hub === "1";
             toast(title, {
               description: body,
               duration: 30000,
@@ -66,7 +68,16 @@ export function PushRegistrar() {
                   } catch {
                     /* ignore */
                   }
-                  void navigate({ to: "/lists/$listId", params: { listId } });
+                  requestAutojoin(listId);
+                  if (isHub) {
+                    void navigate({
+                      to: "/team/$conversationId",
+                      params: { conversationId: listId },
+                      search: { call: "1" },
+                    });
+                  } else {
+                    void navigate({ to: "/lists/$listId", params: { listId } });
+                  }
                 },
               },
             });

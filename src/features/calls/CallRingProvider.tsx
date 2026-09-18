@@ -68,18 +68,20 @@ export function CallRingProvider() {
 
   const join = () => {
     const listId = ring.listId;
+    // Team-hub conversations (DM/group) live at /team/$conversationId; task
+    // Lists live at /lists/$listId. Route the "Join" accordingly.
+    const isHub = ring.kind === "dm" || ring.kind === "group";
+    const path = isHub ? `/team/${listId}` : `/lists/${listId}`;
     // Unlock audio/mic within this click gesture (iOS Safari requires it).
     unlockAudio();
-    // Durable in-memory signal: consumed by the list page as soon as it is
-    // ready (covers navigating in), and delivered live to it if already open.
+    // Durable in-memory signal: consumed by the destination page as soon as it
+    // is ready (covers navigating in), and delivered live to it if already open.
     requestAutojoin(listId);
     dismiss();
-    // Only navigate if we are NOT already on this list. Navigating to the same
-    // route re-mounts the list page and would tear down the call that the live
-    // autojoin listener just started (that is why it only worked after a
-    // manual refresh when the call came from the list already open).
-    const alreadyHere =
-      typeof window !== "undefined" && window.location.pathname.includes(`/lists/${listId}`);
+    // Only navigate if we are NOT already on this conversation/list. Navigating
+    // to the same route re-mounts the page and would tear down the call that the
+    // live autojoin listener just started.
+    const alreadyHere = typeof window !== "undefined" && window.location.pathname.includes(path);
     if (alreadyHere) return;
     // Persist a one-shot flag the destination page consumes on mount (belt-and-
     // suspenders alongside the in-memory signal, which survives SPA navigation).
@@ -88,7 +90,15 @@ export function CallRingProvider() {
     } catch {
       // sessionStorage may be unavailable; the in-memory signal still covers it.
     }
-    void navigate({ to: "/lists/$listId", params: { listId } });
+    if (isHub) {
+      void navigate({
+        to: "/team/$conversationId",
+        params: { conversationId: listId },
+        search: { call: "1" },
+      });
+    } else {
+      void navigate({ to: "/lists/$listId", params: { listId } });
+    }
   };
 
   return (

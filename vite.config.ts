@@ -5,6 +5,36 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
+import { getSupabaseAdmin } from "./server/lib/supabase-admin.ts";
+import { resolvePersonToProfileId } from "./server/lib/resolve-person.ts";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * Dev-middleware equivalent of server/lib/require-user.ts. Vite middleware
+ * gets a raw Node req, not an H3Event, so this reads the Authorization
+ * header directly instead of sharing that helper.
+ */
+async function requireUserFromReq(req: import("node:http").IncomingMessage) {
+  const authHeader = req.headers["authorization"];
+  const token = typeof authHeader === "string" && authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length)
+    : null;
+  if (!token) return null;
+
+  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const anonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+  if (!url || !anonKey) return null;
+
+  const client = createSupabaseClient(url, anonKey, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  const { data, error } = await client.auth.getUser(token);
+  if (error || !data?.user) return null;
+
+  return { userId: data.user.id, client };
+}
 
 /**
  * Finish PGLite bootstrap during dev-server setup (before traffic). Vite awaits
@@ -156,13 +186,7 @@ function phoneAuthPlugin(): Plugin {
             return;
           }
 
-          const { createClient } = await import("@supabase/supabase-js");
-          const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://dyxqlgnbwtbxxdfoiqva.supabase.co";
-          const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5eHFsZ25id3RieHhkZm9pcXZhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzA1Mjg3OCwiZXhwIjoyMTAyNjI4ODc4fQ.INa1hOmRJVNbj7TBGOqRpYEmT4oA9ij8MI_5M77vyG4";
-
-          const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-            auth: { persistSession: false },
-          });
+          const admin = getSupabaseAdmin();
 
           const cleanDigits = phone.replace(/\D/g, "");
           const { data: { users }, error: listErr } = await admin.auth.admin.listUsers();
@@ -186,16 +210,16 @@ function phoneAuthPlugin(): Plugin {
                 phone,
                 display_name: "Katalist User",
                 full_name: "Katalist User",
-                uat_profile_complete: true,
               },
             });
             if (createErr) throw createErr;
             user = created.user;
           }
 
+          const userEmail = user.email || `user-${cleanDigits}@users.katalist.invalid`;
           const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
             type: "magiclink",
-            email: user.email,
+            email: userEmail,
           });
           if (linkErr) throw linkErr;
 
@@ -203,7 +227,7 @@ function phoneAuthPlugin(): Plugin {
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify({
             token_hash: linkData.properties.hashed_token,
-            email: user.email,
+            email: userEmail,
           }));
         } catch (err: any) {
           console.error("[phone-auth] error:", err);
@@ -217,6 +241,16 @@ function phoneAuthPlugin(): Plugin {
     },
   };
 }
+
+const DEMO_PERSONAS: Record<string, string> = {
+  priya: "Priya Sharma",
+  arjun: "Arjun Mehta",
+  sarah: "Sarah Kapoor",
+  mike: "Mike Fernandes",
+  neha: "Neha Rao",
+  rahul: "Rahul Mehta",
+  sai: "Sai",
+};
 
 function listMemberPlugin(): Plugin {
   return {
@@ -238,15 +272,20 @@ function listMemberPlugin(): Plugin {
             return;
           }
 
-          const { createClient } = await import("@supabase/supabase-js");
-          const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://dyxqlgnbwtbxxdfoiqva.supabase.co";
-          const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5eHFsZ25id3RieHhkZm9pcXZhIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NzA1Mjg3OCwiZXhwIjoyMTAyNjI4ODc4fQ.INa1hOmRJVNbj7TBGOqRpYEmT4oA9ij8MI_5M77vyG4";
-
-          const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-            auth: { persistSession: false },
-          });
+          const auth = await requireUserFromReq(req);
+          if (!auth) {
+            res.statusCode = 401;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Authentication required." }));
+            return;
+          }
+          const { client } = auth;
 
           if (pathOnly === "/api/people/directory") {
+            // Cross-user directory: profiles/actors RLS is "own row only",
+            // so this deliberately uses the admin client - gated on the
+            // auth check above rather than reachable anonymously.
+            const admin = getSupabaseAdmin();
             const [{ data: profiles }, { data: actors }] = await Promise.all([
               admin.from("profiles").select("id, email, display_name, avatar_url"),
               admin.from("actors").select("id, profile_id, kind"),
@@ -293,32 +332,20 @@ function listMemberPlugin(): Plugin {
               return;
             }
 
-            let bQuery = admin.from("bucket_items").select("id").eq("bucket_id", bucketId);
-            if (thingId) bQuery = bQuery.eq("thing_id", thingId);
-            if (reqListId) bQuery = bQuery.eq("list_id", reqListId);
-            const { data: existing } = await bQuery.maybeSingle();
+            // add_to_bucket enforces bucket ownership and viewer permission
+            // on the referenced Thing/List, and is already idempotent.
+            const { data: inserted, error: rpcErr } = await client.rpc("add_to_bucket", {
+              p_bucket_id: bucketId,
+              p_thing_id: thingId || null,
+              p_list_id: reqListId || null,
+            });
 
-            if (existing?.id) {
-              res.statusCode = 200;
+            if (rpcErr) {
+              res.statusCode = 403;
               res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ ok: true, id: existing.id, message: "Item already in bucket" }));
+              res.end(JSON.stringify({ error: rpcErr.message || "Failed to add item to bucket" }));
               return;
             }
-
-            const { data: inserted, error: insErr } = await admin.from("bucket_items").insert({
-              bucket_id: bucketId,
-              thing_id: thingId || null,
-              list_id: reqListId || null,
-            }).select().single();
-
-            if (insErr) {
-              res.statusCode = 500;
-              res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ error: insErr.message || "Failed to add item to bucket" }));
-              return;
-            }
-
-            await admin.from("buckets").update({ updated_at: new Date().toISOString() }).eq("id", bucketId);
 
             res.statusCode = 200;
             res.setHeader("content-type", "application/json");
@@ -335,49 +362,37 @@ function listMemberPlugin(): Plugin {
             return;
           }
 
-          // Resolve personId to profileId
-          let targetProfileId: string | null = null;
-          const { data: actor } = await admin.from("actors").select("id, profile_id").eq("id", personId).maybeSingle();
-          if (actor?.profile_id) targetProfileId = actor.profile_id;
+          let targetProfileId = await resolvePersonToProfileId(client, personId);
 
-          if (!targetProfileId) {
-            const { data: prof } = await admin.from("profiles").select("id").eq("id", personId).maybeSingle();
-            if (prof?.id) targetProfileId = prof.id;
-          }
-
-          if (!targetProfileId) {
-            const { data: byName } = await admin.from("profiles").select("id").ilike("display_name", `%${personId}%`).limit(1);
-            if (byName?.[0]?.id) targetProfileId = byName[0].id;
-          }
-
-          if (!targetProfileId) {
-            const DEMO_PERSONAS: Record<string, string> = {
-              priya: "Priya Sharma",
-              arjun: "Arjun Mehta",
-              sarah: "Sarah Kapoor",
-              mike: "Mike Fernandes",
-              neha: "Neha Rao",
-              rahul: "Rahul Mehta",
-              sai: "Sai",
-            };
+          // Demo personas are shared fixtures, not private profiles - look
+          // them up via admin, since profiles RLS ("own row only") would
+          // otherwise hide an already-provisioned persona from every user
+          // except whoever happened to create it first.
+          if (!targetProfileId && pathOnly === "/api/lists/add-member") {
             const demoKey = personId.replace(/^p-/, "").toLowerCase();
             const demoName = DEMO_PERSONAS[demoKey] || Object.values(DEMO_PERSONAS).find((n) => n.toLowerCase().includes(demoKey));
             if (demoName) {
+              const admin = getSupabaseAdmin();
               const { data: demoProf } = await admin.from("profiles").select("id").ilike("display_name", demoName).maybeSingle();
               if (demoProf?.id) {
                 targetProfileId = demoProf.id;
               } else {
                 const email = `${demoName.toLowerCase().replace(/\s+/g, ".")}@users.katalist.invalid`;
-                const { data: created } = await admin.auth.admin.createUser({
+                const { data: created, error: createErr } = await admin.auth.admin.createUser({
                   email,
                   email_confirm: true,
                   user_metadata: {
                     full_name: demoName,
                     display_name: demoName,
-                    uat_profile_complete: true,
                   },
                 });
-                if (created?.user?.id) targetProfileId = created.user.id;
+                if (createErr) {
+                  res.statusCode = 500;
+                  res.setHeader("content-type", "application/json");
+                  res.end(JSON.stringify({ error: createErr.message }));
+                  return;
+                }
+                targetProfileId = created?.user?.id ?? null;
               }
             }
           }
@@ -389,29 +404,19 @@ function listMemberPlugin(): Plugin {
             return;
           }
 
+          // Every membership write below is delegated to the secured RPC,
+          // which enforces "only the List Owner" via auth.uid() itself.
           if (pathOnly === "/api/lists/add-member") {
-            const { data: listData, error: listErr } = await admin.from("lists").select("id, owner_profile_id").eq("id", listId).single();
-            if (listErr || !listData) {
-              res.statusCode = 404;
-              res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ error: "List not found" }));
-              return;
-            }
+            const { data: member, error: rpcErr } = await client.rpc("add_list_member", {
+              p_list_id: listId,
+              p_profile_id: targetProfileId,
+              p_role: role,
+            });
 
-            const { data: member, error: insertErr } = await admin.from("list_members").upsert(
-              {
-                list_id: listId,
-                profile_id: targetProfileId,
-                role,
-                added_by_profile_id: listData.owner_profile_id,
-              },
-              { onConflict: "list_id,profile_id" }
-            ).select().single();
-
-            if (insertErr) {
-              res.statusCode = 500;
+            if (rpcErr) {
+              res.statusCode = 403;
               res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ error: insertErr.message || "Failed to add list member" }));
+              res.end(JSON.stringify({ error: rpcErr.message || "Failed to add list member" }));
               return;
             }
 
@@ -422,11 +427,15 @@ function listMemberPlugin(): Plugin {
           }
 
           if (pathOnly === "/api/lists/change-role") {
-            const { data: member, error: updateErr } = await admin.from("list_members").update({ role }).eq("list_id", listId).eq("profile_id", targetProfileId).select().single();
-            if (updateErr) {
-              res.statusCode = 500;
+            const { data: member, error: rpcErr } = await client.rpc("change_list_role", {
+              p_list_id: listId,
+              p_profile_id: targetProfileId,
+              p_role: role,
+            });
+            if (rpcErr) {
+              res.statusCode = 403;
               res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ error: updateErr.message || "Failed to update role" }));
+              res.end(JSON.stringify({ error: rpcErr.message || "Failed to update role" }));
               return;
             }
             res.statusCode = 200;
@@ -436,16 +445,19 @@ function listMemberPlugin(): Plugin {
           }
 
           if (pathOnly === "/api/lists/remove-member") {
-            const { error: deleteErr } = await admin.from("list_members").delete().eq("list_id", listId).eq("profile_id", targetProfileId);
-            if (deleteErr) {
-              res.statusCode = 500;
+            const { data: removed, error: rpcErr } = await client.rpc("remove_list_member", {
+              p_list_id: listId,
+              p_profile_id: targetProfileId,
+            });
+            if (rpcErr) {
+              res.statusCode = 403;
               res.setHeader("content-type", "application/json");
-              res.end(JSON.stringify({ error: deleteErr.message || "Failed to remove member" }));
+              res.end(JSON.stringify({ error: rpcErr.message || "Failed to remove member" }));
               return;
             }
             res.statusCode = 200;
             res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ ok: true }));
+            res.end(JSON.stringify({ ok: true, removed }));
             return;
           }
         } catch (err: any) {
@@ -454,6 +466,250 @@ function listMemberPlugin(): Plugin {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
             res.end(JSON.stringify({ error: err?.message || "Operation failed" }));
+          }
+        }
+      });
+    },
+  };
+}
+
+function thingsReopenPlugin(): Plugin {
+  return {
+    name: "app-builder:things-reopen",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        try {
+          const rawUrl = req.url ?? "";
+          const pathOnly = rawUrl.split("?", 1)[0] ?? "";
+          if (pathOnly !== "/api/things/reopen") {
+            next();
+            return;
+          }
+          if ((req.method ?? "GET").toUpperCase() !== "POST") {
+            res.statusCode = 405;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Method Not Allowed" }));
+            return;
+          }
+
+          const auth = await requireUserFromReq(req);
+          if (!auth) {
+            res.statusCode = 401;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Authentication required." }));
+            return;
+          }
+          const { client, userId } = auth;
+
+          let bodyStr = "";
+          for await (const chunk of req) {
+            bodyStr += chunk;
+          }
+          const { thingId } = JSON.parse(bodyStr || "{}");
+          if (!thingId) {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "thingId is required." }));
+            return;
+          }
+
+          // things has no UPDATE RLS policy - every mutation goes through a
+          // SECURITY DEFINER RPC that checks ownership internally. No reopen
+          // RPC exists yet, so the check happens here before falling back to
+          // the admin client for the write itself.
+          const { data: actorRow } = await client
+            .from("actors")
+            .select("id")
+            .eq("profile_id", userId)
+            .eq("kind", "user")
+            .maybeSingle();
+
+          if (!actorRow) {
+            res.statusCode = 403;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Could not resolve caller identity." }));
+            return;
+          }
+
+          const { data: thing } = await client
+            .from("things")
+            .select("id, owner_actor_id, work_status")
+            .eq("id", thingId)
+            .maybeSingle();
+
+          if (!thing) {
+            res.statusCode = 404;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Thing not found." }));
+            return;
+          }
+          if (thing.owner_actor_id !== actorRow.id) {
+            res.statusCode = 403;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Only the Thing Owner can reopen it." }));
+            return;
+          }
+          if (thing.work_status !== "cancelled") {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Only a Cancelled Thing can be reopened." }));
+            return;
+          }
+
+          const admin = getSupabaseAdmin();
+          const { data, error } = await admin
+            .from("things")
+            .update({
+              work_status: "not_started",
+              cancelled_at: null,
+              acknowledgement: "waiting_for_catch",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", thingId)
+            .select()
+            .single();
+
+          if (error) {
+            res.statusCode = 500;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: error.message }));
+            return;
+          }
+
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ ok: true, thing: data }));
+        } catch (err: any) {
+          console.error("[things-reopen] error:", err);
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: err?.message || "Reopen failed" }));
+          }
+        }
+      });
+    },
+  };
+}
+
+const ATTACHMENTS_BUCKET = "thing-attachments";
+
+function completeAttachmentPlugin(): Plugin {
+  return {
+    name: "app-builder:complete-attachment",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        try {
+          const rawUrl = req.url ?? "";
+          const pathOnly = rawUrl.split("?", 1)[0] ?? "";
+          if (pathOnly !== "/api/things/complete-attachment") {
+            next();
+            return;
+          }
+          if ((req.method ?? "GET").toUpperCase() !== "POST") {
+            res.statusCode = 405;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Method Not Allowed" }));
+            return;
+          }
+
+          const auth = await requireUserFromReq(req);
+          if (!auth) {
+            res.statusCode = 401;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Authentication required." }));
+            return;
+          }
+          const { client, userId } = auth;
+
+          let bodyStr = "";
+          for await (const chunk of req) {
+            bodyStr += chunk;
+          }
+          const { attachmentId, stagingKey, storageKey } = JSON.parse(bodyStr || "{}");
+          if (!attachmentId || !stagingKey || !storageKey) {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "attachmentId, stagingKey and storageKey are required." }));
+            return;
+          }
+
+          const { data: actorRow } = await client
+            .from("actors")
+            .select("id")
+            .eq("profile_id", userId)
+            .eq("kind", "user")
+            .maybeSingle();
+          if (!actorRow) {
+            res.statusCode = 403;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Could not resolve caller identity." }));
+            return;
+          }
+
+          const admin = getSupabaseAdmin();
+          const { data: attachment, error: fetchErr } = await admin
+            .from("thing_attachments")
+            .select("id, uploaded_by_actor_id, staging_key, storage_key, status")
+            .eq("id", attachmentId)
+            .maybeSingle();
+
+          if (fetchErr || !attachment) {
+            res.statusCode = 404;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Attachment not found." }));
+            return;
+          }
+          if (attachment.uploaded_by_actor_id !== actorRow.id) {
+            res.statusCode = 403;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "You did not upload this attachment." }));
+            return;
+          }
+          if (attachment.staging_key !== stagingKey || attachment.storage_key !== storageKey) {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Staging/storage key mismatch." }));
+            return;
+          }
+
+          if (attachment.status !== "pending") {
+            res.statusCode = 200;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ ok: true, attachment }));
+            return;
+          }
+
+          const { error: moveErr } = await admin.storage.from(ATTACHMENTS_BUCKET).move(stagingKey, storageKey);
+          if (moveErr) {
+            res.statusCode = 500;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: moveErr.message || "Failed to move attachment into place." }));
+            return;
+          }
+
+          const { data: completed, error: completeErr } = await client.rpc("complete_thing_attachment", {
+            p_attachment_id: attachmentId,
+            p_storage_key: storageKey,
+          });
+          if (completeErr) {
+            res.statusCode = 500;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: completeErr.message || "Failed to finalize attachment." }));
+            return;
+          }
+
+          res.statusCode = 200;
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ ok: true, attachment: completed }));
+        } catch (err: any) {
+          console.error("[complete-attachment] error:", err);
+          if (!res.headersSent) {
+            res.statusCode = 500;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: err?.message || "Failed to finalize attachment" }));
           }
         }
       });
@@ -486,6 +742,8 @@ export default defineConfig(({ command, isPreview }) => ({
     authPopupPlugin(),
     phoneAuthPlugin(),
     listMemberPlugin(),
+    thingsReopenPlugin(),
+    completeAttachmentPlugin(),
     // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
     grokPwaPlugin(),
     tailwindcss(),

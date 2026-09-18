@@ -22,8 +22,8 @@ import {
   type BucketItem,
 } from "@/features/buckets/use-bucket-items";
 import { bucketItemsSurface } from "@/features/buckets/bucket-items-surface";
-import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
-import { ListDetailSkeleton } from "@/components/katalist/ScreenSkeletons";
+import { CourtDetailModal } from "@/features/court/CourtDetailModal";
+import { ListDetailSkeleton, Shimmer } from "@/components/katalist/ScreenSkeletons";
 import { useThing } from "@/features/things/use-thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -88,6 +88,76 @@ function matchesQuery(q: string, thing?: Thing, list?: ListRow) {
     return list.name.toLowerCase().includes(n) || list.ownerLine.toLowerCase().includes(n);
   }
   return false;
+}
+
+function BucketItemsShimmer({ view }: { view: "things" | "lists" }) {
+  if (view === "lists") {
+    return (
+      <div aria-label="Loading bucket Lists" className="animate-in fade-in">
+        <Shimmer className="mb-4 h-3 w-24" />
+        <div className="divide-y divide-[#f2f3f9]">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-1 items-center gap-3 py-3 sm:grid-cols-[minmax(0,1.6fr)_1fr_0.7fr_1.4fr_auto] sm:gap-4"
+            >
+              <div className="flex items-center gap-3">
+                <Shimmer className="h-9 w-9 shrink-0 rounded-[8px]" />
+                <div className="flex-1 space-y-2">
+                  <Shimmer className="h-3.5 w-3/5" />
+                  <Shimmer className="h-3 w-2/5" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Shimmer className="h-6 w-6 rounded-full" />
+                <Shimmer className="h-3 w-24" />
+              </div>
+              <Shimmer className="h-3 w-16" />
+              <div className="flex items-center gap-2">
+                <Shimmer className="h-1.5 w-24 rounded-full" />
+                <Shimmer className="h-3 w-20" />
+              </div>
+              <Shimmer className="h-3 w-14" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div aria-label="Loading bucket Things" className="animate-in fade-in">
+      <Shimmer className="mb-4 h-3 w-24" />
+      <div className="mb-2 grid grid-cols-[2fr_1fr_1fr_0.65fr_0.55fr_0.45fr_0.8fr_36px] gap-4 border-b border-[#eef0f6] px-3 pb-2">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <Shimmer key={index} className="h-2.5 w-3/4" />
+        ))}
+      </div>
+      <div className="divide-y divide-[#f2f3f9]">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div
+            key={index}
+            className="grid grid-cols-[2fr_1fr_1fr_0.65fr_0.55fr_0.45fr_0.8fr_36px] items-center gap-4 px-3 py-3"
+          >
+            <div className="flex items-center gap-2">
+              <Shimmer className="h-4 w-4 shrink-0" />
+              <Shimmer className="h-3.5 w-4/5" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Shimmer className="h-6 w-6 rounded-full" />
+              <Shimmer className="h-3 w-16" />
+            </div>
+            <Shimmer className="h-5 w-20 rounded-full" />
+            <Shimmer className="h-3 w-12" />
+            <Shimmer className="h-3 w-8" />
+            <Shimmer className="h-3 w-8" />
+            <Shimmer className="h-3 w-16" />
+            <Shimmer className="h-8 w-8 rounded-lg" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function BucketDetailPage() {
@@ -172,8 +242,6 @@ function BucketDetailPage() {
 
   const thingItems = visible.filter((i): i is Extract<BucketItem, { kind: "thing" }> => i.kind === "thing");
   const listItems = visible.filter((i): i is Extract<BucketItem, { kind: "list" }> => i.kind === "list");
-  const bucketThings = useMemo(() => thingItems.map((it) => it.thing), [thingItems]);
-
   const addThings = things.filter(
     (t) =>
       !referencedThingIds.has(t.id) &&
@@ -670,16 +738,8 @@ function BucketDetailPage() {
             </div>
           ) : null}
 
-          <InlineThingDetailWorkspace
-            thing={selectedThing}
-            onClose={() => setSelectedId(null)}
-            backLabel={bucket.name}
-            items={bucketThings}
-            onSelectThing={(id) => setSelectedId(id)}
-            navTitle={bucket.name}
-          >
-            {itemsSurface === "loading" ? (
-              <p className="text-sm text-muted-foreground">Loading references…</p>
+          {itemsSurface === "loading" ? (
+              <BucketItemsShimmer view={detailTab === "lists" ? "lists" : "things"} />
             ) : itemsSurface === "error" ? (
               <p className="text-sm text-muted-foreground">{domainErrorMessage(itemsError)}</p>
             ) : detailTab === "notes" ? (
@@ -749,9 +809,16 @@ function BucketDetailPage() {
                 {detailTab === "things" && thingsSection}
               </div>
             )}
-          </InlineThingDetailWorkspace>
         </div>
       </div>
+
+      <CourtDetailModal
+        thing={selectedThing}
+        lane="theirs"
+        isOpen={Boolean(selectedThing)}
+        onClose={() => setSelectedId(null)}
+        onOpenFullView={() => undefined}
+      />
 
       {/* Note editor dialog */}
       <Dialog open={noteOpen} onOpenChange={setNoteOpen}>

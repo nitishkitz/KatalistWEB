@@ -6,6 +6,8 @@ export type BucketCard = {
   pinned: boolean;
   thingCount: number;
   listCount: number;
+  progressCompleted?: number;
+  progressTotal?: number;
   updatedAt: string;
   ownerActorId?: string;
   context: "work" | "home";

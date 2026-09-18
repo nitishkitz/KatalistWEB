@@ -15,6 +15,8 @@ export type RingPayload = {
   fromDeviceId: string;
   fromName: string;
   memberIds: string[];
+  /** Conversation kind, so the ring routes to /team (dm/group) vs /lists. */
+  kind?: "dm" | "group" | "list";
 };
 
 const LOBBY = "calls-lobby";

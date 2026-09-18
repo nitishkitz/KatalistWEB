@@ -1,11 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
-  Briefcase,
-  Home,
-  LayoutGrid,
-  List as ListIcon,
-  Lock,
   Plus,
   Search,
 } from "lucide-react";
@@ -29,17 +24,17 @@ export const Route = createFileRoute("/buckets/")({
   component: BucketsPage,
 });
 
-const SQUARE_TINTS = [
-  "bg-[#e9e2fb] text-[#6638ec]",
-  "bg-[#e0edff] text-[#2874f4]",
-  "bg-[#e4fcf0] text-[#12a15f]",
-  "bg-[#fff1de] text-[#d99f10]",
-  "bg-[#ffe6ec] text-[#e0466b]",
+const BUCKET_ACCENTS = [
+  { line: "bg-[#7c4dcc]", wash: "bg-[#f7f3fc]", text: "text-[#673aa9]" },
+  { line: "bg-[#2874d8]", wash: "bg-[#f1f6fd]", text: "text-[#1f5da9]" },
+  { line: "bg-[#16845a]", wash: "bg-[#eff8f4]", text: "text-[#126d4b]" },
+  { line: "bg-[#bf7a18]", wash: "bg-[#fcf7ee]", text: "text-[#925a0c]" },
+  { line: "bg-[#c84b69]", wash: "bg-[#fcf2f5]", text: "text-[#a43852]" },
 ];
 
-function squareTint(name: string): string {
-  const code = (name.charCodeAt(0) || 0) % SQUARE_TINTS.length;
-  return SQUARE_TINTS[code]!;
+function bucketAccent(name: string) {
+  const code = (name.charCodeAt(0) || 0) % BUCKET_ACCENTS.length;
+  return BUCKET_ACCENTS[code]!;
 }
 
 function CollaboratorStack({ bucket }: { bucket: BucketCard }) {
@@ -66,51 +61,13 @@ function CollaboratorStack({ bucket }: { bucket: BucketCard }) {
   );
 }
 
-function BucketGridCard({ bucket }: { bucket: BucketCard }) {
-  const navigate = useNavigate();
-  const open = () => void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
-  const Icon = bucket.context === "home" ? Home : Briefcase;
-  return (
-    <article
-      role="link"
-      tabIndex={0}
-      onClick={open}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          open();
-        }
-      }}
-      className="group flex cursor-pointer flex-col rounded-[14px] border border-[#eef0f6] bg-white p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-sm"
-    >
-      <span className={cn("flex h-11 w-11 items-center justify-center rounded-[12px]", squareTint(bucket.name))}>
-        <Icon className="h-5 w-5" />
-      </span>
-
-      <div className="mt-3 flex items-center gap-1.5">
-        <h3 className="text-[15px] font-bold text-[#000533] transition-colors group-hover:text-[#975ee2]">
-          {bucket.name}
-        </h3>
-        <Lock className="h-3.5 w-3.5 text-[#8487a7]" />
-      </div>
-      <p className="mt-1 line-clamp-2 text-[12px] leading-relaxed text-[#6a769c]">{bucket.description}</p>
-
-      <p className="mt-2.5 text-[12px] font-medium text-[#3d3f74]">
-        {bucket.thingCount} Things • {bucket.listCount} {bucket.listCount === 1 ? "List" : "Lists"}
-      </p>
-
-      <div className="mt-4 flex items-center justify-between border-t border-[#f2f3f9] pt-3">
-        <CollaboratorStack bucket={bucket} />
-        <span className="whitespace-nowrap text-[11px] text-[#a3a9c9]">Updated {bucket.updatedAt}</span>
-      </div>
-    </article>
-  );
-}
-
 function BucketTableRow({ bucket }: { bucket: BucketCard }) {
   const navigate = useNavigate();
   const open = () => void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
-  const Icon = bucket.context === "home" ? Home : Briefcase;
+  const accent = bucketAccent(bucket.name);
+  const progressTotal = bucket.progressTotal ?? 0;
+  const progressCompleted = Math.min(bucket.progressCompleted ?? 0, progressTotal);
+  const progressPercent = progressTotal ? Math.round((progressCompleted / progressTotal) * 100) : 0;
   return (
     <tr
       role="link"
@@ -126,19 +83,13 @@ function BucketTableRow({ bucket }: { bucket: BucketCard }) {
     >
       <td className="px-3 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]", squareTint(bucket.name))}>
-            <Icon className="h-4 w-4" />
-          </span>
+          <span className={cn("h-8 w-1 shrink-0 rounded-full", accent.line)} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="truncate text-[13px] font-semibold text-[#000533] group-hover:text-[#975ee2]">
                 {bucket.name}
               </span>
-              <Lock className="h-3 w-3 shrink-0 text-[#8487a7]" />
             </div>
-            {bucket.description ? (
-              <p className="truncate max-w-[360px] text-[11.5px] text-[#6a769c]">{bucket.description}</p>
-            ) : null}
           </div>
         </div>
       </td>
@@ -147,6 +98,23 @@ function BucketTableRow({ bucket }: { bucket: BucketCard }) {
       </td>
       <td className="px-3 py-3 text-[12.5px] text-[#3d3f74]">{bucket.thingCount}</td>
       <td className="px-3 py-3 text-[12.5px] text-[#3d3f74]">{bucket.listCount}</td>
+      <td className="px-3 py-3">
+        <div className="flex min-w-[120px] items-center gap-2">
+          <div
+            className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#efeff4]"
+            role="progressbar"
+            aria-label={`${bucket.name} progress`}
+            aria-valuemin={0}
+            aria-valuemax={progressTotal}
+            aria-valuenow={progressCompleted}
+          >
+            <span className={cn("block h-full rounded-full", accent.line)} style={{ width: `${progressPercent}%` }} />
+          </div>
+          <span className="w-8 text-right text-[11px] tabular-nums text-[#777489]">
+            {progressTotal ? `${progressPercent}%` : "—"}
+          </span>
+        </div>
+      </td>
       <td className="px-3 py-3 whitespace-nowrap text-[11.5px] text-[#a3a9c9]">{bucket.updatedAt}</td>
     </tr>
   );
@@ -159,7 +127,6 @@ function BucketsPage() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [personFilter, setPersonFilter] = useState<string | null>(null);
-  const [view, setView] = useState<"grid" | "list">("grid");
 
   // People involved across all buckets (their Things' assignees/owners, their
   // Lists' members) — shown as avatar filters in place of a sort dropdown.
@@ -210,7 +177,7 @@ function BucketsPage() {
   return (
     <AppShell>
       {/* Toolbar: search, people avatars (instead of a sort dropdown), create */}
-      <div className="-mt-2 mb-3 flex flex-wrap items-center gap-3">
+      <div className="-mt-2 mb-6 flex flex-wrap items-center gap-3 border-b border-[#ececf2] pb-4">
         <label className="flex h-10 flex-1 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-white px-3 sm:max-w-md">
           <Search className="h-4 w-4 text-[#8487a7]" />
           <input
@@ -254,36 +221,12 @@ function BucketsPage() {
           </div>
         ) : null}
 
-        {/* View toggle + Create Bucket, side by side */}
+        {/* Create Bucket */}
         <div className="ml-auto flex items-center gap-2">
-          <div className="flex items-center gap-0.5 rounded-[10px] border border-[#ebecf7] bg-white p-0.5">
-            <button
-              type="button"
-              onClick={() => setView("grid")}
-              aria-label="Grid view"
-              className={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
-                view === "grid" ? "bg-[#f0e9fb] text-[#6638ec]" : "text-[#8487a7] hover:bg-muted",
-              )}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("list")}
-              aria-label="List view"
-              className={cn(
-                "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
-                view === "list" ? "bg-[#f0e9fb] text-[#6638ec]" : "text-[#8487a7] hover:bg-muted",
-              )}
-            >
-              <ListIcon className="h-4 w-4" />
-            </button>
-          </div>
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#975ee2] px-4 text-[13px] font-medium text-white transition hover:brightness-95"
+            className="inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#8250c8] px-4 text-[13px] font-medium text-white shadow-[0_2px_8px_rgba(86,45,143,0.2)] transition-[background-color,transform] duration-150 hover:bg-[#7343b8] active:scale-[0.96]"
           >
             <Plus className="h-4 w-4" />
             Create Bucket
@@ -292,24 +235,19 @@ function BucketsPage() {
       </div>
 
       {/* Buckets */}
-      <div className="rounded-[14px] bg-white p-4" style={{ boxShadow: "0 1px 2px rgba(11,12,41,0.05)" }}>
+      <div>
         {filtered.length === 0 ? (
           <p className="py-12 text-center text-[13px] text-[#6a769c]">No buckets found.</p>
-        ) : view === "grid" ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((b) => (
-              <BucketGridCard key={b.id} bucket={b} />
-            ))}
-          </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left">
+            <table className="w-full min-w-[880px] text-left">
               <thead>
                 <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
                   <th className="px-3 py-2.5 font-semibold">Bucket</th>
                   <th className="px-3 py-2.5 font-semibold">Members</th>
                   <th className="px-3 py-2.5 font-semibold">Things</th>
                   <th className="px-3 py-2.5 font-semibold">Lists</th>
+                  <th className="px-3 py-2.5 font-semibold">Progress</th>
                   <th className="px-3 py-2.5 font-semibold">Updated</th>
                 </tr>
               </thead>

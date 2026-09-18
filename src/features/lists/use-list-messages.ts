@@ -143,6 +143,22 @@ export function useListMessages(listId: string) {
         attachment: attachment ? { key: attachment.key, name: attachment.name, mime: attachment.mime, size: attachment.size } : null,
       });
       if (error) throw error;
+
+      // Best-effort push to the other members so they are notified even when the
+      // app is closed. Never blocks the send.
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const at = sess.session?.access_token;
+        if (at) {
+          void fetch("/api/hub/notify-message", {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
+            body: JSON.stringify({ listId, preview: body || (attachment ? "📎 attachment" : "") }),
+          });
+        }
+      } catch {
+        // push is best-effort
+      }
     },
     onSuccess: () => {
       invalidate();

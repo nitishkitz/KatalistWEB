@@ -239,13 +239,28 @@ export type NudgeReason = "waiting_for_catch" | "quiet" | "due_soon" | "stale" |
 export async function rpcNudgeThing(thingId: string, reason?: NudgeReason) {
   return runDomainMutation({
     thingId,
-    live: () =>
-      liveRpc(() =>
+    live: async () => {
+      const res = await liveRpc(() =>
         supabase.rpc("nudge_thing", {
           p_thing_id: thingId,
           ...(reason ? { p_reason: reason } : {}),
         }),
-      ),
+      );
+      // Best-effort push to the assignee so they are notified even when the app
+      // is closed. Never blocks the nudge itself.
+      try {
+        if (typeof window !== "undefined") {
+          void authedFetch("/api/nudges/notify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ thingId }),
+          });
+        }
+      } catch {
+        // push is best-effort
+      }
+      return res;
+    },
     preview: () => {
       nudgeLocal(thingId);
       return null as never;

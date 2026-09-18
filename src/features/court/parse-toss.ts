@@ -48,6 +48,49 @@ export function findFuzzyPersonMatch(
   return null;
 }
 
+/**
+ * Collapse directory entries that describe the same human. The @-mention
+ * directory merges several sources (Court collaborators, the assignable-people
+ * RPC, demo personas), so one person can appear under two different ids. Keyed
+ * by name, we keep a single entry and prefer a real actor id over a demo `p-`
+ * id so the resolved assignee is not filtered out before the Thing is created.
+ */
+function dedupePeopleByName(list: Person[]): Person[] {
+  const byName = new Map<string, Person>();
+  for (const p of list) {
+    const key = p.name.trim().toLowerCase();
+    const existing = byName.get(key);
+    if (!existing) {
+      byName.set(key, p);
+      continue;
+    }
+    if (existing.id.startsWith("p-") && !p.id.startsWith("p-")) {
+      byName.set(key, p);
+    }
+  }
+  return Array.from(byName.values());
+}
+
+/**
+ * Resolve an @-mention needle to the people it could refer to, most-specific
+ * first: an exact first-name / full-name match wins over a prefix match, which
+ * wins over a loose substring match. Duplicate entries for the same person are
+ * collapsed so a directory that lists someone twice no longer reads as an
+ * ambiguous "who is this?".
+ */
+function resolveMentionCandidates(needle: string, people: Person[]): Person[] {
+  const firstNameOf = (name: string) => name.toLowerCase().split(" ")[0] ?? "";
+  const exact = people.filter(
+    (p) => p.name.toLowerCase() === needle || firstNameOf(p.name) === needle,
+  );
+  const prefix = people.filter(
+    (p) => p.name.toLowerCase().startsWith(needle) || firstNameOf(p.name).startsWith(needle),
+  );
+  const substring = people.filter((p) => p.name.toLowerCase().includes(needle));
+  const pool = exact.length ? exact : prefix.length ? prefix : substring;
+  return dedupePeopleByName(pool);
+}
+
 function dueFromToken(token: string): { dueAt: string; dueHasTime: boolean } | null {
   const now = new Date();
   const day = now.getDay();
@@ -102,9 +145,7 @@ export function parseToss(
   const allMentions = [...title.matchAll(mentionRegex)];
   for (const mention of allMentions) {
     const needle = mention[1].toLowerCase();
-    const hits = people.filter(
-      (p) => p.name.toLowerCase().startsWith(needle) || p.name.toLowerCase().includes(needle),
-    );
+    const hits = resolveMentionCandidates(needle, people);
     if (hits.length === 1) {
       const person = hits[0]!;
       if (!assigneeIds.includes(person.id)) {

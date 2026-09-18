@@ -47,6 +47,14 @@ async function fetchBuckets(context: "work" | "home", profileId: string): Promis
     const refs = (items ?? []).filter((it) => it.bucket_id === b.id);
     const bucketThingIds = refs.map((r) => r.thing_id).filter(Boolean) as string[];
     const bucketListIds = refs.map((r) => r.list_id).filter(Boolean) as string[];
+    const directThings = bucketThingIds.map((id) => thingMap.get(id)).filter(Boolean);
+    const bucketLists = bucketListIds.map((id) => listMap.get(id)).filter(Boolean);
+    const activeDirectThings = directThings.filter((thing) => thing?.workStatus !== "cancelled");
+    const progressCompleted =
+      activeDirectThings.filter((thing) => thing?.workStatus === "sorted").length +
+      bucketLists.reduce((sum, list) => sum + (list?.doneCount ?? 0), 0);
+    const progressTotal =
+      activeDirectThings.length + bucketLists.reduce((sum, list) => sum + (list?.thingCount ?? 0), 0);
 
     const bucketCollaborators: { id: string; name: string; avatarUrl: string | null; initials: string }[] = [];
     const seenCollab = new Set<string>();
@@ -148,6 +156,8 @@ async function fetchBuckets(context: "work" | "home", profileId: string): Promis
       pinned: i < 3,
       thingCount: bucketThingIds.length,
       listCount: bucketListIds.length,
+      progressCompleted,
+      progressTotal,
       thingIds: bucketThingIds,
       tags,
       collaborators: bucketCollaborators,

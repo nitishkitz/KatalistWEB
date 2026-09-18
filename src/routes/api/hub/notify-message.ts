@@ -3,10 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
-// Push an incoming-call notification to a list's members (except the caller)
-// who have registered device tokens. Reaches members even when the app is
-// closed. In-app (app open) rings are handled separately via Realtime.
-export const Route = createFileRoute("/api/calls/ring")({
+// Push a new-message notification to a conversation's other members who have
+// registered device tokens. Reaches them even when the app is closed. In-app
+// live refresh is handled separately via the per-list broadcast channel.
+export const Route = createFileRoute("/api/hub/notify-message")({
   server: {
     handlers: {
       POST: async ({ request }) => {
@@ -14,9 +14,9 @@ export const Route = createFileRoute("/api/calls/ring")({
         const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
         if (!token) return json({ error: "unauthorized" }, 401);
 
-        let body: { listId?: string } = {};
+        let body: { listId?: string; preview?: string } = {};
         try {
-          body = (await request.json()) as { listId?: string };
+          body = (await request.json()) as { listId?: string; preview?: string };
         } catch {
           body = {};
         }
@@ -34,8 +34,6 @@ export const Route = createFileRoute("/api/calls/ring")({
           .eq("id", listId)
           .maybeSingle();
         if (!list) return json({ error: "not found" }, 404);
-
-        // DM/group conversations live under /team; task Lists under /lists.
         const isHub = list.kind === "dm" || list.kind === "group";
 
         const { data: members } = await supabaseAdmin
@@ -47,12 +45,12 @@ export const Route = createFileRoute("/api/calls/ring")({
         );
         if (!memberIds.has(uid)) return json({ error: "forbidden" }, 403);
 
-        const { data: caller } = await supabaseAdmin
+        const { data: sender } = await supabaseAdmin
           .from("profiles")
           .select("display_name")
           .eq("id", uid)
           .maybeSingle();
-        const fromName = caller?.display_name || "Someone";
+        const fromName = sender?.display_name || "Someone";
 
         const recipientIds = [...memberIds].filter((id) => id !== uid);
         if (recipientIds.length === 0) return json({ sent: 0 });
@@ -63,16 +61,19 @@ export const Route = createFileRoute("/api/calls/ring")({
           .in("profile_id", recipientIds);
         const tokens = (toks ?? []).map((t) => t.token).filter(Boolean) as string[];
 
+        // DM shows the sender as the title; a group shows the group name.
+        const title = list.kind === "dm" ? fromName : list.name;
+        const preview = (body.preview || "").trim();
+        const messageBody =
+          list.kind === "dm"
+            ? preview || "sent you a message"
+            : `${fromName}: ${preview || "sent a message"}`;
+
         const { sendPush } = await import("@/lib/fcm.server");
         const sent = await sendPush(
           tokens,
-          { title: "Incoming call", body: `${fromName} started a call in ${list.name}` },
-          {
-            url: isHub ? `/team/${listId}` : `/lists/${listId}`,
-            kind: "incoming_call",
-            hub: isHub ? "1" : "0",
-            listId,
-          },
+          { title, body: messageBody.slice(0, 140) },
+          { url: isHub ? `/team/${listId}` : `/lists/${listId}`, kind: "message", hub: isHub ? "1" : "0", listId },
         );
         return json({ sent });
       },

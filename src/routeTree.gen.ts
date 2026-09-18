@@ -23,9 +23,13 @@ import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
+import { Route as TeamIndexRouteImport } from './routes/team.index'
+import { Route as TeamConversationIdRouteImport } from './routes/team.$conversationId'
 import { Route as ApiCallsRingRouteImport } from './routes/api/calls/ring'
+import { Route as ApiHubNotifyMessageRouteImport } from './routes/api/hub/notify-message'
 import { Route as ApiJobsDailyMaintenanceRouteImport } from './routes/api/jobs/daily-maintenance'
 import { Route as ApiJobsEscalateNudgesRouteImport } from './routes/api/jobs/escalate-nudges'
+import { Route as ApiNudgesNotifyRouteImport } from './routes/api/nudges/notify'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
 import { Route as ApiPublicBridgeCommentRouteImport } from './routes/api/public/bridge/comment'
 import { Route as ApiPublicBridgeRedeemRouteImport } from './routes/api/public/bridge/redeem'
@@ -101,9 +105,24 @@ const ListsListIdRoute = ListsListIdRouteImport.update({
   path: '/$listId',
   getParentRoute: () => ListsRoute,
 } as any)
+const TeamIndexRoute = TeamIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => TeamRoute,
+} as any)
+const TeamConversationIdRoute = TeamConversationIdRouteImport.update({
+  id: '/$conversationId',
+  path: '/$conversationId',
+  getParentRoute: () => TeamRoute,
+} as any)
 const ApiCallsRingRoute = ApiCallsRingRouteImport.update({
   id: '/api/calls/ring',
   path: '/api/calls/ring',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHubNotifyMessageRoute = ApiHubNotifyMessageRouteImport.update({
+  id: '/api/hub/notify-message',
+  path: '/api/hub/notify-message',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiJobsDailyMaintenanceRoute = ApiJobsDailyMaintenanceRouteImport.update({
@@ -114,6 +133,11 @@ const ApiJobsDailyMaintenanceRoute = ApiJobsDailyMaintenanceRouteImport.update({
 const ApiJobsEscalateNudgesRoute = ApiJobsEscalateNudgesRouteImport.update({
   id: '/api/jobs/escalate-nudges',
   path: '/api/jobs/escalate-nudges',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNudgesNotifyRoute = ApiNudgesNotifyRouteImport.update({
+  id: '/api/nudges/notify',
+  path: '/api/nudges/notify',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicBridgeActRoute = ApiPublicBridgeActRouteImport.update({
@@ -145,16 +169,20 @@ export interface FileRoutesByFullPath {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
-  '/team': typeof TeamRoute
+  '/team': typeof TeamRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
   '/lists/$listId': typeof ListsListIdRoute
+  '/team/$conversationId': typeof TeamConversationIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/team/': typeof TeamIndexRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
+  '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
+  '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -166,16 +194,19 @@ export interface FileRoutesByTo {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
-  '/team': typeof TeamRoute
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
   '/lists/$listId': typeof ListsListIdRoute
+  '/team/$conversationId': typeof TeamConversationIdRoute
   '/buckets': typeof BucketsIndexRoute
   '/lists': typeof ListsIndexRoute
+  '/team': typeof TeamIndexRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
+  '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
+  '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -190,16 +221,20 @@ export interface FileRoutesById {
   '/me': typeof MeRoute
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
-  '/team': typeof TeamRoute
+  '/team': typeof TeamRouteWithChildren
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
   '/lists/$listId': typeof ListsListIdRoute
+  '/team/$conversationId': typeof TeamConversationIdRoute
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
+  '/team/': typeof TeamIndexRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
+  '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
+  '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -220,11 +255,15 @@ export interface FileRouteTypes {
     | '/bridge/$token'
     | '/buckets/$bucketId'
     | '/lists/$listId'
+    | '/team/$conversationId'
     | '/buckets/'
     | '/lists/'
+    | '/team/'
     | '/api/calls/ring'
+    | '/api/hub/notify-message'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
+    | '/api/nudges/notify'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -236,16 +275,19 @@ export interface FileRouteTypes {
     | '/me'
     | '/nudges'
     | '/onboarding'
-    | '/team'
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
     | '/lists/$listId'
+    | '/team/$conversationId'
     | '/buckets'
     | '/lists'
+    | '/team'
     | '/api/calls/ring'
+    | '/api/hub/notify-message'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
+    | '/api/nudges/notify'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -264,11 +306,15 @@ export interface FileRouteTypes {
     | '/bridge/$token'
     | '/buckets/$bucketId'
     | '/lists/$listId'
+    | '/team/$conversationId'
     | '/buckets/'
     | '/lists/'
+    | '/team/'
     | '/api/calls/ring'
+    | '/api/hub/notify-message'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
+    | '/api/nudges/notify'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -283,12 +329,14 @@ export interface RootRouteChildren {
   MeRoute: typeof MeRoute
   NudgesRoute: typeof NudgesRoute
   OnboardingRoute: typeof OnboardingRoute
-  TeamRoute: typeof TeamRoute
+  TeamRoute: typeof TeamRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
   ApiCallsRingRoute: typeof ApiCallsRingRoute
+  ApiHubNotifyMessageRoute: typeof ApiHubNotifyMessageRoute
   ApiJobsDailyMaintenanceRoute: typeof ApiJobsDailyMaintenanceRoute
   ApiJobsEscalateNudgesRoute: typeof ApiJobsEscalateNudgesRoute
+  ApiNudgesNotifyRoute: typeof ApiNudgesNotifyRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
   ApiPublicBridgeCommentRoute: typeof ApiPublicBridgeCommentRoute
   ApiPublicBridgeRedeemRoute: typeof ApiPublicBridgeRedeemRoute
@@ -395,11 +443,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ListsListIdRouteImport
       parentRoute: typeof ListsRoute
     }
+    '/team/': {
+      id: '/team/'
+      path: '/'
+      fullPath: '/team/'
+      preLoaderRoute: typeof TeamIndexRouteImport
+      parentRoute: typeof TeamRoute
+    }
+    '/team/$conversationId': {
+      id: '/team/$conversationId'
+      path: '/$conversationId'
+      fullPath: '/team/$conversationId'
+      preLoaderRoute: typeof TeamConversationIdRouteImport
+      parentRoute: typeof TeamRoute
+    }
     '/api/calls/ring': {
       id: '/api/calls/ring'
       path: '/api/calls/ring'
       fullPath: '/api/calls/ring'
       preLoaderRoute: typeof ApiCallsRingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/hub/notify-message': {
+      id: '/api/hub/notify-message'
+      path: '/api/hub/notify-message'
+      fullPath: '/api/hub/notify-message'
+      preLoaderRoute: typeof ApiHubNotifyMessageRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/jobs/daily-maintenance': {
@@ -414,6 +483,13 @@ declare module '@tanstack/react-router' {
       path: '/api/jobs/escalate-nudges'
       fullPath: '/api/jobs/escalate-nudges'
       preLoaderRoute: typeof ApiJobsEscalateNudgesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/nudges/notify': {
+      id: '/api/nudges/notify'
+      path: '/api/nudges/notify'
+      fullPath: '/api/nudges/notify'
+      preLoaderRoute: typeof ApiNudgesNotifyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/bridge/act': {
@@ -472,6 +548,18 @@ const ListsRouteChildren: ListsRouteChildren = {
 
 const ListsRouteWithChildren = ListsRoute._addFileChildren(ListsRouteChildren)
 
+interface TeamRouteChildren {
+  TeamConversationIdRoute: typeof TeamConversationIdRoute
+  TeamIndexRoute: typeof TeamIndexRoute
+}
+
+const TeamRouteChildren: TeamRouteChildren = {
+  TeamConversationIdRoute: TeamConversationIdRoute,
+  TeamIndexRoute: TeamIndexRoute,
+}
+
+const TeamRouteWithChildren = TeamRoute._addFileChildren(TeamRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
@@ -480,12 +568,14 @@ const rootRouteChildren: RootRouteChildren = {
   MeRoute: MeRoute,
   NudgesRoute: NudgesRoute,
   OnboardingRoute: OnboardingRoute,
-  TeamRoute: TeamRoute,
+  TeamRoute: TeamRouteWithChildren,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
   ApiCallsRingRoute: ApiCallsRingRoute,
+  ApiHubNotifyMessageRoute: ApiHubNotifyMessageRoute,
   ApiJobsDailyMaintenanceRoute: ApiJobsDailyMaintenanceRoute,
   ApiJobsEscalateNudgesRoute: ApiJobsEscalateNudgesRoute,
+  ApiNudgesNotifyRoute: ApiNudgesNotifyRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,
   ApiPublicBridgeCommentRoute: ApiPublicBridgeCommentRoute,
   ApiPublicBridgeRedeemRoute: ApiPublicBridgeRedeemRoute,
