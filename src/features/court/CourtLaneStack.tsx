@@ -4,6 +4,7 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -191,15 +192,36 @@ function PeekQueueCard({
 
 export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackProps>(
   function CourtLaneStack(
-    { lane, things, myActorId, initialPosition, onOpen, onRefresh, onViewAll },
+    { lane, things: allThings, myActorId, initialPosition, onOpen, onRefresh, onViewAll },
     ref,
   ) {
+    const qc = useQueryClient();
+    // Optimistic removal: when a card is sorted / paced-later / snoozed we hide it
+    // instantly and run the RPC in the background, so the stack never freezes while
+    // waiting on the network. If the RPC fails we drop the id and the card returns.
+    const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set<string>());
+    const inFlightRef = useRef<Set<string>>(new Set());
+    const things = useMemo(
+      () => (removedIds.size ? allThings.filter((t) => !removedIds.has(t.id)) : allThings),
+      [allThings, removedIds],
+    );
+
+    // Once the server refetch confirms a removal (or the thing never existed),
+    // drop it from the optimistic set so it cannot grow unbounded. A rolled-back
+    // failure is unaffected because the thing is still present in allThings.
+    useEffect(() => {
+      setRemovedIds((prev) => {
+        if (!prev.size) return prev;
+        const next = new Set([...prev].filter((id) => allThings.some((t) => t.id === id)));
+        return next.size === prev.size ? prev : next;
+      });
+    }, [allThings]);
+
     const initialIndex = reconcileStackIndex(
       initialPosition?.activeIndex ?? 0,
       initialPosition?.activeThingId ?? null,
       things,
     );
-    const qc = useQueryClient();
     const [activeIndex, setActiveIndex] = useState(initialIndex);
     const [pendingAction, setPendingAction] = useState<CourtStackAction | null>(null);
     const [announcement, setAnnouncement] = useState("");
@@ -399,20 +421,68 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       return () => observer.kill();
     }, [things.length]);
 
+    // Hide a card immediately, then reconcile with the server in the background.
+    // On failure the card is restored so nothing is silently lost.
+    const runOptimisticRemoval = useCallback(
+      async (thing: Thing, label: string, mutate: () => Promise<unknown>) => {
+        if (inFlightRef.current.has(thing.id)) return;
+        inFlightRef.current.add(thing.id);
+        setRemovedIds((prev) => {
+          const next = new Set(prev);
+          next.add(thing.id);
+          return next;
+        });
+        setAnnouncement(`${thing.title} ${label}.`);
+        try {
+          await mutate();
+          await onRefresh();
+        } catch (error) {
+          // Roll back — the card slides back into the stack.
+          setRemovedIds((prev) => {
+            if (!prev.has(thing.id)) return prev;
+            const next = new Set(prev);
+            next.delete(thing.id);
+            return next;
+          });
+          toast.error(domainErrorMessage(error));
+        } finally {
+          inFlightRef.current.delete(thing.id);
+        }
+      },
+      [onRefresh],
+    );
+
     const runAction = useCallback(
       async (action: CourtStackAction) => {
-        if (!activeThing || pendingAction) return;
+        if (!activeThing) return;
         if (action === "catch" && !capabilities.canCatch) return;
         if (action === "later" && !actionCapabilities.canMoveLater) return;
         if (action === "sort" && !capabilities.canSort) return;
+
+        // Sort and pace-later remove the card from this lane — do them optimistically.
+        if (action === "later") {
+          const target = activeThing;
+          void runOptimisticRemoval(target, "snoozed", async () => {
+            await rpcSetPersonalPace(target.id, "later");
+            toast.success("Snoozed.");
+          });
+          return;
+        }
+        if (action === "sort") {
+          const target = activeThing;
+          void runOptimisticRemoval(target, `sorted in ${content.label}`, async () => {
+            await rpcSortThing(target.id);
+            toast.success("Nicely sorted.");
+          });
+          return;
+        }
+
+        // Catch keeps the card in place, so keep the blocking pending state.
+        if (pendingAction) return;
         setPendingAction(action);
         try {
-          if (action === "catch") await rpcCatchAndStart(activeThing.id);
-          if (action === "later") await rpcSetPersonalPace(activeThing.id, "later");
-          if (action === "sort") await rpcSortThing(activeThing.id);
-          toast.success(
-            action === "catch" ? "Caught." : action === "later" ? "Snoozed." : "Nicely sorted.",
-          );
+          await rpcCatchAndStart(activeThing.id);
+          toast.success("Caught.");
           await onRefresh();
           setAnnouncement(`${activeThing.title} updated in ${content.label}.`);
         } catch (error) {
@@ -429,34 +499,28 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         content.label,
         onRefresh,
         pendingAction,
+        runOptimisticRemoval,
       ],
     );
 
     const runSnooze = useCallback(
-      async (option: SnoozeOption) => {
-        if (!activeThing || pendingAction) return;
-        setPendingAction("later");
-        try {
-          const until = snoozeUntilFor(option);
-          await rpcSnoozeThing(activeThing.id, until);
-          toast.success(
-            option === "1h"
-              ? "Snoozed for 1 hour."
-              : option === "6h"
-                ? "Snoozed for 6 hours."
-                : "Snoozed until tomorrow, 9 AM.",
-          );
+      (option: SnoozeOption) => {
+        if (!activeThing) return;
+        const target = activeThing;
+        setSnoozeOpen(false);
+        const label =
+          option === "1h"
+            ? "Snoozed for 1 hour."
+            : option === "6h"
+              ? "Snoozed for 6 hours."
+              : "Snoozed until tomorrow, 9 AM.";
+        void runOptimisticRemoval(target, "snoozed", async () => {
+          await rpcSnoozeThing(target.id, snoozeUntilFor(option));
+          toast.success(label);
           await invalidateSnoozeSurfaces(qc);
-          await onRefresh();
-          setAnnouncement(`${activeThing.title} snoozed.`);
-        } catch (error) {
-          toast.error(domainErrorMessage(error));
-        } finally {
-          setSnoozeOpen(false);
-          setPendingAction(null);
-        }
+        });
       },
-      [activeThing, pendingAction, onRefresh, qc],
+      [activeThing, qc, runOptimisticRemoval],
     );
 
     // Close the snooze menu whenever the active card changes.
