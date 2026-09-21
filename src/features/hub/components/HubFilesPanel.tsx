@@ -28,8 +28,11 @@ import { detectFileType } from "@/lib/file-utils";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 import { useHubFiles, getHubFileUrl, type HubFile } from "@/features/hub/use-hub-files";
+import type { ChatAttachment } from "@/features/lists/use-list-messages";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
+
+export type ChatFileEntry = { id: string; attachment: ChatAttachment; author: string; at: string };
 
 function fileVisual(f: HubFile): { label: string; Icon: typeof FileIcon; tint: string } {
   if (f.isFolder) return { label: "Folder", Icon: Folder, tint: "text-[#f2b70a]" };
@@ -52,7 +55,15 @@ function fileVisual(f: HubFile): { label: string; Icon: typeof FileIcon; tint: s
   }
 }
 
-export function HubFilesPanel({ listId, conversationTitle }: { listId: string; conversationTitle: string }) {
+export function HubFilesPanel({
+  listId,
+  conversationTitle,
+  chatAttachments = [],
+}: {
+  listId: string;
+  conversationTitle: string;
+  chatAttachments?: ChatFileEntry[];
+}) {
   const [path, setPath] = useState<{ id: string; name: string }[]>([]);
   const parentId = path.length ? path[path.length - 1].id : null;
   const { files, isLoading, createFolder, upload, rename, remove } = useHubFiles(listId, parentId);
@@ -227,6 +238,41 @@ export function HubFilesPanel({ listId, conversationTitle }: { listId: string; c
 
       {/* Body */}
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+        {path.length === 0 && chatAttachments.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Shared in chat</p>
+            <div className="space-y-2">
+              {chatAttachments
+                .slice()
+                .reverse()
+                .map((entry) => {
+                  const a = entry.attachment;
+                  const isImage = (a.mime ?? "").startsWith("image/");
+                  return (
+                    <a
+                      key={entry.id}
+                      href={a.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-3 rounded-[10px] border border-[#eef0f6] px-3 py-2.5 hover:border-[#975ee2]"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#eef0f6] text-[#6a769c]">
+                        {isImage ? <FileImage className="h-4.5 w-4.5" /> : <FileText className="h-4.5 w-4.5" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[12.5px] font-medium text-[#000533]">{a.name}</span>
+                        <span className="block text-[11px] text-[#8487a7]">
+                          {entry.author} · {new Date(entry.at).toLocaleDateString([], { day: "numeric", month: "short" })}
+                          {a.size ? ` · ${formatFileSize(a.size)}` : ""}
+                        </span>
+                      </span>
+                      <Download className="h-4 w-4 shrink-0 text-[#8487a7]" />
+                    </a>
+                  );
+                })}
+            </div>
+          </div>
+        )}
         {isLoading ? (
           <p className="py-10 text-center text-[12.5px] text-[#6a769c]">Loading files…</p>
         ) : shown.length === 0 ? (

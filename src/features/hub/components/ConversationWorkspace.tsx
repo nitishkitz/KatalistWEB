@@ -54,6 +54,15 @@ export function ConversationWorkspace({
     (user?.user_metadata?.display_name as string | undefined) || user?.email?.split("@")[0] || "You";
   const call = useListCall(listId, selfId, selfName);
 
+  const callHistory = useMemo(() => chat.messages.filter((m) => m.kind === "system"), [chat.messages]);
+  const chatAttachments = useMemo(
+    () =>
+      chat.messages
+        .filter((m) => m.attachment)
+        .map((m) => ({ id: m.id, attachment: m.attachment!, author: m.author, at: m.at })),
+    [chat.messages],
+  );
+
   const title = conversation?.title ?? "Conversation";
   const isDm = conversation?.kind === "dm";
   const selectedList = useMemo(() => lists.find((list) => list.id === listId), [lists, listId]);
@@ -257,39 +266,71 @@ export function ConversationWorkspace({
         {tab === "chat" ? (
           <ListChatPanel listId={listId} placeholderName={title} />
         ) : tab === "files" ? (
-          <HubFilesPanel listId={listId} conversationTitle={title} />
+          <HubFilesPanel listId={listId} conversationTitle={title} chatAttachments={chatAttachments} />
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-            {call.joined || call.connecting ? (
-              <p className="text-[13px] text-[#6a769c]">You are in the call. Controls are at the bottom of the screen.</p>
-            ) : (
-              <>
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f0e9fb]">
-                  <PhoneCall className="h-7 w-7 text-[#6638ec]" />
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <div className="flex flex-col items-center justify-center gap-4 p-6 text-center">
+              {call.joined || call.connecting ? (
+                <p className="text-[13px] text-[#6a769c]">You are in the call. Controls are at the bottom of the screen.</p>
+              ) : (
+                <>
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f0e9fb]">
+                    <PhoneCall className="h-7 w-7 text-[#6638ec]" />
+                  </div>
+                  <div>
+                    <p className="text-[15px] font-semibold text-[#000533]">Start a call with {title}</p>
+                    <p className="mt-1 text-[12.5px] text-[#6a769c]">Everyone in this conversation will be notified.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openStartCall(false)}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] px-4 text-[13px] font-semibold text-[#3d3f74] hover:border-[#975ee2]"
+                    >
+                      <Phone className="h-4 w-4" />
+                      Audio
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openStartCall(true)}
+                      className="inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#975ee2] px-4 text-[13px] font-semibold text-white hover:brightness-95"
+                    >
+                      <Video className="h-4 w-4" />
+                      Video
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            {callHistory.length > 0 && (
+              <div className="border-t border-[#eef0f6] px-5 py-4">
+                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Call history</p>
+                <div className="space-y-2">
+                  {callHistory
+                    .slice()
+                    .reverse()
+                    .map((m) => (
+                      <div key={m.id} className="flex items-center gap-3 rounded-[10px] border border-[#eef0f6] px-3 py-2.5">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0e9fb] text-[#6638ec]">
+                          <PhoneCall className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0 flex-1 text-left">
+                          <p className="truncate text-[12.5px] text-[#000533]">
+                            <span className="font-medium">{m.author}</span> {m.body}
+                          </p>
+                          <p className="text-[11px] text-[#8487a7]">
+                            {new Date(m.at).toLocaleString([], {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
                 </div>
-                <div>
-                  <p className="text-[15px] font-semibold text-[#000533]">Start a call with {title}</p>
-                  <p className="mt-1 text-[12.5px] text-[#6a769c]">Everyone in this conversation will be notified.</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => openStartCall(false)}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] px-4 text-[13px] font-semibold text-[#3d3f74] hover:border-[#975ee2]"
-                  >
-                    <Phone className="h-4 w-4" />
-                    Audio
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openStartCall(true)}
-                    className="inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#975ee2] px-4 text-[13px] font-semibold text-white hover:brightness-95"
-                  >
-                    <Video className="h-4 w-4" />
-                    Video
-                  </button>
-                </div>
-              </>
+              </div>
             )}
           </div>
         )}

@@ -755,13 +755,15 @@ export function ThingDetailContent({
                   </span>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => thingFileInputRef.current?.click()}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-[#975ee2] hover:opacity-80 transition-opacity cursor-pointer"
-              >
-                + Add file
-              </button>
+              {!viewOnly && (
+                <button
+                  type="button"
+                  onClick={() => thingFileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[#975ee2] hover:opacity-80 transition-opacity cursor-pointer"
+                >
+                  + Add file
+                </button>
+              )}
             </div>
             {displayFiles.length > 0 ? (
               <div className="overflow-hidden rounded-[8px] border border-[#eeeff6] bg-[#fdfcfd]">

@@ -135,7 +135,7 @@ function NudgesPage() {
 
   return (
     <AppShell>
-      <InlineThingDetailWorkspace thing={selected} onClose={() => setSelectedId(null)}>
+      <InlineThingDetailWorkspace thing={selected} onClose={() => setSelectedId(null)} flatPanel>
         <div className="space-y-5">
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-3">

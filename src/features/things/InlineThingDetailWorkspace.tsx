@@ -28,7 +28,11 @@ type InlineThingDetailWorkspaceProps = {
   onSelectThing?: (thingId: string) => void;
   navTitle?: string;
   magicBoxProps?: { listId?: string; listName?: string };
+  /** Opt into the flat white-card look used by the restyled Team/Bucket-detail screens (hex borders, rounded-[10px], no shadcn shadow token) instead of the generic card default. */
+  flatPanel?: boolean;
 };
+
+const FLAT_PANEL_SHADOW = "0 3px 9.4px 0 rgba(0,0,0,0.05)";
 
 export function InlineThingDetailWorkspace({
   thing,
@@ -42,6 +46,7 @@ export function InlineThingDetailWorkspace({
   onSelectThing,
   navTitle,
   magicBoxProps,
+  flatPanel = false,
 }: InlineThingDetailWorkspaceProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -76,17 +81,25 @@ export function InlineThingDetailWorkspace({
       <button
         type="button"
         onClick={onClose}
-        className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-foreground hover:text-primary outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+        className={cn(
+          "inline-flex items-center gap-1.5 text-[12px] font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring cursor-pointer",
+          flatPanel ? "text-[#6a769c] hover:text-[#000533]" : "text-foreground hover:text-primary",
+        )}
         aria-label={`Back to ${backLabel || "List"}`}
       >
-        <ChevronLeft className="h-4 w-4 text-foreground" />
+        <ChevronLeft className={cn("h-4 w-4", flatPanel ? "text-[#6a769c]" : "text-foreground")} />
         Back to {backLabel || "List"}
       </button>
       <button
         type="button"
         onClick={onClose}
         aria-label="Close Thing details"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:bg-muted/30 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+        className={cn(
+          "inline-flex h-7 w-7 items-center justify-center outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring cursor-pointer",
+          flatPanel
+            ? "rounded-[8px] border border-[#eef0f6] text-[#6a769c] hover:bg-[#f4f6fd] hover:text-[#000533]"
+            : "rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:bg-muted/30",
+        )}
       >
         <X className="h-3.5 w-3.5" />
       </button>
@@ -307,9 +320,15 @@ export function InlineThingDetailWorkspace({
         className,
       )}
     >
-      <div className={cn("min-w-0", sourceClassName)}>{children}</div>
+      <div className={cn("min-w-0 overflow-x-hidden", sourceClassName)}>{children}</div>
 
-      <div className="min-w-0 rounded-2xl border border-border/80 bg-white p-6 md:p-8 shadow-xs motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
+      <div
+        className={cn(
+          "min-w-0 p-6 md:p-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200",
+          flatPanel ? "rounded-[10px] bg-white" : "rounded-2xl border border-border/80 bg-white shadow-xs",
+        )}
+        style={flatPanel ? { boxShadow: FLAT_PANEL_SHADOW } : undefined}
+      >
         <div className="max-h-[calc(100vh-10rem)] overflow-y-auto overscroll-contain">
           <ThingDetailContent
             initialThing={thing}
