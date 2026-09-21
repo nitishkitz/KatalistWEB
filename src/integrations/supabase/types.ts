@@ -322,7 +322,29 @@ export type Database = {
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "bucket_notes_author_profile_id_fkey"
+            columns: ["author_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bucket_notes_author_profile_id_fkey"
+            columns: ["author_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bucket_notes_bucket_id_fkey"
+            columns: ["bucket_id"]
+            isOneToOne: false
+            referencedRelation: "buckets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       buckets: {
         Row: {
@@ -366,6 +388,98 @@ export type Database = {
           {
             foreignKeyName: "buckets_owner_profile_id_fkey"
             columns: ["owner_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catchup_receipts: {
+        Row: {
+          id: string
+          moment_key: string
+          profile_id: string
+          surfaced_at: string
+        }
+        Insert: {
+          id?: string
+          moment_key: string
+          profile_id: string
+          surfaced_at?: string
+        }
+        Update: {
+          id?: string
+          moment_key?: string
+          profile_id?: string
+          surfaced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catchup_receipts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "catchup_receipts_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_requests: {
+        Row: {
+          addressee_profile_id: string
+          created_at: string
+          id: string
+          requester_profile_id: string
+          responded_at: string | null
+          status: string
+        }
+        Insert: {
+          addressee_profile_id: string
+          created_at?: string
+          id?: string
+          requester_profile_id: string
+          responded_at?: string | null
+          status?: string
+        }
+        Update: {
+          addressee_profile_id?: string
+          created_at?: string
+          id?: string
+          requester_profile_id?: string
+          responded_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_requests_addressee_profile_id_fkey"
+            columns: ["addressee_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_requests_addressee_profile_id_fkey"
+            columns: ["addressee_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_requests_requester_profile_id_fkey"
+            columns: ["requester_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_requests_requester_profile_id_fkey"
+            columns: ["requester_profile_id"]
             isOneToOne: false
             referencedRelation: "public_identities"
             referencedColumns: ["id"]
@@ -421,6 +535,45 @@ export type Database = {
           {
             foreignKeyName: "contacts_owner_profile_id_fkey"
             columns: ["owner_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      device_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          profile_id: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          profile_id: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_id?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "device_tokens_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "device_tokens_profile_id_fkey"
+            columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "public_identities"
             referencedColumns: ["id"]
@@ -492,72 +645,6 @@ export type Database = {
           },
         ]
       }
-      thing_snooze: {
-        Row: {
-          created_at: string
-          id: string
-          profile_id: string
-          snoozed_until: string
-          thing_id: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          profile_id: string
-          snoozed_until: string
-          thing_id: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          profile_id?: string
-          snoozed_until?: string
-          thing_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "thing_snooze_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "thing_snooze_thing_id_fkey"
-            columns: ["thing_id"]
-            isOneToOne: false
-            referencedRelation: "things"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      device_tokens: {
-        Row: {
-          created_at: string
-          id: string
-          profile_id: string
-          token: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          profile_id: string
-          token: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          profile_id?: string
-          token?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       external_identities: {
         Row: {
           claimed_at: string | null
@@ -606,63 +693,6 @@ export type Database = {
           },
         ]
       }
-      contact_requests: {
-        Row: {
-          addressee_profile_id: string
-          created_at: string
-          id: string
-          requester_profile_id: string
-          responded_at: string | null
-          status: string
-        }
-        Insert: {
-          addressee_profile_id: string
-          created_at?: string
-          id?: string
-          requester_profile_id: string
-          responded_at?: string | null
-          status?: string
-        }
-        Update: {
-          addressee_profile_id?: string
-          created_at?: string
-          id?: string
-          requester_profile_id?: string
-          responded_at?: string | null
-          status?: string
-        }
-        Relationships: []
-      }
-      invitations: {
-        Row: {
-          accepted_at: string | null
-          created_at: string
-          email: string
-          id: string
-          inviter_profile_id: string
-          status: string
-          token: string
-        }
-        Insert: {
-          accepted_at?: string | null
-          created_at?: string
-          email: string
-          id?: string
-          inviter_profile_id: string
-          status?: string
-          token: string
-        }
-        Update: {
-          accepted_at?: string | null
-          created_at?: string
-          email?: string
-          id?: string
-          inviter_profile_id?: string
-          status?: string
-          token?: string
-        }
-        Relationships: []
-      }
       hub_files: {
         Row: {
           created_at: string
@@ -708,6 +738,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "hub_files_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hub_files_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "hub_files_list_id_fkey"
             columns: ["list_id"]
             isOneToOne: false
@@ -715,11 +759,128 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "hub_files_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "thing_list_label"
+            referencedColumns: ["list_id"]
+          },
+          {
             foreignKeyName: "hub_files_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "hub_files"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          id: string
+          inviter_profile_id: string
+          status: string
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          inviter_profile_id: string
+          status?: string
+          token: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          inviter_profile_id?: string
+          status?: string
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_inviter_profile_id_fkey"
+            columns: ["inviter_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitations_inviter_profile_id_fkey"
+            columns: ["inviter_profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      list_meetings: {
+        Row: {
+          cancelled_at: string | null
+          created_at: string
+          created_by: string
+          ends_at: string
+          id: string
+          list_id: string
+          starts_at: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          created_at?: string
+          created_by: string
+          ends_at: string
+          id?: string
+          list_id: string
+          starts_at: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          created_at?: string
+          created_by?: string
+          ends_at?: string
+          id?: string
+          list_id?: string
+          starts_at?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "list_meetings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_meetings_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_meetings_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "lists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "list_meetings_list_id_fkey"
+            columns: ["list_id"]
+            isOneToOne: false
+            referencedRelation: "thing_list_label"
+            referencedColumns: ["list_id"]
           },
         ]
       }
@@ -915,6 +1076,98 @@ export type Database = {
           },
         ]
       }
+      notification_log: {
+        Row: {
+          channel: string
+          created_at: string
+          id: string
+          profile_id: string
+          thing_id: string | null
+          type: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          id?: string
+          profile_id: string
+          thing_id?: string | null
+          type: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+          thing_id?: string | null
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_log_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_log_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_log_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "thing_list_label"
+            referencedColumns: ["thing_id"]
+          },
+          {
+            foreignKeyName: "notification_log_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "things"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_prefs: {
+        Row: {
+          profile_id: string
+          quiet_end: number
+          quiet_start: number
+          updated_at: string
+        }
+        Insert: {
+          profile_id: string
+          quiet_end?: number
+          quiet_start?: number
+          updated_at?: string
+        }
+        Update: {
+          profile_id?: string
+          quiet_end?: number
+          quiet_start?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_prefs_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notification_prefs_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           actor_id: string | null
@@ -925,6 +1178,7 @@ export type Database = {
           list_id: string | null
           payload: Json
           profile_id: string
+          pushed_at: string | null
           read_at: string | null
           thing_id: string | null
           title: string
@@ -939,6 +1193,7 @@ export type Database = {
           list_id?: string | null
           payload?: Json
           profile_id: string
+          pushed_at?: string | null
           read_at?: string | null
           thing_id?: string | null
           title: string
@@ -953,6 +1208,7 @@ export type Database = {
           list_id?: string | null
           payload?: Json
           profile_id?: string
+          pushed_at?: string | null
           read_at?: string | null
           thing_id?: string | null
           title?: string
@@ -1163,8 +1419,8 @@ export type Database = {
         Row: {
           active_context: Database["public"]["Enums"]["context_kind"]
           age: number | null
-          cover_theme: string | null
           avatar_url: string | null
+          cover_theme: string | null
           created_at: string
           display_name: string
           email: string | null
@@ -1430,6 +1686,110 @@ export type Database = {
           },
           {
             foreignKeyName: "thing_comments_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "things"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      thing_nudge_state: {
+        Row: {
+          id: string
+          last_escalated_at: string | null
+          snoozed_until: string | null
+          staleness_level: Database["public"]["Enums"]["nudge_staleness"]
+          thing_id: string
+          to_actor_id: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          last_escalated_at?: string | null
+          snoozed_until?: string | null
+          staleness_level?: Database["public"]["Enums"]["nudge_staleness"]
+          thing_id: string
+          to_actor_id: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          last_escalated_at?: string | null
+          snoozed_until?: string | null
+          staleness_level?: Database["public"]["Enums"]["nudge_staleness"]
+          thing_id?: string
+          to_actor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thing_nudge_state_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "thing_list_label"
+            referencedColumns: ["thing_id"]
+          },
+          {
+            foreignKeyName: "thing_nudge_state_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "things"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      thing_snooze: {
+        Row: {
+          created_at: string
+          id: string
+          profile_id: string
+          snoozed_until: string
+          thing_id: string
+          updated_at: string
+          woke_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          profile_id: string
+          snoozed_until: string
+          thing_id: string
+          updated_at?: string
+          woke_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          profile_id?: string
+          snoozed_until?: string
+          thing_id?: string
+          updated_at?: string
+          woke_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thing_snooze_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "thing_snooze_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "public_identities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "thing_snooze_thing_id_fkey"
+            columns: ["thing_id"]
+            isOneToOne: false
+            referencedRelation: "thing_list_label"
+            referencedColumns: ["thing_id"]
+          },
+          {
+            foreignKeyName: "thing_snooze_thing_id_fkey"
             columns: ["thing_id"]
             isOneToOne: false
             referencedRelation: "things"
@@ -1728,6 +2088,14 @@ export type Database = {
           thing_id: string
         }[]
       }
+      cancel_contact_request: {
+        Args: { p_request_id: string }
+        Returns: boolean
+      }
+      cancel_list_meeting: {
+        Args: { p_meeting_id: string }
+        Returns: undefined
+      }
       cancel_thing: {
         Args: { p_reason?: string; p_thing_id: string }
         Returns: {
@@ -1913,6 +2281,45 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_group: {
+        Args: { p_member_ids: string[]; p_name: string }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
+          created_at: string
+          description: string | null
+          id: string
+          kind: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lists"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_invitation: {
+        Args: { p_email: string }
+        Returns: {
+          accepted_at: string | null
+          created_at: string
+          email: string
+          id: string
+          inviter_profile_id: string
+          status: string
+          token: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "invitations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_list: {
         Args: {
           p_context?: Database["public"]["Enums"]["context_kind"]
@@ -1927,6 +2334,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          kind: string
           name: string
           owner_profile_id: string
           updated_at: string
@@ -1951,6 +2359,31 @@ export type Database = {
         }
         Returns: string
       }
+      create_list_meeting: {
+        Args: {
+          p_ends_at: string
+          p_list_id: string
+          p_starts_at: string
+          p_title: string
+        }
+        Returns: {
+          cancelled_at: string | null
+          created_at: string
+          created_by: string
+          ends_at: string
+          id: string
+          list_id: string
+          starts_at: string
+          title: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "list_meetings"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_list_v2: {
         Args: {
           p_context?: Database["public"]["Enums"]["context_kind"]
@@ -1964,6 +2397,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          kind: string
           name: string
           owner_profile_id: string
           updated_at: string
@@ -2079,6 +2513,27 @@ export type Database = {
         }
         Returns: boolean
       }
+      get_or_create_dm: {
+        Args: { p_other_profile_id: string }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
+          created_at: string
+          description: string | null
+          id: string
+          kind: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lists"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       get_thing_list_label: {
         Args: { p_thing_id: string }
         Returns: {
@@ -2113,6 +2568,17 @@ export type Database = {
           id: string
           revoked_at: string
           revoked_reason: string
+        }[]
+      }
+      list_catchup_moments: {
+        Args: never
+        Returns: {
+          actor_id: string
+          kind: string
+          moment_key: string
+          occurred_at: string
+          reason: string
+          thing_id: string
         }[]
       }
       list_list_roster: {
@@ -2224,6 +2690,7 @@ export type Database = {
           list_id: string | null
           payload: Json
           profile_id: string
+          pushed_at: string | null
           read_at: string | null
           thing_id: string | null
           title: string
@@ -2416,6 +2883,23 @@ export type Database = {
           id: string
         }[]
       }
+      respond_contact_request: {
+        Args: { p_accept: boolean; p_request_id: string }
+        Returns: {
+          addressee_profile_id: string
+          created_at: string
+          id: string
+          requester_profile_id: string
+          responded_at: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "contact_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       restore_for_me: {
         Args: {
           p_object_id: string
@@ -2438,6 +2922,7 @@ export type Database = {
         }
       }
       revoke_bridge_grant: { Args: { p_grant_id: string }; Returns: boolean }
+      revoke_invitation: { Args: { p_id: string }; Returns: boolean }
       revoke_list_invitation: {
         Args: { p_invitation_id: string; p_list_id: string }
         Returns: boolean
@@ -2453,6 +2938,25 @@ export type Database = {
           ok: boolean
           test: string
         }[]
+      }
+      run_daily_maintenance: { Args: never; Returns: number }
+      run_nudge_escalation: { Args: never; Returns: number }
+      send_contact_request: {
+        Args: { p_addressee_profile_id: string }
+        Returns: {
+          addressee_profile_id: string
+          created_at: string
+          id: string
+          requester_profile_id: string
+          responded_at: string | null
+          status: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "contact_requests"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       set_bucket_pinned: {
         Args: { p_bucket_id: string; p_pinned: boolean }
@@ -2504,6 +3008,48 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      set_list_cover: {
+        Args: { p_cover_storage_path: string; p_list_id: string }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
+          created_at: string
+          description: string | null
+          id: string
+          kind: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lists"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_list_description: {
+        Args: { p_description: string; p_list_id: string }
+        Returns: {
+          archived_at: string | null
+          context: Database["public"]["Enums"]["context_kind"]
+          cover_storage_path: string | null
+          created_at: string
+          description: string | null
+          id: string
+          kind: string
+          name: string
+          owner_profile_id: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "lists"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_owner_importance: {
         Args: {
           p_owner_importance: Database["public"]["Enums"]["importance"]
@@ -2534,54 +3080,6 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "things"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      set_list_cover: {
-        Args: { p_cover_storage_path: string; p_list_id: string }
-        Returns: {
-          archived_at: string | null
-          context: Database["public"]["Enums"]["context_kind"]
-          cover_storage_path: string | null
-          created_at: string
-          description: string | null
-          id: string
-          name: string
-          owner_profile_id: string
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "lists"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
-      run_daily_maintenance: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      run_nudge_escalation: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      set_list_description: {
-        Args: { p_description: string; p_list_id: string }
-        Returns: {
-          archived_at: string | null
-          context: Database["public"]["Enums"]["context_kind"]
-          cover_storage_path: string | null
-          created_at: string
-          description: string | null
-          id: string
-          name: string
-          owner_profile_id: string
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "lists"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -2704,6 +3202,7 @@ export type Database = {
           snoozed_until: string
           thing_id: string
           updated_at: string
+          woke_at: string | null
         }
         SetofOptions: {
           from: "*"
@@ -2711,10 +3210,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      unsnooze_thing: {
-        Args: { p_thing_id: string }
-        Returns: undefined
       }
       sort_thing: {
         Args: { p_thing_id: string }
@@ -2747,6 +3242,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      surface_catchup_moment: {
+        Args: { p_moment_key: string }
+        Returns: undefined
+      }
       test_bridge_cleanup: { Args: never; Returns: undefined }
       test_bridge_fixture: {
         Args: never
@@ -2772,6 +3271,7 @@ export type Database = {
       }
       test_bridge_state: { Args: { p_thing_id: string }; Returns: Json }
       unread_notification_count: { Args: never; Returns: number }
+      unsnooze_thing: { Args: { p_thing_id: string }; Returns: undefined }
       update_list_metadata: {
         Args: {
           p_cover_storage_path?: string
@@ -2786,6 +3286,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          kind: string
           name: string
           owner_profile_id: string
           updated_at: string
@@ -2827,6 +3328,7 @@ export type Database = {
         | "due_soon"
         | "stale"
         | "repeated_handoff"
+      nudge_staleness: "fresh" | "warm" | "hot" | "on_fire" | "stale"
       object_type: "thing" | "list" | "bucket"
       pace: "now" | "next" | "later"
       private_activity_event:
@@ -2997,6 +3499,7 @@ export const Constants = {
         "stale",
         "repeated_handoff",
       ],
+      nudge_staleness: ["fresh", "warm", "hot", "on_fire", "stale"],
       object_type: ["thing", "list", "bucket"],
       pace: ["now", "next", "later"],
       private_activity_event: [

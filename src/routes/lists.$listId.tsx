@@ -44,14 +44,19 @@ import {
   ChevronDown,
   Phone,
   PhoneOff,
+  Video,
+  MoreVertical,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
+import { useListMeetings } from "@/features/lists/use-list-meetings";
+import { ScheduleMeetingDialog } from "@/features/lists/ScheduleMeetingDialog";
 import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
 import { ListDetailSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useSession } from "@/hooks/useSession";
+import { isPreviewSession } from "@/lib/session-mode";
 import { supabase } from "@/integrations/supabase/client";
 import { MagicBox } from "@/features/court/MagicBox";
 import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
@@ -59,7 +64,7 @@ import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { PDFViewer, type ThingFile } from "@/features/things/PDFViewer";
 import { formatCourtDue } from "@/features/court/court-view-model";
 import { laneOf } from "@/domain/thing";
-import { format } from "date-fns";
+import { format, isToday, isTomorrow } from "date-fns";
 import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
 import { useLocalVersion } from "@/features/things/use-local-version";
@@ -141,7 +146,8 @@ function ListDetailPage() {
   const { list, isLoading, error } = useList(listId);
   const chat = useListMessages(listId);
   const { things: listThings, myActorId } = useListThings(listId);
-  const { user } = useSession();
+  const { user, session } = useSession();
+  const preview = isPreviewSession(session);
   // Unique per-device call identity. Using only user.id collides when the same
   // account is open on two devices, so each side would filter the other out as
   // "self" and never connect. A per-session suffix keeps every device distinct.
@@ -156,15 +162,22 @@ function ListDetailPage() {
     user?.email?.split("@")[0] ||
     "You";
   const call = useListCall(listId, selfId, selfName);
+  const meetingsHook = useListMeetings(listId);
+  const [scheduleMeetingOpen, setScheduleMeetingOpen] = useState(false);
+  const [showAllMeetings, setShowAllMeetings] = useState(false);
 
   // Start (or leave) a call. Starting also rings the list's other members.
-  const startOrJoinCall = async () => {
+  // withVideo=false drops the camera right after joining (audio-only), and an
+  // optional meetingTitle personalizes the chat-history entry (e.g. "started
+  // the meeting Design Review" for a scheduled meeting's "Join now").
+  const startOrJoinCall = async (withVideo = true, meetingTitle?: string) => {
     if (call.joined) {
       call.leave();
       return;
     }
     const ok = await call.join();
     if (!ok) return;
+    if (!withVideo) call.toggleCamera();
     const memberIds = (list?.members ?? [])
       .map((m) => m.profileId)
       .filter((x): x is string => Boolean(x));
@@ -176,7 +189,7 @@ function ListDetailPage() {
       memberIds,
     });
     // Record a call-history entry that renders inline in the chat timeline.
-    chat.sendSystem.mutate("started a call");
+    chat.sendSystem.mutate(meetingTitle ? `started the meeting "${meetingTitle}"` : "started a call");
     // Also push to members who don't have the app open (best-effort).
     try {
       const { data: sess } = await supabase.auth.getSession();
@@ -1092,6 +1105,131 @@ function ListDetailPage() {
                 ))}
               </div>
 
+              {/* Quick Actions */}
+              <div className="mt-6 border-t border-[#eef0f6] pt-4">
+                <span className="text-[14.5px] font-medium text-[#000128]">Quick Actions</span>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void startOrJoinCall(false)}
+                    disabled={call.connecting}
+                    className="flex flex-col items-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] py-3 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
+                      <Phone className="h-4 w-4" />
+                    </span>
+                    <span className="text-[10.5px] font-medium text-[#000533]">Start Audio Call</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void startOrJoinCall(true)}
+                    disabled={call.connecting}
+                    className="flex flex-col items-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] py-3 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer disabled:opacity-60"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
+                      <Video className="h-4 w-4" />
+                    </span>
+                    <span className="text-[10.5px] font-medium text-[#000533]">Start Video Call</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScheduleMeetingOpen(true)}
+                    className="flex flex-col items-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] py-3 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
+                      <Calendar className="h-4 w-4" />
+                    </span>
+                    <span className="text-[10.5px] font-medium text-[#000533]">Schedule Meeting</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Upcoming Meetings */}
+              <div className="mt-6 border-t border-[#eef0f6] pt-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[14.5px] font-medium text-[#000128]">Upcoming Meetings</span>
+                  {meetingsHook.meetings.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllMeetings((s) => !s)}
+                      className="text-[12.5px] font-medium text-[#975ee2] hover:opacity-80 cursor-pointer"
+                    >
+                      {showAllMeetings ? "Show less" : "See All"}
+                    </button>
+                  )}
+                </div>
+                {meetingsHook.meetings.length === 0 ? (
+                  <p className="mt-3 text-[12px] text-[#8487a7]">No meetings scheduled yet.</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {(showAllMeetings ? meetingsHook.meetings : meetingsHook.meetings.slice(0, 3)).map((meeting) => {
+                      const starts = new Date(meeting.startsAt);
+                      const ends = new Date(meeting.endsAt);
+                      const now = Date.now();
+                      const isLive = now >= starts.getTime() && now <= ends.getTime();
+                      const dayLabel = isToday(starts) ? "Today" : isTomorrow(starts) ? "Tomorrow" : format(starts, "MMM d");
+                      // list_meetings.created_by is a profile id live (auth.uid())
+                      // but an actor-shaped demo id in preview — compare against
+                      // whichever identity matches the mode.
+                      const canManage = preview
+                        ? meeting.createdBy === myActorId
+                        : meeting.createdBy === user?.id;
+                      return (
+                        <div
+                          key={meeting.id}
+                          className="flex items-center gap-3 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe]/40 p-2.5"
+                        >
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] bg-[#f0effe] text-[#975ee2]">
+                            <Calendar className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-medium text-[#00011b]">{meeting.title}</p>
+                            <p className="text-[10.5px] text-black/60">
+                              {dayLabel}, {format(starts, "h:mm a")} - {format(ends, "h:mm a")}
+                            </p>
+                          </div>
+                          {isLive ? (
+                            <button
+                              type="button"
+                              onClick={() => void startOrJoinCall(true, meeting.title)}
+                              className="inline-flex h-7 shrink-0 items-center rounded-[8px] bg-[#975ee2] px-3 text-[11.5px] font-medium text-white hover:brightness-95 cursor-pointer"
+                            >
+                              Join now
+                            </button>
+                          ) : null}
+                          {canManage ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button
+                                  type="button"
+                                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[6px] text-[#8487a7] hover:bg-muted"
+                                  aria-label="Meeting actions"
+                                >
+                                  <MoreVertical className="h-3.5 w-3.5" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-40 bg-white">
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    meetingsHook.cancel.mutate(meeting.id, {
+                                      onSuccess: () => toast.success("Meeting cancelled."),
+                                      onError: (err) => toast.error(domainErrorMessage(err)),
+                                    });
+                                  }}
+                                  className="text-[12.5px] text-[#fc404d] cursor-pointer"
+                                >
+                                  Cancel meeting
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               {/* Recent Things */}
               <div className="mt-6 flex items-center justify-between border-t border-[#eef0f6] pt-4">
                 <span className="text-[14.5px] font-medium text-[#000128]">Recent Things</span>
@@ -1613,6 +1751,11 @@ function ListDetailPage() {
         )}
       </div>
       <ListCallPanel call={call} selfName={selfName} listId={listId} />
+      <ScheduleMeetingDialog
+        listId={listId}
+        open={scheduleMeetingOpen}
+        onOpenChange={setScheduleMeetingOpen}
+      />
     </AppShell>
   );
 }

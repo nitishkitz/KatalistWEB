@@ -15,6 +15,7 @@ export const keys = {
     ["nudges", profileId, context] as const,
   catchup: (profileId: string | undefined, context: string) =>
     ["catchup", profileId, context] as const,
+  listMeetings: (listId: string) => ["list-meetings", listId] as const,
   profile: (profileId: string | undefined) => ["profile", profileId] as const,
   trophy: (profileId: string | undefined) => ["trophy", profileId] as const,
   notifications: (profileId: string | undefined) =>

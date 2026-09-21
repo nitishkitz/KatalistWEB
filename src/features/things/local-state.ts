@@ -16,6 +16,15 @@ export type LocalComment = {
 };
 export type LocalActivity = { id: string; event: string; at: string; detail?: string };
 export type LocalMessage = { id: string; body: string; author: string; at: string };
+export type LocalMeeting = {
+  id: string;
+  listId: string;
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  createdBy: string;
+  cancelledAt: string | null;
+};
 export type LocalNotification = {
   id: string;
   title: string;
@@ -46,6 +55,7 @@ const shreddedLogByActor = new Map<string, ShreddedItem[]>();
 const comments = new Map<string, LocalComment[]>();
 const activity = new Map<string, LocalActivity[]>();
 const listMessages = new Map<string, LocalMessage[]>();
+const listMeetings = new Map<string, LocalMeeting[]>();
 let extraLists: ListRow[] = [];
 let extraBuckets: BucketCard[] = [];
 const bucketItems = new Map<string, BucketItem[]>();
@@ -522,6 +532,66 @@ export function getListMessages(listId: string): LocalMessage[] {
   return listMessages.get(listId) ?? [];
 }
 
+export function scheduleMeetingLocal(
+  listId: string,
+  title: string,
+  startsAt: string,
+  endsAt: string,
+): LocalMeeting {
+  const me = currentDemoPerson();
+  const list = getListById(listId);
+  if (!list) throw new Error("That List isn’t available.");
+  if (list.role !== "owner" && list.role !== "collaborator") {
+    throw new Error("You don’t have permission to schedule a meeting on this List.");
+  }
+  const trimmed = title.trim();
+  if (!trimmed) throw new Error("A meeting needs a title.");
+  if (!(new Date(endsAt).getTime() > new Date(startsAt).getTime())) {
+    throw new Error("A meeting needs a valid start and end time.");
+  }
+  const row: LocalMeeting = {
+    id: crypto.randomUUID(),
+    listId,
+    title: trimmed,
+    startsAt,
+    endsAt,
+    createdBy: me.id,
+    cancelledAt: null,
+  };
+  listMeetings.set(listId, [...(listMeetings.get(listId) ?? []), row]);
+  bump();
+  return row;
+}
+
+export function cancelMeetingLocal(meetingId: string) {
+  const me = currentDemoActorId();
+  for (const [listId, rows] of listMeetings) {
+    const idx = rows.findIndex((m) => m.id === meetingId);
+    if (idx === -1) continue;
+    const meeting = rows[idx];
+    const list = getListById(listId);
+    const isOwner = list?.role === "owner";
+    if (meeting.createdBy !== me && !isOwner) {
+      throw new Error("Only the organizer or list owner can cancel this meeting.");
+    }
+    listMeetings.set(
+      listId,
+      rows.map((m) => (m.id === meetingId ? { ...m, cancelledAt: new Date().toISOString() } : m)),
+    );
+    bump();
+    return;
+  }
+  throw new Error("Meeting not found");
+}
+
+/** Upcoming (non-cancelled) meetings for a List, soonest first. */
+export function getMeetingsLocal(listId: string): LocalMeeting[] {
+  if (!getListById(listId)) return [];
+  return (listMeetings.get(listId) ?? [])
+    .filter((m) => !m.cancelledAt)
+    .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
+}
+
 export function addListMemberLocal(
   listId: string,
   personId: string,
@@ -823,6 +893,7 @@ export function resetDemoLocalStateForTests() {
   comments.clear();
   activity.clear();
   listMessages.clear();
+  listMeetings.clear();
   extraLists = [];
   extraBuckets = [];
   bucketItems.clear();
