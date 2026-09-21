@@ -14,9 +14,9 @@ export const Route = createFileRoute("/api/calls/ring")({
         const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
         if (!token) return json({ error: "unauthorized" }, 401);
 
-        let body: { listId?: string } = {};
+        let body: { listId?: string; memberIds?: string[] } = {};
         try {
-          body = (await request.json()) as { listId?: string };
+          body = (await request.json()) as { listId?: string; memberIds?: string[] };
         } catch {
           body = {};
         }
@@ -54,7 +54,13 @@ export const Route = createFileRoute("/api/calls/ring")({
           .maybeSingle();
         const fromName = caller?.display_name || "Someone";
 
-        const recipientIds = [...memberIds].filter((id) => id !== uid);
+        // If the caller picked a subset of people to ring, only push to those —
+        // but always intersect with actual list membership so a client can
+        // never make this endpoint push to someone outside the list.
+        const requested = Array.isArray(body.memberIds) ? new Set(body.memberIds) : null;
+        const recipientIds = [...memberIds].filter(
+          (id) => id !== uid && (!requested || requested.has(id)),
+        );
         if (recipientIds.length === 0) return json({ sent: 0 });
 
         const { data: toks } = await supabaseAdmin

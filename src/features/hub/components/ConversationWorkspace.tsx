@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Phone, Video, MessageSquare, Folder, PhoneCall } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -11,6 +11,7 @@ import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
 import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
+import { StartCallDialog, type CallPerson } from "@/features/calls/StartCallDialog";
 import { useConversation } from "@/features/hub/use-conversations";
 import { useLists } from "@/features/lists/use-lists";
 import { HubFilesPanel } from "./HubFilesPanel";
@@ -59,8 +60,50 @@ export function ConversationWorkspace({
   const other = conversation?.others[0];
   const isOnline = isDm && other ? online.has(other.id) : false;
   const memberIds = useMemo(() => (conversation?.others ?? []).map((o) => o.id), [conversation]);
+  const callPeople: CallPerson[] = useMemo(
+    () =>
+      (conversation?.others ?? []).map((o) => ({
+        id: o.id,
+        name: o.name,
+        avatarUrl: o.avatarUrl,
+      })),
+    [conversation],
+  );
 
-  const startOrJoinCall = async (withVideo: boolean) => {
+  const [startCallOpen, setStartCallOpen] = useState(false);
+  const [startCallDefaultVideo, setStartCallDefaultVideo] = useState(true);
+  const [inviteOpen, setInviteOpen] = useState(false);
+
+  // Ring + push a chosen set of people without touching the caller's own join
+  // state (used both when starting a call and when inviting mid-call).
+  const ringAndAnnounce = (selectedIds: string[]) => {
+    void announceCall({
+      listId,
+      listName: title,
+      fromDeviceId: getDeviceId(),
+      fromName: selfName,
+      memberIds: selectedIds,
+      kind: conversation?.kind ?? "group",
+    });
+    chat.sendSystem.mutate("started a call");
+    void (async () => {
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const at = sess.session?.access_token;
+        if (at) {
+          void fetch("/api/calls/ring", {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
+            body: JSON.stringify({ listId, memberIds: selectedIds }),
+          });
+        }
+      } catch {
+        // push is best-effort
+      }
+    })();
+  };
+
+  const startOrJoinCall = async (withVideo: boolean, selectedIds?: string[]) => {
     if (call.joined) {
       call.leave();
       return;
@@ -68,31 +111,17 @@ export function ConversationWorkspace({
     const ok = await call.join();
     if (!ok) return;
     if (!withVideo) call.toggleCamera(); // audio-only: drop the camera immediately
-    void announceCall({
-      listId,
-      listName: title,
-      fromDeviceId: getDeviceId(),
-      fromName: selfName,
-      memberIds,
-      kind: conversation?.kind ?? "group",
-    });
-    chat.sendSystem.mutate("started a call");
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const at = sess.session?.access_token;
-      if (at) {
-        void fetch("/api/calls/ring", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
-          body: JSON.stringify({ listId }),
-        });
-      }
-    } catch {
-      // push is best-effort
-    }
+    ringAndAnnounce(selectedIds ?? memberIds);
   };
 
-  // Auto-start a call when arriving from a contact's "Call" action.
+  const openStartCall = (defaultVideo: boolean) => {
+    setStartCallDefaultVideo(defaultVideo);
+    setStartCallOpen(true);
+  };
+
+  // Auto-start a call when arriving from a contact's "Call" action. This is
+  // already an explicit, single-target call — it rings everyone directly,
+  // skipping the Start Call picker.
   const startedRef = useRef(false);
   useEffect(() => {
     if (!startCall || startedRef.current) return;
@@ -186,7 +215,7 @@ export function ConversationWorkspace({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => void startOrJoinCall(false)}
+            onClick={() => (call.joined ? void startOrJoinCall(false) : openStartCall(false))}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#3d3f74] hover:bg-[#f4f5fb]"
             aria-label="Audio call"
             title="Audio call"
@@ -195,7 +224,7 @@ export function ConversationWorkspace({
           </button>
           <button
             type="button"
-            onClick={() => void startOrJoinCall(true)}
+            onClick={() => (call.joined ? void startOrJoinCall(true) : openStartCall(true))}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#3d3f74] hover:bg-[#f4f5fb]"
             aria-label="Video call"
             title="Video call"
@@ -245,7 +274,7 @@ export function ConversationWorkspace({
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => void startOrJoinCall(false)}
+                    onClick={() => openStartCall(false)}
                     className="inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] px-4 text-[13px] font-semibold text-[#3d3f74] hover:border-[#975ee2]"
                   >
                     <Phone className="h-4 w-4" />
@@ -253,7 +282,7 @@ export function ConversationWorkspace({
                   </button>
                   <button
                     type="button"
-                    onClick={() => void startOrJoinCall(true)}
+                    onClick={() => openStartCall(true)}
                     className="inline-flex h-10 items-center gap-1.5 rounded-[10px] bg-[#975ee2] px-4 text-[13px] font-semibold text-white hover:brightness-95"
                   >
                     <Video className="h-4 w-4" />
@@ -266,8 +295,28 @@ export function ConversationWorkspace({
         )}
       </div>
 
-      {/* The call surface (fixed bottom panel) renders itself when joined/connecting. */}
-      <ListCallPanel call={call} selfName={selfName} listId={listId} />
+      {/* The call surface (floating window) renders itself when joined/connecting. */}
+      <ListCallPanel
+        call={call}
+        selfName={selfName}
+        listId={listId}
+        title={title}
+        onInvite={() => setInviteOpen(true)}
+      />
+      <StartCallDialog
+        open={startCallOpen}
+        onOpenChange={setStartCallOpen}
+        people={callPeople}
+        defaultVideo={startCallDefaultVideo}
+        onStart={({ withVideo, selectedIds }) => void startOrJoinCall(withVideo, selectedIds)}
+      />
+      <StartCallDialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        people={callPeople}
+        variant="invite"
+        onInvite={(selectedIds) => ringAndAnnounce(selectedIds)}
+      />
     </div>
   );
 }

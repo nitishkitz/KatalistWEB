@@ -20,6 +20,8 @@ export type CallParticipant = {
   name: string;
   stream?: MediaStream;
   connection?: RTCPeerConnectionState;
+  muted?: boolean;
+  cameraOff?: boolean;
 };
 
 export type CallRoomState = {
@@ -32,6 +34,8 @@ type PeerSlot = {
   ignoreOffer: boolean;
   name: string;
   stream: MediaStream;
+  muted: boolean;
+  cameraOff: boolean;
 };
 
 function envStr(key: string): string | undefined {
@@ -109,6 +113,11 @@ export class CallRoom {
   private screenStream: MediaStream | null = null;
   private resolvedIce: RTCIceServer[] | null = null;
   private closed = false;
+  // Own mute/camera state, re-broadcast via presence metadata so remote peers
+  // can show an accurate mic/camera indicator (there is no other reliable way
+  // to observe a remote track's `enabled` flag over WebRTC).
+  private selfMuted = false;
+  private selfCameraOff = false;
 
   private readonly onReaction?: (p: { from: string; emoji: string }) => void;
 
@@ -146,21 +155,27 @@ export class CallRoom {
       .on("presence", { event: "sync" }, () => this.syncPeers())
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          void channel.track({ id: this.selfId, name: this.selfName });
+          void channel.track(this.presenceMeta());
         }
       });
 
     return this.localStream;
   }
 
-  private presentPeerIds(): { id: string; name: string }[] {
+  private presenceMeta() {
+    return { id: this.selfId, name: this.selfName, muted: this.selfMuted, cameraOff: this.selfCameraOff };
+  }
+
+  private presentPeerIds(): { id: string; name: string; muted: boolean; cameraOff: boolean }[] {
     if (!this.channel) return [];
-    const state = this.channel.presenceState<{ id: string; name: string }>();
-    const out: { id: string; name: string }[] = [];
+    const state = this.channel.presenceState<{ id: string; name: string; muted?: boolean; cameraOff?: boolean }>();
+    const out: { id: string; name: string; muted: boolean; cameraOff: boolean }[] = [];
     for (const key of Object.keys(state)) {
       const metas = state[key];
       const meta = metas?.[0];
-      if (meta && meta.id !== this.selfId) out.push({ id: meta.id, name: meta.name });
+      if (meta && meta.id !== this.selfId) {
+        out.push({ id: meta.id, name: meta.name, muted: Boolean(meta.muted), cameraOff: Boolean(meta.cameraOff) });
+      }
     }
     return out;
   }
@@ -174,20 +189,36 @@ export class CallRoom {
     for (const id of [...this.peers.keys()]) {
       if (!presentIds.has(id)) this.dropPeer(id);
     }
-    // Add peers that joined. Adding local tracks in createPeer triggers
-    // onnegotiationneeded on both sides; perfect negotiation resolves the glare.
+    // Add peers that joined, and refresh mute/camera state for peers already
+    // connected (presence re-syncs whenever anyone updates their metadata).
+    // Adding local tracks in createPeer triggers onnegotiationneeded on both
+    // sides; perfect negotiation resolves the glare.
     for (const p of present) {
-      if (!this.peers.has(p.id)) this.createPeer(p.id, p.name);
+      const existing = this.peers.get(p.id);
+      if (existing) {
+        existing.muted = p.muted;
+        existing.cameraOff = p.cameraOff;
+      } else {
+        this.createPeer(p.id, p.name, p.muted, p.cameraOff);
+      }
     }
     this.emit();
   }
 
-  private createPeer(peerId: string, name: string): PeerSlot {
+  private createPeer(peerId: string, name: string, muted = false, cameraOff = false): PeerSlot {
     const pc = new RTCPeerConnection({
       iceServers: this.resolvedIce ?? iceServers(),
       ...(forceRelay() ? { iceTransportPolicy: "relay" as RTCIceTransportPolicy } : {}),
     });
-    const slot: PeerSlot = { pc, makingOffer: false, ignoreOffer: false, name, stream: new MediaStream() };
+    const slot: PeerSlot = {
+      pc,
+      makingOffer: false,
+      ignoreOffer: false,
+      name,
+      stream: new MediaStream(),
+      muted,
+      cameraOff,
+    };
     this.peers.set(peerId, slot);
 
     // Publish our local tracks.
@@ -295,10 +326,14 @@ export class CallRoom {
 
   setMuted(muted: boolean) {
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = !muted));
+    this.selfMuted = muted;
+    void this.channel?.track(this.presenceMeta());
   }
 
   setCameraOff(off: boolean) {
     this.localStream?.getVideoTracks().forEach((t) => (t.enabled = !off));
+    this.selfCameraOff = off;
+    void this.channel?.track(this.presenceMeta());
   }
 
   private dropPeer(id: string) {
@@ -322,6 +357,8 @@ export class CallRoom {
       name: slot.name,
       stream: slot.stream,
       connection: slot.pc.connectionState,
+      muted: slot.muted,
+      cameraOff: slot.cameraOff,
     }));
     this.onState({ participants });
   }

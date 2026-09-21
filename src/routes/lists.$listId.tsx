@@ -53,6 +53,7 @@ import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
 import { useListMeetings } from "@/features/lists/use-list-meetings";
 import { ScheduleMeetingDialog } from "@/features/lists/ScheduleMeetingDialog";
+import { StartCallDialog, type CallPerson } from "@/features/calls/StartCallDialog";
 import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
 import { ListDetailSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useSession } from "@/hooks/useSession";
@@ -165,12 +166,59 @@ function ListDetailPage() {
   const meetingsHook = useListMeetings(listId);
   const [scheduleMeetingOpen, setScheduleMeetingOpen] = useState(false);
   const [showAllMeetings, setShowAllMeetings] = useState(false);
+  const [startCallOpen, setStartCallOpen] = useState(false);
+  const [startCallDefaultVideo, setStartCallDefaultVideo] = useState(true);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
-  // Start (or leave) a call. Starting also rings the list's other members.
-  // withVideo=false drops the camera right after joining (audio-only), and an
-  // optional meetingTitle personalizes the chat-history entry (e.g. "started
-  // the meeting Design Review" for a scheduled meeting's "Join now").
-  const startOrJoinCall = async (withVideo = true, meetingTitle?: string) => {
+  // Other list members, for the "Start a call" / "Invite" picker.
+  const callPeople: CallPerson[] = useMemo(
+    () =>
+      (list?.members ?? [])
+        .filter((m) => (m.profileId ?? m.actorId) !== (user?.id ?? myActorId))
+        .map((m) => ({
+          id: m.profileId ?? m.actorId ?? m.name,
+          name: m.name,
+          initials: m.initials,
+          avatarUrl: m.avatarUrl,
+        })),
+    [list?.members, user?.id, myActorId],
+  );
+
+  // Ring + push a chosen set of people (client picker's selection, or "everyone"
+  // as a default) without touching the caller's own join state.
+  const ringAndAnnounce = (selectedProfileIds: string[], meetingTitle?: string) => {
+    void announceCall({
+      listId,
+      listName: list?.name ?? "a list",
+      fromDeviceId: getDeviceId(),
+      fromName: selfName,
+      memberIds: selectedProfileIds,
+    });
+    // Record a call-history entry that renders inline in the chat timeline.
+    chat.sendSystem.mutate(meetingTitle ? `started the meeting "${meetingTitle}"` : "started a call");
+    // Also push to members who don't have the app open (best-effort).
+    void (async () => {
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const at = sess.session?.access_token;
+        if (at) {
+          void fetch("/api/calls/ring", {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
+            body: JSON.stringify({ listId, memberIds: selectedProfileIds }),
+          });
+        }
+      } catch {
+        // push is best-effort
+      }
+    })();
+  };
+
+  // Start (or leave) a call. Starting also rings the given (or every) list
+  // member. withVideo=false drops the camera right after joining (audio-only),
+  // and an optional meetingTitle personalizes the chat-history entry (e.g.
+  // "started the meeting Design Review" for a scheduled meeting's "Join now").
+  const startOrJoinCall = async (withVideo = true, meetingTitle?: string, selectedProfileIds?: string[]) => {
     if (call.joined) {
       call.leave();
       return;
@@ -178,32 +226,15 @@ function ListDetailPage() {
     const ok = await call.join();
     if (!ok) return;
     if (!withVideo) call.toggleCamera();
-    const memberIds = (list?.members ?? [])
+    const allMemberIds = (list?.members ?? [])
       .map((m) => m.profileId)
       .filter((x): x is string => Boolean(x));
-    void announceCall({
-      listId,
-      listName: list?.name ?? "a list",
-      fromDeviceId: getDeviceId(),
-      fromName: selfName,
-      memberIds,
-    });
-    // Record a call-history entry that renders inline in the chat timeline.
-    chat.sendSystem.mutate(meetingTitle ? `started the meeting "${meetingTitle}"` : "started a call");
-    // Also push to members who don't have the app open (best-effort).
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const at = sess.session?.access_token;
-      if (at) {
-        void fetch("/api/calls/ring", {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
-          body: JSON.stringify({ listId }),
-        });
-      }
-    } catch {
-      // push is best-effort
-    }
+    ringAndAnnounce(selectedProfileIds ?? allMemberIds, meetingTitle);
+  };
+
+  const openStartCall = (defaultVideo: boolean) => {
+    setStartCallDefaultVideo(defaultVideo);
+    setStartCallOpen(true);
   };
 
   // Auto-join when arriving from an incoming-call ring: either the in-app ring
@@ -609,7 +640,7 @@ function ListDetailPage() {
             </div>
             <button
               type="button"
-              onClick={() => void startOrJoinCall()}
+              onClick={() => (call.joined ? void startOrJoinCall() : openStartCall(true))}
               disabled={call.connecting}
               className={cn(
                 "inline-flex h-[42px] items-center gap-2 rounded-[9px] px-4 text-[14px] font-medium transition cursor-pointer disabled:opacity-60",
@@ -1111,7 +1142,7 @@ function ListDetailPage() {
                 <div className="mt-3 grid grid-cols-3 gap-2">
                   <button
                     type="button"
-                    onClick={() => void startOrJoinCall(false)}
+                    onClick={() => (call.joined ? void startOrJoinCall() : openStartCall(false))}
                     disabled={call.connecting}
                     className="flex flex-col items-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] py-3 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer disabled:opacity-60"
                   >
@@ -1122,7 +1153,7 @@ function ListDetailPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void startOrJoinCall(true)}
+                    onClick={() => (call.joined ? void startOrJoinCall() : openStartCall(true))}
                     disabled={call.connecting}
                     className="flex flex-col items-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] py-3 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer disabled:opacity-60"
                   >
@@ -1750,11 +1781,31 @@ function ListDetailPage() {
           </div>
         )}
       </div>
-      <ListCallPanel call={call} selfName={selfName} listId={listId} />
+      <ListCallPanel
+        call={call}
+        selfName={selfName}
+        listId={listId}
+        title={list?.name}
+        onInvite={() => setInviteOpen(true)}
+      />
       <ScheduleMeetingDialog
         listId={listId}
         open={scheduleMeetingOpen}
         onOpenChange={setScheduleMeetingOpen}
+      />
+      <StartCallDialog
+        open={startCallOpen}
+        onOpenChange={setStartCallOpen}
+        people={callPeople}
+        defaultVideo={startCallDefaultVideo}
+        onStart={({ withVideo, selectedIds }) => void startOrJoinCall(withVideo, undefined, selectedIds)}
+      />
+      <StartCallDialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        people={callPeople}
+        variant="invite"
+        onInvite={(selectedIds) => ringAndAnnounce(selectedIds)}
       />
     </AppShell>
   );
