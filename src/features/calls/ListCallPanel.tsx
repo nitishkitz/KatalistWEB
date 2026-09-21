@@ -26,6 +26,7 @@ import {
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
 import { useListMessages } from "@/features/lists/use-list-messages";
+import { AnnotateCanvas } from "./AnnotateCanvas";
 import type { ListCallControls } from "./use-list-call";
 
 const REACTIONS = [
@@ -48,12 +49,15 @@ function VideoTile({
   muted,
   cameraOff,
   self,
+  compact,
 }: {
   stream: MediaStream | null | undefined;
   name: string;
   muted?: boolean;
   cameraOff?: boolean;
   self?: boolean;
+  /** Shrinks the fallback avatar/name — used for the presentation-mode thumbnail rail. */
+  compact?: boolean;
 }) {
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
@@ -76,11 +80,11 @@ function VideoTile({
       />
       {!hasVideo ? (
         <div className="absolute inset-0 flex items-center justify-center">
-          <PersonAvatar name={name} initials={name.slice(0, 2)} size={56} />
+          <PersonAvatar name={name} initials={name.slice(0, 2)} size={compact ? 28 : 56} />
         </div>
       ) : null}
       <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5">
-        <span className="truncate text-[11px] font-medium text-white">
+        <span className={cn("truncate font-medium text-white", compact ? "text-[9.5px]" : "text-[11px]")}>
           {name}
           {self ? " (You)" : ""}
         </span>
@@ -192,6 +196,29 @@ export function ListCallPanel({
   const cols = count <= 1 ? "grid-cols-1" : count <= 4 ? "grid-cols-2" : "grid-cols-3";
   const localStream = call.sharing && call.screenStream ? call.screenStream : call.localStream;
 
+  // Presentation mode: someone (self or a remote peer) is sharing their
+  // screen. Feature that stream large with the annotate overlay, and shrink
+  // everyone else into a thumbnail rail (Figma's expanded call window).
+  const presenting = call.screenSharerId;
+  const presenterTile = presenting
+    ? presenting === "self"
+      ? { stream: localStream, name: selfName, self: true, muted: call.muted, cameraOff: false }
+      : (() => {
+          const p = call.participants.find((x) => x.id === presenting);
+          return p ? { stream: p.stream, name: p.name, self: false, muted: p.muted, cameraOff: p.cameraOff } : null;
+        })()
+    : null;
+  const thumbnailTiles = presenting
+    ? [
+        ...(presenting !== "self"
+          ? [{ id: "self", stream: localStream, name: selfName, self: true, muted: call.muted, cameraOff: call.cameraOff }]
+          : []),
+        ...call.participants
+          .filter((p) => p.id !== presenting)
+          .map((p) => ({ id: p.id, stream: p.stream, name: p.name, self: false, muted: p.muted, cameraOff: p.cameraOff })),
+      ]
+    : [];
+
   // Minimized: compact floating pill.
   if (minimized) {
     return (
@@ -240,7 +267,10 @@ export function ListCallPanel({
   return (
     <div
       ref={rootRef}
-      className="fixed bottom-4 right-4 z-50 flex w-[min(96vw,780px)] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white"
+      className={cn(
+        "fixed bottom-4 right-4 z-50 flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-white transition-[width] duration-200",
+        presenterTile ? "w-[min(96vw,1040px)]" : "w-[min(96vw,780px)]",
+      )}
       style={{ boxShadow: "0 24px 60px -12px rgba(15,23,42,0.35)" }}
     >
       {/* Title bar */}
@@ -317,18 +347,53 @@ export function ListCallPanel({
               );
             })}
           </div>
-          <div className={cn("grid gap-2", cols)}>
-            <VideoTile
-              stream={localStream}
-              name={call.sharing ? `${selfName} (screen)` : selfName}
-              self
-              muted={call.muted}
-              cameraOff={call.cameraOff && !call.sharing}
-            />
-            {call.participants.map((p) => (
-              <VideoTile key={p.id} stream={p.stream} name={p.name} muted={p.muted} cameraOff={p.cameraOff} />
-            ))}
-          </div>
+          {presenterTile ? (
+            <div className="flex flex-col gap-2">
+              <div className="relative">
+                <VideoTile
+                  stream={presenterTile.stream}
+                  name={presenterTile.name}
+                  self={presenterTile.self}
+                  muted={presenterTile.muted}
+                  cameraOff={presenterTile.cameraOff}
+                />
+                <AnnotateCanvas drawOps={call.drawOps} onSend={call.sendDraw} />
+                <div className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#fc404d]" />
+                  {formatDuration(elapsed)} · Live
+                </div>
+              </div>
+              {thumbnailTiles.length > 0 ? (
+                <div className="flex gap-2 overflow-x-auto">
+                  {thumbnailTiles.map((t) => (
+                    <div key={t.id} className="w-24 shrink-0">
+                      <VideoTile
+                        stream={t.stream}
+                        name={t.name}
+                        self={t.self}
+                        muted={t.muted}
+                        cameraOff={t.cameraOff}
+                        compact
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className={cn("grid gap-2", cols)}>
+              <VideoTile
+                stream={localStream}
+                name={call.sharing ? `${selfName} (screen)` : selfName}
+                self
+                muted={call.muted}
+                cameraOff={call.cameraOff && !call.sharing}
+              />
+              {call.participants.map((p) => (
+                <VideoTile key={p.id} stream={p.stream} name={p.name} muted={p.muted} cameraOff={p.cameraOff} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Docked side panel: Participants or Chat (mutually exclusive to keep the window compact). */}

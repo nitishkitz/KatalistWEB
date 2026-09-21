@@ -22,11 +22,21 @@ export type CallParticipant = {
   connection?: RTCPeerConnectionState;
   muted?: boolean;
   cameraOff?: boolean;
+  /** True while this peer is presenting their screen (drives "presentation mode"). */
+  sharing?: boolean;
 };
 
 export type CallRoomState = {
   participants: CallParticipant[];
 };
+
+/** A single annotate-layer draw operation, broadcast to every peer. Coordinates
+ *  are normalized (0..1) so they render correctly regardless of each viewer's
+ *  window size. Ephemeral — never persisted, cleared when the call ends. */
+export type DrawOp =
+  | { kind: "stroke"; id: string; tool: "pen" | "eraser"; color: string; width: number; points: { x: number; y: number }[] }
+  | { kind: "shape"; id: string; tool: "rect" | "ellipse" | "arrow"; color: string; width: number; x1: number; y1: number; x2: number; y2: number }
+  | { kind: "clear" };
 
 type PeerSlot = {
   pc: RTCPeerConnection;
@@ -36,6 +46,7 @@ type PeerSlot = {
   stream: MediaStream;
   muted: boolean;
   cameraOff: boolean;
+  sharing: boolean;
 };
 
 function envStr(key: string): string | undefined {
@@ -118,8 +129,10 @@ export class CallRoom {
   // to observe a remote track's `enabled` flag over WebRTC).
   private selfMuted = false;
   private selfCameraOff = false;
+  private selfSharing = false;
 
   private readonly onReaction?: (p: { from: string; emoji: string }) => void;
+  private readonly onDraw?: (op: DrawOp) => void;
 
   constructor(opts: {
     listId: string;
@@ -127,12 +140,14 @@ export class CallRoom {
     selfName: string;
     onState: (state: CallRoomState) => void;
     onReaction?: (p: { from: string; emoji: string }) => void;
+    onDraw?: (op: DrawOp) => void;
   }) {
     this.listId = opts.listId;
     this.selfId = opts.selfId;
     this.selfName = opts.selfName;
     this.onState = opts.onState;
     this.onReaction = opts.onReaction;
+    this.onDraw = opts.onDraw;
   }
 
   /** Acquire local media and join the room. */
@@ -152,6 +167,7 @@ export class CallRoom {
       .on("broadcast", { event: "reaction" }, ({ payload }) =>
         this.onReaction?.(payload as { from: string; emoji: string }),
       )
+      .on("broadcast", { event: "draw" }, ({ payload }) => this.onDraw?.(payload as DrawOp))
       .on("presence", { event: "sync" }, () => this.syncPeers())
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -163,18 +179,36 @@ export class CallRoom {
   }
 
   private presenceMeta() {
-    return { id: this.selfId, name: this.selfName, muted: this.selfMuted, cameraOff: this.selfCameraOff };
+    return {
+      id: this.selfId,
+      name: this.selfName,
+      muted: this.selfMuted,
+      cameraOff: this.selfCameraOff,
+      sharing: this.selfSharing,
+    };
   }
 
-  private presentPeerIds(): { id: string; name: string; muted: boolean; cameraOff: boolean }[] {
+  private presentPeerIds(): { id: string; name: string; muted: boolean; cameraOff: boolean; sharing: boolean }[] {
     if (!this.channel) return [];
-    const state = this.channel.presenceState<{ id: string; name: string; muted?: boolean; cameraOff?: boolean }>();
-    const out: { id: string; name: string; muted: boolean; cameraOff: boolean }[] = [];
+    const state = this.channel.presenceState<{
+      id: string;
+      name: string;
+      muted?: boolean;
+      cameraOff?: boolean;
+      sharing?: boolean;
+    }>();
+    const out: { id: string; name: string; muted: boolean; cameraOff: boolean; sharing: boolean }[] = [];
     for (const key of Object.keys(state)) {
       const metas = state[key];
       const meta = metas?.[0];
       if (meta && meta.id !== this.selfId) {
-        out.push({ id: meta.id, name: meta.name, muted: Boolean(meta.muted), cameraOff: Boolean(meta.cameraOff) });
+        out.push({
+          id: meta.id,
+          name: meta.name,
+          muted: Boolean(meta.muted),
+          cameraOff: Boolean(meta.cameraOff),
+          sharing: Boolean(meta.sharing),
+        });
       }
     }
     return out;
@@ -198,14 +232,15 @@ export class CallRoom {
       if (existing) {
         existing.muted = p.muted;
         existing.cameraOff = p.cameraOff;
+        existing.sharing = p.sharing;
       } else {
-        this.createPeer(p.id, p.name, p.muted, p.cameraOff);
+        this.createPeer(p.id, p.name, p.muted, p.cameraOff, p.sharing);
       }
     }
     this.emit();
   }
 
-  private createPeer(peerId: string, name: string, muted = false, cameraOff = false): PeerSlot {
+  private createPeer(peerId: string, name: string, muted = false, cameraOff = false, sharing = false): PeerSlot {
     const pc = new RTCPeerConnection({
       iceServers: this.resolvedIce ?? iceServers(),
       ...(forceRelay() ? { iceTransportPolicy: "relay" as RTCIceTransportPolicy } : {}),
@@ -218,6 +253,7 @@ export class CallRoom {
       stream: new MediaStream(),
       muted,
       cameraOff,
+      sharing,
     };
     this.peers.set(peerId, slot);
 
@@ -307,6 +343,8 @@ export class CallRoom {
     const track = screen.getVideoTracks()[0]!;
     await this.replaceVideoTrack(track);
     track.onended = () => void this.stopScreenShare();
+    this.selfSharing = true;
+    void this.channel?.track(this.presenceMeta());
     return screen;
   }
 
@@ -314,6 +352,8 @@ export class CallRoom {
     this.screenStream?.getTracks().forEach((t) => t.stop());
     this.screenStream = null;
     await this.replaceVideoTrack(this.cameraTrack);
+    this.selfSharing = false;
+    void this.channel?.track(this.presenceMeta());
   }
 
   sendReaction(emoji: string) {
@@ -322,6 +362,11 @@ export class CallRoom {
       event: "reaction",
       payload: { from: this.selfName, emoji },
     });
+  }
+
+  /** Broadcast an annotate-layer draw operation (stroke/shape/clear) to every peer. */
+  sendDraw(op: DrawOp) {
+    void this.channel?.send({ type: "broadcast", event: "draw", payload: op });
   }
 
   setMuted(muted: boolean) {
@@ -359,6 +404,7 @@ export class CallRoom {
       connection: slot.pc.connectionState,
       muted: slot.muted,
       cameraOff: slot.cameraOff,
+      sharing: slot.sharing,
     }));
     this.onState({ participants });
   }

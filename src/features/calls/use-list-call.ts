@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { CallRoom, type CallParticipant } from "./call-room";
+import { CallRoom, type CallParticipant, type DrawOp } from "./call-room";
 
 export type CallReaction = { id: string; from: string; emoji: string };
 
@@ -14,12 +14,18 @@ export type ListCallControls = {
   cameraOff: boolean;
   sharing: boolean;
   reactions: CallReaction[];
+  /** Ordered annotate-layer ops (own + everyone else's) — replay in order to
+   *  redraw the shared whiteboard. Reset whenever a "clear" op arrives. */
+  drawOps: DrawOp[];
+  /** Who is currently presenting: "self", a remote participant id, or null. */
+  screenSharerId: string | null;
   join: () => Promise<boolean>;
   leave: () => void;
   toggleMute: () => void;
   toggleCamera: () => void;
   toggleScreenShare: () => Promise<void>;
   sendReaction: (emoji: string) => void;
+  sendDraw: (op: DrawOp) => void;
 };
 
 /** Full-mesh audio/video call for a List, scoped to the current members. */
@@ -34,6 +40,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const [cameraOff, setCameraOff] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [reactions, setReactions] = useState<CallReaction[]>([]);
+  const [drawOps, setDrawOps] = useState<DrawOp[]>([]);
 
   const leave = useCallback(() => {
     roomRef.current?.leave();
@@ -47,6 +54,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setCameraOff(false);
     setSharing(false);
     setReactions([]);
+    setDrawOps([]);
   }, []);
 
   const join = useCallback(async (): Promise<boolean> => {
@@ -65,6 +73,9 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
         const item = { id: crypto.randomUUID(), from: r.from, emoji: r.emoji };
         setReactions((prev) => [...prev, item]);
         setTimeout(() => setReactions((prev) => prev.filter((x) => x.id !== item.id)), 4000);
+      },
+      onDraw: (op) => {
+        setDrawOps((prev) => (op.kind === "clear" ? [] : [...prev, op]));
       },
     });
     roomRef.current = room;
@@ -137,6 +148,12 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setTimeout(() => setReactions((prev) => prev.filter((x) => x.id !== item.id)), 4000);
   }, []);
 
+  const sendDraw = useCallback((op: DrawOp) => {
+    roomRef.current?.sendDraw(op);
+    // Optimistic local echo — the room never re-broadcasts to the sender.
+    setDrawOps((prev) => (op.kind === "clear" ? [] : [...prev, op]));
+  }, []);
+
   // Clean up media/peers if the component unmounts mid-call.
   useEffect(() => {
     return () => {
@@ -144,6 +161,11 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       roomRef.current = null;
     };
   }, []);
+
+  const screenSharerId = useMemo(() => {
+    if (sharing) return "self";
+    return participants.find((p) => p.sharing)?.id ?? null;
+  }, [sharing, participants]);
 
   return {
     joined,
@@ -155,11 +177,14 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     cameraOff,
     sharing,
     reactions,
+    drawOps,
+    screenSharerId,
     join,
     leave,
     toggleMute,
     toggleCamera,
     toggleScreenShare,
     sendReaction,
+    sendDraw,
   };
 }
