@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Search, MessageSquare, Paperclip, AtSign, Smile, Download, FileText, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { ChatMessagesSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useListMessages, type ChatAttachment } from "@/features/lists/use-list-messages";
 import { formatFileSize } from "@/lib/file-utils";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -138,7 +139,9 @@ export function ListChatPanel({
       )}
 
       <div ref={scrollRef} className="mt-3 min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-2">
-        {filtered.length === 0 ? (
+        {chat.isLoading ? (
+          <ChatMessagesSkeleton />
+        ) : filtered.length === 0 ? (
           <div className="py-12 text-center">
             <MessageSquare className="mx-auto mb-1.5 h-7 w-7 text-[#c5cae0]" />
             <p className="text-[12.5px] font-medium text-[#000533]">No messages yet</p>

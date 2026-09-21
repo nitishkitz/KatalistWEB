@@ -23,6 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { FileListSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { formatFileSize } from "@/lib/file-utils";
 import { detectFileType } from "@/lib/file-utils";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -274,7 +275,7 @@ export function HubFilesPanel({
           </div>
         )}
         {isLoading ? (
-          <p className="py-10 text-center text-[12.5px] text-[#6a769c]">Loading files…</p>
+          <FileListSkeleton />
         ) : shown.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Folder className="h-9 w-9 text-[#c5cae0]" />

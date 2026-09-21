@@ -127,6 +127,65 @@ export function TeamSkeleton() {
   );
 }
 
+/** Team Hub sidebar: a vertical list of conversation/list rows (avatar +
+ *  name/subtitle + a trailing time chip). Used while conversations or lists
+ *  are loading in HubSidebar. */
+export function ConversationListSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className="animate-in fade-in space-y-1 px-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-2.5 rounded-[10px] px-2 py-2">
+          <Shimmer className="h-9 w-9 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <Shimmer className="h-3.5 w-28" />
+              <Shimmer className="h-2.5 w-8 shrink-0" />
+            </div>
+            <Shimmer className="h-3 w-40" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Chat message timeline: alternating avatar + bubble rows. Used while a
+ *  conversation's/List's messages are loading (ListChatPanel). */
+export function ChatMessagesSkeleton() {
+  const widths = ["w-2/3", "w-1/2", "w-3/4", "w-2/5", "w-1/3"];
+  return (
+    <div className="animate-in fade-in space-y-4">
+      {widths.map((w, i) => (
+        <div key={i} className="flex items-start gap-3">
+          <Shimmer className="h-[34px] w-[34px] shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Shimmer className="h-3 w-24" />
+            <Shimmer className={cn("h-3.5", w)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** File/folder list: icon square + name/size bars. Used while a Files panel
+ *  is loading (HubFilesPanel). */
+export function FileListSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="animate-in fade-in space-y-2">
+      {Array.from({ length: rows }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 rounded-[10px] border border-[#eef0f6] px-3 py-2.5">
+          <Shimmer className="h-9 w-9 shrink-0 rounded-md" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Shimmer className="h-3.5 w-1/3" />
+            <Shimmer className="h-2.5 w-16" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Nudges: header + group tabs + a table-style list view. */
 export function NudgesSkeleton() {
   return (

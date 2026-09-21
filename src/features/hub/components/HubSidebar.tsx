@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "@tanstack/react-router";
 import { Search, MessageCircle, List as ListIcon, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { ConversationListSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { usePresence } from "@/features/people/presence";
 import { cn } from "@/lib/utils";
 import { useConversations, type Conversation } from "@/features/hub/use-conversations";
@@ -53,8 +54,8 @@ export function HubSidebar() {
   const params = useParams({ strict: false }) as { conversationId?: string };
   const activeId = params.conversationId;
   const online = usePresence();
-  const { conversations } = useConversations();
-  const { lists } = useLists();
+  const { conversations, isLoading: conversationsLoading } = useConversations();
+  const { lists, isLoading: listsLoading } = useLists();
   const { members } = useTeam();
   const { openContacts } = useHub();
   const [view, setView] = useState<RailView>("conversations");
@@ -184,7 +185,9 @@ export function HubSidebar() {
         {view === "conversations" && (
           <>
             <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Conversations</p>
-            {filteredConversations.length === 0 ? (
+            {conversationsLoading ? (
+              <ConversationListSkeleton />
+            ) : filteredConversations.length === 0 ? (
               <p className="px-2 py-6 text-center text-[12px] text-[#6a769c]">
                 No conversations yet. Search a name above or open Contacts to start one.
               </p>
@@ -227,7 +230,9 @@ export function HubSidebar() {
         {view === "lists" && (
           <>
             <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Lists</p>
-            {filteredLists.length === 0 ? (
+            {listsLoading ? (
+              <ConversationListSkeleton />
+            ) : filteredLists.length === 0 ? (
               <p className="px-2 py-6 text-center text-[12px] text-[#6a769c]">No lists in this mode.</p>
             ) : (
               filteredLists.map((l) => (
