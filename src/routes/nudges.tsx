@@ -93,7 +93,7 @@ function NudgesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [nudgingId, setNudgingId] = useState<string | null>(null);
-  const { rows: allRows, recent, counts, isLoading } = useNudges();
+  const { rows: allRows, recent, counts, isLoading, eligibilityLoading, error: nudgesError, retry: retryNudges } = useNudges();
   const court = useCourt();
   const live = useThing(selectedId);
   const selected = live.thing;
@@ -172,6 +172,19 @@ function NudgesPage() {
               </button>
             </div>
           </div>
+
+          {nudgesError ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12.5px] text-amber-900">
+              <span>{domainErrorMessage(nudgesError)}</span>
+              <button
+                type="button"
+                onClick={() => retryNudges()}
+                className="inline-flex h-7 items-center rounded-[6px] border border-amber-300 bg-white px-2.5 text-[12px] font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Retry
+              </button>
+            </div>
+          ) : null}
 
           {/* Body */}
           <div className="grid gap-5 xl:grid-cols-[1fr_372px]">
@@ -274,7 +287,15 @@ function NudgesPage() {
                                   </span>
                                 </td>
                                 <td className="px-2">
-                                  {row.canNudge ? (
+                                  {eligibilityLoading ? (
+                                    // Eligibility (which rows can actually be nudged) hasn't
+                                    // resolved yet — the row itself is real, so don't render a
+                                    // confident "Open" (which implies "not eligible") before we
+                                    // know either way.
+                                    <span className="inline-flex items-center rounded-[5px] border border-border px-3 py-1.5 text-[13px] text-muted-foreground opacity-60">
+                                      Checking…
+                                    </span>
+                                  ) : row.canNudge ? (
                                     <button
                                       type="button"
                                       disabled={nudgingId === row.id}

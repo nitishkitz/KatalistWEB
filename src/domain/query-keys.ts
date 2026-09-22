@@ -13,6 +13,8 @@ export const keys = {
     ["accessible-things", profileId, context] as const,
   nudges: (profileId: string | undefined, context: string) =>
     ["nudges", profileId, context] as const,
+  nudgeHistory: (profileId: string | undefined, context: string) =>
+    ["nudge-history", profileId, context] as const,
   catchup: (profileId: string | undefined, context: string) =>
     ["catchup", profileId, context] as const,
   listMeetings: (listId: string) => ["list-meetings", listId] as const,

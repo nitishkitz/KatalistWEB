@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCourt } from "@/features/court/use-court";
 import { isActiveThing, theirStateFor, type Thing } from "@/domain/thing";
@@ -8,6 +8,9 @@ import { isRecentlyNudged, canNudge as demoCanNudge } from "@/features/things/lo
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { supabase } from "@/integrations/supabase/client";
 import { keys } from "@/domain/query-keys";
+import { useSession } from "@/hooks/useSession";
+import { useAppContext } from "@/features/context/use-app-context";
+import { isPreviewSession } from "@/lib/session-mode";
 import type { NudgeReason } from "@/features/things/rpc";
 
 function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string, dbReason?: NudgeReason): NudgeRow {
@@ -37,12 +40,16 @@ function groupThing(t: Thing, recently: boolean): { group: NudgeGroup; reason: s
 
 export function useNudges() {
   const court = useCourt();
+  const { session, user } = useSession();
+  const { context } = useAppContext();
+  const preview = isPreviewSession(session);
+  const liveAuth = Boolean(session) && !preview;
   useLocalVersion();
   const liveThings = court.theirs.filter(isActiveThing);
 
   const nudgeable = useQuery({
-    queryKey: keys.nudges(undefined, "work"),
-    enabled: !court.preview,
+    queryKey: keys.nudges(user?.id, context),
+    enabled: liveAuth,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("list_nudgeable_things");
       if (error) throw error;
@@ -51,8 +58,8 @@ export function useNudges() {
   });
 
   const history = useQuery({
-    queryKey: ["nudge-history"],
-    enabled: !court.preview,
+    queryKey: keys.nudgeHistory(user?.id, context),
+    enabled: liveAuth,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nudges")
@@ -120,7 +127,33 @@ export function useNudges() {
     return map;
   }, [derived.rows]);
 
-  const isLoading = !court.preview && (nudgeable.isLoading || history.isLoading);
+  // Rows are derived from Court, so they aren't ready until Court's own
+  // query resolves — a prior version of this hook omitted court.isLoading
+  // here, which let a still-loading Court render as "0 nudges / caught up"
+  // for a moment. Eligibility (which rows *can* be nudged, and cooldown
+  // history) resolves separately and more slowly, so it's exposed on its
+  // own: callers should keep showing the rows they already have and only
+  // gray out/disable the nudge action while eligibilityLoading is true,
+  // rather than blocking the whole list on it.
+  const rowsLoading = liveAuth && court.isLoading;
+  const eligibilityLoading = liveAuth && (nudgeable.isLoading || history.isLoading);
+  const error = nudgeable.error ?? history.error ?? court.error ?? null;
+  const retry = useCallback(() => {
+    void court.refetch();
+    void nudgeable.refetch();
+    void history.refetch();
+  }, [court, nudgeable, history]);
 
-  return { ...derived, counts, preview: court.preview, isLoading };
+  return {
+    ...derived,
+    counts,
+    preview: court.preview,
+    rowsLoading,
+    eligibilityLoading,
+    // Backward-compatible combined flag: reflects row readiness only, per
+    // the note above — never blocks on eligibility.
+    isLoading: rowsLoading,
+    error,
+    retry,
+  };
 }
