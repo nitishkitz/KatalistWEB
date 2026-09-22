@@ -4,7 +4,7 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { addListMessage, getListMessages } from "@/features/things/local-state";
+import { addListMessage, getListMessages, pinListMessageLocal } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { fetchProfileIdentities, matchProfile } from "@/features/people/directory";
 import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
@@ -30,6 +30,7 @@ export type ListChatMessage = {
   at: string;
   kind: "message" | "system";
   attachment: ChatAttachment | null;
+  pinnedAt: string | null;
 };
 
 type RawAttachment = { key?: string; name?: string; mime?: string | null; size?: number | null };
@@ -37,7 +38,7 @@ type RawAttachment = { key?: string; name?: string; mime?: string | null; size?:
 async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
   const { data, error } = await supabase
     .from("list_messages")
-    .select("id, body, created_at, author_profile_id, kind, attachment")
+    .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at")
     .eq("list_id", listId)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
@@ -50,6 +51,7 @@ async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
     author_profile_id: string;
     kind: string | null;
     attachment: RawAttachment | null;
+    pinned_at: string | null;
   }>;
 
   return Promise.all(
@@ -77,6 +79,7 @@ async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
         at: row.created_at,
         kind: row.kind === "system" ? "system" : "message",
         attachment,
+        pinnedAt: row.pinned_at,
       } satisfies ListChatMessage;
     }),
   );
@@ -184,6 +187,26 @@ export function useListMessages(listId: string) {
     },
   });
 
+  /** Pin/unpin a message so it stays visible above the scroll. Works on any
+   *  message, not just your own — owner/collaborator only, enforced by the
+   *  pin_list_message RPC (list_messages' own UPDATE policy is author-only,
+   *  which would block pinning someone else's message). */
+  const pin = useMutation({
+    mutationFn: async ({ messageId, pinned }: { messageId: string; pinned: boolean }) => {
+      if (hidden) throw new Error("That List isn’t available.");
+      if (preview) {
+        pinListMessageLocal(listId, messageId, pinned);
+        return;
+      }
+      const { error } = await supabase.rpc("pin_list_message", { p_message_id: messageId, p_pinned: pinned });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      invalidate();
+      broadcastChange();
+    },
+  });
+
   /** Upload a file to the private chat bucket and return its descriptor. */
   const uploadAttachment = async (file: File): Promise<ChatAttachment> => {
     if (!user?.id) throw new Error("Sign in to attach files.");
@@ -210,10 +233,21 @@ export function useListMessages(listId: string) {
             at: m.at,
             kind: "message" as const,
             attachment: null,
+            pinnedAt: m.pinnedAt,
           }))
         : (query.data ?? []);
 
-  return { messages, send, sendSystem, uploadAttachment, isLoading: !preview && !hidden && query.isLoading };
+  const pinnedMessages = messages.filter((m) => m.pinnedAt);
+
+  return {
+    messages,
+    pinnedMessages,
+    send,
+    sendSystem,
+    pin,
+    uploadAttachment,
+    isLoading: !preview && !hidden && query.isLoading,
+  };
 }
 
 export { matchProfile };

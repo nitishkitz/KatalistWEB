@@ -18,12 +18,13 @@ export type HubFile = {
   createdBy: string;
   ownerName: string;
   createdAt: string;
+  pinnedAt: string | null;
 };
 
 async function fetchFiles(listId: string, parentId: string | null): Promise<HubFile[]> {
   let q = supabase
     .from("hub_files")
-    .select("id, list_id, parent_id, is_folder, name, storage_path, mime, size, created_by, created_at")
+    .select("id, list_id, parent_id, is_folder, name, storage_path, mime, size, created_by, created_at, pinned_at")
     .eq("list_id", listId)
     .is("deleted_at", null);
   q = parentId === null ? q.is("parent_id", null) : q.eq("parent_id", parentId);
@@ -40,6 +41,7 @@ async function fetchFiles(listId: string, parentId: string | null): Promise<HubF
     size: number | null;
     created_by: string;
     created_at: string;
+    pinned_at: string | null;
   }>;
 
   const identities = await fetchProfileIdentities();
@@ -57,10 +59,12 @@ async function fetchFiles(listId: string, parentId: string | null): Promise<HubF
     createdBy: r.created_by,
     ownerName: nameById.get(r.created_by) ?? "Member",
     createdAt: r.created_at,
+    pinnedAt: r.pinned_at,
   }));
 
-  // Folders first, then alphabetical.
+  // Pinned first, then folders, then alphabetical.
   files.sort((a, b) => {
+    if (Boolean(a.pinnedAt) !== Boolean(b.pinnedAt)) return a.pinnedAt ? -1 : 1;
     if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1;
     return a.name.localeCompare(b.name);
   });
@@ -138,6 +142,20 @@ export function useHubFiles(listId: string, parentId: string | null) {
     onSuccess: invalidate,
   });
 
+  /** Pin/unpin a file so it stays at the top of the list. Direct update — the
+   *  existing owner-or-collaborator UPDATE policy on hub_files already covers
+   *  this, same as rename/move above. */
+  const pin = useMutation({
+    mutationFn: async ({ id, pinned }: { id: string; pinned: boolean }) => {
+      const { error } = await supabase
+        .from("hub_files")
+        .update({ pinned_at: pinned ? new Date().toISOString() : null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+
   const move = useMutation({
     mutationFn: async ({ id, targetParentId }: { id: string; targetParentId: string | null }) => {
       const { error } = await supabase.from("hub_files").update({ parent_id: targetParentId }).eq("id", id);
@@ -166,5 +184,6 @@ export function useHubFiles(listId: string, parentId: string | null) {
     rename,
     move,
     remove,
+    pin,
   };
 }

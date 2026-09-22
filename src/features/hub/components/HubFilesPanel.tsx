@@ -15,6 +15,8 @@ import {
   Pencil,
   Trash2,
   ChevronRight,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -70,7 +72,7 @@ export function HubFilesPanel({
 }) {
   const [path, setPath] = useState<{ id: string; name: string }[]>([]);
   const parentId = path.length ? path[path.length - 1].id : null;
-  const { files, isLoading, createFolder, upload, rename, remove } = useHubFiles(listId, parentId);
+  const { files, isLoading, createFolder, upload, rename, remove, pin } = useHubFiles(listId, parentId);
   const [view, setView] = useState<"list" | "grid">("list");
   const [query, setQuery] = useState("");
   const [newFolder, setNewFolder] = useState(false);
@@ -139,6 +141,14 @@ export function HubFilesPanel({
     if (!next || next.trim() === f.name) return;
     try {
       await rename.mutateAsync({ id: f.id, name: next });
+    } catch (err) {
+      toast.error(domainErrorMessage(err));
+    }
+  };
+
+  const doPin = async (f: HubFile) => {
+    try {
+      await pin.mutateAsync({ id: f.id, pinned: !f.pinnedAt });
     } catch (err) {
       toast.error(domainErrorMessage(err));
     }
@@ -250,6 +260,37 @@ export function HubFilesPanel({
 
       {/* Body */}
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+        {files.some((f) => f.pinnedAt) && (
+          <div className="mb-4">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Pinned</p>
+            <div className="space-y-2">
+              {files
+                .filter((f) => f.pinnedAt)
+                .map((f) => {
+                  const v = fileVisual(f);
+                  return (
+                    <div
+                      key={f.id}
+                      className="flex items-center gap-3 rounded-[10px] border border-[#eef0f6] px-3 py-2.5 hover:border-[#975ee2]"
+                    >
+                      <button type="button" onClick={() => void openItem(f)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                        <v.Icon className={cn("h-4.5 w-4.5 shrink-0", v.tint)} />
+                        <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-[#000533]">{f.name}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void doPin(f)}
+                        title="Unpin"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#975ee2] hover:bg-[#f0e9fb]"
+                      >
+                        <PinOff className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
         {path.length === 0 && chatAttachments.length > 0 && (
           <div className="mb-4">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Shared in chat</p>
@@ -342,6 +383,7 @@ export function HubFilesPanel({
                       >
                         <v.Icon className={cn("h-5 w-5 shrink-0", v.tint)} />
                         <span className="truncate text-[13px] font-medium text-[#000533]">{f.name}</span>
+                        {f.pinnedAt ? <Pin className="h-3 w-3 shrink-0 text-[#975ee2]" /> : null}
                       </button>
                     </td>
                     <td className="px-3 py-3 text-[12.5px] text-[#3d3f74]">{v.label}</td>
@@ -368,6 +410,19 @@ export function HubFilesPanel({
                               Download
                             </DropdownMenuItem>
                           ) : null}
+                          <DropdownMenuItem className="cursor-pointer text-[12.5px]" onClick={() => void doPin(f)}>
+                            {f.pinnedAt ? (
+                              <>
+                                <PinOff className="mr-2 h-3.5 w-3.5" />
+                                Unpin
+                              </>
+                            ) : (
+                              <>
+                                <Pin className="mr-2 h-3.5 w-3.5" />
+                                Pin
+                              </>
+                            )}
+                          </DropdownMenuItem>
                           <DropdownMenuItem className="cursor-pointer text-[12.5px]" onClick={() => void doRename(f)}>
                             <Pencil className="mr-2 h-3.5 w-3.5" />
                             Rename

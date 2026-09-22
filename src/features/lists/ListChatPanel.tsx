@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Search, MessageSquare, Paperclip, AtSign, Smile, Download, FileText, Phone } from "lucide-react";
+import { Search, MessageSquare, Paperclip, AtSign, Smile, Download, FileText, Phone, Pin, PinOff } from "lucide-react";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { ChatMessagesSkeleton } from "@/components/katalist/ScreenSkeletons";
@@ -66,6 +66,19 @@ export function ListChatPanel({
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const scrollToMessage = (id: string) => {
+    messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const togglePin = async (messageId: string, pinned: boolean) => {
+    try {
+      await chat.pin.mutateAsync({ messageId, pinned });
+    } catch (err) {
+      toast.error(domainErrorMessage(err));
+    }
+  };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -138,6 +151,33 @@ export function ListChatPanel({
         </div>
       )}
 
+      {chat.pinnedMessages.length > 0 && (
+        <div className="mx-5 mt-2 space-y-1 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 py-2">
+          {chat.pinnedMessages.map((m) => (
+            <div key={m.id} className="flex items-center gap-2">
+              <Pin className="h-3 w-3 shrink-0 text-[#975ee2]" />
+              <button
+                type="button"
+                onClick={() => scrollToMessage(m.id)}
+                className="min-w-0 flex-1 truncate text-left text-[11.5px] text-[#3d3f74] hover:text-[#000533]"
+              >
+                <span className="font-medium">{m.author}:</span> {m.body || "📎 attachment"}
+              </button>
+              {!viewOnly ? (
+                <button
+                  type="button"
+                  onClick={() => void togglePin(m.id, false)}
+                  title="Unpin"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#975ee2]"
+                >
+                  <PinOff className="h-3 w-3" />
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+
       <div ref={scrollRef} className="mt-3 min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-2">
         {chat.isLoading ? (
           <ChatMessagesSkeleton />
@@ -163,7 +203,14 @@ export function ListChatPanel({
                 </span>
               </div>
             ) : (
-              <div key={m.id} className="flex items-start gap-3">
+              <div
+                key={m.id}
+                ref={(el) => {
+                  if (el) messageRefs.current.set(m.id, el);
+                  else messageRefs.current.delete(m.id);
+                }}
+                className="group flex items-start gap-3 rounded-lg px-1 -mx-1 transition-colors hover:bg-[#faf9fe]"
+              >
                 <PersonAvatar name={m.author} initials={m.author.slice(0, 2).toUpperCase()} src={m.avatarUrl} size={34} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
@@ -171,10 +218,21 @@ export function ListChatPanel({
                     <span className="text-[11px] text-[#757b9e]">
                       {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
+                    {m.pinnedAt ? <Pin className="h-3 w-3 shrink-0 text-[#975ee2]" /> : null}
                   </div>
                   {m.body ? <p className="mt-0.5 text-[12px] text-[#1a2345]">{m.body}</p> : null}
                   {m.attachment ? <ChatAttachmentView attachment={m.attachment} /> : null}
                 </div>
+                {!viewOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => void togglePin(m.id, !m.pinnedAt)}
+                    title={m.pinnedAt ? "Unpin" : "Pin"}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#8487a7] opacity-0 transition-opacity hover:bg-[#f0e9fb] hover:text-[#975ee2] group-hover:opacity-100"
+                  >
+                    {m.pinnedAt ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                  </button>
+                ) : null}
               </div>
             ),
           )

@@ -704,6 +704,7 @@ export type Database = {
           mime: string | null
           name: string
           parent_id: string | null
+          pinned_at: string | null
           size: number | null
           storage_path: string | null
           updated_at: string
@@ -718,6 +719,7 @@ export type Database = {
           mime?: string | null
           name: string
           parent_id?: string | null
+          pinned_at?: string | null
           size?: number | null
           storage_path?: string | null
           updated_at?: string
@@ -732,6 +734,7 @@ export type Database = {
           mime?: string | null
           name?: string
           parent_id?: string | null
+          pinned_at?: string | null
           size?: number | null
           storage_path?: string | null
           updated_at?: string
@@ -967,6 +970,7 @@ export type Database = {
           id: string
           kind: string
           list_id: string
+          pinned_at: string | null
           updated_at: string
         }
         Insert: {
@@ -978,6 +982,7 @@ export type Database = {
           id?: string
           kind?: string
           list_id: string
+          pinned_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -989,6 +994,7 @@ export type Database = {
           id?: string
           kind?: string
           list_id?: string
+          pinned_at?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2729,6 +2735,27 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "nudges"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      pin_list_message: {
+        Args: { p_message_id: string; p_pinned: boolean }
+        Returns: {
+          attachment: Json | null
+          author_profile_id: string
+          body: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+          kind: string
+          list_id: string
+          pinned_at: string | null
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "list_messages"
           isOneToOne: true
           isSetofReturn: false
         }

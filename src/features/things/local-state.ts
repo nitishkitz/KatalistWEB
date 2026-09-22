@@ -15,7 +15,7 @@ export type LocalComment = {
   attachments?: ThingFile[];
 };
 export type LocalActivity = { id: string; event: string; at: string; detail?: string };
-export type LocalMessage = { id: string; body: string; author: string; at: string };
+export type LocalMessage = { id: string; body: string; author: string; at: string; pinnedAt: string | null };
 export type LocalMeeting = {
   id: string;
   listId: string;
@@ -522,6 +522,7 @@ export function addListMessage(listId: string, body: string, author = "Me") {
     body,
     author: author === "Me" ? me.name : author,
     at: new Date().toISOString(),
+    pinnedAt: null,
   };
   listMessages.set(listId, [...(listMessages.get(listId) ?? []), row]);
   bump();
@@ -530,6 +531,16 @@ export function addListMessage(listId: string, body: string, author = "Me") {
 export function getListMessages(listId: string): LocalMessage[] {
   if (!getListById(listId)) return [];
   return listMessages.get(listId) ?? [];
+}
+
+export function pinListMessageLocal(listId: string, messageId: string, pinned: boolean) {
+  const rows = listMessages.get(listId);
+  if (!rows) return;
+  listMessages.set(
+    listId,
+    rows.map((m) => (m.id === messageId ? { ...m, pinnedAt: pinned ? new Date().toISOString() : null } : m)),
+  );
+  bump();
 }
 
 export function scheduleMeetingLocal(
