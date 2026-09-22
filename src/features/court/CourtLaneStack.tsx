@@ -616,7 +616,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             await rpcSetPersonalPace(data.thingId, lane);
             toast.success(`Moved "${data.title}" to ${content.label}`);
             await onRefresh();
-          } catch (err: any) {
+          } catch (err: unknown) {
             toast.error(domainErrorMessage(err));
           }
         }}

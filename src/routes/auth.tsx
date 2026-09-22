@@ -239,9 +239,9 @@ function AuthPage() {
         toast.success(`Welcome back${authData.user?.user_metadata?.full_name ? `, ${authData.user.user_metadata.full_name}` : ""}!`);
         navigate({ to: "/", replace: true });
         return;
-      } catch (err: any) {
+      } catch (err: unknown) {
         setBusy(false);
-        toast.error(err?.message || "Failed to authenticate");
+        toast.error(err instanceof Error ? err.message : "Failed to authenticate");
         setOtp("");
         return;
       }

@@ -49,7 +49,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
       setNewBucketName("");
       setIsNewBucketOpen(false);
       await qc.invalidateQueries({ queryKey: ["buckets"] });
-    } catch (err: any) {
+    } catch (err: unknown) {
       toast.error(domainErrorMessage(err));
     } finally {
       setIsCreating(false);
@@ -140,7 +140,10 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                     if (!raw) return;
                     const data = JSON.parse(raw) as { thingId: string; title?: string };
 
-                    const res = (await rpcAddToBucket(b.id, data.thingId)) as any;
+                    const res = (await rpcAddToBucket(b.id, data.thingId)) as {
+                      message?: string;
+                      alreadyExists?: boolean;
+                    } | null;
                     if (res?.message?.includes("already") || res?.alreadyExists) {
                       toast.info(`"${data.title || "Thing"}" is already in 📁 ${b.name}`);
                     } else {
@@ -151,7 +154,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                     await qc.invalidateQueries({ queryKey: ["buckets"] });
                     await qc.invalidateQueries({ queryKey: ["bucket", b.id] });
                     await qc.invalidateQueries({ queryKey: ["bucket-items", b.id] });
-                  } catch (err: any) {
+                  } catch (err: unknown) {
                     toast.error(domainErrorMessage(err));
                   } finally {
                     onClose?.();

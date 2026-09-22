@@ -42,7 +42,7 @@ export function CourtWorkspace({
         lanes={lanes}
         theirs={theirs}
         onSelectThing={onSelectThing}
-        onOpen={onOpen as any}
+        onOpen={onOpen}
         onClose={onClose}
         heroRect={heroRect}
       />

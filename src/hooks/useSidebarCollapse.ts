@@ -17,7 +17,9 @@ export function useSidebarCollapse() {
       const next = !prev;
       try {
         localStorage.setItem(STORAGE_KEY, String(next));
-      } catch {}
+      } catch {
+        // Private/quota-restricted storage — collapse state just won't persist.
+      }
       window.dispatchEvent(new CustomEvent("katalist_sidebar_change", { detail: next }));
       return next;
     });

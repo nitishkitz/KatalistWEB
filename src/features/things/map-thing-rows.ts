@@ -1,5 +1,6 @@
 import type { Thing, ThingFile } from "@/domain/thing";
 import { supabase } from "@/integrations/supabase/client";
+import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import { personOrSomeone, resolveActorPeople } from "@/features/people/resolve-actors";
 import { authedFetch } from "@/lib/authed-fetch";
 import { getThing } from "./local-state";
@@ -68,7 +69,7 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
     const missingAfterApi = listIds.filter((id) => !listNames.has(id));
     if (missingAfterApi.length) {
       try {
-        const { data, error } = await (supabase.rpc as any)("resolve_list_names", { p_list_ids: missingAfterApi });
+        const { data, error } = await callUngeneratedRpc("resolve_list_names", { p_list_ids: missingAfterApi });
         if (!error && data) {
           for (const l of (data as { id: string; name: string }[])) {
             if (l.id && l.name) listNames.set(l.id, l.name);

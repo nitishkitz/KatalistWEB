@@ -13,6 +13,21 @@ async function rpc<T>(name: keyof Database["public"]["Functions"], args: object)
   return data as T;
 }
 
+type RpcCaller = (
+  fn: string,
+  args?: object,
+) => Promise<{ data: unknown; error: { message: string } | null }>;
+
+/**
+ * Calls a Postgres RPC by name that has not been added to the generated
+ * Supabase `Database["public"]["Functions"]` types yet. Isolates the one
+ * necessary type escape hatch instead of casting `supabase.rpc` to `any`
+ * at each call site.
+ */
+export function callUngeneratedRpc(name: string, args?: object) {
+  return (supabase.rpc as unknown as RpcCaller)(name, args);
+}
+
 export const katalistRpc = {
   createThing: (args: {
     p_title: string;

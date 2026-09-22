@@ -1488,8 +1488,8 @@ function ListDetailPage() {
                                           toast.success(`Updated ${m.name}'s role`);
                                           await qc.invalidateQueries({ queryKey: ["list", listId] });
                                           await qc.invalidateQueries({ queryKey: ["lists"] });
-                                        } catch (err: any) {
-                                          toast.error(err?.message || "Failed to update role");
+                                        } catch (err: unknown) {
+                                          toast.error(err instanceof Error ? err.message : "Failed to update role");
                                         }
                                       }}
                                       className="text-[12px]"
@@ -1513,8 +1513,8 @@ function ListDetailPage() {
                                           await qc.invalidateQueries({ queryKey: ["list", listId] });
                                           await qc.invalidateQueries({ queryKey: ["lists"] });
                                           await qc.invalidateQueries({ queryKey: ["assignable-people"] });
-                                        } catch (err: any) {
-                                          toast.error(err?.message || "Failed to remove member");
+                                        } catch (err: unknown) {
+                                          toast.error(err instanceof Error ? err.message : "Failed to remove member");
                                         }
                                       }}
                                     >
@@ -1727,8 +1727,8 @@ function ListDetailPage() {
                                       await qc.invalidateQueries({ queryKey: ["list", listId] });
                                       await qc.invalidateQueries({ queryKey: ["lists"] });
                                       await qc.invalidateQueries({ queryKey: ["assignable-people"] });
-                                    } catch (err: any) {
-                                      toast.error(err?.message || "Couldn't add team member. Please try again.");
+                                    } catch (err: unknown) {
+                                      toast.error(err instanceof Error ? err.message : "Couldn't add team member. Please try again.");
                                     } finally {
                                       setAddingPersonId(null);
                                     }

@@ -107,7 +107,7 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
                     await qc.invalidateQueries({ queryKey: ["buckets"] });
                     await qc.invalidateQueries({ queryKey: ["bucket", b.id] });
                     await qc.invalidateQueries({ queryKey: ["bucket-items", b.id] });
-                  } catch (err: any) {
+                  } catch (err: unknown) {
                     toast.error(domainErrorMessage(err));
                   }
                 }}

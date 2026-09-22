@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { supabase } from "@/integrations/supabase/client";
+import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
@@ -46,8 +47,7 @@ type RpcRow = {
 };
 
 async function fetchCatchupMoments(): Promise<CatchUpMoment[]> {
-  // Cast: the new RPC is not yet in the generated Supabase types.
-  const { data, error } = await (supabase.rpc as any)("list_catchup_moments");
+  const { data, error } = await callUngeneratedRpc("list_catchup_moments");
   if (error) throw error;
   const rows = (data ?? []) as RpcRow[];
   if (!rows.length) return [];
@@ -201,8 +201,7 @@ export function useCatchup(): UseCatchup {
 
   const surface = useMutation({
     mutationFn: async (momentKey: string) => {
-      // Cast: the new RPC is not yet in the generated Supabase types.
-      const { error } = await (supabase.rpc as any)("surface_catchup_moment", {
+      const { error } = await callUngeneratedRpc("surface_catchup_moment", {
         p_moment_key: momentKey,
       });
       if (error) throw error;

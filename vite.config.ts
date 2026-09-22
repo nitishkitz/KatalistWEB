@@ -229,12 +229,13 @@ function phoneAuthPlugin(): Plugin {
             token_hash: linkData.properties.hashed_token,
             email: userEmail,
           }));
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("[phone-auth] error:", err);
+          const message = err instanceof Error ? err.message : undefined;
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: err?.message || "Authentication failed" }));
+            res.end(JSON.stringify({ error: message || "Authentication failed" }));
           }
         }
       });
@@ -460,12 +461,13 @@ function listMemberPlugin(): Plugin {
             res.end(JSON.stringify({ ok: true, removed }));
             return;
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("[list-members] error:", err);
+          const message = err instanceof Error ? err.message : undefined;
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: err?.message || "Operation failed" }));
+            res.end(JSON.stringify({ error: message || "Operation failed" }));
           }
         }
       });
@@ -580,12 +582,13 @@ function thingsReopenPlugin(): Plugin {
           res.statusCode = 200;
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify({ ok: true, thing: data }));
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("[things-reopen] error:", err);
+          const message = err instanceof Error ? err.message : undefined;
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: err?.message || "Reopen failed" }));
+            res.end(JSON.stringify({ error: message || "Reopen failed" }));
           }
         }
       });
@@ -704,12 +707,13 @@ function completeAttachmentPlugin(): Plugin {
           res.statusCode = 200;
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify({ ok: true, attachment: completed }));
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.error("[complete-attachment] error:", err);
+          const message = err instanceof Error ? err.message : undefined;
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: err?.message || "Failed to finalize attachment" }));
+            res.end(JSON.stringify({ error: message || "Failed to finalize attachment" }));
           }
         }
       });

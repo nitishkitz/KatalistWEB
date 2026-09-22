@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,8 +22,8 @@ type PdfCanvasProps = {
 export function PdfCanvas({ url, page = 1, className, onNumPages }: PdfCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const docRef = useRef<any>(null);
-  const renderTaskRef = useRef<any>(null);
+  const docRef = useRef<PDFDocumentProxy | null>(null);
+  const renderTaskRef = useRef<RenderTask | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   // Load the document whenever the URL changes.
@@ -33,7 +34,7 @@ export function PdfCanvas({ url, page = 1, className, onNumPages }: PdfCanvasPro
 
     (async () => {
       try {
-        const pdfjs: any = await import("pdfjs-dist");
+        const pdfjs = await import("pdfjs-dist");
         pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
         const doc = await pdfjs.getDocument({ url }).promise;
         if (cancelled) {
@@ -87,8 +88,8 @@ export function PdfCanvas({ url, page = 1, className, onNumPages }: PdfCanvasPro
       renderTaskRef.current = task;
       await task.promise;
       setStatus("ready");
-    } catch (err: any) {
-      if (err?.name === "RenderingCancelledException") return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === "RenderingCancelledException") return;
       setStatus("error");
     }
   }

@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import type { Importance, Pace, ThingFile, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
 import { authedFetch } from "@/lib/authed-fetch";
@@ -115,8 +116,8 @@ async function runDomainMutation<T>(handlers: {
   }
   try {
     return await handlers.live();
-  } catch (error: any) {
-    const msg = String(error?.message || "");
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error ?? "");
     if (
       msg.includes("Thing not found") ||
       msg.includes("not found") ||
@@ -318,7 +319,7 @@ export async function rpcReopenThing(thingId: string) {
         // ignore and fallback to rpc
       }
       return liveRpc(() =>
-        (supabase.rpc as any)("reopen_thing", {
+        callUngeneratedRpc("reopen_thing", {
           p_thing_id: thingId,
         }),
       );

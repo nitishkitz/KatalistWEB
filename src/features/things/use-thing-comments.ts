@@ -156,6 +156,7 @@ export function useThingComments(thingId: string | null) {
         avatarUrl: null,
         authorActorId: null,
         attachments: c.attachments,
+        sending: undefined,
       })),
       activity: getActivity(thingId).map((e) => ({ id: e.id, event: e.event, at: e.at })),
       post,

@@ -891,7 +891,7 @@ export function ThingDetailContent({
                             avatarUrl={entry.avatarUrl}
                             body={entry.body}
                             at={entry.at}
-                            sending={(entry as any).sending}
+                            sending={entry.sending}
                             attachments={entry.attachments}
                             onFileSelect={onFileSelect}
                           />
@@ -1488,7 +1488,7 @@ export function ThingDetailContent({
                     avatarUrl={c.avatarUrl}
                     body={c.body}
                     at={c.at}
-                    sending={"sending" in c ? (c as any).sending : undefined}
+                    sending={c.sending}
                     attachments={c.attachments}
                     onFileSelect={onFileSelect}
                   />
