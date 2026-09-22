@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { PictureInPicture2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -14,6 +15,17 @@ import { getConversationLastReadAt, markConversationAsRead, useConversationReadS
 const BUBBLE_SIZE = 52;
 const DRAG_THRESHOLD_PX = 6;
 const POSITION_STORAGE_KEY = "katalist_chat_bubble_pos";
+
+/** Not yet in TypeScript's DOM lib (the API itself is still a Draft
+ *  Community Group Report) — minimal shape for what this file uses. */
+type PipWindow = Window & { document: Document };
+interface DocumentPictureInPicture {
+  requestWindow(options?: { width?: number; height?: number }): Promise<PipWindow>;
+}
+function getDocumentPip(): DocumentPictureInPicture | null {
+  if (typeof window === "undefined") return null;
+  return (window as unknown as { documentPictureInPicture?: DocumentPictureInPicture }).documentPictureInPicture ?? null;
+}
 
 function defaultPosition() {
   if (typeof window === "undefined") return { x: 16, y: 500 };
@@ -118,6 +130,58 @@ function SwitcherBubble({
   );
 }
 
+function MiniChatContent({
+  conversations,
+  selected,
+  myId,
+  onSelect,
+  onClose,
+  pipSupported,
+  poppedOut,
+  onPopOut,
+}: {
+  conversations: Conversation[];
+  selected: Conversation;
+  myId: string | undefined;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+  pipSupported: boolean;
+  poppedOut: boolean;
+  onPopOut: () => void;
+}) {
+  return (
+    <div className="flex h-[420px] flex-col overflow-hidden rounded-md bg-popover">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <div className="flex flex-1 items-center gap-1.5 overflow-x-auto">
+          {conversations.slice(0, 12).map((c) => (
+            <SwitcherBubble key={c.id} conversation={c} myId={myId} selected={c.id === selected.id} onSelect={() => onSelect(c.id)} />
+          ))}
+        </div>
+        {pipSupported && !poppedOut ? (
+          <button
+            type="button"
+            onClick={onPopOut}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+            title="Pop out — stays visible when you switch tabs or minimize the browser"
+          >
+            <PictureInPicture2 className="h-4 w-4" />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <p className="truncate px-3 pt-2 text-[13px] font-semibold text-foreground">{selected.title}</p>
+      <ListChatPanel listId={selected.id} placeholderName={selected.title} className="flex-1" />
+    </div>
+  );
+}
+
 /**
  * A close, buildable analog of Messenger's mobile "Chat Heads": one
  * draggable circular launcher bubble (not one per conversation — a web page
@@ -127,6 +191,14 @@ function SwitcherBubble({
  * small popover, anchored wherever the bubble currently sits, containing a
  * conversation switcher and an embedded mini chat. Nothing here navigates
  * away from whatever page you're on.
+ *
+ * The mini chat can also "pop out" into a real always-on-top OS window via
+ * the Document Picture-in-Picture API, where supported — that's the only
+ * way a web page can stay visible across a tab switch or a minimized
+ * browser; a normal in-tab popover categorically cannot (see the chat-heads
+ * "visible all the time" discussion). Feature-detected: browsers without
+ * support just don't show the pop-out button, no degraded fallback needed
+ * since the in-tab popover already works fully on its own.
  */
 export function ChatHeadsDock() {
   const { user } = useSession();
@@ -135,6 +207,7 @@ export function ChatHeadsDock() {
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [unreadById, setUnreadById] = useState<Record<string, number>>({});
+  const [pipWindow, setPipWindow] = useState<PipWindow | null>(null);
   const bubbleRef = useRef<HTMLButtonElement | null>(null);
   const dragRef = useRef<{
     startX: number;
@@ -147,8 +220,17 @@ export function ChatHeadsDock() {
   const selected = conversations.find((c) => c.id === selectedId) ?? conversations[0] ?? null;
 
   useEffect(() => {
-    if (open && selected) markConversationAsRead(selected.id);
-  }, [open, selected]);
+    if ((open || pipWindow) && selected) markConversationAsRead(selected.id);
+  }, [open, pipWindow, selected]);
+
+  // If the user closes the PiP window from its own chrome (not our button),
+  // fall back to the normal in-tab popover state.
+  useEffect(() => {
+    if (!pipWindow) return;
+    const onPageHide = () => setPipWindow(null);
+    pipWindow.addEventListener("pagehide", onPageHide);
+    return () => pipWindow.removeEventListener("pagehide", onPageHide);
+  }, [pipWindow]);
 
   const totalUnread = useMemo(
     () => Object.values(unreadById).reduce((sum, n) => sum + n, 0),
@@ -156,6 +238,30 @@ export function ChatHeadsDock() {
   );
 
   const onUnreadChange = (id: string, count: number) => setUnreadById((prev) => (prev[id] === count ? prev : { ...prev, [id]: count }));
+
+  const openPip = async () => {
+    const dpip = getDocumentPip();
+    if (!dpip) return;
+    try {
+      const win = await dpip.requestWindow({ width: 340, height: 480 });
+      // Clone every stylesheet/style tag rather than reading CSSOM (which
+      // throws on cross-origin sheets) — the browser just re-applies them.
+      document.querySelectorAll('link[rel="stylesheet"], style').forEach((node) => {
+        win.document.head.appendChild(node.cloneNode(true));
+      });
+      win.document.body.style.margin = "0";
+      setOpen(false);
+      setPipWindow(win);
+    } catch {
+      // user dismissed the permission prompt, or the API rejected — stay
+      // on the normal in-tab popover, nothing else to do
+    }
+  };
+
+  const closePip = () => {
+    pipWindow?.close();
+    setPipWindow(null);
+  };
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -198,7 +304,12 @@ export function ChatHeadsDock() {
       }
       return;
     }
-    // A tap, not a drag — toggle the popover.
+    // A tap, not a drag. While popped out, bring that window forward
+    // instead of also opening the in-tab popover.
+    if (pipWindow) {
+      pipWindow.focus();
+      return;
+    }
     setOpen((o) => !o);
   };
 
@@ -232,37 +343,34 @@ export function ChatHeadsDock() {
         </PopoverAnchor>
         <PopoverContent side="top" align="start" className="w-[320px] p-0" sideOffset={10}>
           {selected ? (
-            <div className="flex h-[420px] flex-col overflow-hidden rounded-md">
-              <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-                <div className="flex flex-1 items-center gap-1.5 overflow-x-auto">
-                  {conversations.slice(0, 12).map((c) => (
-                    <SwitcherBubble
-                      key={c.id}
-                      conversation={c}
-                      myId={user?.id}
-                      selected={c.id === selected.id}
-                      onSelect={() => {
-                        setSelectedId(c.id);
-                        markConversationAsRead(c.id);
-                      }}
-                    />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <p className="truncate px-3 pt-2 text-[13px] font-semibold text-foreground">{selected.title}</p>
-              <ListChatPanel listId={selected.id} placeholderName={selected.title} className="flex-1" />
-            </div>
+            <MiniChatContent
+              conversations={conversations}
+              selected={selected}
+              myId={user?.id}
+              onSelect={(id) => setSelectedId(id)}
+              onClose={() => setOpen(false)}
+              pipSupported={Boolean(getDocumentPip())}
+              poppedOut={false}
+              onPopOut={() => void openPip()}
+            />
           ) : null}
         </PopoverContent>
       </Popover>
+      {pipWindow && selected
+        ? createPortal(
+            <MiniChatContent
+              conversations={conversations}
+              selected={selected}
+              myId={user?.id}
+              onSelect={(id) => setSelectedId(id)}
+              onClose={closePip}
+              pipSupported={false}
+              poppedOut={true}
+              onPopOut={() => {}}
+            />,
+            pipWindow.document.body,
+          )
+        : null}
     </>
   );
 }
