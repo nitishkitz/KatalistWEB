@@ -970,6 +970,7 @@ export type Database = {
           id: string
           kind: string
           list_id: string
+          mentioned_profile_ids: string[]
           pinned_at: string | null
           updated_at: string
         }
@@ -982,6 +983,7 @@ export type Database = {
           id?: string
           kind?: string
           list_id: string
+          mentioned_profile_ids?: string[]
           pinned_at?: string | null
           updated_at?: string
         }
@@ -994,6 +996,7 @@ export type Database = {
           id?: string
           kind?: string
           list_id?: string
+          mentioned_profile_ids?: string[]
           pinned_at?: string | null
           updated_at?: string
         }
@@ -2762,6 +2765,7 @@ export type Database = {
           id: string
           kind: string
           list_id: string
+          mentioned_profile_ids: string[]
           pinned_at: string | null
           updated_at: string
         }

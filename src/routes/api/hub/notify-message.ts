@@ -14,9 +14,9 @@ export const Route = createFileRoute("/api/hub/notify-message")({
         const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
         if (!token) return json({ error: "unauthorized" }, 401);
 
-        let body: { listId?: string; preview?: string } = {};
+        let body: { listId?: string; preview?: string; mentionedProfileIds?: string[] } = {};
         try {
-          body = (await request.json()) as { listId?: string; preview?: string };
+          body = (await request.json()) as { listId?: string; preview?: string; mentionedProfileIds?: string[] };
         } catch {
           body = {};
         }
@@ -57,24 +57,43 @@ export const Route = createFileRoute("/api/hub/notify-message")({
 
         const { data: toks } = await supabaseAdmin
           .from("device_tokens")
-          .select("token")
+          .select("token, profile_id")
           .in("profile_id", recipientIds);
-        const tokens = (toks ?? []).map((t) => t.token).filter(Boolean) as string[];
+        const rows = (toks ?? []) as Array<{ token: string; profile_id: string }>;
 
-        // DM shows the sender as the title; a group shows the group name.
-        const title = list.kind === "dm" ? fromName : list.name;
+        // Mentioned recipients get a distinct, more prominent notification —
+        // everyone else gets the regular new-message preview. Only members of
+        // this conversation who were actually mentioned count (a mention of
+        // someone outside the list can't have a token to notify anyway).
+        const mentioned = new Set((body.mentionedProfileIds ?? []).filter((id) => memberIds.has(id) && id !== uid));
+        const mentionedTokens = rows.filter((r) => mentioned.has(r.profile_id)).map((r) => r.token);
+        const otherTokens = rows.filter((r) => !mentioned.has(r.profile_id)).map((r) => r.token);
+
+        const url = isHub ? `/team/${listId}` : `/lists/${listId}`;
         const preview = (body.preview || "").trim();
-        const messageBody =
-          list.kind === "dm"
-            ? preview || "sent you a message"
-            : `${fromName}: ${preview || "sent a message"}`;
-
         const { sendPush } = await import("@/lib/fcm.server");
-        const sent = await sendPush(
-          tokens,
-          { title, body: messageBody.slice(0, 140) },
-          { url: isHub ? `/team/${listId}` : `/lists/${listId}`, kind: "message", hub: isHub ? "1" : "0", listId },
-        );
+
+        let sent = 0;
+        if (mentionedTokens.length > 0) {
+          sent += await sendPush(
+            mentionedTokens,
+            { title: `${fromName} mentioned you`, body: (preview || "in a message").slice(0, 140) },
+            { url, kind: "mention", hub: isHub ? "1" : "0", listId },
+          );
+        }
+        if (otherTokens.length > 0) {
+          // DM shows the sender as the title; a group shows the group name.
+          const title = list.kind === "dm" ? fromName : list.name;
+          const messageBody =
+            list.kind === "dm"
+              ? preview || "sent you a message"
+              : `${fromName}: ${preview || "sent a message"}`;
+          sent += await sendPush(
+            otherTokens,
+            { title, body: messageBody.slice(0, 140) },
+            { url, kind: "message", hub: isHub ? "1" : "0", listId },
+          );
+        }
         return json({ sent });
       },
     },

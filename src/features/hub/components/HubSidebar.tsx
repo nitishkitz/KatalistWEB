@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
-import { Search, MessageCircle, List as ListIcon, Plus, Users } from "lucide-react";
+import { Search, MessageCircle, AtSign, List as ListIcon, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { ConversationListSkeleton } from "@/components/katalist/ScreenSkeletons";
@@ -8,7 +8,7 @@ import { usePresence } from "@/features/people/presence";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 import { useConversations, type Conversation } from "@/features/hub/use-conversations";
-import { useConversationUnreadCount } from "@/features/hub/chat-read-state";
+import { useConversationUnreadCount, useConversationMentionCount } from "@/features/hub/chat-read-state";
 import { useLists } from "@/features/lists/use-lists";
 import { useTeam } from "@/features/people/use-team";
 import { isUuid } from "@/features/things/rpc";
@@ -65,6 +65,7 @@ function ConversationRow({
   onOpen: () => void;
 }) {
   const unread = useConversationUnreadCount(c, myId);
+  const mentions = useConversationMentionCount(c, myId);
   return (
     <button
       type="button"
@@ -82,8 +83,19 @@ function ConversationRow({
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-2">
-          <span className={cn("truncate text-[13px]", unread > 0 ? "font-bold text-[#000533]" : "font-semibold text-[#000533]")}>
-            {c.title}
+          <span className="flex min-w-0 items-center gap-1">
+            <span className={cn("truncate text-[13px]", unread > 0 ? "font-bold text-[#000533]" : "font-semibold text-[#000533]")}>
+              {c.title}
+            </span>
+            {mentions > 0 ? (
+              <span
+                title={`${mentions} mention${mentions === 1 ? "" : "s"}`}
+                className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-[#fdb412] px-1 text-[9px] font-bold text-white"
+              >
+                <AtSign className="h-2.5 w-2.5" />
+                {mentions > 9 ? "9+" : mentions}
+              </span>
+            ) : null}
           </span>
           <span className="shrink-0 text-[10.5px] text-[#8487a7]">{relativeTime(c.lastAt)}</span>
         </span>

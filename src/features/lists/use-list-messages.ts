@@ -31,6 +31,7 @@ export type ListChatMessage = {
   kind: "message" | "system";
   attachment: ChatAttachment | null;
   pinnedAt: string | null;
+  mentionedProfileIds: string[];
 };
 
 type RawAttachment = { key?: string; name?: string; mime?: string | null; size?: number | null };
@@ -38,7 +39,7 @@ type RawAttachment = { key?: string; name?: string; mime?: string | null; size?:
 async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
   const { data, error } = await supabase
     .from("list_messages")
-    .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at")
+    .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
     .eq("list_id", listId)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
@@ -52,6 +53,7 @@ async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
     kind: string | null;
     attachment: RawAttachment | null;
     pinned_at: string | null;
+    mentioned_profile_ids: string[] | null;
   }>;
 
   return Promise.all(
@@ -80,6 +82,7 @@ async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
         kind: row.kind === "system" ? "system" : "message",
         attachment,
         pinnedAt: row.pinned_at,
+        mentionedProfileIds: row.mentioned_profile_ids ?? [],
       } satisfies ListChatMessage;
     }),
   );
@@ -129,9 +132,12 @@ export function useListMessages(listId: string) {
   };
 
   const send = useMutation({
-    mutationFn: async (input: string | { body: string; attachment?: ChatAttachment | null }) => {
+    mutationFn: async (
+      input: string | { body: string; attachment?: ChatAttachment | null; mentionedProfileIds?: string[] },
+    ) => {
       const body = typeof input === "string" ? input : input.body;
       const attachment = typeof input === "string" ? null : input.attachment ?? null;
+      const mentionedProfileIds = typeof input === "string" ? [] : input.mentionedProfileIds ?? [];
       if (hidden) throw new Error("That List isn’t available.");
       if (preview) {
         addListMessage(listId, body);
@@ -144,6 +150,7 @@ export function useListMessages(listId: string) {
         author_profile_id: user.id,
         kind: "message",
         attachment: attachment ? { key: attachment.key, name: attachment.name, mime: attachment.mime, size: attachment.size } : null,
+        mentioned_profile_ids: mentionedProfileIds,
       });
       if (error) throw error;
 
@@ -156,7 +163,11 @@ export function useListMessages(listId: string) {
           void fetch("/api/hub/notify-message", {
             method: "POST",
             headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
-            body: JSON.stringify({ listId, preview: body || (attachment ? "📎 attachment" : "") }),
+            body: JSON.stringify({
+              listId,
+              preview: body || (attachment ? "📎 attachment" : ""),
+              mentionedProfileIds,
+            }),
           });
         }
       } catch {
@@ -234,6 +245,7 @@ export function useListMessages(listId: string) {
             kind: "message" as const,
             attachment: null,
             pinnedAt: m.pinnedAt,
+            mentionedProfileIds: [],
           }))
         : (query.data ?? []);
 

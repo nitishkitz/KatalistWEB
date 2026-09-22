@@ -1,14 +1,67 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Search, MessageSquare, Paperclip, AtSign, Smile, Download, FileText, Phone, Pin, PinOff } from "lucide-react";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { ChatMessagesSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useListMessages, type ChatAttachment } from "@/features/lists/use-list-messages";
+import { useConversation, type ConversationParticipant } from "@/features/hub/use-conversations";
+import { useSession } from "@/hooks/useSession";
 import { formatFileSize } from "@/lib/file-utils";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 
 const MAX_CHAT_FILE_BYTES = 50 * 1024 * 1024;
+
+/** Finds the "@partial-name" being typed right at the caret, if any — a
+ *  space or the start of the string ends the trigger. */
+function findMentionTrigger(text: string, caret: number): { start: number; query: string } | null {
+  const upTo = text.slice(0, caret);
+  const at = upTo.lastIndexOf("@");
+  if (at === -1) return null;
+  const between = upTo.slice(at + 1);
+  if (/\s/.test(between)) return null;
+  return { start: at, query: between };
+}
+
+/** Resolved at send time (not tracked incrementally) so edits/deletions to
+ *  the text are always reflected correctly — matches "@Name" as a whole
+ *  word against the conversation's actual members. */
+function resolveMentions(text: string, people: ConversationParticipant[]): string[] {
+  const ids: string[] = [];
+  for (const p of people) {
+    const escaped = p.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`@${escaped}(?!\\w)`, "i").test(text)) ids.push(p.id);
+  }
+  return ids;
+}
+
+/** Renders a message body with any "@Name" mention of an actual member
+ *  highlighted — bold + tinted, more strongly if it's you. */
+function MessageBody({ body, people, myId }: { body: string; people: ConversationParticipant[]; myId: string | undefined }) {
+  const mentionNames = people.map((p) => p.name).filter(Boolean);
+  if (mentionNames.length === 0) return <p className="mt-0.5 text-[12px] text-[#1a2345]">{body}</p>;
+  const pattern = mentionNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const parts = body.split(new RegExp(`(@(?:${pattern})(?!\\w))`, "gi"));
+  return (
+    <p className="mt-0.5 text-[12px] text-[#1a2345]">
+      {parts.map((part, i) => {
+        const person = people.find((p) => part.toLowerCase() === `@${p.name.toLowerCase()}`);
+        if (!person) return <span key={i}>{part}</span>;
+        return (
+          <span
+            key={i}
+            className={cn(
+              "rounded px-1 font-medium",
+              person.id === myId ? "bg-[#fdb412]/30 text-[#7a5200]" : "bg-[#f0e9fb] text-[#6638ec]",
+            )}
+          >
+            {part}
+          </span>
+        );
+      })}
+    </p>
+  );
+}
 
 /** Renders a chat attachment: an inline preview for images, a file chip otherwise. */
 function ChatAttachmentView({ attachment }: { attachment: ChatAttachment }) {
@@ -64,13 +117,41 @@ export const ListChatPanel = forwardRef<
   }
 >(function ListChatPanel({ listId, placeholderName, viewOnly = false, className }, forwardedRef) {
   const chat = useListMessages(listId);
+  const { user } = useSession();
+  const { conversation } = useConversation(listId);
+  const mentionable = useMemo(() => conversation?.others ?? [], [conversation]);
   const [msg, setMsg] = useState("");
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [mentionTrigger, setMentionTrigger] = useState<{ start: number; query: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const msgInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const mentionMatches = useMemo(() => {
+    if (!mentionTrigger) return [];
+    const q = mentionTrigger.query.toLowerCase();
+    return mentionable.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6);
+  }, [mentionTrigger, mentionable]);
+
+  const insertMention = (person: ConversationParticipant) => {
+    if (!mentionTrigger) return;
+    const before = msg.slice(0, mentionTrigger.start);
+    const after = msg.slice(mentionTrigger.start + 1 + mentionTrigger.query.length);
+    const next = `${before}@${person.name} ${after}`;
+    setMsg(next);
+    setMentionTrigger(null);
+    requestAnimationFrame(() => msgInputRef.current?.focus());
+  };
+
+  const onMsgChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setMsg(value);
+    const caret = e.target.selectionStart ?? value.length;
+    setMentionTrigger(findMentionTrigger(value, caret));
+  };
 
   const scrollToMessage = (id: string) => {
     messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -215,7 +296,10 @@ export const ListChatPanel = forwardRef<
                   if (el) messageRefs.current.set(m.id, el);
                   else messageRefs.current.delete(m.id);
                 }}
-                className="group flex items-start gap-3 rounded-lg px-1 -mx-1 transition-colors hover:bg-[#faf9fe]"
+                className={cn(
+                  "group flex items-start gap-3 rounded-lg px-1 -mx-1 transition-colors hover:bg-[#faf9fe]",
+                  user?.id && m.mentionedProfileIds.includes(user.id) && "bg-[#fdb412]/10",
+                )}
               >
                 <PersonAvatar name={m.author} initials={m.author.slice(0, 2).toUpperCase()} src={m.avatarUrl} size={34} />
                 <div className="min-w-0 flex-1">
@@ -226,7 +310,7 @@ export const ListChatPanel = forwardRef<
                     </span>
                     {m.pinnedAt ? <Pin className="h-3 w-3 shrink-0 text-[#975ee2]" /> : null}
                   </div>
-                  {m.body ? <p className="mt-0.5 text-[12px] text-[#1a2345]">{m.body}</p> : null}
+                  {m.body ? <MessageBody body={m.body} people={mentionable} myId={user?.id} /> : null}
                   {m.attachment ? <ChatAttachmentView attachment={m.attachment} /> : null}
                 </div>
                 {!viewOnly ? (
@@ -250,48 +334,84 @@ export const ListChatPanel = forwardRef<
           View-only members can observe the conversation.
         </p>
       ) : (
-        <form
-          className="mx-5 mb-4 mt-2 flex items-center gap-2 rounded-[8px] border border-[#e5e7f6] bg-white px-3 py-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!msg.trim()) return;
-            void chat.send.mutateAsync(msg.trim()).then(
-              () => setMsg(""),
-              (err) => toast.error(domainErrorMessage(err)),
-            );
-          }}
-        >
-          <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => void handleFile(e.target.files?.[0])} />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533] disabled:opacity-40"
-            aria-label="Attach file"
-            title="Attach a file"
+        <div className="relative mx-5 mb-4 mt-2">
+          {mentionTrigger && mentionMatches.length > 0 ? (
+            <div className="absolute bottom-full left-0 z-10 mb-1 w-56 overflow-hidden rounded-[10px] border border-[#ebecf7] bg-white shadow-lg">
+              {mentionMatches.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => insertMention(p)}
+                  className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-[#f6f7fc]"
+                >
+                  <PersonAvatar name={p.name} initials={p.initials} src={p.avatarUrl} size={22} />
+                  <span className="truncate text-[12px] font-medium text-[#000533]">{p.name}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <form
+            className="flex items-center gap-2 rounded-[8px] border border-[#e5e7f6] bg-white px-3 py-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = msg.trim();
+              if (!trimmed) return;
+              const mentionedProfileIds = resolveMentions(trimmed, mentionable);
+              void chat.send.mutateAsync({ body: trimmed, mentionedProfileIds }).then(
+                () => setMsg(""),
+                (err) => toast.error(domainErrorMessage(err)),
+              );
+            }}
           >
-            <Paperclip className="h-4 w-4" />
-          </button>
-          <input
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-            placeholder={uploading ? "Uploading file…" : `Message ${placeholderName ?? "the conversation"}…`}
-            className="min-w-0 flex-1 bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#6a6b8e]"
-          />
-          <button type="button" className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533]" aria-label="Mention">
-            <AtSign className="h-4 w-4" />
-          </button>
-          <button type="button" className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533]" aria-label="Emoji">
-            <Smile className="h-4 w-4" />
-          </button>
-          <button
-            type="submit"
-            disabled={!msg.trim()}
-            className="inline-flex h-[34px] cursor-pointer items-center rounded-[6px] bg-[#975ee2] px-4 text-[13px] font-medium text-white transition hover:brightness-95 disabled:opacity-40"
-          >
-            Send
-          </button>
-        </form>
+            <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => void handleFile(e.target.files?.[0])} />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533] disabled:opacity-40"
+              aria-label="Attach file"
+              title="Attach a file"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+            <input
+              ref={msgInputRef}
+              value={msg}
+              onChange={onMsgChange}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setMentionTrigger(null);
+              }}
+              placeholder={uploading ? "Uploading file…" : `Message ${placeholderName ?? "the conversation"}…`}
+              className="min-w-0 flex-1 bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#6a6b8e]"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                const caret = msgInputRef.current?.selectionStart ?? msg.length;
+                const next = `${msg.slice(0, caret)}@${msg.slice(caret)}`;
+                setMsg(next);
+                setMentionTrigger({ start: caret, query: "" });
+                requestAnimationFrame(() => msgInputRef.current?.focus());
+              }}
+              disabled={mentionable.length === 0}
+              className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533] disabled:opacity-40"
+              aria-label="Mention someone"
+              title="Mention someone"
+            >
+              <AtSign className="h-4 w-4" />
+            </button>
+            <button type="button" className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533]" aria-label="Emoji">
+              <Smile className="h-4 w-4" />
+            </button>
+            <button
+              type="submit"
+              disabled={!msg.trim()}
+              className="inline-flex h-[34px] cursor-pointer items-center rounded-[6px] bg-[#975ee2] px-4 text-[13px] font-medium text-white transition hover:brightness-95 disabled:opacity-40"
+            >
+              Send
+            </button>
+          </form>
+        </div>
       )}
     </div>
   );

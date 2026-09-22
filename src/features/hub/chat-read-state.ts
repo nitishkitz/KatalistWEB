@@ -80,3 +80,31 @@ export function useConversationUnreadCount(conversation: Conversation, myId: str
   if (!unread) return 0;
   return query.data ?? 1; // optimistic "1" while the exact count is still loading
 }
+
+/** How many unread messages in this conversation actually @mention me — a
+ *  strict subset of the unread count above. Same gating (only queries while
+ *  the conversation is flagged unread at all) to avoid a query per
+ *  conversation on every render. */
+export function useConversationMentionCount(conversation: Conversation, myId: string | undefined): number {
+  useConversationReadState();
+  const lastReadAt = getConversationLastReadAt(conversation.id);
+  const unread = isConversationUnread(conversation, myId, lastReadAt);
+  const query = useQuery({
+    queryKey: ["conversation-mention-count", conversation.id, lastReadAt, conversation.lastAt, myId],
+    enabled: unread && Boolean(myId),
+    staleTime: 10_000,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("list_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("list_id", conversation.id)
+        .is("deleted_at", null)
+        .gt("created_at", new Date(lastReadAt).toISOString())
+        .neq("author_profile_id", myId ?? "")
+        .contains("mentioned_profile_ids", [myId]);
+      return count ?? 0;
+    },
+  });
+  if (!unread || !myId) return 0;
+  return query.data ?? 0; // unlike unread count, no optimistic guess — a mention is specific enough to wait for
+}
