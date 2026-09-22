@@ -72,7 +72,7 @@ export function CourtDetailModal({
       <div
         className={`relative flex w-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-white shadow-2xl animate-in zoom-in-98 duration-150 ${
           hasFiles
-            ? "h-[88vh] max-h-[900px] max-w-5xl xl:max-w-6xl"
+            ? "h-[88vh] max-h-[900px] max-w-5xl xl:max-w-6xl 2xl:max-w-7xl"
             : "max-h-[88vh] max-w-3xl"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -89,7 +89,10 @@ export function CourtDetailModal({
         {/* Modal Body: Left Detail Content + Right PDFViewer (if files attached) */}
         <div className="flex flex-1 min-h-0 flex-row overflow-hidden bg-white">
           <div className="flex-1 min-w-[360px] min-h-0 overflow-y-auto bg-[#fefdfd] px-8 py-6">
-            <div className="w-full max-w-3xl mx-auto">
+            {/* Scales up on larger screens so a long title/description gets more
+                room to breathe instead of always wrapping into a fixed 768px
+                column, even when the modal itself (widened above) has space. */}
+            <div className="w-full max-w-3xl mx-auto xl:max-w-4xl 2xl:max-w-5xl">
               <ThingDetailContent
                 initialThing={thing}
                 variant="court"
