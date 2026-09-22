@@ -54,6 +54,11 @@ export function useRealtimeInvalidation() {
         void qc.invalidateQueries({ queryKey: ["list-messages"] });
         void qc.invalidateQueries({ queryKey: ["list"] });
         void qc.invalidateQueries({ queryKey: ["lists"] });
+        // The hub conversation rail (and the chat-heads dock's unread badges)
+        // both read this — their own broadcast-based refresh listens on a
+        // channel nothing actually sends to, so this postgres_changes path
+        // is what keeps them genuinely live.
+        void qc.invalidateQueries({ queryKey: ["hub-conversations"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "bucket_items" }, () => {
         void qc.invalidateQueries({ queryKey: ["bucket"] });

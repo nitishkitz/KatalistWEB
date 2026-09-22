@@ -8,6 +8,7 @@ import { useSession } from "@/hooks/useSession";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 import { GhostCard } from "@/features/doorman/GhostCard";
 import { MeetingReminderCard } from "@/features/lists/MeetingReminderCard";
+import { ChatHeadsDock } from "@/features/hub/ChatHeadsDock";
 import { useRealtimeInvalidation } from "@/features/realtime/use-realtime";
 import { usePresence } from "@/features/people/presence";
 
@@ -56,6 +57,7 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
       </main>
       <GhostCard />
       <MeetingReminderCard />
+      <ChatHeadsDock />
     </div>
   );
 }

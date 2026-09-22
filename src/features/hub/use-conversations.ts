@@ -27,6 +27,10 @@ export type Conversation = {
   lastMessage: string | null;
   lastAt: string | null;
   lastAuthor: string | null;
+  /** Raw profile id of the last message's author — for unread comparisons
+   *  against "was this sent by me", which a display name can't answer
+   *  reliably (two people can share a name). Null when there's no message. */
+  lastAuthorId: string | null;
 };
 
 function initialsOf(name: string): string {
@@ -144,6 +148,7 @@ async function fetchConversations(myId: string): Promise<Conversation[]> {
       lastMessage: preview,
       lastAt: last?.created_at ?? null,
       lastAuthor,
+      lastAuthorId: last?.author_profile_id ?? null,
     };
   });
 
@@ -232,6 +237,7 @@ export function useConversation(listId: string | undefined) {
         lastMessage: null,
         lastAt: null,
         lastAuthor: null,
+        lastAuthorId: null,
       };
     },
   });
