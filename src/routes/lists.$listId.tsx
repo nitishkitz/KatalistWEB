@@ -515,10 +515,18 @@ function ListDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeThingId]);
 
+  // call.join() can already be in flight here — the autojoin listener and
+  // the call's own hooks are created above, unconditionally, regardless of
+  // which branch below ends up rendering. Without <ListCallPanel> in every
+  // one of these early returns, a "Join" click that lands while the list is
+  // still loading would successfully publish media (visible to everyone
+  // else on the call) while this tab shows no call window at all, until the
+  // list finishes loading and the component reaches the main return below.
   if (isLoading) {
     return (
       <AppShell noPadding hideTopNav>
         <ListDetailSkeleton />
+        <ListCallPanel call={call} selfName={selfName} listId={listId} onInvite={() => setInviteOpen(true)} />
       </AppShell>
     );
   }
@@ -527,6 +535,7 @@ function ListDetailPage() {
     return (
       <AppShell title="List" subtitle="Couldn’t load">
         <p className="text-sm text-muted-foreground">{domainErrorMessage(error)}</p>
+        <ListCallPanel call={call} selfName={selfName} listId={listId} onInvite={() => setInviteOpen(true)} />
       </AppShell>
     );
   }
@@ -537,6 +546,7 @@ function ListDetailPage() {
         <Link to="/lists" className="text-sm text-primary">
           Back to Lists
         </Link>
+        <ListCallPanel call={call} selfName={selfName} listId={listId} onInvite={() => setInviteOpen(true)} />
       </AppShell>
     );
   }
