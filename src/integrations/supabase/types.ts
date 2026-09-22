@@ -2519,6 +2519,18 @@ export type Database = {
         }
         Returns: boolean
       }
+      get_my_upcoming_meetings: {
+        Args: { p_within_hours?: number }
+        Returns: {
+          ends_at: string
+          id: string
+          list_id: string
+          list_kind: string
+          list_name: string
+          starts_at: string
+          title: string
+        }[]
+      }
       get_or_create_dm: {
         Args: { p_other_profile_id: string }
         Returns: {

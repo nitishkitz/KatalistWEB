@@ -7,6 +7,7 @@ import { PageHeader } from "./PageHeader";
 import { useSession } from "@/hooks/useSession";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 import { GhostCard } from "@/features/doorman/GhostCard";
+import { MeetingReminderCard } from "@/features/lists/MeetingReminderCard";
 import { useRealtimeInvalidation } from "@/features/realtime/use-realtime";
 import { usePresence } from "@/features/people/presence";
 
@@ -54,6 +55,7 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
         )}
       </main>
       <GhostCard />
+      <MeetingReminderCard />
     </div>
   );
 }

@@ -64,6 +64,10 @@ export function useRealtimeInvalidation() {
         void qc.invalidateQueries({ queryKey: ["list"] });
         void qc.invalidateQueries({ queryKey: ["lists"] });
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "list_meetings" }, () => {
+        void qc.invalidateQueries({ queryKey: ["list-meetings"] });
+        void qc.invalidateQueries({ queryKey: ["upcoming-meetings"] });
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "profile_object_state" }, () => {
         void invalidatePersonalSurfaces(qc);
       })
