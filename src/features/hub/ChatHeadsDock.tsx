@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PictureInPicture2, X } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -11,7 +9,7 @@ import { ListChatPanel } from "@/features/lists/ListChatPanel";
 import { cn } from "@/lib/utils";
 import katalistMark from "@/assets/katalist-mark.png.asset.json";
 import { useConversations, type Conversation } from "./use-conversations";
-import { getConversationLastReadAt, markConversationAsRead, useConversationReadState } from "./chat-read-state";
+import { markConversationAsRead, useConversationUnreadCount } from "./chat-read-state";
 
 const BUBBLE_SIZE = 52;
 const DRAG_THRESHOLD_PX = 6;
@@ -50,38 +48,6 @@ function clamp(value: number, max: number) {
   return Math.min(Math.max(0, value), Math.max(0, max));
 }
 
-/** True once a conversation's latest message is newer than its local
- *  last-read mark and wasn't sent by me. */
-function isUnread(c: Conversation, myId: string | undefined, lastReadAt: number): boolean {
-  if (!c.lastAt || !c.lastAuthorId || c.lastAuthorId === myId) return false;
-  return new Date(c.lastAt).getTime() > lastReadAt;
-}
-
-/** Exact unread count for one conversation — a lightweight head-count query,
- *  only fired while that conversation is actually flagged unread. */
-function useUnreadCount(conversation: Conversation, myId: string | undefined): number {
-  useConversationReadState();
-  const lastReadAt = getConversationLastReadAt(conversation.id);
-  const unread = isUnread(conversation, myId, lastReadAt);
-  const query = useQuery({
-    queryKey: ["conversation-unread-count", conversation.id, lastReadAt, conversation.lastAt],
-    enabled: unread,
-    staleTime: 10_000,
-    queryFn: async () => {
-      const { count } = await supabase
-        .from("list_messages")
-        .select("id", { count: "exact", head: true })
-        .eq("list_id", conversation.id)
-        .is("deleted_at", null)
-        .gt("created_at", new Date(lastReadAt).toISOString())
-        .neq("author_profile_id", myId ?? "");
-      return count ?? 0;
-    },
-  });
-  if (!unread) return 0;
-  return query.data ?? 1; // optimistic "1" while the exact count is still loading
-}
-
 /** Renders nothing itself — reports its conversation's unread count up to
  *  the parent so the single launcher bubble can show a true total across
  *  every conversation, not just the ones visible in the switcher row. */
@@ -94,7 +60,7 @@ function UnreadReporter({
   myId: string | undefined;
   onChange: (id: string, count: number) => void;
 }) {
-  const count = useUnreadCount(conversation, myId);
+  const count = useConversationUnreadCount(conversation, myId);
   useEffect(() => onChange(conversation.id, count), [conversation.id, count, onChange]);
   return null;
 }
@@ -110,7 +76,7 @@ function SwitcherBubble({
   selected: boolean;
   onSelect: () => void;
 }) {
-  const count = useUnreadCount(conversation, myId);
+  const count = useConversationUnreadCount(conversation, myId);
   return (
     <button
       type="button"

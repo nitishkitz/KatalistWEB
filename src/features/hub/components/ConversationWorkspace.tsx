@@ -17,6 +17,7 @@ import { useConversation } from "@/features/hub/use-conversations";
 import { useLists } from "@/features/lists/use-lists";
 import { HubFilesPanel } from "./HubFilesPanel";
 import { getHubFileUrl, searchHubFiles, type HubFile } from "@/features/hub/use-hub-files";
+import { markConversationAsRead } from "@/features/hub/chat-read-state";
 import { cn } from "@/lib/utils";
 
 export type HubTab = "chat" | "files" | "call";
@@ -43,6 +44,14 @@ export function ConversationWorkspace({
   const { conversation } = useConversation(listId);
   const { lists } = useLists();
   const chat = useListMessages(listId);
+
+  // Opening a conversation here — via the sidebar, a direct link, or
+  // anywhere else — should clear its unread state, same as opening it
+  // through the chat-heads bubble/pop-out already does (both read from the
+  // same device-local last-read mark).
+  useEffect(() => {
+    markConversationAsRead(listId);
+  }, [listId]);
 
   const sessionSuffix = useMemo(
     () =>

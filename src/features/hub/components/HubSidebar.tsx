@@ -5,8 +5,10 @@ import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { ConversationListSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { usePresence } from "@/features/people/presence";
+import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 import { useConversations, type Conversation } from "@/features/hub/use-conversations";
+import { useConversationUnreadCount } from "@/features/hub/chat-read-state";
 import { useLists } from "@/features/lists/use-lists";
 import { useTeam } from "@/features/people/use-team";
 import { isUuid } from "@/features/things/rpc";
@@ -49,11 +51,63 @@ function GroupAvatars({ conversation, size = 36 }: { conversation: Conversation;
   );
 }
 
+function ConversationRow({
+  conversation: c,
+  myId,
+  active,
+  isOnline,
+  onOpen,
+}: {
+  conversation: Conversation;
+  myId: string | undefined;
+  active: boolean;
+  isOnline: boolean;
+  onOpen: () => void;
+}) {
+  const unread = useConversationUnreadCount(c, myId);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-[10px] px-2 py-2 text-left transition-colors",
+        active ? "bg-[#f0e9fb]" : "hover:bg-[#f6f7fc]",
+      )}
+    >
+      <span className="relative shrink-0">
+        {c.kind === "dm" ? <PersonAvatar name={c.title} src={c.avatarUrl} size={36} /> : <GroupAvatars conversation={c} />}
+        {isOnline ? (
+          <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#12a15f]" />
+        ) : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className={cn("truncate text-[13px]", unread > 0 ? "font-bold text-[#000533]" : "font-semibold text-[#000533]")}>
+            {c.title}
+          </span>
+          <span className="shrink-0 text-[10.5px] text-[#8487a7]">{relativeTime(c.lastAt)}</span>
+        </span>
+        <span className="flex items-center justify-between gap-2">
+          <span className={cn("block truncate text-[11.5px]", unread > 0 ? "font-medium text-[#000533]" : "text-[#6a769c]")}>
+            {c.lastMessage || (c.kind === "group" ? `${c.memberCount} members` : "Say hello")}
+          </span>
+          {unread > 0 ? (
+            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#fc404d] px-1 text-[10px] font-semibold text-white">
+              {unread > 99 ? "99+" : unread}
+            </span>
+          ) : null}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 export function HubSidebar() {
   const navigate = useNavigate();
   const params = useParams({ strict: false }) as { conversationId?: string };
   const activeId = params.conversationId;
   const online = usePresence();
+  const { user } = useSession();
   const { conversations, isLoading: conversationsLoading } = useConversations();
   const { lists, isLoading: listsLoading } = useLists();
   const { members } = useTeam();
@@ -195,31 +249,14 @@ export function HubSidebar() {
               filteredConversations.map((c) => {
                 const isOnline = c.kind === "dm" && c.others[0] ? online.has(c.others[0].id) : false;
                 return (
-                  <button
+                  <ConversationRow
                     key={c.id}
-                    type="button"
-                    onClick={() => navigate({ to: "/team/$conversationId", params: { conversationId: c.id } })}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-[10px] px-2 py-2 text-left transition-colors",
-                      activeId === c.id ? "bg-[#f0e9fb]" : "hover:bg-[#f6f7fc]",
-                    )}
-                  >
-                    <span className="relative shrink-0">
-                      {c.kind === "dm" ? <PersonAvatar name={c.title} src={c.avatarUrl} size={36} /> : <GroupAvatars conversation={c} />}
-                      {isOnline ? (
-                        <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#12a15f]" />
-                      ) : null}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center justify-between gap-2">
-                        <span className="truncate text-[13px] font-semibold text-[#000533]">{c.title}</span>
-                        <span className="shrink-0 text-[10.5px] text-[#8487a7]">{relativeTime(c.lastAt)}</span>
-                      </span>
-                      <span className="block truncate text-[11.5px] text-[#6a769c]">
-                        {c.lastMessage || (c.kind === "group" ? `${c.memberCount} members` : "Say hello")}
-                      </span>
-                    </span>
-                  </button>
+                    conversation={c}
+                    myId={user?.id}
+                    active={activeId === c.id}
+                    isOnline={isOnline}
+                    onOpen={() => navigate({ to: "/team/$conversationId", params: { conversationId: c.id } })}
+                  />
                 );
               })
             )}

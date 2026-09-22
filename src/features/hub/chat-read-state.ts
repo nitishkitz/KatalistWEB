@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import type { Conversation } from "./use-conversations";
 
 /**
  * Device-local "last read" timestamp per conversation — same convention as
@@ -43,4 +46,37 @@ export function useConversationReadState() {
   }, []);
 
   return version;
+}
+
+/** True once a conversation's latest message is newer than its local
+ *  last-read mark and wasn't sent by me. */
+export function isConversationUnread(c: Conversation, myId: string | undefined, lastReadAt: number): boolean {
+  if (!c.lastAt || !c.lastAuthorId || c.lastAuthorId === myId) return false;
+  return new Date(c.lastAt).getTime() > lastReadAt;
+}
+
+/** Exact unread count for one conversation — a lightweight head-count query,
+ *  only fired while that conversation is actually flagged unread. Shared by
+ *  the chat-heads bubble and the Team Hub sidebar so both surfaces agree. */
+export function useConversationUnreadCount(conversation: Conversation, myId: string | undefined): number {
+  useConversationReadState();
+  const lastReadAt = getConversationLastReadAt(conversation.id);
+  const unread = isConversationUnread(conversation, myId, lastReadAt);
+  const query = useQuery({
+    queryKey: ["conversation-unread-count", conversation.id, lastReadAt, conversation.lastAt],
+    enabled: unread,
+    staleTime: 10_000,
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("list_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("list_id", conversation.id)
+        .is("deleted_at", null)
+        .gt("created_at", new Date(lastReadAt).toISOString())
+        .neq("author_profile_id", myId ?? "");
+      return count ?? 0;
+    },
+  });
+  if (!unread) return 0;
+  return query.data ?? 1; // optimistic "1" while the exact count is still loading
 }
