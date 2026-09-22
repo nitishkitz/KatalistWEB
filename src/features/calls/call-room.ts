@@ -41,10 +41,6 @@ export type CallParticipant = {
 
 export type CallRoomState = {
   participants: CallParticipant[];
-  /** Who currently holds the whiteboard drawing lock — "take control" — or
-   *  null when it's open to everyone (the default). */
-  controllerId: string | null;
-  controllerName: string | null;
   /** Everyone with a hand raised, soonest-first — a lightweight speaking
    *  queue for calls with no host to call on people. */
   raisedHandQueue: { id: string; name: string }[];
@@ -75,8 +71,6 @@ type PeerSlot = {
   docName: string | null;
   docKind: "pdf" | "docx" | "excel" | "image" | null;
   docPage: number;
-  controlling: boolean;
-  controlSince: number;
   raisedHand: boolean;
   raisedSince: number;
 };
@@ -169,14 +163,8 @@ export class CallRoom {
   private selfDocName: string | null = null;
   private selfDocKind: "pdf" | "docx" | "excel" | "image" | null = null;
   private selfDocPage = 1;
-  // "Take control" of the whiteboard is a baton, not a role: whoever last
-  // claimed it (highest controlSince among everyone currently claiming it)
-  // holds exclusive drawing rights. No call ever has a "host" concept, so
-  // this stays symmetric — anyone can take control from anyone.
-  private selfControlling = false;
-  private selfControlSince = 0;
-  // Raised hand: same ephemeral presence-broadcast shape as the control
-  // baton above, but purely informational — it never gates any capability.
+  // Raised hand: same ephemeral presence-broadcast shape as the flags
+  // above, but purely informational — it never gates any capability.
   private selfRaisedHand = false;
   private selfRaisedSince = 0;
 
@@ -239,8 +227,6 @@ export class CallRoom {
       docName: this.selfDocName,
       docKind: this.selfDocKind,
       docPage: this.selfDocPage,
-      controlling: this.selfControlling,
-      controlSince: this.selfControlSince,
       raisedHand: this.selfRaisedHand,
       raisedSince: this.selfRaisedSince,
     };
@@ -257,8 +243,6 @@ export class CallRoom {
     docName: string | null;
     docKind: "pdf" | "docx" | "excel" | "image" | null;
     docPage: number;
-    controlling: boolean;
-    controlSince: number;
     raisedHand: boolean;
     raisedSince: number;
   }[] {
@@ -274,8 +258,6 @@ export class CallRoom {
       docName?: string | null;
       docKind?: "pdf" | "docx" | "excel" | "image" | null;
       docPage?: number;
-      controlling?: boolean;
-      controlSince?: number;
       raisedHand?: boolean;
       raisedSince?: number;
     }>();
@@ -290,8 +272,6 @@ export class CallRoom {
       docName: string | null;
       docKind: "pdf" | "docx" | "excel" | "image" | null;
       docPage: number;
-      controlling: boolean;
-      controlSince: number;
       raisedHand: boolean;
       raisedSince: number;
     }[] = [];
@@ -310,8 +290,6 @@ export class CallRoom {
           docName: meta.docName ?? null,
           docKind: meta.docKind ?? null,
           docPage: meta.docPage ?? 1,
-          controlling: Boolean(meta.controlling),
-          controlSince: meta.controlSince ?? 0,
           raisedHand: Boolean(meta.raisedHand),
           raisedSince: meta.raisedSince ?? 0,
         });
@@ -344,8 +322,6 @@ export class CallRoom {
         existing.docName = p.docName;
         existing.docKind = p.docKind;
         existing.docPage = p.docPage;
-        existing.controlling = p.controlling;
-        existing.controlSince = p.controlSince;
         existing.raisedHand = p.raisedHand;
         existing.raisedSince = p.raisedSince;
       } else {
@@ -367,8 +343,6 @@ export class CallRoom {
       docName: string | null;
       docKind: "pdf" | "docx" | "excel" | "image" | null;
       docPage: number;
-      controlling: boolean;
-      controlSince: number;
       raisedHand: boolean;
       raisedSince: number;
     }> = {},
@@ -382,8 +356,6 @@ export class CallRoom {
       docName = null,
       docKind = null,
       docPage = 1,
-      controlling = false,
-      controlSince = 0,
       raisedHand = false,
       raisedSince = 0,
     } = meta;
@@ -405,8 +377,6 @@ export class CallRoom {
       docName,
       docKind,
       docPage,
-      controlling,
-      controlSince,
       raisedHand,
       raisedSince,
     };
@@ -583,22 +553,6 @@ export class CallRoom {
     void this.channel?.send({ type: "broadcast", event: "draw", payload: op });
   }
 
-  /** Claim exclusive whiteboard drawing rights, taking them from whoever (if
-   *  anyone) currently holds them. Last claim always wins. */
-  takeControl() {
-    this.selfControlling = true;
-    this.selfControlSince = Date.now();
-    void this.channel?.track(this.presenceMeta());
-    this.emit();
-  }
-
-  /** Release the whiteboard back to "anyone can draw". */
-  releaseControl() {
-    this.selfControlling = false;
-    void this.channel?.track(this.presenceMeta());
-    this.emit();
-  }
-
   /** Raise a hand — purely informational, does not gate any capability. */
   raiseHand() {
     this.selfRaisedHand = true;
@@ -657,25 +611,6 @@ export class CallRoom {
       raisedHand: slot.raisedHand,
     }));
 
-    // Derived controller: among everyone (self + peers) currently claiming
-    // control, whoever claimed it most recently. Rare simultaneous-claim
-    // races resolve deterministically to "last click wins".
-    let controllerId: string | null = null;
-    let controllerName: string | null = null;
-    let bestSince = -1;
-    if (this.selfControlling && this.selfControlSince > bestSince) {
-      controllerId = this.selfId;
-      controllerName = this.selfName;
-      bestSince = this.selfControlSince;
-    }
-    for (const [id, slot] of this.peers) {
-      if (slot.controlling && slot.controlSince > bestSince) {
-        controllerId = id;
-        controllerName = slot.name;
-        bestSince = slot.controlSince;
-      }
-    }
-
     // Raised-hand queue: everyone (self + peers) currently raised, ordered
     // soonest-first — a lightweight speaking order for a call with no host.
     const raised: { id: string; name: string; since: number }[] = [];
@@ -686,7 +621,7 @@ export class CallRoom {
     raised.sort((a, b) => a.since - b.since);
     const raisedHandQueue = raised.map(({ id, name }) => ({ id, name }));
 
-    this.onState({ participants, controllerId, controllerName, raisedHandQueue });
+    this.onState({ participants, raisedHandQueue });
   }
 
   leave() {

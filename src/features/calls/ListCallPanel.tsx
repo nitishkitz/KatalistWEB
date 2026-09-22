@@ -562,11 +562,6 @@ export function ListCallPanel({
                   ref={annotateRef}
                   drawOps={call.drawOps}
                   onSend={call.sendDraw}
-                  canDraw={call.canDraw}
-                  isController={call.isController}
-                  controllerName={call.controllerName}
-                  onTakeControl={call.takeControl}
-                  onReleaseControl={call.releaseControl}
                   onUploadImage={handleUploadImage}
                 />
                 <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex max-w-[70%] items-center gap-1.5 truncate rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">

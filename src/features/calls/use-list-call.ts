@@ -35,14 +35,6 @@ export type ListCallControls = {
   openDoc: (doc: { url: string; name: string; kind: "pdf" | "docx" | "excel" | "image" }) => void;
   closeDoc: () => void;
   setDocPage: (page: number) => void;
-  /** Who holds the whiteboard drawing lock ("take control"), or null when
-   *  it's open to everyone (the default). */
-  controllerId: string | null;
-  controllerName: string | null;
-  /** True when *you* hold the lock. */
-  isController: boolean;
-  /** True when the board is unlocked, or you're the one holding it. */
-  canDraw: boolean;
   /** Everyone with a hand raised, soonest-first. Purely informational. */
   raisedHandQueue: { id: string; name: string }[];
   /** True when *you* have your hand raised. */
@@ -54,8 +46,6 @@ export type ListCallControls = {
   toggleScreenShare: () => Promise<void>;
   sendReaction: (emoji: string) => void;
   sendDraw: (op: DrawOp) => void;
-  takeControl: () => void;
-  releaseControl: () => void;
   toggleHand: () => void;
 };
 
@@ -79,8 +69,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   } | null>(null);
   const [reactions, setReactions] = useState<CallReaction[]>([]);
   const [drawOps, setDrawOps] = useState<DrawOp[]>([]);
-  const [controllerId, setControllerId] = useState<string | null>(null);
-  const [controllerName, setControllerName] = useState<string | null>(null);
   const [raisedHandQueue, setRaisedHandQueue] = useState<{ id: string; name: string }[]>([]);
   const [handRaised, setHandRaised] = useState(false);
 
@@ -99,8 +87,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setSelfDoc(null);
     setReactions([]);
     setDrawOps([]);
-    setControllerId(null);
-    setControllerName(null);
     setRaisedHandQueue([]);
     setHandRaised(false);
   }, []);
@@ -118,8 +104,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       selfName,
       onState: (s) => {
         setParticipants(s.participants);
-        setControllerId(s.controllerId);
-        setControllerName(s.controllerName);
         setRaisedHandQueue(s.raisedHandQueue);
       },
       onReaction: (r) => {
@@ -236,18 +220,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setDrawOps((prev) => (op.kind === "clear" ? [] : [...prev, op]));
   }, []);
 
-  const takeControl = useCallback(() => {
-    roomRef.current?.takeControl();
-    // Optimistic local echo (presence re-sync will confirm shortly).
-    setControllerId(selfId);
-    setControllerName(selfName);
-  }, [selfId, selfName]);
-
-  const releaseControl = useCallback(() => {
-    roomRef.current?.releaseControl();
-    setControllerId((cur) => (cur === selfId ? null : cur));
-  }, [selfId]);
-
   const toggleHand = useCallback(() => {
     setHandRaised((raised) => {
       const next = !raised;
@@ -282,9 +254,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const docKind = selfDoc?.kind ?? remoteDoc?.docKind ?? null;
   const docPage = selfDoc?.page ?? remoteDoc?.docPage ?? 1;
 
-  const isController = controllerId === selfId;
-  const canDraw = controllerId === null || isController;
-
   return {
     joined,
     connecting,
@@ -307,10 +276,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     openDoc,
     closeDoc,
     setDocPage,
-    controllerId,
-    controllerName,
-    isController,
-    canDraw,
     raisedHandQueue,
     handRaised,
     join,
@@ -320,8 +285,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     toggleScreenShare,
     sendReaction,
     sendDraw,
-    takeControl,
-    releaseControl,
     toggleHand,
   };
 }
