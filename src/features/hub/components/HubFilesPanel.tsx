@@ -23,6 +23,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { FileListSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { formatFileSize } from "@/lib/file-utils";
 import { detectFileType } from "@/lib/file-utils";
@@ -34,6 +35,8 @@ import type { ChatAttachment } from "@/features/lists/use-list-messages";
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
 export type ChatFileEntry = { id: string; attachment: ChatAttachment; author: string; at: string };
+
+type ImagePreview = { name: string; url: string; sizeLabel?: string };
 
 function fileVisual(f: HubFile): { label: string; Icon: typeof FileIcon; tint: string } {
   if (f.isFolder) return { label: "Folder", Icon: Folder, tint: "text-[#f2b70a]" };
@@ -73,6 +76,7 @@ export function HubFilesPanel({
   const [newFolder, setNewFolder] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<ImagePreview | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const q = query.trim().toLowerCase();
@@ -114,7 +118,14 @@ export function HubFilesPanel({
     }
     if (!f.storagePath) return;
     const url = await getHubFileUrl(f.storagePath);
-    if (url) window.open(url, "_blank", "noopener");
+    if (!url) return;
+    // Images open in-place in a large preview dialog; everything else (PDF,
+    // docs, etc.) still opens in a new tab — there's no in-app viewer for those.
+    if (detectFileType(f.name, f.mime ?? undefined) === "image") {
+      setPreview({ name: f.name, url, sizeLabel: f.size ? formatFileSize(f.size) : undefined });
+      return;
+    }
+    window.open(url, "_blank", "noopener");
   };
 
   const download = async (f: HubFile) => {
@@ -253,8 +264,13 @@ export function HubFilesPanel({
                     <a
                       key={entry.id}
                       href={a.url}
-                      target="_blank"
+                      target={isImage ? undefined : "_blank"}
                       rel="noreferrer"
+                      onClick={(e) => {
+                        if (!isImage || !a.url) return;
+                        e.preventDefault();
+                        setPreview({ name: a.name, url: a.url, sizeLabel: a.size ? formatFileSize(a.size) : undefined });
+                      }}
                       className="flex items-center gap-3 rounded-[10px] border border-[#eef0f6] px-3 py-2.5 hover:border-[#975ee2]"
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#eef0f6] text-[#6a769c]">
@@ -373,6 +389,41 @@ export function HubFilesPanel({
           </table>
         )}
       </div>
+
+      {/* Giant in-app image preview — replaces navigating to a new tab. */}
+      <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && setPreview(null)}>
+        <DialogContent className="max-w-[92vw] w-fit gap-0 border-none bg-transparent p-0 shadow-none sm:rounded-none">
+          {preview ? (
+            <div className="flex max-h-[90vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between gap-3 border-b border-[#eef0f6] px-4 py-2.5">
+                <DialogTitle className="min-w-0 truncate text-[13px] font-medium text-[#000533]">
+                  {preview.name}
+                </DialogTitle>
+                <div className="flex shrink-0 items-center gap-3">
+                  {preview.sizeLabel ? <span className="text-[11px] text-[#8487a7]">{preview.sizeLabel}</span> : null}
+                  <a
+                    href={preview.url}
+                    download={preview.name}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[#975ee2] hover:opacity-80"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Download
+                  </a>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto bg-[#0b0c29] p-2">
+                <img
+                  src={preview.url}
+                  alt={preview.name}
+                  className="mx-auto max-h-[80vh] w-auto max-w-full object-contain"
+                />
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
