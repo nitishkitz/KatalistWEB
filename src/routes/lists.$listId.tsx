@@ -795,7 +795,12 @@ function ListDetailPage() {
                               size={24}
                             />
                             <div className="min-w-0 flex-1">
-                              <p className="truncate text-[12.5px] font-medium leading-snug text-[#000533]">
+                              <p
+                                className={cn(
+                                  "truncate text-[12.5px] font-medium leading-snug text-[#000533]",
+                                  isSorted && "line-through",
+                                )}
+                              >
                                 {thing.title}
                               </p>
                               <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
@@ -826,11 +831,13 @@ function ListDetailPage() {
                               <span
                                 className="h-3 w-3 rounded-full border-2 bg-white"
                                 style={{
-                                  borderColor: inProgress
-                                    ? "#247cfc"
-                                    : isWaiting
-                                      ? "#f59e0b"
-                                      : "#626d96",
+                                  borderColor: isSorted
+                                    ? "#12a15f"
+                                    : inProgress
+                                      ? "#247cfc"
+                                      : isWaiting
+                                        ? "#f59e0b"
+                                        : "#626d96",
                                 }}
                               />
                               <span>

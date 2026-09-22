@@ -544,7 +544,12 @@ function BucketDetailPage() {
                         className="flex max-w-[420px] items-center gap-2 text-left"
                       >
                         <FileText className="h-4 w-4 shrink-0 text-[#8487a7]" />
-                        <span className="truncate text-[13px] font-medium text-[#000533] hover:text-[#975ee2]">
+                        <span
+                          className={cn(
+                            "truncate text-[13px] font-medium text-[#000533] hover:text-[#975ee2]",
+                            t.workStatus === "sorted" && "line-through",
+                          )}
+                        >
                           {t.title}
                         </span>
                       </button>
