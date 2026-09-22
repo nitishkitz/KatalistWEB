@@ -24,6 +24,10 @@ export type CallParticipant = {
   cameraOff?: boolean;
   /** True while this peer is presenting their screen (drives "presentation mode"). */
   sharing?: boolean;
+  /** True while this peer has opened the standalone whiteboard (no screen
+   *  share needed — everyone on the call can draw on it, same as during a
+   *  screen share, just without a shared screen underneath it). */
+  whiteboardOpen?: boolean;
   /** True while this peer has their hand raised. */
   raisedHand?: boolean;
 };
@@ -59,6 +63,7 @@ type PeerSlot = {
   muted: boolean;
   cameraOff: boolean;
   sharing: boolean;
+  whiteboardOpen: boolean;
   controlling: boolean;
   controlSince: number;
   raisedHand: boolean;
@@ -146,6 +151,7 @@ export class CallRoom {
   private selfMuted = false;
   private selfCameraOff = false;
   private selfSharing = false;
+  private selfWhiteboardOpen = false;
   // "Take control" of the whiteboard is a baton, not a role: whoever last
   // claimed it (highest controlSince among everyone currently claiming it)
   // holds exclusive drawing rights. No call ever has a "host" concept, so
@@ -211,6 +217,7 @@ export class CallRoom {
       muted: this.selfMuted,
       cameraOff: this.selfCameraOff,
       sharing: this.selfSharing,
+      whiteboardOpen: this.selfWhiteboardOpen,
       controlling: this.selfControlling,
       controlSince: this.selfControlSince,
       raisedHand: this.selfRaisedHand,
@@ -224,6 +231,7 @@ export class CallRoom {
     muted: boolean;
     cameraOff: boolean;
     sharing: boolean;
+    whiteboardOpen: boolean;
     controlling: boolean;
     controlSince: number;
     raisedHand: boolean;
@@ -236,6 +244,7 @@ export class CallRoom {
       muted?: boolean;
       cameraOff?: boolean;
       sharing?: boolean;
+      whiteboardOpen?: boolean;
       controlling?: boolean;
       controlSince?: number;
       raisedHand?: boolean;
@@ -247,6 +256,7 @@ export class CallRoom {
       muted: boolean;
       cameraOff: boolean;
       sharing: boolean;
+      whiteboardOpen: boolean;
       controlling: boolean;
       controlSince: number;
       raisedHand: boolean;
@@ -262,6 +272,7 @@ export class CallRoom {
           muted: Boolean(meta.muted),
           cameraOff: Boolean(meta.cameraOff),
           sharing: Boolean(meta.sharing),
+          whiteboardOpen: Boolean(meta.whiteboardOpen),
           controlling: Boolean(meta.controlling),
           controlSince: meta.controlSince ?? 0,
           raisedHand: Boolean(meta.raisedHand),
@@ -291,12 +302,24 @@ export class CallRoom {
         existing.muted = p.muted;
         existing.cameraOff = p.cameraOff;
         existing.sharing = p.sharing;
+        existing.whiteboardOpen = p.whiteboardOpen;
         existing.controlling = p.controlling;
         existing.controlSince = p.controlSince;
         existing.raisedHand = p.raisedHand;
         existing.raisedSince = p.raisedSince;
       } else {
-        this.createPeer(p.id, p.name, p.muted, p.cameraOff, p.sharing, p.controlling, p.controlSince, p.raisedHand, p.raisedSince);
+        this.createPeer(
+          p.id,
+          p.name,
+          p.muted,
+          p.cameraOff,
+          p.sharing,
+          p.whiteboardOpen,
+          p.controlling,
+          p.controlSince,
+          p.raisedHand,
+          p.raisedSince,
+        );
       }
     }
     this.emit();
@@ -308,6 +331,7 @@ export class CallRoom {
     muted = false,
     cameraOff = false,
     sharing = false,
+    whiteboardOpen = false,
     controlling = false,
     controlSince = 0,
     raisedHand = false,
@@ -326,6 +350,7 @@ export class CallRoom {
       muted,
       cameraOff,
       sharing,
+      whiteboardOpen,
       controlling,
       controlSince,
       raisedHand,
@@ -448,6 +473,21 @@ export class CallRoom {
     void this.channel?.track(this.presenceMeta());
   }
 
+  /** Open the standalone whiteboard — usable without anyone screen-sharing,
+   *  so the board isn't gated behind presenting a screen. Symmetric like
+   *  the raise-hand/take-control flags: anyone can open or close it. */
+  openWhiteboard() {
+    this.selfWhiteboardOpen = true;
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
+  closeWhiteboard() {
+    this.selfWhiteboardOpen = false;
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
   sendReaction(emoji: string) {
     void this.channel?.send({
       type: "broadcast",
@@ -527,6 +567,7 @@ export class CallRoom {
       muted: slot.muted,
       cameraOff: slot.cameraOff,
       sharing: slot.sharing,
+      whiteboardOpen: slot.whiteboardOpen,
       raisedHand: slot.raisedHand,
     }));
 

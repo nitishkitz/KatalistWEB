@@ -24,6 +24,7 @@ import {
   UserPlus,
   Users,
   Camera,
+  PenTool,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
@@ -231,18 +232,21 @@ export function ListCallPanel({
   const handleSaveScreenshot = async () => {
     const video = presenterVideoRef.current;
     const canvas = annotateRef.current?.getCanvas();
-    if (!video || video.videoWidth === 0) {
+    const hasVideo = Boolean(video && video.videoWidth > 0);
+    if (!hasVideo && !canvas) {
       toast.error("Nothing to capture yet.");
       return;
     }
     setSavingShot(true);
     try {
       const out = document.createElement("canvas");
-      out.width = video.videoWidth;
-      out.height = video.videoHeight;
+      // Whiteboard-only mode has no presenter video to composite — just
+      // save the board itself, sized to the canvas's own pixels.
+      out.width = hasVideo ? video!.videoWidth : canvas!.width;
+      out.height = hasVideo ? video!.videoHeight : canvas!.height;
       const ctx = out.getContext("2d");
       if (!ctx) throw new Error("Canvas unavailable");
-      ctx.drawImage(video, 0, 0, out.width, out.height);
+      if (hasVideo) ctx.drawImage(video!, 0, 0, out.width, out.height);
       if (canvas) ctx.drawImage(canvas, 0, 0, out.width, out.height);
       const blob: Blob | null = await new Promise((resolve) => out.toBlob(resolve, "image/png"));
       if (!blob) throw new Error("Could not encode screenshot");
@@ -264,18 +268,38 @@ export function ListCallPanel({
   const localStream = call.sharing && call.screenStream ? call.screenStream : call.localStream;
 
   // Presentation mode: someone (self or a remote peer) is sharing their
-  // screen. Feature that stream large with the annotate overlay, and shrink
-  // everyone else into a thumbnail rail (Figma's expanded call window).
-  const presenting = call.screenSharerId;
+  // screen, OR someone has opened the standalone whiteboard (no screen
+  // needed — see toggleWhiteboard). Either way, feature that large with the
+  // annotate overlay, and shrink everyone else into a thumbnail rail
+  // (Figma's expanded call window).
+  const presenting = call.screenSharerId ?? (call.whiteboardOpenerId ? "whiteboard" : null);
   const presenterTile = presenting
-    ? presenting === "self"
-      ? { stream: localStream, name: selfName, self: true, muted: call.muted, cameraOff: false, raisedHand: call.handRaised }
-      : (() => {
-          const p = call.participants.find((x) => x.id === presenting);
-          return p
-            ? { stream: p.stream, name: p.name, self: false, muted: p.muted, cameraOff: p.cameraOff, raisedHand: p.raisedHand }
-            : null;
-        })()
+    ? presenting === "whiteboard"
+      ? { whiteboardOnly: true as const, stream: undefined, name: "Whiteboard", self: false, muted: false, cameraOff: true, raisedHand: false }
+      : presenting === "self"
+        ? {
+            whiteboardOnly: false as const,
+            stream: localStream,
+            name: selfName,
+            self: true,
+            muted: call.muted,
+            cameraOff: false,
+            raisedHand: call.handRaised,
+          }
+        : (() => {
+            const p = call.participants.find((x) => x.id === presenting);
+            return p
+              ? {
+                  whiteboardOnly: false as const,
+                  stream: p.stream,
+                  name: p.name,
+                  self: false,
+                  muted: p.muted,
+                  cameraOff: p.cameraOff,
+                  raisedHand: p.raisedHand,
+                }
+              : null;
+          })()
     : null;
   const thumbnailTiles = presenting
     ? [
@@ -451,15 +475,21 @@ export function ListCallPanel({
                   above it, instead of depending on browser-specific video
                   compositing behavior. */}
               <div className="relative isolate">
-                <VideoTile
-                  ref={presenterVideoRef}
-                  stream={presenterTile.stream}
-                  name={presenterTile.name}
-                  self={presenterTile.self}
-                  muted={presenterTile.muted}
-                  cameraOff={presenterTile.cameraOff}
-                  raisedHand={presenterTile.raisedHand}
-                />
+                {presenterTile.whiteboardOnly ? (
+                  <div className="flex aspect-video items-center justify-center rounded-[10px] border border-dashed border-[#c5cae0] bg-white">
+                    <p className="text-[12.5px] font-medium text-[#8487a7]">Whiteboard</p>
+                  </div>
+                ) : (
+                  <VideoTile
+                    ref={presenterVideoRef}
+                    stream={presenterTile.stream}
+                    name={presenterTile.name}
+                    self={presenterTile.self}
+                    muted={presenterTile.muted}
+                    cameraOff={presenterTile.cameraOff}
+                    raisedHand={presenterTile.raisedHand}
+                  />
+                )}
                 <AnnotateCanvas
                   ref={annotateRef}
                   drawOps={call.drawOps}
@@ -472,8 +502,14 @@ export function ListCallPanel({
                   onUploadImage={handleUploadImage}
                 />
                 <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#fc404d]" />
-                  {formatDuration(elapsed)} · Live
+                  {presenterTile.whiteboardOnly ? (
+                    "Whiteboard"
+                  ) : (
+                    <>
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#fc404d]" />
+                      {formatDuration(elapsed)} · Live
+                    </>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -640,6 +676,17 @@ export function ListCallPanel({
           title={call.sharing ? "Stop sharing" : "Share screen"}
         >
           <MonitorUp className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={call.toggleWhiteboard}
+          className={cn(
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            call.whiteboardOpenerId ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
+          )}
+          title={call.whiteboardOpenerId ? "Close whiteboard" : "Open whiteboard — no screen share needed"}
+        >
+          <PenTool className="h-4 w-4" />
         </button>
 
         <button

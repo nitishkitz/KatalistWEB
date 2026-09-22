@@ -19,6 +19,10 @@ export type ListCallControls = {
   drawOps: DrawOp[];
   /** Who is currently presenting: "self", a remote participant id, or null. */
   screenSharerId: string | null;
+  /** Who opened the standalone whiteboard (no screen share needed): "self",
+   *  a remote participant id, or null. Independent of screenSharerId. */
+  whiteboardOpenerId: string | null;
+  toggleWhiteboard: () => void;
   /** Who holds the whiteboard drawing lock ("take control"), or null when
    *  it's open to everyone (the default). */
   controllerId: string | null;
@@ -54,6 +58,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [whiteboardOpen, setWhiteboardOpen] = useState(false);
   const [reactions, setReactions] = useState<CallReaction[]>([]);
   const [drawOps, setDrawOps] = useState<DrawOp[]>([]);
   const [controllerId, setControllerId] = useState<string | null>(null);
@@ -72,6 +77,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setMuted(false);
     setCameraOff(false);
     setSharing(false);
+    setWhiteboardOpen(false);
     setReactions([]);
     setDrawOps([]);
     setControllerId(null);
@@ -168,6 +174,17 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     }
   }, [sharing]);
 
+  /** Open/close the standalone whiteboard — no screen share needed. Anyone
+   *  can toggle it, same symmetric model as raise-hand/take-control. */
+  const toggleWhiteboard = useCallback(() => {
+    setWhiteboardOpen((open) => {
+      const next = !open;
+      if (next) roomRef.current?.openWhiteboard();
+      else roomRef.current?.closeWhiteboard();
+      return next;
+    });
+  }, []);
+
   const sendReaction = useCallback((emoji: string) => {
     roomRef.current?.sendReaction(emoji);
     // Optimistic local echo.
@@ -216,6 +233,11 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     return participants.find((p) => p.sharing)?.id ?? null;
   }, [sharing, participants]);
 
+  const whiteboardOpenerId = useMemo(() => {
+    if (whiteboardOpen) return "self";
+    return participants.find((p) => p.whiteboardOpen)?.id ?? null;
+  }, [whiteboardOpen, participants]);
+
   const isController = controllerId === selfId;
   const canDraw = controllerId === null || isController;
 
@@ -231,6 +253,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     reactions,
     drawOps,
     screenSharerId,
+    whiteboardOpenerId,
+    toggleWhiteboard,
     controllerId,
     controllerName,
     isController,
