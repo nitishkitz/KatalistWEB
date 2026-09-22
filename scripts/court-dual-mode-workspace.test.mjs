@@ -10,7 +10,10 @@ test("overview is composed as three equal layered stacks", () => {
 
   assert.match(workspace, /grid-cols-3/);
   assert.match(workspace, /CourtLaneStack/);
-  assert.match(stack, /Math\.min\(2, Math\.max\(0, things\.length - 1\)\)/);
+  // The decorative deck cap was intentionally raised from 2 to 6 for a
+  // deeper stack illusion; this locks in a bounded, non-linear depth
+  // rather than the exact historical number.
+  assert.match(stack, /Math\.min\(6, Math\.max\(0, things\.length - 1\)\)/);
   assert.match(stack, /more Things in/);
   assert.doesNotMatch(stack, /\.slice\(0, 2\)/);
 });
@@ -32,10 +35,11 @@ test("stack cards use real optional metadata and approved actions", () => {
 
   assert.doesNotMatch(card, /Go through the brief|Work is in progress|Needs to be caught/);
   assert.doesNotMatch(card, /No due date|Standalone|Owner Importance|My Pace/);
-  assert.match(card, />\s*Details\s*</);
+  // The Catch/Sort model replaced the earlier Details/Later/Sorted button
+  // row: the card now surfaces only Catch, and pace/sort happen via the
+  // swipe gesture (CourtLaneStack) or the Thing detail surface.
   assert.match(card, />\s*Catch\s*</);
-  assert.match(card, />\s*Later\s*</);
-  assert.match(card, />\s*Sorted\s*</);
+  assert.doesNotMatch(card, />\s*Details\s*<|>\s*Later\s*<|>\s*Sorted\s*</);
 });
 
 test("focused Thing detail remains in natural page flow", () => {
@@ -66,7 +70,9 @@ test("Court detail uses the approved compact state-driven surface", () => {
   const detail = read("src/features/things/ThingDetailContent.tsx");
 
   assert.match(detail, /if \(variant === "court"\)[\s\S]*Mark Sorted/);
-  assert.match(detail, /if \(variant === "court"\)[\s\S]*Choose Buckets/);
-  assert.match(detail, /if \(variant === "court"\)[\s\S]*Details ›/);
+  // "Choose Buckets" / "Details ›" were replaced by the "Add to bucket"
+  // dropdown in the bucket-detail redesign; this Thing detail view is
+  // itself the details surface, so no separate "Details ›" link exists.
+  assert.match(detail, /if \(variant === "court"\)[\s\S]*Add to bucket/);
   assert.match(read("src/features/court/CourtFocusView.tsx"), /variant="court"/);
 });

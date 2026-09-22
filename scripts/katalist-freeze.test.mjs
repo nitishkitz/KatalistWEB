@@ -224,7 +224,17 @@ test("List member/owner identities use public_identities, not nested profiles", 
 test("Self-assigned Thing starts Waiting for Catch; Catch is explicit", () => {
   resetDemoLocalStateForTests();
   setDemoActorForTests("p-priya");
-  const self = tossLocalThing({ title: "Self toss", context: "work", assigneeId: "p-priya" });
+  // ownerImportance is explicit here because pre-Catch lane placement
+  // follows it (see laneOf() in src/domain/thing.ts) — tossLocalThing's
+  // own default is "next", not "now", so this pins the scenario this
+  // test actually wants to exercise (an urgent self-toss landing in Now)
+  // rather than relying on an implicit default.
+  const self = tossLocalThing({
+    title: "Self toss",
+    context: "work",
+    assigneeId: "p-priya",
+    ownerImportance: "now",
+  });
   assert.equal(self.assignee.id, "p-priya");
   assert.equal(self.owner.id, "p-priya");
   assert.equal(self.creator.id, "p-priya");

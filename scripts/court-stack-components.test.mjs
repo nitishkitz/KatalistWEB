@@ -67,7 +67,8 @@ test("Court stack gestures use native pointer and wheel intent handling without 
 
 test("Court lane stacks render one active Thing over a capped, hidden decorative deck", () => {
   assert.match(laneStack, /<ThingStackCard[\s\S]*thing=\{activeThing\}/);
-  assert.match(laneStack, /Math\.min\(2, Math\.max\(0, things\.length - 1\)\)/);
+  // Cap intentionally raised from 2 to 6 for a deeper stack illusion.
+  assert.match(laneStack, /Math\.min\(6, Math\.max\(0, things\.length - 1\)\)/);
   assert.match(laneStack, /aria-hidden="true"/);
   assert.match(laneStack, /depth \* -(5|6)/);
   assert.match(laneStack, /motion-reduce:!transform-none/);
@@ -76,15 +77,17 @@ test("Court lane stacks render one active Thing over a capped, hidden decorative
 
 test("Court stack actions are capability-gated and route to canonical RPCs", () => {
   assert.match(laneStack, /getThingCapabilities\(activeThing, myActorId\)/);
-  assert.match(stackCard, /canCatch \?/);
-  assert.match(stackCard, /canSetPace && lane !== "later"/);
-  assert.match(stackCard, /canSort/);
+  // Pace/sort capability gating and their RPC calls moved from the card
+  // into the lane's swipe-gesture handler (runAction); the card itself
+  // only gates its one remaining button, Catch.
+  assert.match(stackCard, /capabilities\.canCatch && \(/);
   assert.match(stackCard, />\s*Catch\s*</);
-  assert.match(stackCard, />\s*Later\s*</);
-  assert.match(stackCard, />\s*Sorted\s*</);
-  assert.match(laneStack, /await rpcCatchThing\(activeThing\.id\)/);
-  assert.match(laneStack, /await rpcSetPersonalPace\(activeThing\.id, "later"\)/);
-  assert.match(laneStack, /await rpcSortThing\(activeThing\.id\)/);
+  assert.doesNotMatch(stackCard, />\s*Later\s*<|>\s*Sorted\s*</);
+  assert.match(laneStack, /actionCapabilities\.canMoveLater/);
+  assert.match(laneStack, /capabilities\.canSort/);
+  assert.match(laneStack, /await rpcCatchAndStart\(activeThing\.id\)/);
+  assert.match(laneStack, /await rpcSetPersonalPace\(target\.id, "later"\)/);
+  assert.match(laneStack, /await rpcSortThing\(target\.id\)/);
 });
 
 test("Court stacks never use Doorman snooze and LATER cannot move farther left", () => {

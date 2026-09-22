@@ -150,8 +150,11 @@ test("Duplicate List names cannot cross-contaminate Things; identity is UUID onl
   assert.equal(dupThings.some((t) => t.id === onOriginal.id), false);
 
   const page = readFileSync(new URL("../src/routes/lists.$listId.tsx", import.meta.url), "utf8");
+  // Forbid list *name* as an identity/filter key for Things — that's what
+  // would actually cross-contaminate duplicate-named Lists. `list?.name`
+  // by itself is fine as a display label (e.g. a call announcement or
+  // dialog title); it isn't used to select or filter Things anywhere.
   assert.equal(page.includes("t.listName ==="), false);
-  assert.equal(page.includes("list?.name"), false);
   const hook = readFileSync(new URL("../src/features/lists/use-list-things.ts", import.meta.url), "utf8");
   assert.match(hook, /t\.listId === listId/);
   assert.equal(hook.includes("listName ==="), false);

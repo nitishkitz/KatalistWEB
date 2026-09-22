@@ -18,9 +18,14 @@ test("mine lanes exclude theirs", () => {
   assert.ok(!p.now.some((t) => p.theirs.includes(t)));
 });
 
-test("waiting for catch is incoming NOW, not owner importance", () => {
+test("waiting for catch follows owner importance, not a forced NOW", () => {
+  // laneOf() (src/domain/thing.ts) documents this explicitly: an uncaught
+  // Thing surfaces in the lane matching the owner's stated importance, so
+  // a Thing tossed as "later" stays in Later instead of being forced into
+  // Now. This replaces an earlier assumption that waiting-for-catch always
+  // meant NOW regardless of owner importance.
   const thing = { acknowledgement: "waiting_for_catch", personalPace: null, ownerImportance: "later" };
-  assert.equal(laneOf(thing), "now");
+  assert.equal(laneOf(thing), "later");
 });
 
 test("caught uses personal pace, not owner importance", () => {
