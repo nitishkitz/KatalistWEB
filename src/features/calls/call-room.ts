@@ -34,7 +34,6 @@ export type CallParticipant = {
   docUrl?: string | null;
   docName?: string | null;
   docKind?: "pdf" | "docx" | "excel" | "image" | null;
-  docPage?: number;
   /** True while this peer has their hand raised. */
   raisedHand?: boolean;
 };
@@ -52,15 +51,41 @@ export type CallRoomState = {
  *  "image" carries a storage URL (not raw bytes) — pasted images are uploaded
  *  first so the broadcast payload stays small regardless of image size. */
 export type DrawOp =
-  | { kind: "stroke"; id: string; tool: "pen" | "eraser"; color: string; width: number; points: { x: number; y: number }[] }
-  | { kind: "shape"; id: string; tool: "rect" | "ellipse" | "arrow"; color: string; width: number; x1: number; y1: number; x2: number; y2: number }
-  | { kind: "image"; id: string; url: string; x: number; y: number; width: number; height: number }
+  | {
+      kind: "stroke";
+      id: string;
+      tool: "pen" | "eraser";
+      color: string;
+      width: number;
+      points: { x: number; y: number }[];
+      /** Which page of a shared document this was drawn on — unset when
+       *  drawn over a screen share or the standalone whiteboard, where
+       *  there's no paging concept. Only rendered while that page is the
+       *  one currently displayed (see AnnotateCanvas), so a scribble drawn
+       *  on page 2 doesn't reappear stuck on whatever page a viewer is on. */
+      page?: number;
+    }
+  | {
+      kind: "shape";
+      id: string;
+      tool: "rect" | "ellipse" | "arrow";
+      color: string;
+      width: number;
+      x1: number;
+      y1: number;
+      x2: number;
+      y2: number;
+      page?: number;
+    }
+  | { kind: "image"; id: string; url: string; x: number; y: number; width: number; height: number; page?: number }
   | { kind: "clear" }
-  /** Remove the single most recently added stroke/shape/image — a quick
-   *  "undo" action, distinct from the pixel-level eraser tool (which only
-   *  erases the part you drag over) and from "clear" (which wipes
-   *  everything). Removes the whole board's last item, not just your own. */
-  | { kind: "undo" };
+  /** Remove one specific stroke/shape/image by id — a quick "undo" action,
+   *  distinct from the pixel-level eraser tool (which only erases the part
+   *  you drag over) and from "clear" (which wipes everything). Carries an
+   *  id (rather than always meaning "the last item") so undo can target the
+   *  last item on the *current page* of a shared document, not whatever
+   *  happens to be last in the global history regardless of page. */
+  | { kind: "undo"; id: string };
 
 type PeerSlot = {
   pc: RTCPeerConnection;
@@ -75,7 +100,6 @@ type PeerSlot = {
   docUrl: string | null;
   docName: string | null;
   docKind: "pdf" | "docx" | "excel" | "image" | null;
-  docPage: number;
   raisedHand: boolean;
   raisedSince: number;
 };
@@ -167,7 +191,6 @@ export class CallRoom {
   private selfDocUrl: string | null = null;
   private selfDocName: string | null = null;
   private selfDocKind: "pdf" | "docx" | "excel" | "image" | null = null;
-  private selfDocPage = 1;
   // Raised hand: same ephemeral presence-broadcast shape as the flags
   // above, but purely informational — it never gates any capability.
   private selfRaisedHand = false;
@@ -175,6 +198,7 @@ export class CallRoom {
 
   private readonly onReaction?: (p: { from: string; emoji: string }) => void;
   private readonly onDraw?: (op: DrawOp) => void;
+  private readonly onDocPage?: (page: number) => void;
 
   constructor(opts: {
     listId: string;
@@ -183,6 +207,7 @@ export class CallRoom {
     onState: (state: CallRoomState) => void;
     onReaction?: (p: { from: string; emoji: string }) => void;
     onDraw?: (op: DrawOp) => void;
+    onDocPage?: (page: number) => void;
   }) {
     this.listId = opts.listId;
     this.selfId = opts.selfId;
@@ -190,6 +215,7 @@ export class CallRoom {
     this.onState = opts.onState;
     this.onReaction = opts.onReaction;
     this.onDraw = opts.onDraw;
+    this.onDocPage = opts.onDocPage;
   }
 
   /** Acquire local media and join the room. */
@@ -210,6 +236,7 @@ export class CallRoom {
         this.onReaction?.(payload as { from: string; emoji: string }),
       )
       .on("broadcast", { event: "draw" }, ({ payload }) => this.onDraw?.(payload as DrawOp))
+      .on("broadcast", { event: "doc-page" }, ({ payload }) => this.onDocPage?.((payload as { page: number }).page))
       .on("presence", { event: "sync" }, () => this.syncPeers())
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
@@ -231,7 +258,6 @@ export class CallRoom {
       docUrl: this.selfDocUrl,
       docName: this.selfDocName,
       docKind: this.selfDocKind,
-      docPage: this.selfDocPage,
       raisedHand: this.selfRaisedHand,
       raisedSince: this.selfRaisedSince,
     };
@@ -247,7 +273,6 @@ export class CallRoom {
     docUrl: string | null;
     docName: string | null;
     docKind: "pdf" | "docx" | "excel" | "image" | null;
-    docPage: number;
     raisedHand: boolean;
     raisedSince: number;
   }[] {
@@ -262,7 +287,6 @@ export class CallRoom {
       docUrl?: string | null;
       docName?: string | null;
       docKind?: "pdf" | "docx" | "excel" | "image" | null;
-      docPage?: number;
       raisedHand?: boolean;
       raisedSince?: number;
     }>();
@@ -276,7 +300,6 @@ export class CallRoom {
       docUrl: string | null;
       docName: string | null;
       docKind: "pdf" | "docx" | "excel" | "image" | null;
-      docPage: number;
       raisedHand: boolean;
       raisedSince: number;
     }[] = [];
@@ -294,7 +317,6 @@ export class CallRoom {
           docUrl: meta.docUrl ?? null,
           docName: meta.docName ?? null,
           docKind: meta.docKind ?? null,
-          docPage: meta.docPage ?? 1,
           raisedHand: Boolean(meta.raisedHand),
           raisedSince: meta.raisedSince ?? 0,
         });
@@ -326,7 +348,6 @@ export class CallRoom {
         existing.docUrl = p.docUrl;
         existing.docName = p.docName;
         existing.docKind = p.docKind;
-        existing.docPage = p.docPage;
         existing.raisedHand = p.raisedHand;
         existing.raisedSince = p.raisedSince;
       } else {
@@ -347,7 +368,6 @@ export class CallRoom {
       docUrl: string | null;
       docName: string | null;
       docKind: "pdf" | "docx" | "excel" | "image" | null;
-      docPage: number;
       raisedHand: boolean;
       raisedSince: number;
     }> = {},
@@ -360,7 +380,6 @@ export class CallRoom {
       docUrl = null,
       docName = null,
       docKind = null,
-      docPage = 1,
       raisedHand = false,
       raisedSince = 0,
     } = meta;
@@ -381,7 +400,6 @@ export class CallRoom {
       docUrl,
       docName,
       docKind,
-      docPage,
       raisedHand,
       raisedSince,
     };
@@ -525,7 +543,6 @@ export class CallRoom {
     this.selfDocUrl = doc.url;
     this.selfDocName = doc.name;
     this.selfDocKind = doc.kind;
-    this.selfDocPage = 1;
     void this.channel?.track(this.presenceMeta());
     this.emit();
   }
@@ -534,15 +551,19 @@ export class CallRoom {
     this.selfDocUrl = null;
     this.selfDocName = null;
     this.selfDocKind = null;
-    this.selfDocPage = 1;
     void this.channel?.track(this.presenceMeta());
     this.emit();
   }
 
-  setDocPage(page: number) {
-    this.selfDocPage = Math.max(1, page);
-    void this.channel?.track(this.presenceMeta());
-    this.emit();
+  /** Broadcast-only (not presence) — unlike docUrl/docKind, the current
+   *  page isn't "owned" by whoever opened the doc. Anyone on the call can
+   *  turn pages; presence would only ever let the original opener's clicks
+   *  do anything, since only their presence record carries a real docUrl.
+   *  Trade-off: a late joiner starts assuming page 1 until the next page
+   *  turn, same accepted limitation draw ops already have (no history
+   *  replay for latecomers). */
+  sendDocPage(page: number) {
+    void this.channel?.send({ type: "broadcast", event: "doc-page", payload: { page: Math.max(1, page) } });
   }
 
   sendReaction(emoji: string) {
@@ -612,7 +633,6 @@ export class CallRoom {
       docUrl: slot.docUrl,
       docName: slot.docName,
       docKind: slot.docKind,
-      docPage: slot.docPage,
       raisedHand: slot.raisedHand,
     }));
 

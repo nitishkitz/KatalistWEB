@@ -7,7 +7,7 @@ export type CallReaction = { id: string; from: string; emoji: string };
 /** Reduces one incoming/outgoing DrawOp onto the shared whiteboard history. */
 function applyDrawOp(prev: DrawOp[], op: DrawOp): DrawOp[] {
   if (op.kind === "clear") return [];
-  if (op.kind === "undo") return prev.slice(0, -1);
+  if (op.kind === "undo") return prev.filter((o) => o.kind === "clear" || o.kind === "undo" || o.id !== op.id);
   return [...prev, op];
 }
 
@@ -72,8 +72,11 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     url: string;
     name: string;
     kind: "pdf" | "docx" | "excel" | "image";
-    page: number;
   } | null>(null);
+  // Broadcast-only, not tied to whoever opened the doc — anyone can turn
+  // pages (see CallRoom.sendDocPage's comment for why this can't live in
+  // presence like docUrl/docKind do).
+  const [docPage, setDocPageState] = useState(1);
   const [reactions, setReactions] = useState<CallReaction[]>([]);
   const [drawOps, setDrawOps] = useState<DrawOp[]>([]);
   const [raisedHandQueue, setRaisedHandQueue] = useState<{ id: string; name: string }[]>([]);
@@ -92,6 +95,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setSharing(false);
     setWhiteboardOpen(false);
     setSelfDoc(null);
+    setDocPageState(1);
     setReactions([]);
     setDrawOps([]);
     setRaisedHandQueue([]);
@@ -121,6 +125,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       onDraw: (op) => {
         setDrawOps((prev) => applyDrawOp(prev, op));
       },
+      onDocPage: (page) => setDocPageState(page),
     });
     roomRef.current = room;
     try {
@@ -199,18 +204,24 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
    *  renders the same URL locally (see ListCallPanel). */
   const openDoc = useCallback((doc: { url: string; name: string; kind: "pdf" | "docx" | "excel" | "image" }) => {
     roomRef.current?.openDoc(doc);
-    setSelfDoc({ ...doc, page: 1 });
+    setSelfDoc(doc);
+    setDocPageState(1);
+    roomRef.current?.sendDocPage(1); // sync everyone already on the call to page 1 of the new doc
   }, []);
 
   const closeDoc = useCallback(() => {
     roomRef.current?.closeDoc();
     setSelfDoc(null);
+    setDocPageState(1);
   }, []);
 
+  /** Anyone can turn pages, not just whoever opened the doc — broadcasts
+   *  the change and applies it locally (the room never echoes back to the
+   *  sender), same optimistic-echo pattern as sendDraw/sendReaction. */
   const setDocPage = useCallback((page: number) => {
     const p = Math.max(1, page);
-    roomRef.current?.setDocPage(p);
-    setSelfDoc((cur) => (cur ? { ...cur, page: p } : cur));
+    roomRef.current?.sendDocPage(p);
+    setDocPageState(p);
   }, []);
 
   const sendReaction = useCallback((emoji: string) => {
@@ -259,7 +270,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const docUrl = selfDoc?.url ?? remoteDoc?.docUrl ?? null;
   const docName = selfDoc?.name ?? remoteDoc?.docName ?? null;
   const docKind = selfDoc?.kind ?? remoteDoc?.docKind ?? null;
-  const docPage = selfDoc?.page ?? remoteDoc?.docPage ?? 1;
 
   return {
     joined,

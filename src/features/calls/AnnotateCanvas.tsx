@@ -107,9 +107,15 @@ export const AnnotateCanvas = forwardRef<
     /** Uploads a pasted image and returns its (temporary) URL — reuses the
      *  call's existing chat-attachment storage pipeline (see ListCallPanel). */
     onUploadImage: (file: File) => Promise<string | null>;
+    /** Current page of a shared document being presented, if any. Freshly
+     *  drawn ops are tagged with it; rendering only shows ops tagged for
+     *  the page currently on screen (or untagged ops, drawn over a screen
+     *  share/standalone whiteboard where paging doesn't apply). Omit when
+     *  not presenting a paged document. */
+    page?: number;
     className?: string;
   }
->(function AnnotateCanvas({ drawOps, onSend, onUploadImage, className }, forwardedRef) {
+>(function AnnotateCanvas({ drawOps, onSend, onUploadImage, page, className }, forwardedRef) {
   const [tool, setTool] = useState<Tool>("pointer");
   const [color, setColor] = useState(COLORS[0]);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -148,11 +154,15 @@ export const AnnotateCanvas = forwardRef<
     const { w, h } = sizeRef.current;
     ctx.clearRect(0, 0, w, h);
     for (const op of drawOps) {
+      // Only show ops tagged for the page currently on screen; untagged ops
+      // (drawn over a screen share or the standalone whiteboard, where
+      // there's no paging concept) always show.
+      if (op.kind !== "clear" && op.kind !== "undo" && op.page !== undefined && op.page !== page) continue;
       if (op.kind === "image") ensureImageLoaded(op.url);
       drawOp(ctx, op, w, h, imagesRef.current);
     }
     if (preview) drawOp(ctx, preview, w, h, imagesRef.current);
-  }, [drawOps, preview, ensureImageLoaded]);
+  }, [drawOps, preview, page, ensureImageLoaded]);
 
   // Keep the canvas pixel size matched to its container (crisp at any window size).
   useEffect(() => {
@@ -213,6 +223,7 @@ export const AnnotateCanvas = forwardRef<
             y: 0.5 - targetH / 2,
             width: targetW,
             height: targetH,
+            page,
           });
         };
         probe.src = url;
@@ -220,7 +231,7 @@ export const AnnotateCanvas = forwardRef<
     };
     window.addEventListener("paste", onPaste);
     return () => window.removeEventListener("paste", onPaste);
-  }, [onSend, onUploadImage]);
+  }, [onSend, onUploadImage, page]);
 
   const toNorm = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -244,10 +255,22 @@ export const AnnotateCanvas = forwardRef<
         color,
         width: tool === "eraser" ? ERASER_WIDTH : PEN_WIDTH,
         points: [p],
+        page,
       });
     } else {
       shapeStartRef.current = p;
-      setPreview({ kind: "shape", id: crypto.randomUUID(), tool, color, width: PEN_WIDTH, x1: p.x, y1: p.y, x2: p.x, y2: p.y });
+      setPreview({
+        kind: "shape",
+        id: crypto.randomUUID(),
+        tool,
+        color,
+        width: PEN_WIDTH,
+        x1: p.x,
+        y1: p.y,
+        x2: p.x,
+        y2: p.y,
+        page,
+      });
     }
   };
 
@@ -281,13 +304,22 @@ export const AnnotateCanvas = forwardRef<
     toast.success("Board cleared");
   };
 
-  // Removes the single most recently added stroke/shape/image — a quick
-  // way to back out one scribble without dragging the pixel eraser over it
-  // (which only erases the part you actually trace) or nuking everything
-  // with Clear board.
+  // Removes the most recently added stroke/shape/image *on the page
+  // currently shown* — a quick way to back out one scribble without
+  // dragging the pixel eraser over it (which only erases the part you
+  // actually trace) or nuking everything with Clear board. Page-scoped so
+  // it can't reach across and delete something on a different page of a
+  // shared document that you can't even see right now.
+  const undoTarget = useMemo(
+    () =>
+      [...drawOps]
+        .reverse()
+        .find((op) => op.kind !== "clear" && op.kind !== "undo" && (op.page === undefined || op.page === page)),
+    [drawOps, page],
+  );
   const undoLast = () => {
-    if (drawOps.length === 0) return;
-    onSend({ kind: "undo" });
+    if (!undoTarget || undoTarget.kind === "clear" || undoTarget.kind === "undo") return;
+    onSend({ kind: "undo", id: undoTarget.id });
   };
 
   const cursor = useMemo(() => {
@@ -347,7 +379,7 @@ export const AnnotateCanvas = forwardRef<
         <button
           type="button"
           onClick={undoLast}
-          disabled={drawOps.length === 0}
+          disabled={!undoTarget}
           title="Remove the last scribble"
           className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#3d3f74] hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
         >
