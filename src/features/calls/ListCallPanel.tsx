@@ -446,7 +446,11 @@ export function ListCallPanel({
           ) : null}
           {presenterTile ? (
             <div className="flex flex-col gap-2">
-              <div className="relative">
+              {/* isolate: contains the video's own stacking/compositing layer
+                  so z-10 overlays below are reliably painted (and clickable)
+                  above it, instead of depending on browser-specific video
+                  compositing behavior. */}
+              <div className="relative isolate">
                 <VideoTile
                   ref={presenterVideoRef}
                   stream={presenterTile.stream}
@@ -467,7 +471,7 @@ export function ListCallPanel({
                   onReleaseControl={call.releaseControl}
                   onUploadImage={handleUploadImage}
                 />
-                <div className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
+                <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#fc404d]" />
                   {formatDuration(elapsed)} · Live
                 </div>
@@ -476,7 +480,7 @@ export function ListCallPanel({
                   onClick={() => void handleSaveScreenshot()}
                   disabled={savingShot}
                   title="Save whiteboard to chat"
-                  className="pointer-events-auto absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75 disabled:opacity-60"
+                  className="pointer-events-auto absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75 disabled:opacity-60"
                 >
                   <Camera className="h-3.5 w-3.5" />
                 </button>

@@ -300,7 +300,12 @@ export const AnnotateCanvas = forwardRef<
   }, [active, tool]);
 
   return (
-    <div ref={containerRef} className={cn("pointer-events-none absolute inset-0", className)}>
+    // z-10: <video> elements can composite above later DOM siblings in some
+    // browsers (notably Safari/iOS) regardless of source order, unless given
+    // an explicit stacking context — without this the toolbar could render
+    // but silently swallow no clicks, or clicks could land on the video
+    // underneath instead.
+    <div ref={containerRef} className={cn("pointer-events-none absolute inset-0 z-10", className)}>
       <canvas
         ref={canvasRef}
         className={cn(active ? "pointer-events-auto" : "pointer-events-none", "absolute inset-0")}

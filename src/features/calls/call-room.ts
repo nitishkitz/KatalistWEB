@@ -359,8 +359,24 @@ export class CallRoom {
       }
     };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed" || pc.connectionState === "closed") {
-        // leave the slot; a presence re-sync can re-create it
+      if (pc.connectionState === "disconnected") {
+        // Often a brief network blip (Wi-Fi handoff, a dropped packet burst) —
+        // ask the browser to renegotiate ICE without tearing down the peer.
+        // This is the case that was previously left to just sit there,
+        // which is what surfaced as "disconnected mid-call".
+        try {
+          pc.restartIce();
+        } catch {
+          // Not supported everywhere; the "failed" branch below is the backstop.
+        }
+      } else if (pc.connectionState === "failed") {
+        // Unrecoverable — drop the dead slot and rebuild it immediately from
+        // the current presence roster instead of waiting for the next
+        // presence "sync" event, which may not fire again for a while if no
+        // one else joins/leaves in the meantime.
+        this.dropPeer(peerId);
+        this.syncPeers();
+        return;
       }
       this.emit();
     };
