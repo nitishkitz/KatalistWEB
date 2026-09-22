@@ -480,7 +480,23 @@ export function ThingDetailContent({
   const events = thread.activity;
   const busy = run.isPending;
 
+  const currentBuckets = useMemo(() => {
+    void localVersion;
+    if (!thing) return [];
+    return buckets.filter(
+      (bucket) =>
+        bucket.thingIds?.includes(thing.id) ||
+        bucket.previews?.some((preview) => preview.kind === "thing" && preview.thingId === thing.id) ||
+        getBucketRefs(bucket.id).some((ref) => ref.thingId === thing.id),
+    );
+  }, [buckets, thing, localVersion]);
+
+  const creatorAvatar = useAvatarUrl(thing?.creator.name, null, thing?.creator.avatarUrl);
+  const ownerAvatar = useAvatarUrl(thing?.owner.name, null, thing?.owner.avatarUrl);
+  const assigneeAvatar = useAvatarUrl(thing?.assignee.name, null, thing?.assignee.avatarUrl);
+
   if (!thing) return null;
+
   const terminal = caps?.terminal ?? false;
   const canAssignOutside = Boolean(caps?.isOwner && !terminal);
   const hasMoreActions = Boolean(
@@ -493,21 +509,8 @@ export function ThingDetailContent({
     caps?.canShred,
   );
   const activePace: Pace = thing.personalPace ?? "next";
-  const currentBuckets = useMemo(() => {
-    void localVersion;
-    return buckets.filter(
-      (bucket) =>
-        bucket.thingIds?.includes(thing.id) ||
-        bucket.previews?.some((preview) => preview.kind === "thing" && preview.thingId === thing.id) ||
-        getBucketRefs(bucket.id).some((ref) => ref.thingId === thing.id),
-    );
-  }, [buckets, thing.id, localVersion]);
   const currentBucket = currentBuckets[0] ?? null;
   const dueLabel = thing.dueAt ? formatCourtDue(thing).label : null;
-
-  const creatorAvatar = useAvatarUrl(thing.creator.name, null, thing.creator.avatarUrl);
-  const ownerAvatar = useAvatarUrl(thing.owner.name, null, thing.owner.avatarUrl);
-  const assigneeAvatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
 
   const isCreatorSameAsOwner = thing.creator.id === thing.owner.id;
   const isAssigneeSameAsOwner = thing.assignee.id === thing.owner.id;
