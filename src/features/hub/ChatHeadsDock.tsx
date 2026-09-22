@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { PictureInPicture2, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
@@ -241,7 +242,10 @@ export function ChatHeadsDock() {
 
   const openPip = async () => {
     const dpip = getDocumentPip();
-    if (!dpip) return;
+    if (!dpip) {
+      toast.error("This browser doesn't support pop-out windows yet.");
+      return;
+    }
     try {
       const win = await dpip.requestWindow({ width: 340, height: 480 });
       // Clone every stylesheet/style tag rather than reading CSSOM (which
@@ -252,9 +256,12 @@ export function ChatHeadsDock() {
       win.document.body.style.margin = "0";
       setOpen(false);
       setPipWindow(win);
-    } catch {
-      // user dismissed the permission prompt, or the API rejected — stay
-      // on the normal in-tab popover, nothing else to do
+    } catch (err) {
+      // Surface the real reason instead of silently doing nothing — e.g.
+      // requestWindow() throws NotAllowedError when called from a non-top-
+      // level browsing context (an iframe), or if it wasn't called directly
+      // from a user gesture.
+      toast.error(err instanceof Error ? `Couldn't pop out: ${err.message}` : "Couldn't pop out the chat window.");
     }
   };
 
