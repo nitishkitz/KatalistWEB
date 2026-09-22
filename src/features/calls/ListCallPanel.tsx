@@ -25,13 +25,21 @@ import {
   Users,
   Camera,
   PenTool,
+  Upload,
+  X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { detectFileType } from "@/lib/file-utils";
+import { PdfCanvas } from "@/features/things/PdfCanvas";
 import { useListMessages } from "@/features/lists/use-list-messages";
 import { AnnotateCanvas, type AnnotateCanvasHandle } from "./AnnotateCanvas";
 import type { ListCallControls } from "./use-list-call";
+
+const MAX_DOC_BYTES = 50 * 1024 * 1024;
 
 const CHAT_BUCKET = "list-chat";
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -164,6 +172,9 @@ export function ListCallPanel({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [savingShot, setSavingShot] = useState(false);
+  const [docNumPages, setDocNumPages] = useState(1);
+  const docFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   useEffect(() => {
     if (dock === "chat" && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -226,6 +237,39 @@ export function ListCallPanel({
     }
   };
 
+  // Upload a document (PDF/image/DOCX/XLSX) to present to everyone. Same
+  // upload-then-broadcast-a-URL shape as paste-to-whiteboard — nothing but
+  // the URL/name/kind ever goes over the Realtime channel; each viewer
+  // renders the document locally (PdfCanvas, an <img>, or the Office Online
+  // embed viewer, same three renderers PDFViewer.tsx already uses).
+  const handleUploadDoc = async (file?: File) => {
+    if (!file) return;
+    if (file.size > MAX_DOC_BYTES) {
+      toast.error("Files must be 50 MB or smaller.");
+      return;
+    }
+    const detected = detectFileType(file.name, file.type);
+    const kind = detected === "png" || detected === "jpg" ? "image" : detected;
+    if (kind !== "pdf" && kind !== "docx" && kind !== "excel" && kind !== "image") {
+      toast.error("Only PDF, Word, Excel, and image files can be presented.");
+      return;
+    }
+    setUploadingDoc(true);
+    try {
+      const attachment = await chat.uploadAttachment(file);
+      const { data, error } = await supabase.storage
+        .from(CHAT_BUCKET)
+        .createSignedUrl(attachment.key, SIGNED_URL_TTL_SECONDS);
+      if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
+      call.openDoc({ url: data.signedUrl, name: file.name, kind });
+    } catch {
+      toast.error("Couldn't share that document.");
+    } finally {
+      setUploadingDoc(false);
+      if (docFileInputRef.current) docFileInputRef.current.value = "";
+    }
+  };
+
   // Composites the presenter's live video frame with the whiteboard overlay
   // into one image and sends it through the list's normal chat-attachment
   // pipeline — no separate storage or schema needed.
@@ -268,38 +312,41 @@ export function ListCallPanel({
   const localStream = call.sharing && call.screenStream ? call.screenStream : call.localStream;
 
   // Presentation mode: someone (self or a remote peer) is sharing their
-  // screen, OR someone has opened the standalone whiteboard (no screen
-  // needed — see toggleWhiteboard). Either way, feature that large with the
-  // annotate overlay, and shrink everyone else into a thumbnail rail
-  // (Figma's expanded call window).
-  const presenting = call.screenSharerId ?? (call.whiteboardOpenerId ? "whiteboard" : null);
+  // screen, OR someone has opened the standalone whiteboard, OR someone has
+  // opened a shared document — only one occupies the call's large tile at a
+  // time, in that precedence order. Whichever it is, feature that large
+  // with the annotate overlay, and shrink everyone else into a thumbnail
+  // rail (Figma's expanded call window).
+  const presenting = call.screenSharerId ?? (call.whiteboardOpenerId ? "whiteboard" : null) ?? (call.docOpenerId ? "doc" : null);
   const presenterTile = presenting
     ? presenting === "whiteboard"
-      ? { whiteboardOnly: true as const, stream: undefined, name: "Whiteboard", self: false, muted: false, cameraOff: true, raisedHand: false }
-      : presenting === "self"
-        ? {
-            whiteboardOnly: false as const,
-            stream: localStream,
-            name: selfName,
-            self: true,
-            muted: call.muted,
-            cameraOff: false,
-            raisedHand: call.handRaised,
-          }
-        : (() => {
-            const p = call.participants.find((x) => x.id === presenting);
-            return p
-              ? {
-                  whiteboardOnly: false as const,
-                  stream: p.stream,
-                  name: p.name,
-                  self: false,
-                  muted: p.muted,
-                  cameraOff: p.cameraOff,
-                  raisedHand: p.raisedHand,
-                }
-              : null;
-          })()
+      ? { kind: "whiteboard" as const, stream: undefined, name: "Whiteboard", self: false, muted: false, cameraOff: true, raisedHand: false }
+      : presenting === "doc"
+        ? { kind: "doc" as const, stream: undefined, name: call.docName ?? "Document", self: false, muted: false, cameraOff: true, raisedHand: false }
+        : presenting === "self"
+          ? {
+              kind: "video" as const,
+              stream: localStream,
+              name: selfName,
+              self: true,
+              muted: call.muted,
+              cameraOff: false,
+              raisedHand: call.handRaised,
+            }
+          : (() => {
+              const p = call.participants.find((x) => x.id === presenting);
+              return p
+                ? {
+                    kind: "video" as const,
+                    stream: p.stream,
+                    name: p.name,
+                    self: false,
+                    muted: p.muted,
+                    cameraOff: p.cameraOff,
+                    raisedHand: p.raisedHand,
+                  }
+                : null;
+            })()
     : null;
   const thumbnailTiles = presenting
     ? [
@@ -475,9 +522,30 @@ export function ListCallPanel({
                   above it, instead of depending on browser-specific video
                   compositing behavior. */}
               <div className="relative isolate">
-                {presenterTile.whiteboardOnly ? (
+                {presenterTile.kind === "whiteboard" ? (
                   <div className="flex aspect-video items-center justify-center rounded-[10px] border border-dashed border-[#c5cae0] bg-white">
                     <p className="text-[12.5px] font-medium text-[#8487a7]">Whiteboard</p>
+                  </div>
+                ) : presenterTile.kind === "doc" ? (
+                  <div className="relative aspect-video overflow-hidden rounded-[10px] border border-[#eef0f6] bg-white">
+                    {call.docKind === "pdf" && call.docUrl ? (
+                      <div className="h-full overflow-auto p-2">
+                        <PdfCanvas
+                          url={call.docUrl}
+                          page={call.docPage}
+                          onNumPages={setDocNumPages}
+                          className="mx-auto"
+                        />
+                      </div>
+                    ) : call.docKind === "image" && call.docUrl ? (
+                      <img src={call.docUrl} alt={call.docName ?? "Shared document"} className="h-full w-full object-contain" />
+                    ) : call.docUrl ? (
+                      <iframe
+                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(call.docUrl)}`}
+                        className="h-full w-full border-0 bg-white"
+                        title={call.docName ?? "Shared document"}
+                      />
+                    ) : null}
                   </div>
                 ) : (
                   <VideoTile
@@ -501,9 +569,11 @@ export function ListCallPanel({
                   onReleaseControl={call.releaseControl}
                   onUploadImage={handleUploadImage}
                 />
-                <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
-                  {presenterTile.whiteboardOnly ? (
+                <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex max-w-[70%] items-center gap-1.5 truncate rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
+                  {presenterTile.kind === "whiteboard" ? (
                     "Whiteboard"
+                  ) : presenterTile.kind === "doc" ? (
+                    <span className="truncate">{call.docName}</span>
                   ) : (
                     <>
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#fc404d]" />
@@ -511,15 +581,49 @@ export function ListCallPanel({
                     </>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveScreenshot()}
-                  disabled={savingShot}
-                  title="Save whiteboard to chat"
-                  className="pointer-events-auto absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75 disabled:opacity-60"
-                >
-                  <Camera className="h-3.5 w-3.5" />
-                </button>
+                {presenterTile.kind === "doc" && call.docKind === "pdf" && docNumPages > 1 ? (
+                  <div className="pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/60 px-1.5 py-1 text-[11px] text-white">
+                    <button
+                      type="button"
+                      onClick={() => call.setDocPage(call.docPage - 1)}
+                      disabled={call.docPage <= 1}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/20 disabled:opacity-40"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <span>
+                      {call.docPage} / {docNumPages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => call.setDocPage(call.docPage + 1)}
+                      disabled={call.docPage >= docNumPages}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/20 disabled:opacity-40"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : null}
+                {presenterTile.kind === "doc" ? (
+                  <button
+                    type="button"
+                    onClick={() => call.closeDoc()}
+                    title="Close document"
+                    className="pointer-events-auto absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveScreenshot()}
+                    disabled={savingShot}
+                    title="Save whiteboard to chat"
+                    className="pointer-events-auto absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75 disabled:opacity-60"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
               {thumbnailTiles.length > 0 ? (
                 <div className="flex gap-2 overflow-x-auto">
@@ -687,6 +791,26 @@ export function ListCallPanel({
           title={call.whiteboardOpenerId ? "Close whiteboard" : "Open whiteboard — no screen share needed"}
         >
           <PenTool className="h-4 w-4" />
+        </button>
+        <input
+          ref={docFileInputRef}
+          type="file"
+          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+          className="hidden"
+          onChange={(e) => void handleUploadDoc(e.target.files?.[0])}
+        />
+        <button
+          type="button"
+          onClick={() => docFileInputRef.current?.click()}
+          disabled={uploadingDoc}
+          className={cn(
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            call.docOpenerId ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
+            uploadingDoc && "opacity-60",
+          )}
+          title="Present a document (PDF, Word, Excel, or image)"
+        >
+          <Upload className="h-4 w-4" />
         </button>
 
         <button

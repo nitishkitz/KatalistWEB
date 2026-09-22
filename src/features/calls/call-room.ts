@@ -28,6 +28,13 @@ export type CallParticipant = {
    *  share needed — everyone on the call can draw on it, same as during a
    *  screen share, just without a shared screen underneath it). */
   whiteboardOpen?: boolean;
+  /** Set while this peer is presenting a shared document (PDF/image/
+   *  DOCX/XLSX) — everyone renders it locally from this URL and draws on
+   *  it with the same annotation layer used over a screen share. */
+  docUrl?: string | null;
+  docName?: string | null;
+  docKind?: "pdf" | "docx" | "excel" | "image" | null;
+  docPage?: number;
   /** True while this peer has their hand raised. */
   raisedHand?: boolean;
 };
@@ -64,6 +71,10 @@ type PeerSlot = {
   cameraOff: boolean;
   sharing: boolean;
   whiteboardOpen: boolean;
+  docUrl: string | null;
+  docName: string | null;
+  docKind: "pdf" | "docx" | "excel" | "image" | null;
+  docPage: number;
   controlling: boolean;
   controlSince: number;
   raisedHand: boolean;
@@ -152,6 +163,12 @@ export class CallRoom {
   private selfCameraOff = false;
   private selfSharing = false;
   private selfWhiteboardOpen = false;
+  // Shared document (PDF/image/DOCX/XLSX) — same idea as selfWhiteboardOpen,
+  // but carries the doc's URL/name/kind/page instead of a plain boolean.
+  private selfDocUrl: string | null = null;
+  private selfDocName: string | null = null;
+  private selfDocKind: "pdf" | "docx" | "excel" | "image" | null = null;
+  private selfDocPage = 1;
   // "Take control" of the whiteboard is a baton, not a role: whoever last
   // claimed it (highest controlSince among everyone currently claiming it)
   // holds exclusive drawing rights. No call ever has a "host" concept, so
@@ -218,6 +235,10 @@ export class CallRoom {
       cameraOff: this.selfCameraOff,
       sharing: this.selfSharing,
       whiteboardOpen: this.selfWhiteboardOpen,
+      docUrl: this.selfDocUrl,
+      docName: this.selfDocName,
+      docKind: this.selfDocKind,
+      docPage: this.selfDocPage,
       controlling: this.selfControlling,
       controlSince: this.selfControlSince,
       raisedHand: this.selfRaisedHand,
@@ -232,6 +253,10 @@ export class CallRoom {
     cameraOff: boolean;
     sharing: boolean;
     whiteboardOpen: boolean;
+    docUrl: string | null;
+    docName: string | null;
+    docKind: "pdf" | "docx" | "excel" | "image" | null;
+    docPage: number;
     controlling: boolean;
     controlSince: number;
     raisedHand: boolean;
@@ -245,6 +270,10 @@ export class CallRoom {
       cameraOff?: boolean;
       sharing?: boolean;
       whiteboardOpen?: boolean;
+      docUrl?: string | null;
+      docName?: string | null;
+      docKind?: "pdf" | "docx" | "excel" | "image" | null;
+      docPage?: number;
       controlling?: boolean;
       controlSince?: number;
       raisedHand?: boolean;
@@ -257,6 +286,10 @@ export class CallRoom {
       cameraOff: boolean;
       sharing: boolean;
       whiteboardOpen: boolean;
+      docUrl: string | null;
+      docName: string | null;
+      docKind: "pdf" | "docx" | "excel" | "image" | null;
+      docPage: number;
       controlling: boolean;
       controlSince: number;
       raisedHand: boolean;
@@ -273,6 +306,10 @@ export class CallRoom {
           cameraOff: Boolean(meta.cameraOff),
           sharing: Boolean(meta.sharing),
           whiteboardOpen: Boolean(meta.whiteboardOpen),
+          docUrl: meta.docUrl ?? null,
+          docName: meta.docName ?? null,
+          docKind: meta.docKind ?? null,
+          docPage: meta.docPage ?? 1,
           controlling: Boolean(meta.controlling),
           controlSince: meta.controlSince ?? 0,
           raisedHand: Boolean(meta.raisedHand),
@@ -303,23 +340,16 @@ export class CallRoom {
         existing.cameraOff = p.cameraOff;
         existing.sharing = p.sharing;
         existing.whiteboardOpen = p.whiteboardOpen;
+        existing.docUrl = p.docUrl;
+        existing.docName = p.docName;
+        existing.docKind = p.docKind;
+        existing.docPage = p.docPage;
         existing.controlling = p.controlling;
         existing.controlSince = p.controlSince;
         existing.raisedHand = p.raisedHand;
         existing.raisedSince = p.raisedSince;
       } else {
-        this.createPeer(
-          p.id,
-          p.name,
-          p.muted,
-          p.cameraOff,
-          p.sharing,
-          p.whiteboardOpen,
-          p.controlling,
-          p.controlSince,
-          p.raisedHand,
-          p.raisedSince,
-        );
+        this.createPeer(p.id, p.name, p);
       }
     }
     this.emit();
@@ -328,15 +358,35 @@ export class CallRoom {
   private createPeer(
     peerId: string,
     name: string,
-    muted = false,
-    cameraOff = false,
-    sharing = false,
-    whiteboardOpen = false,
-    controlling = false,
-    controlSince = 0,
-    raisedHand = false,
-    raisedSince = 0,
+    meta: Partial<{
+      muted: boolean;
+      cameraOff: boolean;
+      sharing: boolean;
+      whiteboardOpen: boolean;
+      docUrl: string | null;
+      docName: string | null;
+      docKind: "pdf" | "docx" | "excel" | "image" | null;
+      docPage: number;
+      controlling: boolean;
+      controlSince: number;
+      raisedHand: boolean;
+      raisedSince: number;
+    }> = {},
   ): PeerSlot {
+    const {
+      muted = false,
+      cameraOff = false,
+      sharing = false,
+      whiteboardOpen = false,
+      docUrl = null,
+      docName = null,
+      docKind = null,
+      docPage = 1,
+      controlling = false,
+      controlSince = 0,
+      raisedHand = false,
+      raisedSince = 0,
+    } = meta;
     const pc = new RTCPeerConnection({
       iceServers: this.resolvedIce ?? iceServers(),
       ...(forceRelay() ? { iceTransportPolicy: "relay" as RTCIceTransportPolicy } : {}),
@@ -351,6 +401,10 @@ export class CallRoom {
       cameraOff,
       sharing,
       whiteboardOpen,
+      docUrl,
+      docName,
+      docKind,
+      docPage,
       controlling,
       controlSince,
       raisedHand,
@@ -488,6 +542,34 @@ export class CallRoom {
     this.emit();
   }
 
+  /** Present a shared document (PDF/image/DOCX/XLSX) — everyone renders it
+   *  locally from this URL (no pixels are broadcast) and draws on it with
+   *  the same annotation layer used over a screen share. Uploading a new
+   *  doc while one is open replaces it. */
+  openDoc(doc: { url: string; name: string; kind: "pdf" | "docx" | "excel" | "image" }) {
+    this.selfDocUrl = doc.url;
+    this.selfDocName = doc.name;
+    this.selfDocKind = doc.kind;
+    this.selfDocPage = 1;
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
+  closeDoc() {
+    this.selfDocUrl = null;
+    this.selfDocName = null;
+    this.selfDocKind = null;
+    this.selfDocPage = 1;
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
+  setDocPage(page: number) {
+    this.selfDocPage = Math.max(1, page);
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
   sendReaction(emoji: string) {
     void this.channel?.send({
       type: "broadcast",
@@ -568,6 +650,10 @@ export class CallRoom {
       cameraOff: slot.cameraOff,
       sharing: slot.sharing,
       whiteboardOpen: slot.whiteboardOpen,
+      docUrl: slot.docUrl,
+      docName: slot.docName,
+      docKind: slot.docKind,
+      docPage: slot.docPage,
       raisedHand: slot.raisedHand,
     }));
 

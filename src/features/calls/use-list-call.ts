@@ -23,6 +23,18 @@ export type ListCallControls = {
    *  a remote participant id, or null. Independent of screenSharerId. */
   whiteboardOpenerId: string | null;
   toggleWhiteboard: () => void;
+  /** Who is presenting a shared document (PDF/image/DOCX/XLSX): "self", a
+   *  remote participant id, or null. Independent of screenSharerId and
+   *  whiteboardOpenerId — only one of the three occupies the call's large
+   *  tile at a time (see ListCallPanel's presenting precedence). */
+  docOpenerId: string | null;
+  docUrl: string | null;
+  docName: string | null;
+  docKind: "pdf" | "docx" | "excel" | "image" | null;
+  docPage: number;
+  openDoc: (doc: { url: string; name: string; kind: "pdf" | "docx" | "excel" | "image" }) => void;
+  closeDoc: () => void;
+  setDocPage: (page: number) => void;
   /** Who holds the whiteboard drawing lock ("take control"), or null when
    *  it's open to everyone (the default). */
   controllerId: string | null;
@@ -59,6 +71,12 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const [cameraOff, setCameraOff] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [whiteboardOpen, setWhiteboardOpen] = useState(false);
+  const [selfDoc, setSelfDoc] = useState<{
+    url: string;
+    name: string;
+    kind: "pdf" | "docx" | "excel" | "image";
+    page: number;
+  } | null>(null);
   const [reactions, setReactions] = useState<CallReaction[]>([]);
   const [drawOps, setDrawOps] = useState<DrawOp[]>([]);
   const [controllerId, setControllerId] = useState<string | null>(null);
@@ -78,6 +96,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setCameraOff(false);
     setSharing(false);
     setWhiteboardOpen(false);
+    setSelfDoc(null);
     setReactions([]);
     setDrawOps([]);
     setControllerId(null);
@@ -185,6 +204,24 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     });
   }, []);
 
+  /** Present a shared document — no pixels leave this browser; every peer
+   *  renders the same URL locally (see ListCallPanel). */
+  const openDoc = useCallback((doc: { url: string; name: string; kind: "pdf" | "docx" | "excel" | "image" }) => {
+    roomRef.current?.openDoc(doc);
+    setSelfDoc({ ...doc, page: 1 });
+  }, []);
+
+  const closeDoc = useCallback(() => {
+    roomRef.current?.closeDoc();
+    setSelfDoc(null);
+  }, []);
+
+  const setDocPage = useCallback((page: number) => {
+    const p = Math.max(1, page);
+    roomRef.current?.setDocPage(p);
+    setSelfDoc((cur) => (cur ? { ...cur, page: p } : cur));
+  }, []);
+
   const sendReaction = useCallback((emoji: string) => {
     roomRef.current?.sendReaction(emoji);
     // Optimistic local echo.
@@ -238,6 +275,13 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     return participants.find((p) => p.whiteboardOpen)?.id ?? null;
   }, [whiteboardOpen, participants]);
 
+  const remoteDoc = useMemo(() => participants.find((p) => p.docUrl) ?? null, [participants]);
+  const docOpenerId = selfDoc ? "self" : remoteDoc?.id ?? null;
+  const docUrl = selfDoc?.url ?? remoteDoc?.docUrl ?? null;
+  const docName = selfDoc?.name ?? remoteDoc?.docName ?? null;
+  const docKind = selfDoc?.kind ?? remoteDoc?.docKind ?? null;
+  const docPage = selfDoc?.page ?? remoteDoc?.docPage ?? 1;
+
   const isController = controllerId === selfId;
   const canDraw = controllerId === null || isController;
 
@@ -255,6 +299,14 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     screenSharerId,
     whiteboardOpenerId,
     toggleWhiteboard,
+    docOpenerId,
+    docUrl,
+    docName,
+    docKind,
+    docPage,
+    openDoc,
+    closeDoc,
+    setDocPage,
     controllerId,
     controllerName,
     isController,
