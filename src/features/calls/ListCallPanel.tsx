@@ -59,8 +59,9 @@ const VideoTile = forwardRef<
     self?: boolean;
     /** Shrinks the fallback avatar/name — used for the presentation-mode thumbnail rail. */
     compact?: boolean;
+    raisedHand?: boolean;
   }
->(function VideoTile({ stream, name, muted, cameraOff, self, compact }, forwardedRef) {
+>(function VideoTile({ stream, name, muted, cameraOff, self, compact, raisedHand }, forwardedRef) {
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     const el = ref.current;
@@ -89,6 +90,11 @@ const VideoTile = forwardRef<
           <PersonAvatar name={name} initials={name.slice(0, 2)} size={compact ? 28 : 56} />
         </div>
       ) : null}
+      {raisedHand ? (
+        <span className="absolute right-1.5 top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#fdb412] text-white shadow">
+          <Hand className="h-3 w-3" />
+        </span>
+      ) : null}
       <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5">
         <span className={cn("truncate font-medium text-white", compact ? "text-[9.5px]" : "text-[11px]")}>
           {name}
@@ -105,10 +111,12 @@ function ParticipantRow({
   name,
   roleLabel,
   muted,
+  raisedHand,
 }: {
   name: string;
   roleLabel?: string;
   muted?: boolean;
+  raisedHand?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2.5 px-1 py-1.5">
@@ -117,6 +125,7 @@ function ParticipantRow({
         <p className="truncate text-[12.5px] font-medium text-[#000128]">{name}</p>
         {roleLabel ? <p className="text-[10.5px] text-black/60">{roleLabel}</p> : null}
       </div>
+      {raisedHand ? <Hand className="h-3.5 w-3.5 shrink-0 text-[#fdb412]" /> : null}
       {muted ? (
         <MicOff className="h-3.5 w-3.5 shrink-0 text-[#8487a7]" />
       ) : (
@@ -260,20 +269,40 @@ export function ListCallPanel({
   const presenting = call.screenSharerId;
   const presenterTile = presenting
     ? presenting === "self"
-      ? { stream: localStream, name: selfName, self: true, muted: call.muted, cameraOff: false }
+      ? { stream: localStream, name: selfName, self: true, muted: call.muted, cameraOff: false, raisedHand: call.handRaised }
       : (() => {
           const p = call.participants.find((x) => x.id === presenting);
-          return p ? { stream: p.stream, name: p.name, self: false, muted: p.muted, cameraOff: p.cameraOff } : null;
+          return p
+            ? { stream: p.stream, name: p.name, self: false, muted: p.muted, cameraOff: p.cameraOff, raisedHand: p.raisedHand }
+            : null;
         })()
     : null;
   const thumbnailTiles = presenting
     ? [
         ...(presenting !== "self"
-          ? [{ id: "self", stream: localStream, name: selfName, self: true, muted: call.muted, cameraOff: call.cameraOff }]
+          ? [
+              {
+                id: "self",
+                stream: localStream,
+                name: selfName,
+                self: true,
+                muted: call.muted,
+                cameraOff: call.cameraOff,
+                raisedHand: call.handRaised,
+              },
+            ]
           : []),
         ...call.participants
           .filter((p) => p.id !== presenting)
-          .map((p) => ({ id: p.id, stream: p.stream, name: p.name, self: false, muted: p.muted, cameraOff: p.cameraOff })),
+          .map((p) => ({
+            id: p.id,
+            stream: p.stream,
+            name: p.name,
+            self: false,
+            muted: p.muted,
+            cameraOff: p.cameraOff,
+            raisedHand: p.raisedHand,
+          })),
       ]
     : [];
 
@@ -405,6 +434,16 @@ export function ListCallPanel({
               );
             })}
           </div>
+          {/* Raised-hand queue — a lightweight speaking order, soonest-first.
+              Only shown in grid view: in presentation mode each tile already
+              carries its own raised-hand badge, and this corner is taken by
+              the "Live" indicator. */}
+          {!presenterTile && call.raisedHandQueue.length > 0 ? (
+            <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white">
+              <Hand className="h-3.5 w-3.5 text-[#fdb412]" />
+              {call.raisedHandQueue.map((p) => p.name).join(", ")}
+            </div>
+          ) : null}
           {presenterTile ? (
             <div className="flex flex-col gap-2">
               <div className="relative">
@@ -415,6 +454,7 @@ export function ListCallPanel({
                   self={presenterTile.self}
                   muted={presenterTile.muted}
                   cameraOff={presenterTile.cameraOff}
+                  raisedHand={presenterTile.raisedHand}
                 />
                 <AnnotateCanvas
                   ref={annotateRef}
@@ -451,6 +491,7 @@ export function ListCallPanel({
                         self={t.self}
                         muted={t.muted}
                         cameraOff={t.cameraOff}
+                        raisedHand={t.raisedHand}
                         compact
                       />
                     </div>
@@ -466,9 +507,17 @@ export function ListCallPanel({
                 self
                 muted={call.muted}
                 cameraOff={call.cameraOff && !call.sharing}
+                raisedHand={call.handRaised}
               />
               {call.participants.map((p) => (
-                <VideoTile key={p.id} stream={p.stream} name={p.name} muted={p.muted} cameraOff={p.cameraOff} />
+                <VideoTile
+                  key={p.id}
+                  stream={p.stream}
+                  name={p.name}
+                  muted={p.muted}
+                  cameraOff={p.cameraOff}
+                  raisedHand={p.raisedHand}
+                />
               ))}
             </div>
           )}
@@ -481,9 +530,9 @@ export function ListCallPanel({
               In this call ({count})
             </div>
             <div className="flex-1 space-y-0.5 overflow-y-auto px-2 py-1.5" style={{ maxHeight: 220 }}>
-              <ParticipantRow name={selfName} roleLabel="You" muted={call.muted} />
+              <ParticipantRow name={selfName} roleLabel="You" muted={call.muted} raisedHand={call.handRaised} />
               {call.participants.map((p) => (
-                <ParticipantRow key={p.id} name={p.name} muted={p.muted} />
+                <ParticipantRow key={p.id} name={p.name} muted={p.muted} raisedHand={p.raisedHand} />
               ))}
             </div>
           </div>
@@ -587,6 +636,18 @@ export function ListCallPanel({
           title={call.sharing ? "Stop sharing" : "Share screen"}
         >
           <MonitorUp className="h-4 w-4" />
+        </button>
+
+        <button
+          type="button"
+          onClick={call.toggleHand}
+          className={cn(
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            call.handRaised ? "bg-[#fdb412] text-white" : "bg-muted text-foreground hover:bg-muted/70",
+          )}
+          title={call.handRaised ? "Lower hand" : "Raise hand"}
+        >
+          <Hand className="h-4 w-4" />
         </button>
 
         {/* Reactions */}

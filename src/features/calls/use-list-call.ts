@@ -27,6 +27,10 @@ export type ListCallControls = {
   isController: boolean;
   /** True when the board is unlocked, or you're the one holding it. */
   canDraw: boolean;
+  /** Everyone with a hand raised, soonest-first. Purely informational. */
+  raisedHandQueue: { id: string; name: string }[];
+  /** True when *you* have your hand raised. */
+  handRaised: boolean;
   join: () => Promise<boolean>;
   leave: () => void;
   toggleMute: () => void;
@@ -36,6 +40,7 @@ export type ListCallControls = {
   sendDraw: (op: DrawOp) => void;
   takeControl: () => void;
   releaseControl: () => void;
+  toggleHand: () => void;
 };
 
 /** Full-mesh audio/video call for a List, scoped to the current members. */
@@ -53,6 +58,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const [drawOps, setDrawOps] = useState<DrawOp[]>([]);
   const [controllerId, setControllerId] = useState<string | null>(null);
   const [controllerName, setControllerName] = useState<string | null>(null);
+  const [raisedHandQueue, setRaisedHandQueue] = useState<{ id: string; name: string }[]>([]);
+  const [handRaised, setHandRaised] = useState(false);
 
   const leave = useCallback(() => {
     roomRef.current?.leave();
@@ -69,6 +76,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setDrawOps([]);
     setControllerId(null);
     setControllerName(null);
+    setRaisedHandQueue([]);
+    setHandRaised(false);
   }, []);
 
   const join = useCallback(async (): Promise<boolean> => {
@@ -86,6 +95,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
         setParticipants(s.participants);
         setControllerId(s.controllerId);
         setControllerName(s.controllerName);
+        setRaisedHandQueue(s.raisedHandQueue);
       },
       onReaction: (r) => {
         const item = { id: crypto.randomUUID(), from: r.from, emoji: r.emoji };
@@ -184,6 +194,15 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setControllerId((cur) => (cur === selfId ? null : cur));
   }, [selfId]);
 
+  const toggleHand = useCallback(() => {
+    setHandRaised((raised) => {
+      const next = !raised;
+      if (next) roomRef.current?.raiseHand();
+      else roomRef.current?.lowerHand();
+      return next;
+    });
+  }, []);
+
   // Clean up media/peers if the component unmounts mid-call.
   useEffect(() => {
     return () => {
@@ -216,6 +235,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     controllerName,
     isController,
     canDraw,
+    raisedHandQueue,
+    handRaised,
     join,
     leave,
     toggleMute,
@@ -225,5 +246,6 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     sendDraw,
     takeControl,
     releaseControl,
+    toggleHand,
   };
 }

@@ -24,6 +24,8 @@ export type CallParticipant = {
   cameraOff?: boolean;
   /** True while this peer is presenting their screen (drives "presentation mode"). */
   sharing?: boolean;
+  /** True while this peer has their hand raised. */
+  raisedHand?: boolean;
 };
 
 export type CallRoomState = {
@@ -32,6 +34,9 @@ export type CallRoomState = {
    *  null when it's open to everyone (the default). */
   controllerId: string | null;
   controllerName: string | null;
+  /** Everyone with a hand raised, soonest-first — a lightweight speaking
+   *  queue for calls with no host to call on people. */
+  raisedHandQueue: { id: string; name: string }[];
 };
 
 /** A single annotate-layer draw operation, broadcast to every peer. Coordinates
@@ -56,6 +61,8 @@ type PeerSlot = {
   sharing: boolean;
   controlling: boolean;
   controlSince: number;
+  raisedHand: boolean;
+  raisedSince: number;
 };
 
 function envStr(key: string): string | undefined {
@@ -145,6 +152,10 @@ export class CallRoom {
   // this stays symmetric — anyone can take control from anyone.
   private selfControlling = false;
   private selfControlSince = 0;
+  // Raised hand: same ephemeral presence-broadcast shape as the control
+  // baton above, but purely informational — it never gates any capability.
+  private selfRaisedHand = false;
+  private selfRaisedSince = 0;
 
   private readonly onReaction?: (p: { from: string; emoji: string }) => void;
   private readonly onDraw?: (op: DrawOp) => void;
@@ -202,6 +213,8 @@ export class CallRoom {
       sharing: this.selfSharing,
       controlling: this.selfControlling,
       controlSince: this.selfControlSince,
+      raisedHand: this.selfRaisedHand,
+      raisedSince: this.selfRaisedSince,
     };
   }
 
@@ -213,6 +226,8 @@ export class CallRoom {
     sharing: boolean;
     controlling: boolean;
     controlSince: number;
+    raisedHand: boolean;
+    raisedSince: number;
   }[] {
     if (!this.channel) return [];
     const state = this.channel.presenceState<{
@@ -223,6 +238,8 @@ export class CallRoom {
       sharing?: boolean;
       controlling?: boolean;
       controlSince?: number;
+      raisedHand?: boolean;
+      raisedSince?: number;
     }>();
     const out: {
       id: string;
@@ -232,6 +249,8 @@ export class CallRoom {
       sharing: boolean;
       controlling: boolean;
       controlSince: number;
+      raisedHand: boolean;
+      raisedSince: number;
     }[] = [];
     for (const key of Object.keys(state)) {
       const metas = state[key];
@@ -245,6 +264,8 @@ export class CallRoom {
           sharing: Boolean(meta.sharing),
           controlling: Boolean(meta.controlling),
           controlSince: meta.controlSince ?? 0,
+          raisedHand: Boolean(meta.raisedHand),
+          raisedSince: meta.raisedSince ?? 0,
         });
       }
     }
@@ -272,8 +293,10 @@ export class CallRoom {
         existing.sharing = p.sharing;
         existing.controlling = p.controlling;
         existing.controlSince = p.controlSince;
+        existing.raisedHand = p.raisedHand;
+        existing.raisedSince = p.raisedSince;
       } else {
-        this.createPeer(p.id, p.name, p.muted, p.cameraOff, p.sharing, p.controlling, p.controlSince);
+        this.createPeer(p.id, p.name, p.muted, p.cameraOff, p.sharing, p.controlling, p.controlSince, p.raisedHand, p.raisedSince);
       }
     }
     this.emit();
@@ -287,6 +310,8 @@ export class CallRoom {
     sharing = false,
     controlling = false,
     controlSince = 0,
+    raisedHand = false,
+    raisedSince = 0,
   ): PeerSlot {
     const pc = new RTCPeerConnection({
       iceServers: this.resolvedIce ?? iceServers(),
@@ -303,6 +328,8 @@ export class CallRoom {
       sharing,
       controlling,
       controlSince,
+      raisedHand,
+      raisedSince,
     };
     this.peers.set(peerId, slot);
 
@@ -434,6 +461,20 @@ export class CallRoom {
     this.emit();
   }
 
+  /** Raise a hand — purely informational, does not gate any capability. */
+  raiseHand() {
+    this.selfRaisedHand = true;
+    this.selfRaisedSince = Date.now();
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
+  lowerHand() {
+    this.selfRaisedHand = false;
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
   setMuted(muted: boolean) {
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = !muted));
     this.selfMuted = muted;
@@ -470,6 +511,7 @@ export class CallRoom {
       muted: slot.muted,
       cameraOff: slot.cameraOff,
       sharing: slot.sharing,
+      raisedHand: slot.raisedHand,
     }));
 
     // Derived controller: among everyone (self + peers) currently claiming
@@ -491,7 +533,17 @@ export class CallRoom {
       }
     }
 
-    this.onState({ participants, controllerId, controllerName });
+    // Raised-hand queue: everyone (self + peers) currently raised, ordered
+    // soonest-first — a lightweight speaking order for a call with no host.
+    const raised: { id: string; name: string; since: number }[] = [];
+    if (this.selfRaisedHand) raised.push({ id: this.selfId, name: this.selfName, since: this.selfRaisedSince });
+    for (const [id, slot] of this.peers) {
+      if (slot.raisedHand) raised.push({ id, name: slot.name, since: slot.raisedSince });
+    }
+    raised.sort((a, b) => a.since - b.since);
+    const raisedHandQueue = raised.map(({ id, name }) => ({ id, name }));
+
+    this.onState({ participants, controllerId, controllerName, raisedHandQueue });
   }
 
   leave() {
