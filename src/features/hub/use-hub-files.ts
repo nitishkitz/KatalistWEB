@@ -21,29 +21,23 @@ export type HubFile = {
   pinnedAt: string | null;
 };
 
-async function fetchFiles(listId: string, parentId: string | null): Promise<HubFile[]> {
-  let q = supabase
-    .from("hub_files")
-    .select("id, list_id, parent_id, is_folder, name, storage_path, mime, size, created_by, created_at, pinned_at")
-    .eq("list_id", listId)
-    .is("deleted_at", null);
-  q = parentId === null ? q.is("parent_id", null) : q.eq("parent_id", parentId);
-  const { data, error } = await q;
-  if (error) throw error;
-  const rows = (data ?? []) as Array<{
-    id: string;
-    list_id: string;
-    parent_id: string | null;
-    is_folder: boolean;
-    name: string;
-    storage_path: string | null;
-    mime: string | null;
-    size: number | null;
-    created_by: string;
-    created_at: string;
-    pinned_at: string | null;
-  }>;
+type HubFileRow = {
+  id: string;
+  list_id: string;
+  parent_id: string | null;
+  is_folder: boolean;
+  name: string;
+  storage_path: string | null;
+  mime: string | null;
+  size: number | null;
+  created_by: string;
+  created_at: string;
+  pinned_at: string | null;
+};
 
+const FILE_COLUMNS = "id, list_id, parent_id, is_folder, name, storage_path, mime, size, created_by, created_at, pinned_at";
+
+async function resolveFiles(rows: HubFileRow[]): Promise<HubFile[]> {
   const identities = await fetchProfileIdentities();
   const nameById = new Map(identities.map((p) => [p.id, p.display_name?.trim() || "Member"]));
 
@@ -69,6 +63,32 @@ async function fetchFiles(listId: string, parentId: string | null): Promise<HubF
     return a.name.localeCompare(b.name);
   });
   return files;
+}
+
+async function fetchFiles(listId: string, parentId: string | null): Promise<HubFile[]> {
+  let q = supabase.from("hub_files").select(FILE_COLUMNS).eq("list_id", listId).is("deleted_at", null);
+  q = parentId === null ? q.is("parent_id", null) : q.eq("parent_id", parentId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return resolveFiles((data ?? []) as HubFileRow[]);
+}
+
+/** Find files by name anywhere in the conversation, regardless of which
+ *  folder they're in — unlike fetchFiles, this ignores parent_id entirely.
+ *  Backs the combined Chat+Files search in ConversationWorkspace. */
+export async function searchHubFiles(listId: string, query: string): Promise<HubFile[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const { data, error } = await supabase
+    .from("hub_files")
+    .select(FILE_COLUMNS)
+    .eq("list_id", listId)
+    .eq("is_folder", false)
+    .is("deleted_at", null)
+    .ilike("name", `%${q}%`)
+    .limit(20);
+  if (error) throw error;
+  return resolveFiles((data ?? []) as HubFileRow[]);
 }
 
 /** Resolve a fresh signed URL for a stored file (bucket is private). */

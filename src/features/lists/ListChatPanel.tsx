@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Search, MessageSquare, Paperclip, AtSign, Smile, Download, FileText, Phone, Pin, PinOff } from "lucide-react";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -44,21 +44,25 @@ function ChatAttachmentView({ attachment }: { attachment: ChatAttachment }) {
   );
 }
 
+export type ListChatPanelHandle = {
+  /** Scrolls a message into view — used by the combined Chat+Files search
+   *  in ConversationWorkspace to jump to a result after switching tabs. */
+  scrollToMessage: (id: string) => void;
+};
+
 /**
  * Self-contained List/conversation chat: message timeline + composer, backed by
  * `useListMessages`. Reused by the Team hub and available to the List detail page.
  */
-export function ListChatPanel({
-  listId,
-  placeholderName,
-  viewOnly = false,
-  className,
-}: {
-  listId: string;
-  placeholderName?: string;
-  viewOnly?: boolean;
-  className?: string;
-}) {
+export const ListChatPanel = forwardRef<
+  ListChatPanelHandle,
+  {
+    listId: string;
+    placeholderName?: string;
+    viewOnly?: boolean;
+    className?: string;
+  }
+>(function ListChatPanel({ listId, placeholderName, viewOnly = false, className }, forwardedRef) {
   const chat = useListMessages(listId);
   const [msg, setMsg] = useState("");
   const [search, setSearch] = useState("");
@@ -71,6 +75,8 @@ export function ListChatPanel({
   const scrollToMessage = (id: string) => {
     messageRefs.current.get(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
+
+  useImperativeHandle(forwardedRef, () => ({ scrollToMessage }), []);
 
   const togglePin = async (messageId: string, pinned: boolean) => {
     try {
@@ -289,4 +295,4 @@ export function ListChatPanel({
       )}
     </div>
   );
-}
+});

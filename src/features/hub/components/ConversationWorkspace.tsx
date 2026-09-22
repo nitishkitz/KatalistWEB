@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Phone, Video, MessageSquare, Folder, PhoneCall } from "lucide-react";
+import { ArrowLeft, Phone, Video, MessageSquare, Folder, PhoneCall, Search, FileText, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useSession } from "@/hooks/useSession";
 import { usePresence } from "@/features/people/presence";
 import { supabase } from "@/integrations/supabase/client";
 import { useListMessages } from "@/features/lists/use-list-messages";
-import { ListChatPanel } from "@/features/lists/ListChatPanel";
+import { ListChatPanel, type ListChatPanelHandle } from "@/features/lists/ListChatPanel";
 import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
@@ -15,6 +16,7 @@ import { StartCallDialog, type CallPerson } from "@/features/calls/StartCallDial
 import { useConversation } from "@/features/hub/use-conversations";
 import { useLists } from "@/features/lists/use-lists";
 import { HubFilesPanel } from "./HubFilesPanel";
+import { getHubFileUrl, searchHubFiles, type HubFile } from "@/features/hub/use-hub-files";
 import { cn } from "@/lib/utils";
 
 export type HubTab = "chat" | "files" | "call";
@@ -82,6 +84,74 @@ export function ConversationWorkspace({
   const [startCallOpen, setStartCallOpen] = useState(false);
   const [startCallDefaultVideo, setStartCallDefaultVideo] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
+
+  // Combined Chat + Files search (distinct from ListChatPanel's own
+  // chat-only search) — messages are already fetched here via `chat`, so
+  // only file results need a live query; debounced to avoid a query per
+  // keystroke.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [fileResults, setFileResults] = useState<HubFile[]>([]);
+  const [filesSearching, setFilesSearching] = useState(false);
+  const [imagePreview, setImagePreview] = useState<{ name: string; url: string } | null>(null);
+  const chatPanelRef = useRef<ListChatPanelHandle | null>(null);
+  const [pendingScrollToMessageId, setPendingScrollToMessageId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 250);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (!debouncedQuery || debouncedQuery.length < 2) {
+      setFileResults([]);
+      return;
+    }
+    let cancelled = false;
+    setFilesSearching(true);
+    void searchHubFiles(listId, debouncedQuery)
+      .then((files) => {
+        if (!cancelled) setFileResults(files);
+      })
+      .finally(() => {
+        if (!cancelled) setFilesSearching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listId, debouncedQuery]);
+
+  useEffect(() => {
+    if (tab === "chat" && pendingScrollToMessageId) {
+      chatPanelRef.current?.scrollToMessage(pendingScrollToMessageId);
+      setPendingScrollToMessageId(null);
+    }
+  }, [tab, pendingScrollToMessageId]);
+
+  const messageResults = useMemo(() => {
+    const q = debouncedQuery.toLowerCase();
+    if (!q || q.length < 2) return [];
+    return chat.messages
+      .filter((m) => m.kind !== "system" && (m.body.toLowerCase().includes(q) || m.author.toLowerCase().includes(q)))
+      .slice(-20);
+  }, [chat.messages, debouncedQuery]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchQuery("");
+  };
+
+  const openFileResult = async (f: HubFile) => {
+    if (!f.storagePath) return;
+    const url = await getHubFileUrl(f.storagePath);
+    if (!url) return;
+    if ((f.mime ?? "").startsWith("image/")) {
+      setImagePreview({ name: f.name, url });
+      return;
+    }
+    window.open(url, "_blank", "noopener");
+  };
 
   // Ring + push a chosen set of people without touching the caller's own join
   // state (used both when starting a call and when inviting mid-call).
@@ -224,6 +294,18 @@ export function ConversationWorkspace({
         <div className="flex items-center gap-1.5">
           <button
             type="button"
+            onClick={() => setSearchOpen((o) => !o)}
+            className={cn(
+              "inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+              searchOpen ? "bg-[#f0e9fb] text-[#975ee2]" : "text-[#3d3f74] hover:bg-[#f4f5fb]",
+            )}
+            aria-label="Search this conversation"
+            title="Search messages and files"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
             onClick={() => (call.joined ? void startOrJoinCall(false) : openStartCall(false))}
             className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#3d3f74] hover:bg-[#f4f5fb]"
             aria-label="Audio call"
@@ -261,10 +343,93 @@ export function ConversationWorkspace({
         ))}
       </div>
 
+      {/* Combined Chat + Files search — separate from ListChatPanel's own
+          chat-only search box; this one spans both tabs at once. */}
+      {searchOpen && (
+        <div className="border-b border-[#eef0f6] bg-white px-5 py-3">
+          <div className="relative flex items-center">
+            <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#8487a7]" />
+            <input
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Escape" && closeSearch()}
+              placeholder="Search messages and files in this conversation…"
+              className="h-[38px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-9 text-[12.5px] text-[#000533] outline-none transition-colors placeholder:text-[#8487a7] focus:border-[#975ee2]"
+            />
+            <button
+              type="button"
+              onClick={closeSearch}
+              className="absolute right-2.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#975ee2]"
+              aria-label="Close search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {debouncedQuery.length >= 2 ? (
+            <div className="mt-3 max-h-72 space-y-3 overflow-y-auto">
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                  Messages {messageResults.length > 0 ? `(${messageResults.length})` : ""}
+                </p>
+                {messageResults.length === 0 ? (
+                  <p className="text-[11.5px] text-[#8487a7]">No matching messages.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {messageResults.map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          onTabChange("chat");
+                          setPendingScrollToMessageId(m.id);
+                          closeSearch();
+                        }}
+                        className="flex w-full items-start gap-2 rounded-[9px] px-2 py-1.5 text-left hover:bg-[#faf9fe]"
+                      >
+                        <MessageSquare className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#975ee2]" />
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-[#3d3f74]">
+                          <span className="font-medium text-[#000533]">{m.author}:</span> {m.body || "📎 attachment"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                  Files {fileResults.length > 0 ? `(${fileResults.length})` : ""}
+                </p>
+                {filesSearching ? (
+                  <p className="text-[11.5px] text-[#8487a7]">Searching…</p>
+                ) : fileResults.length === 0 ? (
+                  <p className="text-[11.5px] text-[#8487a7]">No matching files.</p>
+                ) : (
+                  <div className="space-y-1">
+                    {fileResults.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        onClick={() => void openFileResult(f)}
+                        className="flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-left hover:bg-[#faf9fe]"
+                      >
+                        <FileText className="h-3.5 w-3.5 shrink-0 text-[#975ee2]" />
+                        <span className="min-w-0 flex-1 truncate text-[12px] text-[#3d3f74]">{f.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col">
         {tab === "chat" ? (
-          <ListChatPanel listId={listId} placeholderName={title} />
+          <ListChatPanel ref={chatPanelRef} listId={listId} placeholderName={title} />
         ) : tab === "files" ? (
           <HubFilesPanel listId={listId} conversationTitle={title} chatAttachments={chatAttachments} />
         ) : (
@@ -358,6 +523,29 @@ export function ConversationWorkspace({
         variant="invite"
         onInvite={(selectedIds) => ringAndAnnounce(selectedIds)}
       />
+
+      {/* Giant in-app preview for image search results — same convention as
+          the Files tab: never redirect to a new tab for an image. */}
+      <Dialog open={Boolean(imagePreview)} onOpenChange={(open) => !open && setImagePreview(null)}>
+        <DialogContent className="max-w-[92vw] w-fit gap-0 border-none bg-transparent p-0 shadow-none sm:rounded-none">
+          {imagePreview ? (
+            <div className="flex max-h-[90vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between gap-3 border-b border-[#eef0f6] px-4 py-2.5">
+                <DialogTitle className="min-w-0 truncate text-[13px] font-medium text-[#000533]">
+                  {imagePreview.name}
+                </DialogTitle>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto bg-[#0b0c29] p-2">
+                <img
+                  src={imagePreview.url}
+                  alt={imagePreview.name}
+                  className="mx-auto max-h-[80vh] w-auto max-w-full object-contain"
+                />
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
