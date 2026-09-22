@@ -28,14 +28,21 @@ export type CallParticipant = {
 
 export type CallRoomState = {
   participants: CallParticipant[];
+  /** Who currently holds the whiteboard drawing lock — "take control" — or
+   *  null when it's open to everyone (the default). */
+  controllerId: string | null;
+  controllerName: string | null;
 };
 
 /** A single annotate-layer draw operation, broadcast to every peer. Coordinates
  *  are normalized (0..1) so they render correctly regardless of each viewer's
- *  window size. Ephemeral — never persisted, cleared when the call ends. */
+ *  window size. Ephemeral — never persisted, cleared when the call ends.
+ *  "image" carries a storage URL (not raw bytes) — pasted images are uploaded
+ *  first so the broadcast payload stays small regardless of image size. */
 export type DrawOp =
   | { kind: "stroke"; id: string; tool: "pen" | "eraser"; color: string; width: number; points: { x: number; y: number }[] }
   | { kind: "shape"; id: string; tool: "rect" | "ellipse" | "arrow"; color: string; width: number; x1: number; y1: number; x2: number; y2: number }
+  | { kind: "image"; id: string; url: string; x: number; y: number; width: number; height: number }
   | { kind: "clear" };
 
 type PeerSlot = {
@@ -47,6 +54,8 @@ type PeerSlot = {
   muted: boolean;
   cameraOff: boolean;
   sharing: boolean;
+  controlling: boolean;
+  controlSince: number;
 };
 
 function envStr(key: string): string | undefined {
@@ -130,6 +139,12 @@ export class CallRoom {
   private selfMuted = false;
   private selfCameraOff = false;
   private selfSharing = false;
+  // "Take control" of the whiteboard is a baton, not a role: whoever last
+  // claimed it (highest controlSince among everyone currently claiming it)
+  // holds exclusive drawing rights. No call ever has a "host" concept, so
+  // this stays symmetric — anyone can take control from anyone.
+  private selfControlling = false;
+  private selfControlSince = 0;
 
   private readonly onReaction?: (p: { from: string; emoji: string }) => void;
   private readonly onDraw?: (op: DrawOp) => void;
@@ -185,10 +200,20 @@ export class CallRoom {
       muted: this.selfMuted,
       cameraOff: this.selfCameraOff,
       sharing: this.selfSharing,
+      controlling: this.selfControlling,
+      controlSince: this.selfControlSince,
     };
   }
 
-  private presentPeerIds(): { id: string; name: string; muted: boolean; cameraOff: boolean; sharing: boolean }[] {
+  private presentPeerIds(): {
+    id: string;
+    name: string;
+    muted: boolean;
+    cameraOff: boolean;
+    sharing: boolean;
+    controlling: boolean;
+    controlSince: number;
+  }[] {
     if (!this.channel) return [];
     const state = this.channel.presenceState<{
       id: string;
@@ -196,8 +221,18 @@ export class CallRoom {
       muted?: boolean;
       cameraOff?: boolean;
       sharing?: boolean;
+      controlling?: boolean;
+      controlSince?: number;
     }>();
-    const out: { id: string; name: string; muted: boolean; cameraOff: boolean; sharing: boolean }[] = [];
+    const out: {
+      id: string;
+      name: string;
+      muted: boolean;
+      cameraOff: boolean;
+      sharing: boolean;
+      controlling: boolean;
+      controlSince: number;
+    }[] = [];
     for (const key of Object.keys(state)) {
       const metas = state[key];
       const meta = metas?.[0];
@@ -208,6 +243,8 @@ export class CallRoom {
           muted: Boolean(meta.muted),
           cameraOff: Boolean(meta.cameraOff),
           sharing: Boolean(meta.sharing),
+          controlling: Boolean(meta.controlling),
+          controlSince: meta.controlSince ?? 0,
         });
       }
     }
@@ -233,14 +270,24 @@ export class CallRoom {
         existing.muted = p.muted;
         existing.cameraOff = p.cameraOff;
         existing.sharing = p.sharing;
+        existing.controlling = p.controlling;
+        existing.controlSince = p.controlSince;
       } else {
-        this.createPeer(p.id, p.name, p.muted, p.cameraOff, p.sharing);
+        this.createPeer(p.id, p.name, p.muted, p.cameraOff, p.sharing, p.controlling, p.controlSince);
       }
     }
     this.emit();
   }
 
-  private createPeer(peerId: string, name: string, muted = false, cameraOff = false, sharing = false): PeerSlot {
+  private createPeer(
+    peerId: string,
+    name: string,
+    muted = false,
+    cameraOff = false,
+    sharing = false,
+    controlling = false,
+    controlSince = 0,
+  ): PeerSlot {
     const pc = new RTCPeerConnection({
       iceServers: this.resolvedIce ?? iceServers(),
       ...(forceRelay() ? { iceTransportPolicy: "relay" as RTCIceTransportPolicy } : {}),
@@ -254,6 +301,8 @@ export class CallRoom {
       muted,
       cameraOff,
       sharing,
+      controlling,
+      controlSince,
     };
     this.peers.set(peerId, slot);
 
@@ -369,6 +418,22 @@ export class CallRoom {
     void this.channel?.send({ type: "broadcast", event: "draw", payload: op });
   }
 
+  /** Claim exclusive whiteboard drawing rights, taking them from whoever (if
+   *  anyone) currently holds them. Last claim always wins. */
+  takeControl() {
+    this.selfControlling = true;
+    this.selfControlSince = Date.now();
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
+  /** Release the whiteboard back to "anyone can draw". */
+  releaseControl() {
+    this.selfControlling = false;
+    void this.channel?.track(this.presenceMeta());
+    this.emit();
+  }
+
   setMuted(muted: boolean) {
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = !muted));
     this.selfMuted = muted;
@@ -406,7 +471,27 @@ export class CallRoom {
       cameraOff: slot.cameraOff,
       sharing: slot.sharing,
     }));
-    this.onState({ participants });
+
+    // Derived controller: among everyone (self + peers) currently claiming
+    // control, whoever claimed it most recently. Rare simultaneous-claim
+    // races resolve deterministically to "last click wins".
+    let controllerId: string | null = null;
+    let controllerName: string | null = null;
+    let bestSince = -1;
+    if (this.selfControlling && this.selfControlSince > bestSince) {
+      controllerId = this.selfId;
+      controllerName = this.selfName;
+      bestSince = this.selfControlSince;
+    }
+    for (const [id, slot] of this.peers) {
+      if (slot.controlling && slot.controlSince > bestSince) {
+        controllerId = id;
+        controllerName = slot.name;
+        bestSince = slot.controlSince;
+      }
+    }
+
+    this.onState({ participants, controllerId, controllerName });
   }
 
   leave() {

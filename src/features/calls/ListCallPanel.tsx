@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Mic,
   MicOff,
@@ -22,12 +23,17 @@ import {
   Check,
   UserPlus,
   Users,
+  Camera,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 import { useListMessages } from "@/features/lists/use-list-messages";
-import { AnnotateCanvas } from "./AnnotateCanvas";
+import { AnnotateCanvas, type AnnotateCanvasHandle } from "./AnnotateCanvas";
 import type { ListCallControls } from "./use-list-call";
+
+const CHAT_BUCKET = "list-chat";
+const SIGNED_URL_TTL_SECONDS = 3600;
 
 const REACTIONS = [
   { key: "like", Icon: ThumbsUp, tint: "text-[#2874f4]" },
@@ -43,22 +49,18 @@ const REACTION_ICON: Record<string, (typeof REACTIONS)[number]["Icon"]> = {
   celebrate: PartyPopper,
 };
 
-function VideoTile({
-  stream,
-  name,
-  muted,
-  cameraOff,
-  self,
-  compact,
-}: {
-  stream: MediaStream | null | undefined;
-  name: string;
-  muted?: boolean;
-  cameraOff?: boolean;
-  self?: boolean;
-  /** Shrinks the fallback avatar/name — used for the presentation-mode thumbnail rail. */
-  compact?: boolean;
-}) {
+const VideoTile = forwardRef<
+  HTMLVideoElement,
+  {
+    stream: MediaStream | null | undefined;
+    name: string;
+    muted?: boolean;
+    cameraOff?: boolean;
+    self?: boolean;
+    /** Shrinks the fallback avatar/name — used for the presentation-mode thumbnail rail. */
+    compact?: boolean;
+  }
+>(function VideoTile({ stream, name, muted, cameraOff, self, compact }, forwardedRef) {
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     const el = ref.current;
@@ -72,7 +74,11 @@ function VideoTile({
   return (
     <div className="relative aspect-video overflow-hidden rounded-[10px] bg-[#0b0c29]">
       <video
-        ref={ref}
+        ref={(el) => {
+          ref.current = el;
+          if (typeof forwardedRef === "function") forwardedRef(el);
+          else if (forwardedRef) forwardedRef.current = el;
+        }}
         autoPlay
         playsInline
         muted={self || muted}
@@ -92,7 +98,7 @@ function VideoTile({
       </div>
     </div>
   );
-}
+});
 
 /** One row in the "In this call (N)" dock — mirrors the Figma participants list. */
 function ParticipantRow({
@@ -141,10 +147,13 @@ export function ListCallPanel({
   const chat = useListMessages(listId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const presenterVideoRef = useRef<HTMLVideoElement | null>(null);
+  const annotateRef = useRef<AnnotateCanvasHandle | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [savingShot, setSavingShot] = useState(false);
 
   useEffect(() => {
     if (dock === "chat" && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -187,6 +196,55 @@ export function ListCallPanel({
       setTimeout(() => setCopied(false), 1500);
     } catch {
       // clipboard may be unavailable
+    }
+  };
+
+  // Pasted whiteboard images upload to the same private bucket as chat
+  // attachments, then broadcast only the resulting signed URL (see
+  // AnnotateCanvas's paste handler) — the Realtime channel never carries
+  // raw image bytes.
+  const handleUploadImage = async (file: File): Promise<string | null> => {
+    try {
+      const attachment = await chat.uploadAttachment(file);
+      const { data, error } = await supabase.storage
+        .from(CHAT_BUCKET)
+        .createSignedUrl(attachment.key, SIGNED_URL_TTL_SECONDS);
+      if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
+      return data.signedUrl;
+    } catch {
+      return null;
+    }
+  };
+
+  // Composites the presenter's live video frame with the whiteboard overlay
+  // into one image and sends it through the list's normal chat-attachment
+  // pipeline — no separate storage or schema needed.
+  const handleSaveScreenshot = async () => {
+    const video = presenterVideoRef.current;
+    const canvas = annotateRef.current?.getCanvas();
+    if (!video || video.videoWidth === 0) {
+      toast.error("Nothing to capture yet.");
+      return;
+    }
+    setSavingShot(true);
+    try {
+      const out = document.createElement("canvas");
+      out.width = video.videoWidth;
+      out.height = video.videoHeight;
+      const ctx = out.getContext("2d");
+      if (!ctx) throw new Error("Canvas unavailable");
+      ctx.drawImage(video, 0, 0, out.width, out.height);
+      if (canvas) ctx.drawImage(canvas, 0, 0, out.width, out.height);
+      const blob: Blob | null = await new Promise((resolve) => out.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("Could not encode screenshot");
+      const file = new File([blob], `whiteboard-${Date.now()}.png`, { type: "image/png" });
+      const attachment = await chat.uploadAttachment(file);
+      await chat.send.mutateAsync({ body: "", attachment });
+      toast.success("Saved to chat.");
+    } catch {
+      toast.error("Couldn't save the screenshot.");
+    } finally {
+      setSavingShot(false);
     }
   };
 
@@ -351,17 +409,37 @@ export function ListCallPanel({
             <div className="flex flex-col gap-2">
               <div className="relative">
                 <VideoTile
+                  ref={presenterVideoRef}
                   stream={presenterTile.stream}
                   name={presenterTile.name}
                   self={presenterTile.self}
                   muted={presenterTile.muted}
                   cameraOff={presenterTile.cameraOff}
                 />
-                <AnnotateCanvas drawOps={call.drawOps} onSend={call.sendDraw} />
+                <AnnotateCanvas
+                  ref={annotateRef}
+                  drawOps={call.drawOps}
+                  onSend={call.sendDraw}
+                  canDraw={call.canDraw}
+                  isController={call.isController}
+                  controllerName={call.controllerName}
+                  onTakeControl={call.takeControl}
+                  onReleaseControl={call.releaseControl}
+                  onUploadImage={handleUploadImage}
+                />
                 <div className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
                   <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#fc404d]" />
                   {formatDuration(elapsed)} · Live
                 </div>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveScreenshot()}
+                  disabled={savingShot}
+                  title="Save whiteboard to chat"
+                  className="pointer-events-auto absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75 disabled:opacity-60"
+                >
+                  <Camera className="h-3.5 w-3.5" />
+                </button>
               </div>
               {thumbnailTiles.length > 0 ? (
                 <div className="flex gap-2 overflow-x-auto">

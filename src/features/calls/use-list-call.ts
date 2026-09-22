@@ -19,6 +19,14 @@ export type ListCallControls = {
   drawOps: DrawOp[];
   /** Who is currently presenting: "self", a remote participant id, or null. */
   screenSharerId: string | null;
+  /** Who holds the whiteboard drawing lock ("take control"), or null when
+   *  it's open to everyone (the default). */
+  controllerId: string | null;
+  controllerName: string | null;
+  /** True when *you* hold the lock. */
+  isController: boolean;
+  /** True when the board is unlocked, or you're the one holding it. */
+  canDraw: boolean;
   join: () => Promise<boolean>;
   leave: () => void;
   toggleMute: () => void;
@@ -26,6 +34,8 @@ export type ListCallControls = {
   toggleScreenShare: () => Promise<void>;
   sendReaction: (emoji: string) => void;
   sendDraw: (op: DrawOp) => void;
+  takeControl: () => void;
+  releaseControl: () => void;
 };
 
 /** Full-mesh audio/video call for a List, scoped to the current members. */
@@ -41,6 +51,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const [sharing, setSharing] = useState(false);
   const [reactions, setReactions] = useState<CallReaction[]>([]);
   const [drawOps, setDrawOps] = useState<DrawOp[]>([]);
+  const [controllerId, setControllerId] = useState<string | null>(null);
+  const [controllerName, setControllerName] = useState<string | null>(null);
 
   const leave = useCallback(() => {
     roomRef.current?.leave();
@@ -55,6 +67,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setSharing(false);
     setReactions([]);
     setDrawOps([]);
+    setControllerId(null);
+    setControllerName(null);
   }, []);
 
   const join = useCallback(async (): Promise<boolean> => {
@@ -68,7 +82,11 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       listId,
       selfId,
       selfName,
-      onState: (s) => setParticipants(s.participants),
+      onState: (s) => {
+        setParticipants(s.participants);
+        setControllerId(s.controllerId);
+        setControllerName(s.controllerName);
+      },
       onReaction: (r) => {
         const item = { id: crypto.randomUUID(), from: r.from, emoji: r.emoji };
         setReactions((prev) => [...prev, item]);
@@ -154,6 +172,18 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setDrawOps((prev) => (op.kind === "clear" ? [] : [...prev, op]));
   }, []);
 
+  const takeControl = useCallback(() => {
+    roomRef.current?.takeControl();
+    // Optimistic local echo (presence re-sync will confirm shortly).
+    setControllerId(selfId);
+    setControllerName(selfName);
+  }, [selfId, selfName]);
+
+  const releaseControl = useCallback(() => {
+    roomRef.current?.releaseControl();
+    setControllerId((cur) => (cur === selfId ? null : cur));
+  }, [selfId]);
+
   // Clean up media/peers if the component unmounts mid-call.
   useEffect(() => {
     return () => {
@@ -167,6 +197,9 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     return participants.find((p) => p.sharing)?.id ?? null;
   }, [sharing, participants]);
 
+  const isController = controllerId === selfId;
+  const canDraw = controllerId === null || isController;
+
   return {
     joined,
     connecting,
@@ -179,6 +212,10 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     reactions,
     drawOps,
     screenSharerId,
+    controllerId,
+    controllerName,
+    isController,
+    canDraw,
     join,
     leave,
     toggleMute,
@@ -186,5 +223,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     toggleScreenShare,
     sendReaction,
     sendDraw,
+    takeControl,
+    releaseControl,
   };
 }

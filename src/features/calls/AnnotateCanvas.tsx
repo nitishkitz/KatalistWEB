@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
   MousePointer2,
   Pencil,
@@ -7,7 +7,10 @@ import {
   Circle,
   ArrowUpRight,
   MoreHorizontal,
+  Lock,
+  Unlock,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { DrawOp } from "./call-room";
 
@@ -27,10 +30,15 @@ const TOOLS: { id: Tool; Icon: typeof MousePointer2; label: string }[] = [
 const PEN_WIDTH = 0.004; // fraction of canvas width
 const ERASER_WIDTH = 0.03;
 
-function drawOp(ctx: CanvasRenderingContext2D, op: DrawOp, w: number, h: number) {
+function drawOp(ctx: CanvasRenderingContext2D, op: DrawOp, w: number, h: number, images: Map<string, HTMLImageElement>) {
   if (op.kind === "clear") return;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  if (op.kind === "image") {
+    const img = images.get(op.url);
+    if (img) ctx.drawImage(img, op.x * w, op.y * h, op.width * w, op.height * h);
+    return;
+  }
   if (op.kind === "stroke") {
     if (op.points.length === 0) return;
     ctx.globalCompositeOperation = op.tool === "eraser" ? "destination-out" : "source-over";
@@ -78,21 +86,42 @@ function drawOp(ctx: CanvasRenderingContext2D, op: DrawOp, w: number, h: number)
   }
 }
 
+export type AnnotateCanvasHandle = {
+  /** The live <canvas> element, for a parent to composite into a screenshot. */
+  getCanvas: () => HTMLCanvasElement | null;
+};
+
 /**
  * Collaborative whiteboard overlay for the call's expanded/screen-share view
- * (Figma parity). Every stroke/shape is broadcast over the call's existing
- * Realtime channel (see call-room.ts DrawOp) and replayed in order by every
- * viewer — ephemeral, never persisted, cleared when the call ends.
+ * (Figma parity). Every stroke/shape/pasted-image is broadcast over the call's
+ * existing Realtime channel (see call-room.ts DrawOp) and replayed in order by
+ * every viewer — ephemeral, never persisted, cleared when the call ends.
+ *
+ * Drawing is gated by a "take control" lock (canDraw): when someone else holds
+ * it, tools are hidden and only a "Take control" affordance shows — matching
+ * how mainstream whiteboards (e.g. Zoom's Presenting/Collaborating modes) keep
+ * a shared board from turning into simultaneous chaos, without inventing a
+ * "host" role this app's flat call model doesn't have (see use-list-call.ts).
  */
-export function AnnotateCanvas({
-  drawOps,
-  onSend,
-  className,
-}: {
-  drawOps: DrawOp[];
-  onSend: (op: DrawOp) => void;
-  className?: string;
-}) {
+export const AnnotateCanvas = forwardRef<
+  AnnotateCanvasHandle,
+  {
+    drawOps: DrawOp[];
+    onSend: (op: DrawOp) => void;
+    canDraw: boolean;
+    isController: boolean;
+    controllerName: string | null;
+    onTakeControl: () => void;
+    onReleaseControl: () => void;
+    /** Uploads a pasted image and returns its (temporary) URL — reuses the
+     *  call's existing chat-attachment storage pipeline (see ListCallPanel). */
+    onUploadImage: (file: File) => Promise<string | null>;
+    className?: string;
+  }
+>(function AnnotateCanvas(
+  { drawOps, onSend, canDraw, isController, controllerName, onTakeControl, onReleaseControl, onUploadImage, className },
+  forwardedRef,
+) {
   const [tool, setTool] = useState<Tool>("pointer");
   const [color, setColor] = useState(COLORS[0]);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -102,8 +131,29 @@ export function AnnotateCanvas({
   const pointsRef = useRef<{ x: number; y: number }[]>([]);
   const shapeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [preview, setPreview] = useState<DrawOp | null>(null);
+  const imagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const loadingRef = useRef<Set<string>>(new Set());
+  const [, bumpImagesLoaded] = useState(0);
 
-  const active = tool !== "pointer";
+  useImperativeHandle(forwardedRef, () => ({ getCanvas: () => canvasRef.current }), []);
+
+  // A tool is only usable while the board is unlocked or you hold the lock;
+  // otherwise force back to "pointer" so a stray drag can't queue up a stroke.
+  const active = canDraw && tool !== "pointer";
+
+  const ensureImageLoaded = useCallback((url: string) => {
+    if (imagesRef.current.has(url) || loadingRef.current.has(url)) return;
+    loadingRef.current.add(url);
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      imagesRef.current.set(url, img);
+      loadingRef.current.delete(url);
+      bumpImagesLoaded((n) => n + 1);
+    };
+    img.onerror = () => loadingRef.current.delete(url);
+    img.src = url;
+  }, []);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -111,9 +161,12 @@ export function AnnotateCanvas({
     if (!canvas || !ctx) return;
     const { w, h } = sizeRef.current;
     ctx.clearRect(0, 0, w, h);
-    for (const op of drawOps) drawOp(ctx, op, w, h);
-    if (preview) drawOp(ctx, preview, w, h);
-  }, [drawOps, preview]);
+    for (const op of drawOps) {
+      if (op.kind === "image") ensureImageLoaded(op.url);
+      drawOp(ctx, op, w, h, imagesRef.current);
+    }
+    if (preview) drawOp(ctx, preview, w, h, imagesRef.current);
+  }, [drawOps, preview, ensureImageLoaded]);
 
   // Keep the canvas pixel size matched to its container (crisp at any window size).
   useEffect(() => {
@@ -140,6 +193,49 @@ export function AnnotateCanvas({
   useEffect(() => {
     redraw();
   }, [redraw]);
+
+  // Paste an image from the clipboard onto the board (centered, aspect-ratio
+  // preserved). Uploads first so the broadcast payload is just a URL — pasted
+  // images can be several MB, far too large to send as raw bytes over a
+  // Realtime broadcast message.
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      if (!canDraw) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const item = [...items].find((it) => it.type.startsWith("image/"));
+      if (!item) return;
+      const file = item.getAsFile();
+      if (!file) return;
+      e.preventDefault();
+      void (async () => {
+        const url = await onUploadImage(file);
+        if (!url) {
+          toast.error("Couldn't paste that image.");
+          return;
+        }
+        const probe = new Image();
+        probe.onload = () => {
+          const { w: cw, h: ch } = sizeRef.current;
+          const targetW = 0.4; // 40% of board width, by default
+          const aspect = probe.naturalHeight / probe.naturalWidth;
+          const targetH = cw > 0 && ch > 0 ? (targetW * cw * aspect) / ch : targetW * aspect;
+          onSend({
+            kind: "image",
+            id: crypto.randomUUID(),
+            url,
+            x: 0.5 - targetW / 2,
+            y: 0.5 - targetH / 2,
+            width: targetW,
+            height: targetH,
+          });
+        };
+        probe.src = url;
+      })();
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [canDraw, onSend, onUploadImage]);
 
   const toNorm = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -215,46 +311,83 @@ export function AnnotateCanvas({
         onPointerCancel={onPointerUp}
       />
 
-      {/* Toolbar */}
-      <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/10 bg-white/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
-        {TOOLS.map(({ id, Icon, label }) => (
+      {/* Locked banner — someone else holds the board. */}
+      {!canDraw ? (
+        <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2.5 rounded-full border border-black/10 bg-white/95 px-3.5 py-2 text-[12px] font-medium text-[#3d3f74] shadow-lg backdrop-blur-sm">
+          <Lock className="h-3.5 w-3.5 text-[#8487a7]" />
+          {controllerName ?? "Someone"} is presenting
           <button
-            key={id}
             type="button"
-            onClick={() => setTool(id)}
-            title={label}
-            className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors cursor-pointer",
-              tool === id ? "bg-[#7b56fd] text-white" : "text-[#3d3f74] hover:bg-muted",
-            )}
+            onClick={onTakeControl}
+            className="inline-flex items-center gap-1 rounded-full bg-[#7b56fd] px-2.5 py-1 text-[11.5px] font-semibold text-white hover:brightness-95 cursor-pointer"
           >
-            <Icon className="h-4 w-4" />
+            Take control
           </button>
-        ))}
-        <span className="mx-0.5 h-5 w-px bg-black/10" />
-        {COLORS.map((c) => (
+        </div>
+      ) : (
+        /* Toolbar — visible whenever no one else holds the lock. */
+        <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/10 bg-white/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
+          {TOOLS.map(({ id, Icon, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTool(id)}
+              title={label}
+              className={cn(
+                "inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors cursor-pointer",
+                tool === id ? "bg-[#7b56fd] text-white" : "text-[#3d3f74] hover:bg-muted",
+              )}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          ))}
+          <span className="mx-0.5 h-5 w-px bg-black/10" />
+          {COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setColor(c)}
+              title={c}
+              className={cn(
+                "h-5 w-5 shrink-0 rounded-full border-2 transition-transform cursor-pointer",
+                color === c ? "scale-110 border-black/50" : "border-transparent",
+              )}
+              style={{ backgroundColor: c }}
+            />
+          ))}
+          <span className="mx-0.5 h-5 w-px bg-black/10" />
           <button
-            key={c}
             type="button"
-            onClick={() => setColor(c)}
-            title={c}
-            className={cn(
-              "h-5 w-5 shrink-0 rounded-full border-2 transition-transform cursor-pointer",
-              color === c ? "scale-110 border-black/50" : "border-transparent",
-            )}
-            style={{ backgroundColor: c }}
-          />
-        ))}
-        <span className="mx-0.5 h-5 w-px bg-black/10" />
-        <button
-          type="button"
-          onClick={clearBoard}
-          title="Clear board"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#3d3f74] hover:bg-muted cursor-pointer"
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
-      </div>
+            onClick={clearBoard}
+            title="Clear board"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#3d3f74] hover:bg-muted cursor-pointer"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          <span className="mx-0.5 h-5 w-px bg-black/10" />
+          {isController ? (
+            <button
+              type="button"
+              onClick={onReleaseControl}
+              title="Let anyone draw"
+              className="inline-flex items-center gap-1.5 rounded-full bg-[#f0e9fb] px-2.5 py-1.5 text-[11.5px] font-semibold text-[#6638ec] hover:brightness-95 cursor-pointer"
+            >
+              <Unlock className="h-3.5 w-3.5" />
+              Presenting
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onTakeControl}
+              title="Take exclusive control of the board"
+              className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-[11.5px] font-semibold text-[#3d3f74] hover:bg-muted cursor-pointer"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              Take control
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
-}
+});
