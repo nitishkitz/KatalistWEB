@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import type { Importance, Pace, ThingFile, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
+import { extractErrorMessage } from "@/lib/domain-error";
 import { authedFetch } from "@/lib/authed-fetch";
 import { DEMO_ACTOR_BY_KEY } from "@/features/demo/identities";
 import {
@@ -117,7 +118,7 @@ async function runDomainMutation<T>(handlers: {
   try {
     return await handlers.live();
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error ?? "");
+    const msg = extractErrorMessage(error) ?? "";
     if (
       msg.includes("Thing not found") ||
       msg.includes("not found") ||

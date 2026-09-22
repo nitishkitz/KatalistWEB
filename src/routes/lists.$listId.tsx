@@ -71,7 +71,7 @@ import { useList } from "@/features/lists/use-lists";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useListMessages, type ChatAttachment } from "@/features/lists/use-list-messages";
 import { formatFileSize } from "@/lib/file-utils";
-import { domainErrorMessage } from "@/lib/domain-error";
+import { domainErrorMessage, extractErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { matchAvatarByName } from "@/features/people/directory";
@@ -1489,7 +1489,7 @@ function ListDetailPage() {
                                           await qc.invalidateQueries({ queryKey: ["list", listId] });
                                           await qc.invalidateQueries({ queryKey: ["lists"] });
                                         } catch (err: unknown) {
-                                          toast.error(err instanceof Error ? err.message : "Failed to update role");
+                                          toast.error(extractErrorMessage(err) ?? "Failed to update role");
                                         }
                                       }}
                                       className="text-[12px]"
@@ -1514,7 +1514,7 @@ function ListDetailPage() {
                                           await qc.invalidateQueries({ queryKey: ["lists"] });
                                           await qc.invalidateQueries({ queryKey: ["assignable-people"] });
                                         } catch (err: unknown) {
-                                          toast.error(err instanceof Error ? err.message : "Failed to remove member");
+                                          toast.error(extractErrorMessage(err) ?? "Failed to remove member");
                                         }
                                       }}
                                     >
@@ -1728,7 +1728,7 @@ function ListDetailPage() {
                                       await qc.invalidateQueries({ queryKey: ["lists"] });
                                       await qc.invalidateQueries({ queryKey: ["assignable-people"] });
                                     } catch (err: unknown) {
-                                      toast.error(err instanceof Error ? err.message : "Couldn't add team member. Please try again.");
+                                      toast.error(extractErrorMessage(err) ?? "Couldn't add team member. Please try again.");
                                     } finally {
                                       setAddingPersonId(null);
                                     }

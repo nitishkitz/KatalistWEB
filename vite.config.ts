@@ -8,6 +8,7 @@ import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
 import { getSupabaseAdmin } from "./server/lib/supabase-admin.ts";
 import { resolvePersonToProfileId } from "./server/lib/resolve-person.ts";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { extractErrorMessage } from "./src/lib/domain-error.ts";
 
 /**
  * Dev-middleware equivalent of server/lib/require-user.ts. Vite middleware
@@ -231,7 +232,7 @@ function phoneAuthPlugin(): Plugin {
           }));
         } catch (err: unknown) {
           console.error("[phone-auth] error:", err);
-          const message = err instanceof Error ? err.message : undefined;
+          const message = extractErrorMessage(err);
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
@@ -463,7 +464,7 @@ function listMemberPlugin(): Plugin {
           }
         } catch (err: unknown) {
           console.error("[list-members] error:", err);
-          const message = err instanceof Error ? err.message : undefined;
+          const message = extractErrorMessage(err);
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
@@ -584,7 +585,7 @@ function thingsReopenPlugin(): Plugin {
           res.end(JSON.stringify({ ok: true, thing: data }));
         } catch (err: unknown) {
           console.error("[things-reopen] error:", err);
-          const message = err instanceof Error ? err.message : undefined;
+          const message = extractErrorMessage(err);
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");
@@ -709,7 +710,7 @@ function completeAttachmentPlugin(): Plugin {
           res.end(JSON.stringify({ ok: true, attachment: completed }));
         } catch (err: unknown) {
           console.error("[complete-attachment] error:", err);
-          const message = err instanceof Error ? err.message : undefined;
+          const message = extractErrorMessage(err);
           if (!res.headersSent) {
             res.statusCode = 500;
             res.setHeader("content-type", "application/json");

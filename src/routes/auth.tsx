@@ -37,6 +37,7 @@ import { useSession, DEMO_PERSONAS, signInAsDemo, DemoPersona } from "@/hooks/us
 import { Logo } from "@/components/katalist/Logo";
 import { demoEnabled } from "@/lib/session-mode";
 import { localFixedOtp } from "@/lib/fixed-otp";
+import { extractErrorMessage } from "@/lib/domain-error";
 import {
   createLocalUser,
   resolveFixedOtpOutcome,
@@ -241,7 +242,7 @@ function AuthPage() {
         return;
       } catch (err: unknown) {
         setBusy(false);
-        toast.error(err instanceof Error ? err.message : "Failed to authenticate");
+        toast.error(extractErrorMessage(err) ?? "Failed to authenticate");
         setOtp("");
         return;
       }
