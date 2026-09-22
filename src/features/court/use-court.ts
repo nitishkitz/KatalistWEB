@@ -94,6 +94,10 @@ export function useCourt() {
       myActorId: query.data?.myActorId ?? null,
       live: true as const,
     };
+    // readVersion forces re-derivation when getThingLastReadAt's mutable
+    // module-level read-state changes; the memo doesn't reference
+    // readVersion directly, so the linter can't see it's a real dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, query.data, context, shred, snooze, readVersion]);
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");

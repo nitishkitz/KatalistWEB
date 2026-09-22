@@ -239,7 +239,14 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
 
     useLayoutEffect(() => {
       return () => {
+        // Deliberately reading .current at cleanup/unmount time, not a
+        // mount-time snapshot: these refs get reassigned to whatever card
+        // is currently active/outgoing as swipes happen, and the goal on
+        // unmount is to kill tweens on whichever nodes are live *now*, not
+        // whichever were live when this effect first ran.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         gsap.killTweensOf(activeCardRef.current);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
         gsap.killTweensOf(outgoingCardRef.current);
       };
     }, []);

@@ -34,6 +34,12 @@ export function CourtDetailModal({
     } else {
       setSelectedFile(null);
     }
+    // Deliberately keyed only by thing.id: this resets the selected file
+    // when the Thing identity changes, not on every re-render where
+    // thing.files is a new array reference or selectedFile just changed
+    // (which this effect itself sets) — including either would fight the
+    // user's in-modal file selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thing?.id]);
 
   useEffect(() => {

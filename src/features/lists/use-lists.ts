@@ -57,6 +57,10 @@ export function useLists() {
   const lists = useMemo(() => {
     if (preview) return getLists().filter((l) => l.context === context);
     return excludePersonallyShreddedLists(query.data ?? [], shred);
+    // version forces re-derivation when local-state's mutable module-level
+    // store changes (used by getLists() above); the linter can't see that
+    // indirection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, query.data, context, version, shred]);
 
   const create = useMutation({

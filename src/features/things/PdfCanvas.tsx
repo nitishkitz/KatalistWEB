@@ -61,7 +61,6 @@ export function PdfCanvas({ url, page = 1, className, onNumPages }: PdfCanvasPro
   // Re-render when the requested page changes.
   useEffect(() => {
     if (docRef.current) void renderPage(page);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
   async function renderPage(pageNum: number) {

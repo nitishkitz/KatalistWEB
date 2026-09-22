@@ -73,6 +73,10 @@ export function useListThings(listId: string | undefined) {
       return getMergedThings().filter((t) => t.listId === listId);
     }
     return excludePersonallyShreddedThings(query.data ?? [], shred);
+    // version forces re-derivation when local-state's mutable module-level
+    // store changes (used by getMergedThings()/getListById() above); the
+    // linter can't see that indirection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, query.data, listId, version, shred, hidden]);
 
   return { things, isLoading: !preview && !hidden && query.isLoading, myActorId: court.myActorId };

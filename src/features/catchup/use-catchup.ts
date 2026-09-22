@@ -195,7 +195,10 @@ export function useCatchup(): UseCatchup {
 
   const previewMoments = useMemo(
     () => (preview ? derivePreviewMoments(context) : []),
-    // localVersion re-derives on any local mutation.
+    // localVersion re-derives on any local mutation. derivePreviewMoments()
+    // reads mutable module-level local-state, not localVersion itself, so
+    // the linter can't see it's a real dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [preview, context, localVersion],
   );
 

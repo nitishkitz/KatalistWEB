@@ -111,6 +111,9 @@ export function CourtFocusView({
     } else {
       setSelectedFile(null);
     }
+    // Deliberately keyed only by selectedThing.id — see the identical
+    // pattern/reasoning in CourtDetailModal.tsx.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedThing?.id]);
 
   useEffect(() => {

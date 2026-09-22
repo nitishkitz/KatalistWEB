@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertCircle,
@@ -179,34 +179,37 @@ function CourtPage() {
     now.concat(next, later, theirs).find((t) => t.id === selectedId) ??
     null;
 
-  function sortThings(list: Thing[]) {
-    return [...list].sort((a, b) => {
-      if (sort === "due")
-        return (
-          (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) -
-          (b.dueAt ? new Date(b.dueAt).getTime() : Infinity)
-        );
-      if (sort === "updated")
-        return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-      if (sort === "importance")
-        return Number(a.ownerImportance === "now") > Number(b.ownerImportance === "now")
-          ? -1
-          : a.ownerImportance.localeCompare(b.ownerImportance);
-      return (a.personalPace ?? "next").localeCompare(b.personalPace ?? "next");
-    });
-  }
+  const sortThings = useCallback(
+    (list: Thing[]) => {
+      return [...list].sort((a, b) => {
+        if (sort === "due")
+          return (
+            (a.dueAt ? new Date(a.dueAt).getTime() : Infinity) -
+            (b.dueAt ? new Date(b.dueAt).getTime() : Infinity)
+          );
+        if (sort === "updated")
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        if (sort === "importance")
+          return Number(a.ownerImportance === "now") > Number(b.ownerImportance === "now")
+            ? -1
+            : a.ownerImportance.localeCompare(b.ownerImportance);
+        return (a.personalPace ?? "next").localeCompare(b.personalPace ?? "next");
+      });
+    },
+    [sort],
+  );
 
   const fNow = useMemo(
     () => sortThings(now.filter((t) => matchesFilter(t, filter, query))),
-    [now, filter, query, sort],
+    [now, filter, query, sortThings],
   );
   const fNext = useMemo(
     () => sortThings(next.filter((t) => matchesFilter(t, filter, query))),
-    [next, filter, query, sort],
+    [next, filter, query, sortThings],
   );
   const fLater = useMemo(
     () => sortThings(later.filter((t) => matchesFilter(t, filter, query))),
-    [later, filter, query, sort],
+    [later, filter, query, sortThings],
   );
 
   const dueToday = now.filter(

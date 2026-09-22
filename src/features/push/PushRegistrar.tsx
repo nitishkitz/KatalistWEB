@@ -93,7 +93,7 @@ export function PushRegistrar() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, navigate]);
 
   return null;
 }

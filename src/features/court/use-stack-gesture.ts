@@ -239,7 +239,7 @@ export function useStackGesture(options: StackGestureOptions): {
       scheduleSuppressClickClear();
       setOffset({ x: 0, y: 0 });
     },
-    [options.interactionDisabled, options.onStep, scheduleSuppressClickClear],
+    [options, scheduleSuppressClickClear],
   );
 
   const gestureProps = React.useMemo(
