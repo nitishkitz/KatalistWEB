@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { NudgesSkeleton } from "@/components/katalist/ScreenSkeletons";
+import { AsyncState } from "@/components/katalist/AsyncState";
 import { type NudgeGroup } from "@/features/nudges/fixtures";
 import { useNudges } from "@/features/nudges/use-nudges";
 import { useCourt } from "@/features/court/use-court";
@@ -125,16 +126,19 @@ function NudgesPage() {
     );
   };
 
-  if (isLoading) {
-    return (
-      <AppShell>
-        <NudgesSkeleton />
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell>
+      <AsyncState
+        isLoading={isLoading}
+        data={allRows}
+        error={nudgesError}
+        onRetry={retryNudges}
+        isEmpty={allRows.length === 0}
+        emptyTitle="You're all caught up"
+        emptyDescription="No nudges need your attention right now."
+        loadingContent={<NudgesSkeleton />}
+      >
+        {() => (
       <InlineThingDetailWorkspace thing={selected} onClose={() => setSelectedId(null)} flatPanel>
         <div className="space-y-5">
           {/* Header */}
@@ -172,19 +176,6 @@ function NudgesPage() {
               </button>
             </div>
           </div>
-
-          {nudgesError ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12.5px] text-amber-900">
-              <span>{domainErrorMessage(nudgesError)}</span>
-              <button
-                type="button"
-                onClick={() => retryNudges()}
-                className="inline-flex h-7 items-center rounded-[6px] border border-amber-300 bg-white px-2.5 text-[12px] font-medium text-amber-900 hover:bg-amber-100"
-              >
-                Retry
-              </button>
-            </div>
-          ) : null}
 
           {/* Body */}
           <div className="grid gap-5 xl:grid-cols-[1fr_372px]">
@@ -374,6 +365,8 @@ function NudgesPage() {
           </div>
         </div>
       </InlineThingDetailWorkspace>
+        )}
+      </AsyncState>
     </AppShell>
   );
 }
