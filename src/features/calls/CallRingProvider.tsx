@@ -97,7 +97,12 @@ export function CallRingProvider() {
         search: { call: "1" },
       });
     } else {
-      void navigate({ to: "/lists/$listId", params: { listId } });
+      // Same signal as the hub branch above — belt-and-suspenders alongside
+      // the sessionStorage flag and the in-memory autojoin-signal, in case
+      // either of those is lost (e.g. sessionStorage disabled, or a second
+      // ring overwrites the single in-memory pending slot before this page
+      // finishes mounting).
+      void navigate({ to: "/lists/$listId", params: { listId }, search: { call: "1" } });
     }
   };
 
