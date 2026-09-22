@@ -1,5 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { PhoneCall, X } from "lucide-react";
+import { requestAutojoin } from "@/features/calls/autojoin-signal";
 import { useUpcomingMeetingReminder } from "./use-upcoming-meetings-reminder";
 
 function formatCountdown(ms: number): string {
@@ -11,9 +12,14 @@ function formatCountdown(ms: number): string {
 
 /** Global "starting soon" call reminder — same fixed-card placement as
  *  GhostCard, mounted alongside it in AppShell. Join reuses the existing
- *  `?call=1` auto-join handoff (ConversationWorkspace / lists.$listId.tsx),
- *  so no new call-starting logic is needed: it's the same mechanism an
- *  incoming-ring "Join" already uses. */
+ *  auto-join handoff (ConversationWorkspace / lists.$listId.tsx) — same
+ *  three redundant signals CallRingProvider's incoming-ring "Join" already
+ *  uses (in-memory requestAutojoin, a sessionStorage flag, and ?call=1 in
+ *  the URL), not just the URL param alone. Relying on the URL param by
+ *  itself was the bug: on a fresh cross-route navigation (e.g. from Court),
+ *  the destination page can mount before its identity/session hooks are
+ *  ready, and by the time its own effect re-runs, the earlier symptom was
+ *  the call window never appearing at all. */
 export function MeetingReminderCard() {
   const navigate = useNavigate();
   const { reminder, inProgress, dismiss } = useUpcomingMeetingReminder();
@@ -22,6 +28,17 @@ export function MeetingReminderCard() {
   const msUntilStart = new Date(reminder.startsAt).getTime() - Date.now();
   const to = reminder.listKind === "list" ? "/lists/$listId" : "/team/$conversationId";
   const params = reminder.listKind === "list" ? { listId: reminder.listId } : { conversationId: reminder.listId };
+
+  const join = () => {
+    requestAutojoin(reminder.listId);
+    try {
+      sessionStorage.setItem(`katalist.autojoin.${reminder.listId}`, "1");
+    } catch {
+      // sessionStorage may be unavailable; the other two signals still cover it
+    }
+    dismiss(reminder.id);
+    void navigate({ to, params, search: { call: "1" } });
+  };
 
   return (
     // Stacked above GhostCard's position (bottom-20/bottom-6) so the two
@@ -47,10 +64,7 @@ export function MeetingReminderCard() {
         <button
           type="button"
           className="rounded-md bg-primary px-2.5 py-1 text-[12px] text-primary-foreground"
-          onClick={() => {
-            dismiss(reminder.id);
-            void navigate({ to, params, search: { call: "1" } });
-          }}
+          onClick={join}
         >
           Join
         </button>
