@@ -59,7 +59,7 @@ export function useUpcomingMeetingReminder() {
     refetchInterval: 30_000,
   });
 
-  const meetings = query.data ?? [];
+  const meetings = useMemo(() => query.data ?? [], [query.data]);
 
   const reminder = useMemo(() => {
     const now = Date.now();
