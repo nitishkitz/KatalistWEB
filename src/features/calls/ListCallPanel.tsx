@@ -260,15 +260,15 @@ export function ListCallPanel({
     );
   }
 
-  // Floating call window (bottom-right), rather than a page-covering modal —
-  // keeps the rest of the app usable while a call is in progress, matching the
-  // existing minimize-to-pill behavior, while adopting the Figma window chrome
-  // (title bar, Invite, participants dock).
+  // Centered call window over a dimmed backdrop (Figma parity) — not a
+  // click-to-dismiss backdrop, since a stray click shouldn't hide an active
+  // call; use Minimize for that instead.
   return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in duration-150">
     <div
       ref={rootRef}
       className={cn(
-        "fixed bottom-4 right-4 z-50 flex flex-col overflow-hidden rounded-2xl border border-black/10 bg-white transition-[width] duration-200",
+        "flex max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white transition-[width] duration-200 animate-in zoom-in-98",
         presenterTile ? "w-[min(96vw,1040px)]" : "w-[min(96vw,780px)]",
       )}
       style={{ boxShadow: "0 24px 60px -12px rgba(15,23,42,0.35)" }}
@@ -560,6 +560,7 @@ export function ListCallPanel({
           Leave
         </button>
       </div>
+    </div>
     </div>
   );
 }
