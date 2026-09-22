@@ -7,6 +7,7 @@ import {
   Circle,
   ArrowUpRight,
   MoreHorizontal,
+  Undo2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -29,7 +30,7 @@ const PEN_WIDTH = 0.004; // fraction of canvas width
 const ERASER_WIDTH = 0.03;
 
 function drawOp(ctx: CanvasRenderingContext2D, op: DrawOp, w: number, h: number, images: Map<string, HTMLImageElement>) {
-  if (op.kind === "clear") return;
+  if (op.kind === "clear" || op.kind === "undo") return;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   if (op.kind === "image") {
@@ -280,6 +281,15 @@ export const AnnotateCanvas = forwardRef<
     toast.success("Board cleared");
   };
 
+  // Removes the single most recently added stroke/shape/image — a quick
+  // way to back out one scribble without dragging the pixel eraser over it
+  // (which only erases the part you actually trace) or nuking everything
+  // with Clear board.
+  const undoLast = () => {
+    if (drawOps.length === 0) return;
+    onSend({ kind: "undo" });
+  };
+
   const cursor = useMemo(() => {
     if (!active) return "default";
     if (tool === "eraser") return "cell";
@@ -334,6 +344,15 @@ export const AnnotateCanvas = forwardRef<
           />
         ))}
         <span className="mx-0.5 h-5 w-px bg-black/10" />
+        <button
+          type="button"
+          onClick={undoLast}
+          disabled={drawOps.length === 0}
+          title="Remove the last scribble"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#3d3f74] hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+        >
+          <Undo2 className="h-4 w-4" />
+        </button>
         <button
           type="button"
           onClick={clearBoard}

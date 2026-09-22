@@ -55,7 +55,12 @@ export type DrawOp =
   | { kind: "stroke"; id: string; tool: "pen" | "eraser"; color: string; width: number; points: { x: number; y: number }[] }
   | { kind: "shape"; id: string; tool: "rect" | "ellipse" | "arrow"; color: string; width: number; x1: number; y1: number; x2: number; y2: number }
   | { kind: "image"; id: string; url: string; x: number; y: number; width: number; height: number }
-  | { kind: "clear" };
+  | { kind: "clear" }
+  /** Remove the single most recently added stroke/shape/image — a quick
+   *  "undo" action, distinct from the pixel-level eraser tool (which only
+   *  erases the part you drag over) and from "clear" (which wipes
+   *  everything). Removes the whole board's last item, not just your own. */
+  | { kind: "undo" };
 
 type PeerSlot = {
   pc: RTCPeerConnection;

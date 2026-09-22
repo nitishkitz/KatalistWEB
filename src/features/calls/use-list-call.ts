@@ -4,6 +4,13 @@ import { CallRoom, type CallParticipant, type DrawOp } from "./call-room";
 
 export type CallReaction = { id: string; from: string; emoji: string };
 
+/** Reduces one incoming/outgoing DrawOp onto the shared whiteboard history. */
+function applyDrawOp(prev: DrawOp[], op: DrawOp): DrawOp[] {
+  if (op.kind === "clear") return [];
+  if (op.kind === "undo") return prev.slice(0, -1);
+  return [...prev, op];
+}
+
 export type ListCallControls = {
   joined: boolean;
   connecting: boolean;
@@ -112,7 +119,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
         setTimeout(() => setReactions((prev) => prev.filter((x) => x.id !== item.id)), 4000);
       },
       onDraw: (op) => {
-        setDrawOps((prev) => (op.kind === "clear" ? [] : [...prev, op]));
+        setDrawOps((prev) => applyDrawOp(prev, op));
       },
     });
     roomRef.current = room;
@@ -217,7 +224,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const sendDraw = useCallback((op: DrawOp) => {
     roomRef.current?.sendDraw(op);
     // Optimistic local echo — the room never re-broadcasts to the sender.
-    setDrawOps((prev) => (op.kind === "clear" ? [] : [...prev, op]));
+    setDrawOps((prev) => applyDrawOp(prev, op));
   }, []);
 
   const toggleHand = useCallback(() => {
