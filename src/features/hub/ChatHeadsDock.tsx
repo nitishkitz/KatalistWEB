@@ -135,9 +135,14 @@ export function ChatHeadsDock() {
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [unreadById, setUnreadById] = useState<Record<string, number>>({});
-  const dragRef = useRef<{ startX: number; startY: number; startPos: { x: number; y: number }; moved: boolean } | null>(
-    null,
-  );
+  const bubbleRef = useRef<HTMLButtonElement | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    startPos: { x: number; y: number };
+    current: { x: number; y: number };
+    moved: boolean;
+  } | null>(null);
 
   const selected = conversations.find((c) => c.id === selectedId) ?? conversations[0] ?? null;
 
@@ -154,9 +159,14 @@ export function ChatHeadsDock() {
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    dragRef.current = { startX: e.clientX, startY: e.clientY, startPos: pos, moved: false };
+    dragRef.current = { startX: e.clientX, startY: e.clientY, startPos: pos, current: pos, moved: false };
   };
 
+  // Move the bubble by writing directly to the DOM, not React state — a
+  // setPos() per pointermove was re-rendering the whole dock (every
+  // conversation's unread-count query included) up to 60+ times a second,
+  // fighting the drag and making it feel broken/laggy. State is only
+  // committed once, on release.
   const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
     if (!drag) return;
@@ -166,7 +176,13 @@ export function ChatHeadsDock() {
     if (!drag.moved) return;
     const maxX = window.innerWidth - BUBBLE_SIZE;
     const maxY = window.innerHeight - BUBBLE_SIZE;
-    setPos({ x: clamp(drag.startPos.x + dx, maxX), y: clamp(drag.startPos.y + dy, maxY) });
+    const next = { x: clamp(drag.startPos.x + dx, maxX), y: clamp(drag.startPos.y + dy, maxY) };
+    drag.current = next;
+    const el = bubbleRef.current;
+    if (el) {
+      el.style.left = `${next.x}px`;
+      el.style.top = `${next.y}px`;
+    }
   };
 
   const onPointerUp = () => {
@@ -174,8 +190,9 @@ export function ChatHeadsDock() {
     dragRef.current = null;
     if (!drag) return;
     if (drag.moved) {
+      setPos(drag.current);
       try {
-        localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(pos));
+        localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(drag.current));
       } catch {
         // ignore storage errors
       }
@@ -195,6 +212,7 @@ export function ChatHeadsDock() {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverAnchor asChild>
           <button
+            ref={bubbleRef}
             type="button"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
