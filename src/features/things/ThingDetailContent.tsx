@@ -635,7 +635,13 @@ export function ThingDetailContent({
                     key={pace}
                     type="button"
                     disabled={busy || !caps?.canSetPace}
-                    onClick={() => run.mutate(async () => rpcSetPersonalPace(thing.id, pace))}
+                    onClick={() =>
+                      run.mutate(
+                        withOptimisticPatch(qc, thing.id, { personalPace: pace }, async () => {
+                          await rpcSetPersonalPace(thing.id, pace);
+                        }),
+                      )
+                    }
                     className={cn(
                       "h-[22px] min-w-[48px] rounded-[5px] px-2 text-[10px] font-medium capitalize transition-colors cursor-pointer disabled:cursor-not-allowed",
                       activePace === pace
@@ -1094,10 +1100,20 @@ export function ThingDetailContent({
                 onChange={(e) => {
                   const targetId = e.target.value;
                   if (!targetId || targetId === thing.assignee.id) return;
-                  run.mutate(async () => {
-                    await rpcReassignThing(thing.id, targetId);
-                    toast.success("Waiting for Catch.");
-                  });
+                  const target = assignableList.find((p) => p.id === targetId);
+                  run.mutate(
+                    withOptimisticPatch(
+                      qc,
+                      thing.id,
+                      target
+                        ? { assignee: target, acknowledgement: "waiting_for_catch", personalPace: null, caughtAt: null }
+                        : {},
+                      async () => {
+                        await rpcReassignThing(thing.id, targetId);
+                        toast.success("Waiting for Catch.");
+                      },
+                    ),
+                  );
                 }}
               >
                 {assignableList.map((p) => (
@@ -1185,9 +1201,11 @@ export function ThingDetailContent({
                     type="button"
                     disabled={busy || !caps?.canSetPace}
                     onClick={() =>
-                      run.mutate(async () => {
-                        await rpcSetPersonalPace(thing.id, p);
-                      })
+                      run.mutate(
+                        withOptimisticPatch(qc, thing.id, { personalPace: p }, async () => {
+                          await rpcSetPersonalPace(thing.id, p);
+                        }),
+                      )
                     }
                     className={cn(
                       "relative z-10 h-7 text-[11px] font-medium uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -1236,14 +1254,21 @@ export function ThingDetailContent({
                     busy || terminal || (s === "sorted" ? !caps?.canSort : !caps?.canSetStatus)
                   }
                   onClick={() =>
-                    run.mutate(async () => {
-                      if (s === "sorted") {
-                        await rpcSortThing(thing.id);
-                        onAfterTerminalAction?.();
-                      } else if (s === "not_started" || s === "under_progress") {
-                        await rpcSetWorkStatus(thing.id, s);
-                      }
-                    })
+                    run.mutate(
+                      withOptimisticPatch(
+                        qc,
+                        thing.id,
+                        s === "sorted" ? { workStatus: "sorted", sortedAt: new Date().toISOString() } : { workStatus: s },
+                        async () => {
+                          if (s === "sorted") {
+                            await rpcSortThing(thing.id);
+                            onAfterTerminalAction?.();
+                          } else if (s === "not_started" || s === "under_progress") {
+                            await rpcSetWorkStatus(thing.id, s);
+                          }
+                        },
+                      ),
+                    )
                   }
                   className={cn(
                     "flex h-8 items-center justify-center rounded-lg border px-2 text-center text-[10px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
@@ -1374,7 +1399,11 @@ export function ThingDetailContent({
                     onClick={() => {
                       if (!due) return;
                       const iso = new Date(due).toISOString();
-                      run.mutate(async () => rpcSetDue(thing.id, iso, true));
+                      run.mutate(
+                        withOptimisticPatch(qc, thing.id, { dueAt: iso, dueHasTime: true }, async () => {
+                          await rpcSetDue(thing.id, iso, true);
+                        }),
+                      );
                     }}
                   >
                     Set
@@ -1393,10 +1422,17 @@ export function ThingDetailContent({
                     type="button"
                     disabled={busy}
                     onClick={() =>
-                      run.mutate(async () => {
-                        await rpcCatchThing(thing.id);
-                        toast.success("Caught.");
-                      })
+                      run.mutate(
+                        withOptimisticPatch(
+                          qc,
+                          thing.id,
+                          { acknowledgement: "caught", personalPace: "next", caughtAt: new Date().toISOString() },
+                          async () => {
+                            await rpcCatchThing(thing.id);
+                            toast.success("Caught.");
+                          },
+                        ),
+                      )
                     }
                     className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[11px] font-medium text-primary hover:bg-white disabled:opacity-60"
                   >
@@ -1432,11 +1468,18 @@ export function ThingDetailContent({
                         type="button"
                         disabled={busy}
                         onClick={() =>
-                          run.mutate(async () => {
-                            await rpcSortThing(thing.id);
-                            toast.success("Nicely sorted.");
-                            onAfterTerminalAction?.();
-                          })
+                          run.mutate(
+                            withOptimisticPatch(
+                              qc,
+                              thing.id,
+                              { workStatus: "sorted", sortedAt: new Date().toISOString() },
+                              async () => {
+                                await rpcSortThing(thing.id);
+                                toast.success("Nicely sorted.");
+                                onAfterTerminalAction?.();
+                              },
+                            ),
+                          )
                         }
                         className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
                       >
@@ -1455,11 +1498,18 @@ export function ThingDetailContent({
                         disabled={busy}
                         onClick={() => {
                           if (window.confirm("Are you sure you want to cancel this thing?")) {
-                            run.mutate(async () => {
-                              await rpcCancelThing(thing.id);
-                              toast.success("Cancelled.");
-                              onAfterTerminalAction?.();
-                            });
+                            run.mutate(
+                              withOptimisticPatch(
+                                qc,
+                                thing.id,
+                                { workStatus: "cancelled", cancelledAt: new Date().toISOString() },
+                                async () => {
+                                  await rpcCancelThing(thing.id);
+                                  toast.success("Cancelled.");
+                                  onAfterTerminalAction?.();
+                                },
+                              ),
+                            );
                           }
                         }}
                         className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[11px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
