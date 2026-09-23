@@ -7,7 +7,7 @@ Recorded per the plan's verification matrix (§14). Each row is filled in as the
 
 | Scenario | Automated evidence | Browser/staging evidence |
 |---|---|---|
-| Filter-preserving List detail | Not run | Not run |
+| Filter-preserving List detail | `fetch-list-detail.test.mjs` — 7/7 pass, filter-aware mocks assert actual `.eq`/`.is` arguments (not just call counts); 6/7 verified to fail against the pre-fix unfiltered version | Not run |
 | Required read failures | `fetch-buckets-error-propagation.test.mjs`, `map-list-rows-error-propagation.test.mjs`, `fetch-court-error-propagation.test.mjs` — all pass, all independently verified to fail against pre-fix source | Not run |
 | Actor cache | Not run | Not run |
 | 20-event burst | Not run | Not run |
@@ -35,6 +35,7 @@ git diff --check
 | Date | Commit | typecheck | test | lint | build | diff --check | Notes |
 |---|---|---|---|---|---|---|---|
 | 2026-09-23 | `f975423` | pass | 243/243 | 0 errors, 80 warnings | pass | not run this pass | Baseline for P0; no code changed in P0 itself |
+| 2026-09-23 | (pending) | pass | 249/249 | 0 errors, 80 warnings | pass | clean | P1: List-detail eligibility filters restored |
 
 ## Deferrals accepted so far
 

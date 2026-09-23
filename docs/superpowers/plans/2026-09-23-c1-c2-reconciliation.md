@@ -12,7 +12,7 @@ Purpose: single running status record for the C1 completion + C2 implementation 
 | Bucket-item/Thing/List/member required-data error propagation | Completed | `fetch-buckets.ts`, `fetch-bucket-items.ts`, `map-list-rows.ts`; failure-path tests verified against pre-fix source |
 | Court actor-read error propagation (distinct from legitimate no-actor) | Completed | `fetch-court.ts`; `fetch-court-error-propagation.test.mjs` |
 | Session-identity reuse (no redundant `auth.getUser()` in Court) | Completed | `fetch-court.ts`; source-level RLS evidence only, not live-verified — caveat stands |
-| Single-List fetch/mapping extraction | In progress | `fetch-list-detail.ts` exists but **dropped the `archived_at`/`kind` eligibility filters** the old `fetchLists()`-based path had — this is the P1 regression to fix next, not yet closed |
+| Single-List fetch/mapping extraction, with eligibility filters preserved | Completed | `fetch-list-detail.ts` now requires `archived_at IS NULL` and `kind = "list"` on the primary query, with a narrowly-scoped (missing-`kind`-column only) compatibility fallback that still filters by exact id and archive status; `fetch-list-detail.test.mjs` covers normal/archived/dm-group/missing-row/fallback/permission-failure/mapper-failure, verified to fail 6/7 against the pre-fix unfiltered version |
 
 ## C1 — broader scope (not yet started at this baseline)
 
@@ -38,8 +38,8 @@ Not begun. P0 inventory (see `2026-09-23-realtime-ownership-inventory.md`) is co
 
 | Step | Status |
 |---|---|
-| P0 — baseline, inventory | Completed (this pass) |
-| P1 — List-detail filters + regression tests | Not started (next) |
+| P0 — baseline, inventory | Completed |
+| P1 — List-detail filters + regression tests | Completed |
 | P2 — remaining read-error policy | Not started |
 | P3 — identity/cache lifecycle design | Not started (review gate — needs explicit approval before P4/P7) |
 | P4 — actor cache | Not started (depends on P3) |
