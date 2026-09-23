@@ -1,36 +1,17 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
-import { isActiveThing, partitionCourt, theirStateFor, type Thing } from "@/domain/thing";
-import { supabase } from "@/integrations/supabase/client";
+import { isActiveThing, partitionCourt, theirStateFor } from "@/domain/thing";
 import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { currentDemoActorId, currentDemoPerson } from "@/features/demo/identities";
 import { accessibleDemoThings, getComments, getSnoozedIds } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPreviewSession } from "@/lib/session-mode";
-import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { excludePersonallyShreddedThings, usePersonalShred } from "@/features/things/personal-shred";
 import { excludeSnoozedThings, usePersonalSnooze } from "@/features/things/personal-snooze";
 import { calculateCommentCounts, getThingLastReadAt, useThingReadState } from "@/features/things/read-state";
-
-async function fetchCourt(context: "work" | "home"): Promise<{ things: Thing[]; myActorId: string | null }> {
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return { things: [], myActorId: null };
-
-  const { data: actor } = await supabase.from("actors").select("id").eq("profile_id", auth.user.id).maybeSingle();
-  const myActorId = actor?.id ?? null;
-
-  const { data: rows, error } = await supabase
-    .from("things")
-    .select(THING_COLUMNS)
-    .eq("context", context)
-    .is("cancelled_at", null);
-
-  if (error) throw error;
-  const things = await mapDbThingRows((rows ?? []) as DbThingRow[], myActorId);
-  return { things, myActorId };
-}
+import { fetchCourt } from "./fetch-court";
 
 export function useCourt() {
   const { session, user } = useSession();
@@ -44,7 +25,7 @@ export function useCourt() {
 
   const query = useQuery({
     queryKey: keys.court(user?.id, context),
-    queryFn: () => fetchCourt(context),
+    queryFn: () => fetchCourt(context, user!.id),
     staleTime: 15_000,
     enabled: liveAuth,
   });
