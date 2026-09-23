@@ -109,15 +109,32 @@ export function RealtimeInvalidationProvider() {
         }
       });
     }
-    // Distinguishes an initial subscription from a later reconnect --
-    // P9's remit to act on (flushing/revalidating on a genuine
-    // disconnected->subscribed transition); tracked here via a ref (not
-    // state -- this component renders nothing) so that logic has
-    // something to build on rather than needing its own separate
-    // status plumbing.
+    // P9: distinguishes an initial subscription from a later reconnect.
+    // Realtime does not replay a backlog of missed events for the time
+    // spent disconnected, so a genuine reconnect (SUBSCRIBED again,
+    // having already been subscribed once before) revalidates
+    // everything this owner watches, rather than assuming nothing
+    // relevant changed while offline. Routed through the SAME batcher
+    // as ordinary events -- still epoch-guarded, and naturally
+    // coalesced with whatever else is already pending. Repeated
+    // SUBSCRIBED notifications firing in quick succession (Supabase can
+    // call this more than once around one real reconnect) don't cause
+    // repeated catch-up passes: each call re-enqueues the same
+    // already-deduplicated target set, and the batcher's own debounce
+    // still flushes it only once. This intentionally does not add any
+    // separate handling for the browser's own online/focus events --
+    // TanStack Query's existing refetchOnReconnect/refetchOnWindowFocus
+    // defaults already own that, and adding a second, redundant
+    // invalidation pass on top of them is exactly what the plan warns
+    // against.
     channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        subscriptionStatusRef.current = subscriptionStatusRef.current === "never-subscribed" ? "initial" : "reconnected";
+      if (status !== "SUBSCRIBED") return;
+      const isReconnect = subscriptionStatusRef.current !== "never-subscribed";
+      subscriptionStatusRef.current = isReconnect ? "reconnected" : "initial";
+      if (isReconnect && isEpochCurrent(qc, epoch)) {
+        for (const table of WATCHED_TABLES) {
+          batcher.enqueue(targetsForEvent({ table }));
+        }
       }
     });
 

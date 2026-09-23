@@ -54,9 +54,13 @@ function makeFakeChannel(name) {
       return channel;
     },
     subscribe: (statusCb) => {
+      channel.statusCb = statusCb;
       statusCb?.("SUBSCRIBED");
       return channel;
     },
+    // Test-only: simulate a reconnect (or any later status transition)
+    // by calling the same callback the production code registered.
+    simulateStatus: (status) => channel.statusCb?.(status),
   };
   channelsCreated.push(channel);
   return channel;
@@ -115,6 +119,16 @@ function resetHarness() {
 async function settle() {
   await act(async () => {
     await new Promise((r) => setTimeout(r, 10));
+  });
+}
+
+// The invalidation batcher's default debounce is 150ms -- settle() alone
+// (10ms) is enough for identity-transition effects but not for a
+// batcher flush. Used only by tests that need a batched invalidation
+// (e.g. P9's catch-up pass) to actually have fired.
+async function settleBatcher() {
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 200));
   });
 }
 
@@ -358,6 +372,142 @@ test("membership revocation fast path does nothing when the payload lacks the ne
     undefined,
     "an incomplete payload must not be treated as grounds to evict -- the batched invalidate-and-refetch is the real mechanism, not this fast path",
   );
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("P9: the initial SUBSCRIBED transition does not trigger a catch-up invalidation", async () => {
+  resetHarness();
+  const qc = newTestClient();
+  let invalidateCallCount = 0;
+  const original = qc.invalidateQueries.bind(qc);
+  qc.invalidateQueries = (...args) => { invalidateCallCount += 1; return original(...args); };
+
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+
+  assert.equal(invalidateCallCount, 0, "the initial subscribe must not, by itself, invalidate anything");
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("P9: a genuine reconnect (a second SUBSCRIBED after the first) revalidates every watched table", async () => {
+  resetHarness();
+  const qc = newTestClient();
+  const invalidatedKeys = [];
+  const original = qc.invalidateQueries.bind(qc);
+  qc.invalidateQueries = (opts) => { invalidatedKeys.push(opts.queryKey[0]); return original(opts); };
+
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+
+  const channel = channelsCreated[0];
+  await act(async () => {
+    channel.simulateStatus("SUBSCRIBED"); // a real reconnect: SUBSCRIBED fires a second time
+  });
+  await settleBatcher(); // let the batcher's debounce elapse
+
+  assert.ok(invalidatedKeys.length > 0, "a genuine reconnect must trigger a catch-up invalidation");
+  assert.ok(invalidatedKeys.includes("court"), "the catch-up pass must cover the same targets ordinary events would (e.g. 'court')");
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("P9: repeated SUBSCRIBED notifications in quick succession coalesce into one catch-up flush, not one per notification", async () => {
+  resetHarness();
+  const qc = newTestClient();
+  let invalidateCallCount = 0;
+  const original = qc.invalidateQueries.bind(qc);
+  qc.invalidateQueries = (...args) => { invalidateCallCount += 1; return original(...args); };
+
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+
+  const channel = channelsCreated[0];
+  await act(async () => {
+    channel.simulateStatus("SUBSCRIBED");
+    channel.simulateStatus("SUBSCRIBED");
+    channel.simulateStatus("SUBSCRIBED");
+  });
+  const afterBurst = invalidateCallCount;
+  await settleBatcher();
+  const afterSettle = invalidateCallCount;
+
+  assert.equal(afterBurst, 0, "nothing should invalidate before the batcher's debounce elapses");
+  assert.ok(afterSettle > 0, "the coalesced burst must still flush once settled");
+
+  // A second burst right after must not re-trigger a second, separate
+  // full catch-up on top of the first (the batcher already drained).
+  const afterFirstFlush = invalidateCallCount;
+  await act(async () => {
+    channel.simulateStatus("SUBSCRIBED");
+  });
+  await settleBatcher();
+  assert.ok(invalidateCallCount > afterFirstFlush, "a LATER, separate reconnect must still flush its own catch-up pass");
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("P9: a reconnect after an identity switch belongs to the NEW identity's owner, not a stale one", async () => {
+  resetHarness();
+  const qc = newTestClient();
+  let invalidateCallCount = 0;
+  const original = qc.invalidateQueries.bind(qc);
+  qc.invalidateQueries = (...args) => { invalidateCallCount += 1; return original(...args); };
+
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+
+  const staleChannel = channelsCreated[0];
+
+  await act(async () => {
+    setTestSession(liveSession("profile-B"));
+  });
+  await settle();
+
+  invalidateCallCount = 0; // reset the counter to isolate what happens next
+
+  // The OLD (retired) channel's status callback fires late, as if a
+  // reconnect notification for A's connection arrived after B is
+  // already active.
+  await act(async () => {
+    staleChannel.simulateStatus("SUBSCRIBED");
+  });
+  await settle();
+
+  assert.equal(invalidateCallCount, 0, "a stale reconnect notification for a retired identity's owner must not replay a catch-up pass into the new identity's cache");
 
   unmount();
   qc.clear();
