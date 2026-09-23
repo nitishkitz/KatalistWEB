@@ -24,4 +24,8 @@ export const keys = {
     ["notifications", profileId] as const,
   shredded: (profileId: string | undefined) => ["shredded", profileId] as const,
   snoozed: (profileId: string | undefined) => ["snoozed", profileId] as const,
+  // Profile-scoped only, no context: the `actors` table has no context
+  // column (verified against the RLS migrations referenced in
+  // fetch-court.ts) -- an actor's identity does not vary by work/home.
+  actor: (profileId: string | undefined) => ["actor", profileId] as const,
 };

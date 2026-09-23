@@ -1,5 +1,6 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getActorId } from "@/features/people/actor-query";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { getMergedThings, getShredded, restoreLocal } from "@/features/things/local-state";
@@ -29,30 +30,25 @@ export type TrophyStats = {
  * fetchBucketItems: this file has no useAppContext (.tsx) import, so it
  * already loads fine in the plain Node test runner.
  */
-export async function fetchTrophyStats(profileId: string): Promise<TrophyStats> {
+export async function fetchTrophyStats(profileId: string, qc: QueryClient): Promise<TrophyStats> {
   // The actor+events chain and the shredded-objects lookup are
   // independent of each other (shredded rows aren't filtered by actorId
   // at all — profile_object_state is scoped to the caller by RLS), so
   // they run concurrently instead of one after another.
   // The activity-events count/streak and the Shred history are stats,
   // not decorative: a failed read must not masquerade as "you haven't
-  // sorted/shredded anything" (a false zero). .maybeSingle() already
-  // distinguishes a genuinely-absent actor row ({ data: null,
-  // error: null }, which legitimately means "no activity yet") from an
-  // actual read failure (error set) — same distinction as
-  // fetch-court.ts's actor lookup.
+  // sorted/shredded anything" (a false zero). getActorId (the shared P4
+  // actor cache) already distinguishes a genuinely-absent actor row
+  // from an actual read failure -- same distinction fetch-court.ts's
+  // actor lookup makes, now sharing the same cached/deduplicated
+  // primitive instead of each doing its own ad-hoc lookup.
   const [mine, { data: shreddedRows, error: shreddedError }] = await Promise.all([
     (async () => {
-      const { data: actor, error: actorError } = await supabase
-        .from("actors")
-        .select("id")
-        .eq("profile_id", profileId)
-        .maybeSingle();
-      if (actorError) throw actorError;
+      const actorId = await getActorId(qc, profileId);
       const { data: events, error } = await supabase
         .from("thing_activity")
         .select("event, created_at, actor_id")
-        .eq("actor_id", actor?.id ?? "00000000-0000-0000-0000-000000000000");
+        .eq("actor_id", actorId ?? "00000000-0000-0000-0000-000000000000");
       if (error) throw error;
       return events ?? [];
     })(),
@@ -121,7 +117,7 @@ export function useTrophy() {
 
   const query = useQuery({
     queryKey: keys.trophy(user?.id),
-    queryFn: () => fetchTrophyStats(user!.id),
+    queryFn: () => fetchTrophyStats(user!.id, qc),
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
   });

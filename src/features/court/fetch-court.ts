@@ -1,6 +1,8 @@
+import type { QueryClient } from "@tanstack/react-query";
 import type { Thing } from "@/domain/thing";
 import { supabase } from "@/integrations/supabase/client";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { getActorId } from "@/features/people/actor-query";
 
 /**
  * Kept in its own module (no React/JSX imports) so it's importable from a
@@ -10,6 +12,7 @@ import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/thing
 export async function fetchCourt(
   context: "work" | "home",
   profileId: string,
+  qc: QueryClient,
 ): Promise<{ things: Thing[]; myActorId: string | null }> {
   // profileId comes from the session useCourt() already holds (see its
   // enabled: liveAuth gate) — no need to re-fetch the current user via
@@ -29,24 +32,22 @@ export async function fetchCourt(
   // independent of this argument. This also matches use-lists.ts and
   // use-buckets.ts, neither of which ever called auth.getUser() either.
   //
-  // The actor lookup and the things query are independent of each other
-  // (the things query only needs `context`), so they run concurrently
-  // instead of the actor lookup blocking the things query behind it.
-  // The actor lookup's result isn't decorative: myActorId feeds
-  // partitionCourt()'s "mine" vs "theirs" split. A failed lookup must
-  // reject, not silently resolve to null — a null myActorId despite
-  // successfully fetched Things would make both partitions look empty
-  // (a false-empty state), not just "this profile has no actor yet".
-  // .maybeSingle() already distinguishes those two cases for us: a
-  // legitimate missing actor comes back as { data: null, error: null };
-  // an actual failure (network, RLS denial, etc.) comes back with
-  // `error` set. Only the latter should throw.
-  const [{ data: actor, error: actorError }, { data: rows, error }] = await Promise.all([
-    supabase.from("actors").select("id").eq("profile_id", profileId).maybeSingle(),
+  // The actor lookup (now the shared, deduplicated, epoch-guarded P4
+  // actor cache -- see actor-query.ts) and the things query are
+  // independent of each other (the things query only needs `context`),
+  // so they run concurrently instead of the actor lookup blocking the
+  // things query behind it. The actor lookup's result isn't decorative:
+  // myActorId feeds partitionCourt()'s "mine" vs "theirs" split. A
+  // failed lookup must reject, not silently resolve to null — a null
+  // myActorId despite successfully fetched Things would make both
+  // partitions look empty (a false-empty state), not just "this profile
+  // has no actor yet". getActorId already distinguishes those two
+  // cases (throws on a real failure; resolves null for a legitimate
+  // no-row profile).
+  const [myActorId, { data: rows, error }] = await Promise.all([
+    getActorId(qc, profileId),
     supabase.from("things").select(THING_COLUMNS).eq("context", context).is("cancelled_at", null),
   ]);
-  if (actorError) throw actorError;
-  const myActorId = actor?.id ?? null;
 
   if (error) throw error;
   const things = await mapDbThingRows((rows ?? []) as DbThingRow[], myActorId);

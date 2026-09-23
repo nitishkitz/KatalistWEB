@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test, mock } from "node:test";
+import { QueryClient } from "@tanstack/react-query";
 
 /**
  * Batch C1: fetchCourt used to call supabase.auth.getUser() to get the
@@ -79,7 +80,8 @@ test("fetchCourt runs the actor lookup and the Things query concurrently, withou
 
   try {
     const { fetchCourt } = await import("@/features/court/fetch-court");
-    const result = await fetchCourt("work", "profile-1");
+    const qc = new QueryClient();
+    const result = await fetchCourt("work", "profile-1", qc);
 
     assert.equal(getUserCalled, false, "fetchCourt must not call supabase.auth.getUser() — the caller already has the profile id");
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test, mock } from "node:test";
+import { QueryClient } from "@tanstack/react-query";
 
 /**
  * Batch C1: the actor lookup in fetchCourt is not decorative — its
@@ -56,7 +57,11 @@ const { fetchCourt } = await import("@/features/court/fetch-court");
 test("fetchCourt rejects when the actor read fails, instead of silently emptying both Court partitions", async () => {
   actorScenario = "error";
   try {
-    await assert.rejects(fetchCourt("work", "profile-1"), /actors read failed/);
+    // A fresh QueryClient per test -- the actor lookup is now cached by
+    // (qc, profileId) via the P4 actor cache, so reusing one across
+    // these differently-scenario'd tests would serve a stale cached
+    // result instead of exercising each scenario's own fetch.
+    await assert.rejects(fetchCourt("work", "profile-1", new QueryClient()), /actors read failed/);
   } finally {
     actorScenario = "ok";
   }
@@ -65,7 +70,7 @@ test("fetchCourt rejects when the actor read fails, instead of silently emptying
 test("fetchCourt still resolves with myActorId: null when the profile legitimately has no actor row yet", async () => {
   actorScenario = "missing";
   try {
-    const result = await fetchCourt("work", "profile-1");
+    const result = await fetchCourt("work", "profile-1", new QueryClient());
     assert.equal(result.myActorId, null);
     assert.equal(result.things.length, 1);
   } finally {
@@ -74,6 +79,6 @@ test("fetchCourt still resolves with myActorId: null when the profile legitimate
 });
 
 test("sanity: fetchCourt still succeeds when the actor read succeeds", async () => {
-  const result = await fetchCourt("work", "profile-1");
+  const result = await fetchCourt("work", "profile-1", new QueryClient());
   assert.equal(result.myActorId, "actor-1");
 });

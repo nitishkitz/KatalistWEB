@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test, mock } from "node:test";
+import { QueryClient } from "@tanstack/react-query";
 
 /**
  * Batch C1/P2 read-error policy: the actor lookup and the Shred
@@ -61,7 +62,10 @@ const { fetchTrophyStats } = await import("@/features/me/use-trophy");
 test("fetchTrophyStats rejects when the actor read fails, instead of silently zeroing every stat", async () => {
   failing = "actor";
   try {
-    await assert.rejects(fetchTrophyStats("profile-1"), /actors read failed/);
+    // A fresh QueryClient -- the actor lookup is cached by (qc,
+    // profileId) via the P4 actor cache, so reusing one across these
+    // differently-scenario'd tests would serve a stale result.
+    await assert.rejects(fetchTrophyStats("profile-1", new QueryClient()), /actors read failed/);
   } finally {
     failing = null;
   }
@@ -70,14 +74,14 @@ test("fetchTrophyStats rejects when the actor read fails, instead of silently ze
 test("fetchTrophyStats rejects when the Shred-history read fails, instead of reporting an empty shredded list", async () => {
   failing = "shredded";
   try {
-    await assert.rejects(fetchTrophyStats("profile-1"), /profile_object_state read failed/);
+    await assert.rejects(fetchTrophyStats("profile-1", new QueryClient()), /profile_object_state read failed/);
   } finally {
     failing = null;
   }
 });
 
 test("sanity: fetchTrophyStats still succeeds when nothing fails", async () => {
-  const stats = await fetchTrophyStats("profile-1");
+  const stats = await fetchTrophyStats("profile-1", new QueryClient());
   assert.equal(stats.sorted, 1);
   assert.deepEqual(stats.shredded, []);
 });

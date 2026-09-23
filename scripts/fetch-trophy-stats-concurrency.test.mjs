@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test, mock } from "node:test";
+import { QueryClient } from "@tanstack/react-query";
 
 /**
  * Batch C1: fetchTrophyStats had two independent-but-sequential shapes:
@@ -78,7 +79,7 @@ test("fetchTrophyStats runs the actor/events chain and the shredded lookup concu
 
   try {
     const { fetchTrophyStats } = await import("@/features/me/use-trophy");
-    const stats = await fetchTrophyStats("profile-1");
+    const stats = await fetchTrophyStats("profile-1", new QueryClient());
 
     // Proof #1: the actor/events chain and the shredded lookup both
     // start before either resolves.

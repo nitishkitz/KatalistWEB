@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { isActiveThing, partitionCourt, theirStateFor } from "@/domain/thing";
 import { useSession } from "@/hooks/useSession";
@@ -18,6 +18,7 @@ export function useCourt() {
   const preview = isPreviewSession(session);
   const liveAuth = Boolean(session) && !preview;
   const { context } = useAppContext();
+  const qc = useQueryClient();
   useLocalVersion();
   const shred = usePersonalShred();
   const snooze = usePersonalSnooze();
@@ -25,7 +26,7 @@ export function useCourt() {
 
   const query = useQuery({
     queryKey: keys.court(user?.id, context),
-    queryFn: () => fetchCourt(context, user!.id),
+    queryFn: () => fetchCourt(context, user!.id, qc),
     staleTime: 15_000,
     enabled: liveAuth,
   });
