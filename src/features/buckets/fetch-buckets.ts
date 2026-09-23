@@ -21,23 +21,34 @@ export async function fetchBuckets(context: "work" | "home", profileId: string):
     .is("archived_at", null);
   if (error) throw error;
   const ids = (buckets ?? []).map((b) => b.id);
-  const { data: items } = ids.length
+  // Required data: a failed bucket_items/Things/Lists read must not
+  // silently become "this bucket has nothing in it" — that's a false
+  // empty state, not the truth. Only decorative data (none in this
+  // function; see mapDbListRows' cover-URL signing) is allowed to fail
+  // open.
+  const { data: items, error: itemsError } = ids.length
     ? await supabase.from("bucket_items").select("bucket_id,thing_id,list_id").in("bucket_id", ids)
-    : { data: [] };
+    : { data: [], error: null };
+  if (itemsError) throw itemsError;
 
   const thingIds = (items ?? []).map((i) => i.thing_id).filter(Boolean) as string[];
   const listIds = (items ?? []).map((i) => i.list_id).filter(Boolean) as string[];
 
   // Both queries depend only on bucket_items' output above, not on each
   // other, so they run concurrently instead of things-then-lists.
-  const [{ data: thingRows }, { data: listRows }] = await Promise.all([
+  const [
+    { data: thingRows, error: thingsError },
+    { data: listRows, error: listsError },
+  ] = await Promise.all([
     thingIds.length
       ? supabase.from("things").select(THING_COLUMNS).in("id", thingIds)
-      : Promise.resolve({ data: [] as DbThingRow[] }),
+      : Promise.resolve({ data: [] as DbThingRow[], error: null }),
     listIds.length
       ? supabase.from("lists").select("id,name,context,owner_profile_id,updated_at").in("id", listIds)
-      : Promise.resolve({ data: [] as DbListRow[] }),
+      : Promise.resolve({ data: [] as DbListRow[], error: null }),
   ]);
+  if (thingsError) throw thingsError;
+  if (listsError) throw listsError;
 
   // Same reasoning: each mapper only needs its own rows.
   const [mappedThings, mappedLists] = await Promise.all([

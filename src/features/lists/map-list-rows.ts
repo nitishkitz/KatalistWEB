@@ -68,11 +68,22 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
   // concurrently instead of cover-then-members-then-things. (The
   // identity-resolution chain below does depend on `members`, so it
   // still waits for this Promise.all to settle.)
-  const [coverUrls, { data: members }, { data: things }] = await Promise.all([
+  //
+  // members/things are required data: a failed read must not silently
+  // present as "this List has no members/Things" — that's a false empty
+  // state. Cover-URL signing is decorative (signCoverUrls already fails
+  // open internally, see its own try/catch) and stays nonblocking.
+  const [
+    coverUrls,
+    { data: members, error: membersError },
+    { data: things, error: thingsError },
+  ] = await Promise.all([
     signCoverUrls(lists.map((l) => l.cover_storage_path).filter((p): p is string => Boolean(p))),
     supabase.from("list_members").select("list_id,profile_id,role").in("list_id", ids),
     supabase.from("things").select("id,list_id,work_status").in("list_id", ids),
   ]);
+  if (membersError) throw membersError;
+  if (thingsError) throw thingsError;
 
   const memberRows = members ?? [];
   const profileIds = [

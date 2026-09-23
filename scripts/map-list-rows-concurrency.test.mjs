@@ -54,7 +54,10 @@ test("mapDbListRows runs cover signing, members, and Things concurrently", async
       supabase: {
         storage: {
           from: () => ({
-            createSignedUrls: () => track("cover-sign", () => delay({ data: [] })),
+            createSignedUrls: (paths) =>
+              track("cover-sign", () =>
+                delay({ data: paths.map((path) => ({ path, signedUrl: `https://signed.example/${path}` })) }),
+              ),
           }),
         },
         from: (table) => {
@@ -77,21 +80,25 @@ test("mapDbListRows runs cover signing, members, and Things concurrently", async
         owner_profile_id: "owner-1",
         updated_at: new Date().toISOString(),
         description: null,
-        cover_storage_path: null,
+        cover_storage_path: "covers/list-1.jpg",
       },
     ]);
 
     // Deterministic concurrency proof: cover signing, members, and
     // Things all start before any of them resolves.
-    const start = events.indexOf("members-query:start");
+    const start = Math.min(
+      events.indexOf("cover-sign:start"),
+      events.indexOf("members-query:start"),
+      events.indexOf("things-query:start"),
+    );
     const firstEnd = events.findIndex(
       (e, i) => i > start - 1 && (e === "members-query:end" || e === "things-query:end" || e === "cover-sign:end"),
     );
     const startedBeforeAnyEnded = new Set(events.slice(start, firstEnd).filter((e) => e.endsWith(":start")));
     assert.deepEqual(
       startedBeforeAnyEnded,
-      new Set(["members-query:start", "things-query:start"]),
-      `expected members and Things queries to start together; event order was: ${events.join(", ")}`,
+      new Set(["members-query:start", "things-query:start", "cover-sign:start"]),
+      `expected members, Things, and cover-sign to start together; event order was: ${events.join(", ")}`,
     );
     // Directory resolution (part of the identity chain, which needs
     // `members`) must not start until members-query has resolved.
@@ -105,6 +112,7 @@ test("mapDbListRows runs cover signing, members, and Things concurrently", async
     assert.equal(row.thingCount, 1);
     assert.equal(row.doneCount, 1);
     assert.equal(row.ownerLine, "Owned by you");
+    assert.equal(row.coverUrl, "https://signed.example/covers/list-1.jpg");
   } finally {
     directoryMock.restore();
     clientMock.restore();
