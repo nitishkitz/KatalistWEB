@@ -36,6 +36,7 @@ import { useAvatarUrl } from "@/features/people/directory";
 import { isDoormanEnabled } from "@/features/doorman/use-doorman";
 import { cn } from "@/lib/utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { useStoredMotionPreference } from "@/hooks/use-motion-preference";
 
 export const Route = createFileRoute("/me")({
   head: () => ({
@@ -84,9 +85,7 @@ function MePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editOccupation, setEditOccupation] = useState("");
-  const [reduced, setReduced] = useState(() =>
-    typeof window === "undefined" ? false : localStorage.getItem("katalist.reduced_motion") === "1",
-  );
+  const { reduceMotion: reduced, setReduceMotion: setReduced } = useStoredMotionPreference();
   const [doorman, setDoorman] = useState(() => isDoormanEnabled());
 
   const name =
@@ -483,11 +482,7 @@ function MePage() {
                     <input
                       type="checkbox"
                       checked={reduced}
-                      onChange={(e) => {
-                        setReduced(e.target.checked);
-                        localStorage.setItem("katalist.reduced_motion", e.target.checked ? "1" : "0");
-                        document.documentElement.classList.toggle("reduce-motion", e.target.checked);
-                      }}
+                      onChange={(e) => setReduced(e.target.checked)}
                     />
                   </label>
                 ) : panel === "preferences" ? (

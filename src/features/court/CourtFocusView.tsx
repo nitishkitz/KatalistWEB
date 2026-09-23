@@ -22,6 +22,7 @@ import { focusColumns, type CourtFocusSelection, type FocusViewTabId } from "./c
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { MagicBox } from "./MagicBox";
 import { cn } from "@/lib/utils";
+import { getEffectiveReducedMotion } from "@/hooks/use-motion-preference";
 
 export type { CourtFocusSelection, FocusViewTabId } from "./court-stack-model";
 
@@ -128,9 +129,7 @@ export function CourtFocusView({
       return;
     }
 
-    const reduceMotion =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduceMotion = getEffectiveReducedMotion();
 
     if (reduceMotion) {
       setIsHeroFlying(false);

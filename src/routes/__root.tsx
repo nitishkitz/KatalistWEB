@@ -16,6 +16,7 @@ import { IdentityBoundary } from "@/features/realtime/IdentityBoundary";
 import { RealtimeInvalidationProvider } from "@/features/realtime/RealtimeInvalidationProvider";
 import { CallRingProvider } from "@/features/calls/CallRingProvider";
 import { PushRegistrar } from "@/features/push/PushRegistrar";
+import { MotionPreferenceApplier } from "@/components/layout/MotionPreferenceApplier";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -144,6 +145,7 @@ function RootComponent() {
           CallRingProvider/PushRegistrar get the same disposal/remount
           guarantee as routed content, rather than resting solely on
           their own independent user?.id-keyed effects. */}
+      <MotionPreferenceApplier />
       <IdentityBoundary>
         {/* P7: mounted once here, inside the remounted subtree, instead of
             once per AppShell instance -- route transitions never multiply

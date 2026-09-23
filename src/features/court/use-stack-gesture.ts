@@ -6,6 +6,7 @@ import {
   resistedDragOffset,
   type GestureAxis,
 } from "./court-stack-model";
+import { useMotionPreference } from "@/hooks/use-motion-preference";
 
 const INTENT_THRESHOLD = 8;
 const ACTION_THRESHOLD = 54;
@@ -37,7 +38,7 @@ export function useStackGesture(options: StackGestureOptions): {
 } {
   const [offset, setOffset] = React.useState<Offset>({ x: 0, y: 0 });
   const [dragging, setDragging] = React.useState(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = React.useState(false);
+  const { reduceMotion: prefersReducedMotion } = useMotionPreference();
   const pointerStartRef = React.useRef<Offset | null>(null);
   const pointerIdRef = React.useRef<number | null>(null);
   const axisRef = React.useRef<GestureAxis>(null);
@@ -72,16 +73,6 @@ export function useStackGesture(options: StackGestureOptions): {
 
     suppressClearRef.current = { id: requestAnimationFrame(clear), kind: "frame" };
   }, [prefersReducedMotion]);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
-    updatePreference();
-    mediaQuery.addEventListener("change", updatePreference);
-    return () => mediaQuery.removeEventListener("change", updatePreference);
-  }, []);
 
   React.useEffect(() => {
     if (options.interactionDisabled) resetGesture();

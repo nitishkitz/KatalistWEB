@@ -46,6 +46,7 @@ import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
+import { getEffectiveReducedMotion, MOTION_PREFERENCE_BROADCAST_EVENT } from "@/hooks/use-motion-preference";
 
 gsap.registerPlugin(Observer);
 
@@ -280,6 +281,32 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       };
     }, []);
 
+    // D02: if the motion preference flips to reduced mid-swipe-animation
+    // (an OS setting or the Me toggle changing while a card is still
+    // sliding), snap immediately to the final state instead of letting an
+    // already-scheduled spatial animation keep running under a preference
+    // that says it shouldn't.
+    useEffect(() => {
+      const snapIfAnimating = () => {
+        if (!animatingRef.current || !getEffectiveReducedMotion()) return;
+        gsap.killTweensOf(activeCardRef.current);
+        gsap.killTweensOf(outgoingCardRef.current);
+        if (activeCardRef.current) {
+          gsap.set(activeCardRef.current, { clearProps: "transform,scale,opacity" });
+        }
+        animatingRef.current = false;
+        setAnim(null);
+      };
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+      const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+      mediaQuery.addEventListener("change", snapIfAnimating);
+      window.addEventListener(MOTION_PREFERENCE_BROADCAST_EVENT, snapIfAnimating);
+      return () => {
+        mediaQuery.removeEventListener("change", snapIfAnimating);
+        window.removeEventListener(MOTION_PREFERENCE_BROADCAST_EVENT, snapIfAnimating);
+      };
+    }, []);
+
     const content = courtLaneContent[lane];
     const renderIndex = reconcileStackIndex(activeIndex, activeThingIdRef.current, things);
     const activeThing = things[renderIndex] ?? null;
@@ -354,9 +381,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         if (!nextThing) return;
         navigationVersionRef.current += 1;
 
-        const reduceMotion =
-          typeof window !== "undefined" &&
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const reduceMotion = getEffectiveReducedMotion();
 
         if (reduceMotion) {
           setActiveIndex(nextIndex);
@@ -382,9 +407,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         if (!nextThing || nextIndex === renderIndex) return;
         navigationVersionRef.current += 1;
 
-        const reduceMotion =
-          typeof window !== "undefined" &&
-          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const reduceMotion = getEffectiveReducedMotion();
 
         if (reduceMotion) {
           setActiveIndex(nextIndex);

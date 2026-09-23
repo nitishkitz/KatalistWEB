@@ -61,7 +61,11 @@ test("Court stack gestures use native pointer and wheel intent handling without 
   assert.match(stackGesture, /lastWheelTimeRef/);
   assert.match(stackGesture, /WHEEL_COOLDOWN_MS = 260/);
   assert.match(stackGesture, /event\.preventDefault\(\)/);
-  assert.match(stackGesture, /prefers-reduced-motion/);
+  // D02 extracted the reduced-motion check (previously its own inline
+  // matchMedia read here) into the shared use-motion-preference.ts
+  // contract, so the real assertion is now "this file defers to that
+  // shared hook", not the literal media-query string.
+  assert.match(stackGesture, /useMotionPreference\(\)/);
   assert.doesNotMatch(packageJson, /framer-motion|@use-gesture|react-swipeable/i);
 });
 

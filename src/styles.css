@@ -342,6 +342,13 @@
   }
 }
 
+/* D02: same rule, driven by the app-level "reduce-motion" class that
+   MotionPreferenceApplier toggles on <html> -- mirrors the OS media-query
+   version above so this responds to either source, not only the OS one. */
+.reduce-motion .katalist-shimmer::after {
+  animation: none;
+}
+
 /* Hero (shared-element) transition, e.g. a list cover morphing from the Lists
    table into the list detail header. Names are set per element in JSX. */
 ::view-transition-group(*) {
@@ -355,4 +362,20 @@
   ::view-transition-new(*) {
     animation: none !important;
   }
+}
+
+.reduce-motion::view-transition-group(*),
+.reduce-motion::view-transition-old(*),
+.reduce-motion::view-transition-new(*) {
+  animation: none !important;
+}
+
+/* D02: a general safety net for anything using a plain CSS
+   transition/animation without its own JS-level reduced-motion check
+   (GSAP-driven animations check getEffectiveReducedMotion() explicitly
+   instead, since GSAP doesn't run through CSS transitions at all). */
+.reduce-motion * {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
