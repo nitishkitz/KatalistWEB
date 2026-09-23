@@ -105,7 +105,8 @@ type PeerSlot = {
 };
 
 function envStr(key: string): string | undefined {
-  const v = (import.meta.env as Record<string, unknown>)[key];
+  const env = (import.meta.env ?? {}) as Record<string, unknown>;
+  const v = env[key];
   return typeof v === "string" && v.trim() ? v.trim() : undefined;
 }
 
@@ -220,9 +221,30 @@ export class CallRoom {
 
   /** Acquire local media and join the room. */
   async join(constraints: MediaStreamConstraints = { audio: true, video: true }): Promise<MediaStream> {
-    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
-    this.cameraTrack = this.localStream.getVideoTracks()[0] ?? null;
-    this.resolvedIce = await loadIceServers();
+    // H02: getUserMedia can resolve well after leave() already ran (the
+    // browser's own permission prompt can sit open for as long as the
+    // user takes to respond, and the caller can navigate away / call
+    // leave() in that window). `this.closed` is set synchronously by
+    // leave(); re-checking it after EVERY await below is what stops an
+    // already-left room from acquiring a camera/mic it can never release
+    // (leave() can only stop tracks it already knows about) or standing
+    // up a realtime channel for a room the caller believes is gone.
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (this.closed) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error("Call room was left before the camera/microphone was ready.");
+    }
+    this.localStream = stream;
+    this.cameraTrack = stream.getVideoTracks()[0] ?? null;
+
+    const resolvedIce = await loadIceServers();
+    if (this.closed) {
+      stream.getTracks().forEach((t) => t.stop());
+      this.localStream = null;
+      this.cameraTrack = null;
+      throw new Error("Call room was left before joining completed.");
+    }
+    this.resolvedIce = resolvedIce;
 
     const channel = supabase.channel(`call:${this.listId}`, {
       config: { presence: { key: this.selfId }, broadcast: { self: false } },
@@ -502,7 +524,14 @@ export class CallRoom {
   }
 
   async startScreenShare(): Promise<MediaStream> {
+    // H02: same getDisplayMedia-resolves-after-leave race as join()'s own
+    // getUserMedia guard above -- the browser's screen picker can stay
+    // open long enough for the call to be left in the meantime.
     const screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    if (this.closed) {
+      screen.getTracks().forEach((t) => t.stop());
+      throw new Error("Call was left before screen sharing started.");
+    }
     this.screenStream = screen;
     const track = screen.getVideoTracks()[0]!;
     await this.replaceVideoTrack(track);
