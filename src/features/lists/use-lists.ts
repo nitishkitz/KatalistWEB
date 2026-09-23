@@ -16,6 +16,7 @@ import {
 } from "@/features/things/personal-shred";
 import { mapDbListRows, type DbListRow } from "./map-list-rows";
 import { fetchListDetail } from "./fetch-list-detail";
+import { getListDetailSeed } from "./list-detail-seed";
 import type { ListRow } from "./fixtures";
 
 async function fetchLists(profileId: string, context: "work" | "home"): Promise<ListRow[]> {
@@ -95,6 +96,7 @@ export function useLists() {
 
 export function useList(listId: string | undefined) {
   const { session, user } = useSession();
+  const { context } = useAppContext();
   const preview = isPreviewSession(session);
   const shred = usePersonalShred();
   const hidden = isPersonallyShreddedList(listId, shred);
@@ -106,14 +108,7 @@ export function useList(listId: string | undefined) {
     enabled: Boolean(listId) && Boolean(user) && !preview && !hidden,
     // Seed from the Lists cache so the detail renders instantly (no skeleton
     // flash) and the shared-element hero transition has its target present.
-    initialData: (): ListRow | null | undefined => {
-      const entries = qc.getQueriesData<ListRow[]>({ queryKey: ["lists"] });
-      for (const [, data] of entries) {
-        const found = data?.find((l) => l.id === listId);
-        if (found) return found;
-      }
-      return undefined;
-    },
+    initialData: () => preview ? undefined : getListDetailSeed(qc, user?.id, context, listId),
     initialDataUpdatedAt: 0,
     queryFn: () => fetchListDetail(user!.id, listId!),
   });
