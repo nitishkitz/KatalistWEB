@@ -13,7 +13,7 @@ type CourtDetailModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onOpenFullView: () => void;
-  onRefresh?: () => void;
+  onRefresh?: (epoch: number) => void;
 };
 
 export function CourtDetailModal({

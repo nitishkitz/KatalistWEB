@@ -60,7 +60,8 @@ export type CourtLaneStackProps = {
   myActorId: string | null;
   initialPosition?: { activeIndex: number; activeThingId: string | null };
   onOpen: (thing: Thing, origin: HTMLElement) => void;
-  onRefresh: () => unknown;
+  /** `epoch` is the caller's own captured epoch (before its mutation's first await) -- see query-updates.ts's withOptimisticPatch for why this can't be read fresh inside onRefresh itself. */
+  onRefresh: (epoch: number) => unknown;
   onViewAll?: (lane: CourtLaneId) => void;
 };
 
@@ -552,7 +553,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         }
         try {
           await mutate();
-          if (isEpochCurrent(qc, epoch)) await onRefresh();
+          if (isEpochCurrent(qc, epoch)) await onRefresh(epoch);
         } catch (error) {
           rollbackPatch?.();
           if (isEpochCurrent(qc, epoch)) {
@@ -607,6 +608,13 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         // Catch keeps the card in place, so keep the blocking pending state.
         if (pendingAction) return;
         setPendingAction(action);
+        // Captured here, synchronously, immediately before dispatching
+        // withOptimisticPatch's own thunk below -- withOptimisticPatch
+        // captures its own epoch internally for the patch/RPC dispatch,
+        // but the `fn` closure passed to it (which calls onRefresh) has
+        // no access to that internal value, so it needs its own capture
+        // at the same moment.
+        const catchEpoch = getIdentityEpoch(qc).epoch;
         try {
           await withOptimisticPatch(
             qc,
@@ -615,8 +623,10 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             async () => {
               await rpcCatchAndStart(activeThing.id);
               toast.success("Caught.");
-              await onRefresh();
-              setAnnouncement(`${activeThing.title} updated in ${content.label}.`);
+              if (isEpochCurrent(qc, catchEpoch)) {
+                await onRefresh(catchEpoch);
+                setAnnouncement(`${activeThing.title} updated in ${content.label}.`);
+              }
             },
           )();
         } catch (error) {
@@ -652,10 +662,11 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         // Timed Snooze is personal-visibility (thing_snooze), not a shared
         // Thing field — no patch to apply here, unlike the pace/sort/catch
         // actions above.
+        const snoozeEpoch = getIdentityEpoch(qc).epoch;
         void runOptimisticRemoval(target, "snoozed", undefined, async () => {
           await rpcSnoozeThing(target.id, snoozeUntilFor(option));
           toast.success(label);
-          await invalidateSnoozeSurfaces(qc);
+          await invalidateSnoozeSurfaces(qc, snoozeEpoch);
         });
       },
       [activeThing, qc, runOptimisticRemoval],
@@ -742,6 +753,8 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         onDrop={async (e) => {
           e.preventDefault();
           setIsDragTarget(false);
+          // Captured before any await in this handler.
+          const dropEpoch = getIdentityEpoch(qc).epoch;
           try {
             const raw = e.dataTransfer.getData("application/katalist-thing");
             if (!raw) return;
@@ -754,7 +767,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
 
             await rpcSetPersonalPace(data.thingId, lane);
             toast.success(`Moved "${data.title}" to ${content.label}`);
-            await onRefresh();
+            if (isEpochCurrent(qc, dropEpoch)) await onRefresh(dropEpoch);
           } catch (err: unknown) {
             toast.error(domainErrorMessage(err));
           }

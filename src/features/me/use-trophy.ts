@@ -8,6 +8,7 @@ import { currentDemoActorId } from "@/features/demo/identities";
 import { rpcRestore } from "@/features/things/rpc";
 import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
 import { keys } from "@/domain/query-keys";
+import { getIdentityEpoch } from "@/features/realtime/identity-cache-policy";
 import { computeStreak } from "@/features/nudges/escalation-logic";
 
 export type TrophyStats = {
@@ -157,8 +158,10 @@ export function useTrophy() {
       shredded: [],
     },
     restore: async (id: string, kind: "thing" | "list" | "bucket" = "thing") => {
+      // Captured before the first await, at the point this call started.
+      const epoch = getIdentityEpoch(qc).epoch;
       await rpcRestore(id, kind);
-      await invalidatePersonalSurfaces(qc);
+      await invalidatePersonalSurfaces(qc, epoch);
     },
     preview: false,
   };

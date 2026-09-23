@@ -8,6 +8,7 @@ import { addListMessage, getListMessages, pinListMessageLocal } from "@/features
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { fetchProfileIdentities, matchProfile } from "@/features/people/directory";
 import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 const CHAT_BUCKET = "list-chat";
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -103,7 +104,8 @@ export function useListMessages(listId: string) {
     staleTime: 10_000,
   });
 
-  const invalidate = () => {
+  const invalidate = (epoch: number) => {
+    if (!isEpochCurrent(qc, epoch)) return;
     void qc.invalidateQueries({ queryKey: ["list-messages", listId] });
     void qc.invalidateQueries({ queryKey: ["lists"] });
   };
@@ -135,13 +137,14 @@ export function useListMessages(listId: string) {
     mutationFn: async (
       input: string | { body: string; attachment?: ChatAttachment | null; mentionedProfileIds?: string[] },
     ) => {
+      const epoch = getIdentityEpoch(qc).epoch;
       const body = typeof input === "string" ? input : input.body;
       const attachment = typeof input === "string" ? null : input.attachment ?? null;
       const mentionedProfileIds = typeof input === "string" ? [] : input.mentionedProfileIds ?? [];
       if (hidden) throw new Error("That List isn’t available.");
       if (preview) {
         addListMessage(listId, body);
-        return;
+        return epoch;
       }
       if (!user?.id) throw new Error("Sign in to chat.");
       const { error } = await supabase.from("list_messages").insert({
@@ -173,17 +176,19 @@ export function useListMessages(listId: string) {
       } catch {
         // push is best-effort
       }
+      return epoch;
     },
-    onSuccess: () => {
-      invalidate();
-      broadcastChange();
+    onSuccess: (epoch) => {
+      invalidate(epoch);
+      if (isEpochCurrent(qc, epoch)) broadcastChange();
     },
   });
 
   /** Post a system entry (e.g. "started a call") that renders inline with a timestamp. */
   const sendSystem = useMutation({
     mutationFn: async (body: string) => {
-      if (hidden || preview || !user?.id) return;
+      const epoch = getIdentityEpoch(qc).epoch;
+      if (hidden || preview || !user?.id) return epoch;
       const { error } = await supabase.from("list_messages").insert({
         list_id: listId,
         body,
@@ -191,10 +196,11 @@ export function useListMessages(listId: string) {
         kind: "system",
       });
       if (error) throw error;
+      return epoch;
     },
-    onSuccess: () => {
-      invalidate();
-      broadcastChange();
+    onSuccess: (epoch) => {
+      invalidate(epoch);
+      if (isEpochCurrent(qc, epoch)) broadcastChange();
     },
   });
 
@@ -204,17 +210,19 @@ export function useListMessages(listId: string) {
    *  which would block pinning someone else's message). */
   const pin = useMutation({
     mutationFn: async ({ messageId, pinned }: { messageId: string; pinned: boolean }) => {
+      const epoch = getIdentityEpoch(qc).epoch;
       if (hidden) throw new Error("That List isn’t available.");
       if (preview) {
         pinListMessageLocal(listId, messageId, pinned);
-        return;
+        return epoch;
       }
       const { error } = await supabase.rpc("pin_list_message", { p_message_id: messageId, p_pinned: pinned });
       if (error) throw error;
+      return epoch;
     },
-    onSuccess: () => {
-      invalidate();
-      broadcastChange();
+    onSuccess: (epoch) => {
+      invalidate(epoch);
+      if (isEpochCurrent(qc, epoch)) broadcastChange();
     },
   });
 

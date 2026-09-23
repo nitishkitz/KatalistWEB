@@ -10,6 +10,7 @@ import { useLocalVersion } from "@/features/things/use-local-version";
 import { rpcCreateBucket, rpcDeleteBucket, rpcRenameBucket } from "@/features/things/rpc";
 import { fetchBuckets } from "./fetch-buckets";
 import type { BucketCard } from "./fixtures";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export function useBuckets() {
   const { session, user } = useSession();
@@ -33,7 +34,12 @@ export function useBuckets() {
 
   const create = useMutation({
     mutationFn: (name: string) => rpcCreateBucket(name, context),
-    onSuccess: async () => {
+    // onMutate captures the epoch before mutationFn's own RPC dispatch --
+    // no earlier point exists for a one-line mutationFn like this one --
+    // and passes it to onSuccess via mutationContext.
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: async (_data, _vars, mutationContext) => {
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       await qc.invalidateQueries({ queryKey: keys.buckets(user?.id, context) });
     },
   });
@@ -92,14 +98,18 @@ export function useBucket(bucketId: string | undefined) {
 
   const rename = useMutation({
     mutationFn: (name: string) => rpcRenameBucket(bucketId!, name),
-    onSuccess: () => {
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       void qc.invalidateQueries({ queryKey: ["bucket"] });
       void qc.invalidateQueries({ queryKey: ["buckets"] });
     },
   });
   const remove = useMutation({
     mutationFn: () => rpcDeleteBucket(bucketId!),
-    onSuccess: () => {
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       void qc.invalidateQueries({ queryKey: ["bucket"] });
       void qc.invalidateQueries({ queryKey: ["buckets"] });
       void qc.invalidateQueries({ queryKey: ["bucket-items"] });

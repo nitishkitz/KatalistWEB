@@ -197,7 +197,11 @@ export function CourtDesktop({
   // ["court"] itself (no need to also call refetch()) — it's the same
   // reconciliation ThingDetailContent's button path already uses on every
   // mutation.
-  const refreshAfterMutation = useCallback(() => invalidatePersonalSurfaces(qc), [qc]);
+  // `epoch` is the caller's own captured epoch (before its mutation's
+  // first await) -- this proxy has no epoch of its own to read; it just
+  // forwards whichever caller passes, and invalidatePersonalSurfaces
+  // itself is the single enforcement point that checks it.
+  const refreshAfterMutation = useCallback((epoch: number) => invalidatePersonalSurfaces(qc, epoch), [qc]);
   const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
   const [modalSelection, setModalSelection] = useState<{ lane: FocusViewTabId; thing: Thing } | null>(null);
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);

@@ -72,6 +72,7 @@ import { useLocalVersion } from "@/features/things/use-local-version";
 import { useListMessages, type ChatAttachment } from "@/features/lists/use-list-messages";
 import { formatFileSize } from "@/lib/file-utils";
 import { domainErrorMessage, extractErrorMessage } from "@/lib/domain-error";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { matchAvatarByName } from "@/features/people/directory";
@@ -1486,17 +1487,21 @@ function ListDetailPage() {
                                   <DropdownMenuContent align="end" className="w-48 bg-white">
                                     <DropdownMenuItem
                                       onClick={async () => {
+                                        const roleEpoch = getIdentityEpoch(qc).epoch;
                                         try {
                                           await rpcChangeListRole(
                                             list.id,
                                             memberId,
                                             role === "collaborator" ? "view_only" : "collaborator",
                                           );
+                                          if (!isEpochCurrent(qc, roleEpoch)) return;
                                           toast.success(`Updated ${m.name}'s role`);
                                           await qc.invalidateQueries({ queryKey: ["list", listId] });
                                           await qc.invalidateQueries({ queryKey: ["lists"] });
                                         } catch (err: unknown) {
-                                          toast.error(extractErrorMessage(err) ?? "Failed to update role");
+                                          if (isEpochCurrent(qc, roleEpoch)) {
+                                            toast.error(extractErrorMessage(err) ?? "Failed to update role");
+                                          }
                                         }
                                       }}
                                       className="text-[12px]"
@@ -1514,14 +1519,18 @@ function ListDetailPage() {
                                     <DropdownMenuItem
                                       className="text-[12px] text-destructive focus:text-destructive"
                                       onClick={async () => {
+                                        const removeEpoch = getIdentityEpoch(qc).epoch;
                                         try {
                                           await rpcRemoveListMember(list.id, memberId);
+                                          if (!isEpochCurrent(qc, removeEpoch)) return;
                                           toast.success(`Removed ${m.name} from list`);
                                           await qc.invalidateQueries({ queryKey: ["list", listId] });
                                           await qc.invalidateQueries({ queryKey: ["lists"] });
                                           await qc.invalidateQueries({ queryKey: ["assignable-people"] });
                                         } catch (err: unknown) {
-                                          toast.error(extractErrorMessage(err) ?? "Failed to remove member");
+                                          if (isEpochCurrent(qc, removeEpoch)) {
+                                            toast.error(extractErrorMessage(err) ?? "Failed to remove member");
+                                          }
                                         }
                                       }}
                                     >
@@ -1728,14 +1737,18 @@ function ListDetailPage() {
                                   disabled={isAdding}
                                   onClick={async () => {
                                     setAddingPersonId(person.id);
+                                    const addEpoch = getIdentityEpoch(qc).epoch;
                                     try {
                                       await rpcAddListMember(list.id, person.profileId || person.id, inviteRole);
+                                      if (!isEpochCurrent(qc, addEpoch)) return;
                                       toast.success(`Added ${person.name} as ${inviteRole === "collaborator" ? "Collaborator" : "View only"}`);
                                       await qc.invalidateQueries({ queryKey: ["list", listId] });
                                       await qc.invalidateQueries({ queryKey: ["lists"] });
                                       await qc.invalidateQueries({ queryKey: ["assignable-people"] });
                                     } catch (err: unknown) {
-                                      toast.error(extractErrorMessage(err) ?? "Couldn't add team member. Please try again.");
+                                      if (isEpochCurrent(qc, addEpoch)) {
+                                        toast.error(extractErrorMessage(err) ?? "Couldn't add team member. Please try again.");
+                                      }
                                     } finally {
                                       setAddingPersonId(null);
                                     }

@@ -16,7 +16,7 @@ type CourtWorkspaceProps = {
   onOpen: (lane: FocusViewTabId, thing: Thing, origin: HTMLElement) => void;
   onSelectThing: (thingId: string, lane?: FocusViewTabId) => void;
   onClose: () => void;
-  onRefresh: () => unknown;
+  onRefresh: (epoch: number) => unknown;
   onViewAll?: (lane: FocusViewTabId) => void;
   heroRect?: { top: number; left: number; width: number; height: number } | null;
 };

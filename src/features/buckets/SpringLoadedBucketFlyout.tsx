@@ -6,6 +6,7 @@ import { useBuckets } from "./use-buckets";
 import { rpcAddToBucket } from "@/features/things/rpc";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 interface SpringLoadedBucketFlyoutProps {
   isOpen: boolean;
@@ -95,12 +96,14 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
                   e.preventDefault();
                   setHoveredBucketId(null);
                   onClose();
+                  const dropEpoch = getIdentityEpoch(qc).epoch;
                   try {
                     const raw = e.dataTransfer.getData("application/katalist-thing");
                     if (!raw) return;
                     const data = JSON.parse(raw) as { thingId: string; title?: string };
 
                     await rpcAddToBucket(b.id, data.thingId);
+                    if (!isEpochCurrent(qc, dropEpoch)) return;
                     toast.success(
                       `Filed "${data.title || "Thing"}" into 📁 ${b.name}`,
                     );
@@ -108,7 +111,7 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
                     await qc.invalidateQueries({ queryKey: ["bucket", b.id] });
                     await qc.invalidateQueries({ queryKey: ["bucket-items", b.id] });
                   } catch (err: unknown) {
-                    toast.error(domainErrorMessage(err));
+                    if (isEpochCurrent(qc, dropEpoch)) toast.error(domainErrorMessage(err));
                   }
                 }}
                 className={cn(

@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
+import { getIdentityEpoch } from "@/features/realtime/identity-cache-policy";
 
 export function useRealtimeInvalidation() {
   const qc = useQueryClient();
@@ -74,7 +75,15 @@ export function useRealtimeInvalidation() {
         void qc.invalidateQueries({ queryKey: ["upcoming-meetings"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "profile_object_state" }, () => {
-        void invalidatePersonalSurfaces(qc);
+        // Read fresh here, not "captured too early" -- this callback IS
+        // the entry point for a live event, with no earlier
+        // construction point to capture from (unlike a mutation, which
+        // has a clear "before the first await" moment). This whole
+        // channel's ownership/disposal-on-identity-change is P7's
+        // remit, not retrofitted here; this is the minimal change
+        // needed to compile against invalidatePersonalSurfaces's new
+        // required epoch parameter.
+        void invalidatePersonalSurfaces(qc, getIdentityEpoch(qc).epoch);
       })
       .subscribe();
 

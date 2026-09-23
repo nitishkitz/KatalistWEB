@@ -3,6 +3,7 @@ import { keys } from "@/domain/query-keys";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
+import { isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type PersonalShred = {
   thingIds: Set<string>;
@@ -80,8 +81,18 @@ export function usePersonalShred(): PersonalShred {
   return query.data ?? EMPTY_PERSONAL_SHRED;
 }
 
-/** Court / Lists / Nudges / Doorman / buckets after personal Shred or Restore. */
-export async function invalidatePersonalSurfaces(qc: QueryClient) {
+/**
+ * Court / Lists / Nudges / Doorman / buckets after personal Shred or
+ * Restore. `epoch` must be captured by the caller before any `await`, at
+ * the point the mutation that motivated this refresh was constructed --
+ * this is a shared helper with multiple, independent callers, so the
+ * epoch check lives here once rather than needing every call site to
+ * duplicate it (and risk one forgetting to). A stale-epoch call is a
+ * silent no-op, not an error -- the caller's own mutation already ran;
+ * only this refresh's cache-side effects are skipped.
+ */
+export async function invalidatePersonalSurfaces(qc: QueryClient, epoch: number) {
+  if (!isEpochCurrent(qc, epoch)) return;
   await Promise.all([
     qc.invalidateQueries({ queryKey: ["shredded"] }),
     qc.invalidateQueries({ queryKey: ["court"] }),

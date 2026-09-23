@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { fetchProfileIdentities, matchProfile } from "@/features/people/directory";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type ProfileRow = {
   id: string;
@@ -74,7 +75,9 @@ export function useUpdateProfile() {
       const { error } = await supabase.from("profiles").update(patch).eq("id", user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       void qc.invalidateQueries({ queryKey: ["profile", user?.id] });
       void qc.invalidateQueries({ queryKey: ["profile-directory"] });
       void qc.invalidateQueries({ queryKey: ["assignable-people"] });
@@ -108,7 +111,9 @@ export function useUploadAvatar() {
       if (rowErr) throw rowErr;
       return avatar_url;
     },
-    onSuccess: () => {
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       void qc.invalidateQueries({ queryKey: ["profile", user?.id] });
       void qc.invalidateQueries({ queryKey: ["profile-directory"] });
       void qc.invalidateQueries({ queryKey: ["assignable-people"] });

@@ -22,6 +22,7 @@ import {
   surfaceCatchupLocal,
 } from "@/features/things/local-state";
 import { isDoormanEnabled } from "@/features/doorman/use-doorman";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import {
   resolveMoments,
   type CatchUpMomentKind,
@@ -209,7 +210,10 @@ export function useCatchup(): UseCatchup {
       });
       if (error) throw error;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["catchup"] }),
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (isEpochCurrent(qc, mutationContext.epoch)) void qc.invalidateQueries({ queryKey: ["catchup"] });
+    },
   });
 
   const surfaceMoment = useCallback(

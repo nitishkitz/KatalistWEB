@@ -60,6 +60,7 @@ import {
 } from "./rpc";
 import { withOptimisticPatch } from "./query-updates";
 import { invalidatePersonalSurfaces } from "./personal-shred";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { isPreviewMode } from "@/lib/session-mode";
 import { uploadThingAttachment } from "./attachments";
 import { getThingCapabilities } from "@/domain/capabilities";
@@ -429,6 +430,8 @@ export function ThingDetailContent({
   };
 
   const handleThingFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Captured before any await in this handler.
+    const uploadEpoch = getIdentityEpoch(qc).epoch;
     try {
       const files = e.target.files;
       if (!files || files.length === 0 || !thing?.id) return;
@@ -439,12 +442,17 @@ export function ThingDetailContent({
             ? await uploadThingAttachment(thing.id, files[i])
             : await processFileForUpload(files[i]);
           if (!useRealStorage) await rpcAddThingFile(thing.id, processed);
-          onFileSelect?.(processed);
-          toast.success(`Attached ${files[i].name}`);
+          if (isEpochCurrent(qc, uploadEpoch)) {
+            onFileSelect?.(processed);
+            toast.success(`Attached ${files[i].name}`);
+          }
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
+          if (isEpochCurrent(qc, uploadEpoch)) {
+            toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
+          }
         }
       }
+      if (!isEpochCurrent(qc, uploadEpoch)) return;
       await qc.invalidateQueries({ queryKey: ["thing", thing.id] });
       await qc.invalidateQueries({ queryKey: ["court"] });
     } finally {
@@ -457,8 +465,9 @@ export function ThingDetailContent({
     setCommentAttachments([]);
   }, [thing?.id]);
 
-  const invalidate = async () => {
-    await invalidatePersonalSurfaces(qc);
+  const invalidate = async (epoch: number) => {
+    if (!isEpochCurrent(qc, epoch)) return;
+    await invalidatePersonalSurfaces(qc, epoch);
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["thing"] }),
       qc.invalidateQueries({ queryKey: ["notifications"] }),
@@ -468,9 +477,20 @@ export function ThingDetailContent({
   };
 
   const run = useMutation({
-    mutationFn: async (fn: () => Promise<unknown>) => fn(),
-    onSuccess: async () => {
-      await invalidate();
+    // Captures the epoch at mutation-start (before `fn()`'s own work,
+    // and therefore before any await inside it) and threads it through
+    // to onSuccess as the mutationFn's return value -- this mutation is
+    // reused generically across every withOptimisticPatch(...) call site
+    // in this file, so there's no single fixed place to read a captured
+    // epoch other than here, at the point `run.mutate(fn)` actually
+    // starts running.
+    mutationFn: async (fn: () => Promise<unknown>) => {
+      const epoch = getIdentityEpoch(qc).epoch;
+      await fn();
+      return epoch;
+    },
+    onSuccess: async (epoch) => {
+      await invalidate(epoch);
     },
     onError: (err) => {
       toast.error(domainErrorMessage(err));

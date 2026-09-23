@@ -10,6 +10,7 @@ import { useLists } from "@/features/lists/use-lists";
 import { keys } from "@/domain/query-keys";
 import type { Thing } from "@/domain/thing";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import {
   excludePersonallyShreddedThings,
   usePersonalShred,
@@ -75,7 +76,8 @@ export function useBucketItems(bucketId: string | undefined) {
     queryFn: () => fetchBucketItems(bucketId!, user!.id),
   });
 
-  const invalidate = () => {
+  const invalidate = (epoch: number) => {
+    if (!isEpochCurrent(qc, epoch)) return;
     void qc.invalidateQueries({ queryKey: ["bucket-items"] });
     void qc.invalidateQueries({ queryKey: ["bucket"] });
     void qc.invalidateQueries({ queryKey: ["buckets"] });
@@ -83,13 +85,15 @@ export function useBucketItems(bucketId: string | undefined) {
 
   const add = useMutation({
     mutationFn: (input: { thingId?: string; listId?: string }) => rpcAddToBucket(bucketId!, input.thingId, input.listId),
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const remove = useMutation({
     mutationFn: (input: { thingId?: string; listId?: string }) =>
       rpcRemoveFromBucket(bucketId!, input.thingId, input.listId),
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const raw: BucketItem[] = preview && bucketId ? resolveDemoItems(bucketId) : (query.data ?? []);

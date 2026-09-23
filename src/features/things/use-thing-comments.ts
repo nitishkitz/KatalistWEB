@@ -6,6 +6,7 @@ import { addCommentLocal, getActivity, getComments } from "./local-state";
 import { useLocalVersion } from "./use-local-version";
 import { rpcComment } from "./rpc";
 import { currentDemoPerson } from "@/features/demo/identities";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import type { ThingFile } from "@/domain/thing";
 
 import { resolveActorPeople } from "@/features/people/resolve-actors";
@@ -101,7 +102,14 @@ export function useThingComments(thingId: string | null) {
       await rpcComment(thingId, bodyText, attachments);
     },
     onMutate: async (input: PostCommentInput) => {
+      // Captured here (effectively at mutate()-dispatch time -- onMutate
+      // runs before mutationFn, with nothing awaited yet) and threaded
+      // through context so onError/onSettled use this SAME captured
+      // value, not a freshly-read "current" epoch that would just
+      // compare against itself.
+      const epoch = getIdentityEpoch(qc).epoch;
       await qc.cancelQueries({ queryKey: ["thing-comments", thingId] });
+      if (!isEpochCurrent(qc, epoch)) return { epoch };
       const previousComments = qc.getQueryData<ThingComment[]>(["thing-comments", thingId]);
 
       const currentUserName =
@@ -132,14 +140,15 @@ export function useThingComments(thingId: string | null) {
         addCommentLocal(thingId, bodyText, currentDemoPerson().name, attachments);
       }
 
-      return { previousComments };
+      return { previousComments, epoch };
     },
     onError: (_err, _input, context) => {
-      if (context?.previousComments) {
+      if (context?.previousComments && context.epoch !== undefined && isEpochCurrent(qc, context.epoch)) {
         qc.setQueryData(["thing-comments", thingId], context.previousComments);
       }
     },
-    onSettled: () => {
+    onSettled: (_data, _error, _input, context) => {
+      if (context?.epoch === undefined || !isEpochCurrent(qc, context.epoch)) return;
       void qc.invalidateQueries({ queryKey: ["thing-comments", thingId] });
       void qc.invalidateQueries({ queryKey: ["thing-activity", thingId] });
       void qc.invalidateQueries({ queryKey: ["court"] });

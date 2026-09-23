@@ -6,6 +6,7 @@ import { dismissGhost, getGhostCandidate } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useAppContext } from "@/features/context/use-app-context";
 import { fetchPersonalShred } from "@/features/things/personal-shred";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import type { ContextKind, Thing } from "@/domain/thing";
 
 export type Ghost = {
@@ -67,7 +68,10 @@ export function useDoorman() {
       const { error } = await supabase.rpc("snooze_breakthrough", { p_thing_id: thingId, p_snoozed_until: until });
       if (error) throw error;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["doorman"] }),
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (isEpochCurrent(qc, mutationContext.epoch)) void qc.invalidateQueries({ queryKey: ["doorman"] });
+    },
   });
 
   const dismiss = useMutation({
@@ -79,7 +83,10 @@ export function useDoorman() {
       const { error } = await supabase.rpc("dismiss_breakthrough", { p_thing_id: thingId });
       if (error) throw error;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["doorman"] }),
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (isEpochCurrent(qc, mutationContext.epoch)) void qc.invalidateQueries({ queryKey: ["doorman"] });
+    },
   });
 
   let ghost: Ghost | null = null;

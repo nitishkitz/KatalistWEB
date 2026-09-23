@@ -3,6 +3,7 @@ import { keys } from "@/domain/query-keys";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
+import { isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 /** Snooze interval presets offered on swipe-left (June BRD v1.1). */
 export type SnoozeOption = "1h" | "6h" | "next_day";
@@ -80,8 +81,13 @@ export function usePersonalSnooze(): PersonalSnooze {
   return query.data ?? EMPTY_PERSONAL_SNOOZE;
 }
 
-/** Refresh every surface that a snooze can hide a Thing from. */
-export async function invalidateSnoozeSurfaces(qc: QueryClient) {
+/**
+ * Refresh every surface that a snooze can hide a Thing from. `epoch`
+ * must be captured by the caller before any `await` -- see
+ * invalidatePersonalSurfaces's identical contract in personal-shred.ts.
+ */
+export async function invalidateSnoozeSurfaces(qc: QueryClient, epoch: number) {
+  if (!isEpochCurrent(qc, epoch)) return;
   await Promise.all([
     qc.invalidateQueries({ queryKey: ["snoozed"] }),
     qc.invalidateQueries({ queryKey: ["court"] }),

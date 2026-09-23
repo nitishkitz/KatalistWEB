@@ -8,6 +8,7 @@ import { rpcAddToBucket, rpcCreateBucket } from "@/features/things/rpc";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { useAppContext } from "@/features/context/use-app-context";
 import { cn } from "@/lib/utils";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import {
   Dialog,
   DialogContent,
@@ -43,14 +44,16 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
     e.preventDefault();
     if (!newBucketName.trim() || isCreating) return;
     setIsCreating(true);
+    const createEpoch = getIdentityEpoch(qc).epoch;
     try {
       await rpcCreateBucket(newBucketName.trim(), context);
+      if (!isEpochCurrent(qc, createEpoch)) return;
       toast.success(`Created bucket "${newBucketName.trim()}"`);
       setNewBucketName("");
       setIsNewBucketOpen(false);
       await qc.invalidateQueries({ queryKey: ["buckets"] });
     } catch (err: unknown) {
-      toast.error(domainErrorMessage(err));
+      if (isEpochCurrent(qc, createEpoch)) toast.error(domainErrorMessage(err));
     } finally {
       setIsCreating(false);
     }
@@ -133,6 +136,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                   e.preventDefault();
                   e.stopPropagation();
                   setHoveredBucketId(null);
+                  const dropEpoch = getIdentityEpoch(qc).epoch;
                   try {
                     const raw =
                       e.dataTransfer.getData("application/katalist-thing") ||
@@ -144,6 +148,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                       message?: string;
                       alreadyExists?: boolean;
                     } | null;
+                    if (!isEpochCurrent(qc, dropEpoch)) return;
                     if (res?.message?.includes("already") || res?.alreadyExists) {
                       toast.info(`"${data.title || "Thing"}" is already in 📁 ${b.name}`);
                     } else {
@@ -155,7 +160,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                     await qc.invalidateQueries({ queryKey: ["bucket", b.id] });
                     await qc.invalidateQueries({ queryKey: ["bucket-items", b.id] });
                   } catch (err: unknown) {
-                    toast.error(domainErrorMessage(err));
+                    if (isEpochCurrent(qc, dropEpoch)) toast.error(domainErrorMessage(err));
                   } finally {
                     onClose?.();
                   }
