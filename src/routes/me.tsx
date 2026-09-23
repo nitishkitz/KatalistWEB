@@ -37,6 +37,7 @@ import { isDoormanEnabled } from "@/features/doorman/use-doorman";
 import { cn } from "@/lib/utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useStoredMotionPreference } from "@/hooks/use-motion-preference";
+import { getPushPermissionState, registerPushForUser, type PushPermissionState } from "@/features/push/push-registration";
 
 export const Route = createFileRoute("/me")({
   head: () => ({
@@ -86,6 +87,13 @@ function MePage() {
   const [editName, setEditName] = useState("");
   const [editOccupation, setEditOccupation] = useState("");
   const { reduceMotion: reduced, setReduceMotion: setReduced } = useStoredMotionPreference();
+  // G06: real push permission state, shown honestly in the notifications
+  // panel below instead of the previous static "in-app notifications
+  // only, for now" copy (which was simply false -- real browser push
+  // already existed via PushRegistrar, it just had no user-facing
+  // control and auto-prompted for permission on every sign-in instead).
+  const [pushPermission, setPushPermission] = useState<PushPermissionState>(() => getPushPermissionState());
+  const [pushEnabling, setPushEnabling] = useState(false);
   const [doorman, setDoorman] = useState(() => isDoormanEnabled());
 
   const name =
@@ -99,7 +107,13 @@ function MePage() {
     user?.user_metadata?.initials ||
     name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase();
   const avatarUrl = useAvatarUrl(name, user?.email, profile?.avatar_url);
-  const email = profile?.email || user?.email || "";
+  // G06: phone-based sign-in synthesizes a fake "local-<digits>@katalist.local"
+  // address (see src/lib/auth/local-user.ts) so Supabase's email-shaped auth
+  // internals still work -- it was never a real contact address, so it must
+  // never be shown as one.
+  const rawEmail = profile?.email || user?.email || "";
+  const isSyntheticAuthEmail = rawEmail.endsWith("@katalist.local");
+  const email = isSyntheticAuthEmail ? "" : rawEmail;
   const phone = profile?.phone_e164 || user?.phone || "";
   const timezone = profile?.timezone || "";
   const createdAt = profile?.created_at || user?.created_at || "";
@@ -121,6 +135,28 @@ function MePage() {
     qc.clear();
     toast.success("Signed out");
     await navigate({ to: "/auth", replace: true });
+  }
+
+  // G06: the ONLY place in the app that ever calls the permission-requesting
+  // flow -- an explicit click here, never an automatic effect on sign-in.
+  async function handleEnablePush() {
+    if (!user?.id || pushEnabling) return;
+    setPushEnabling(true);
+    try {
+      const result = await registerPushForUser(user.id, (opts) => void navigate(opts as never));
+      setPushPermission(getPushPermissionState());
+      if (result.ok) {
+        toast.success("Notifications enabled.");
+      } else if (result.reason === "denied") {
+        toast.error("Notifications were blocked. You can allow them again in your browser's site settings.");
+      } else if (result.reason === "unsupported") {
+        toast.error("This browser doesn't support push notifications.");
+      } else {
+        toast.error("Couldn't enable notifications right now.");
+      }
+    } finally {
+      setPushEnabling(false);
+    }
   }
 
   if (profileLoading) {
@@ -285,7 +321,15 @@ function MePage() {
               { icon: Crown, tint: "bg-[#f0ebfd] text-[#975ee2]", value: String(stats.sorted), label: "Things sorted" },
               { icon: BarChart3, tint: "bg-[#e6fcf0] text-[#12a15f]", value: String(stats.caught), label: "Things caught" },
               { icon: Flame, tint: "bg-[#fef0e4] text-[#fd983f]", value: stats.streak, label: "Current streak" },
-              { icon: Calendar, tint: "bg-[#eef1ff] text-[#2874f4]", value: String(stats.weekly), label: "This week" },
+              {
+                // G06: stats.weekly is a rolling 7-day window (now - 7
+                // days), not a calendar week -- "This week" implied a
+                // reset every Sunday/Monday that never actually happens.
+                icon: Calendar,
+                tint: "bg-[#eef1ff] text-[#2874f4]",
+                value: String(stats.weekly),
+                label: "Last 7 days",
+              },
             ] as const
           ).map((s) => (
             <div
@@ -504,10 +548,36 @@ function MePage() {
                     />
                   </label>
                 ) : panel === "notifications" ? (
-                  <p className="mt-4 text-[13px] text-muted-foreground">
-                    In-app notifications only, for now — you're notified when a Thing is assigned to you, caught,
-                    reassigned, nudged, commented on, sorted, or cancelled.
-                  </p>
+                  <div className="mt-4 space-y-3">
+                    <p className="text-[13px] text-muted-foreground">
+                      You're notified in-app when a Thing is assigned to you, caught, reassigned, nudged, commented
+                      on, sorted, or cancelled.
+                    </p>
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 p-3">
+                      <div>
+                        <p className="text-[13px] font-medium text-foreground">Push notifications</p>
+                        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                          {pushPermission === "granted"
+                            ? "Enabled on this device."
+                            : pushPermission === "denied"
+                              ? "Blocked — allow them again in your browser's site settings to re-enable."
+                              : pushPermission === "unsupported"
+                                ? "Not supported in this browser."
+                                : "Off. Enable to get notified even when Katalist isn't open."}
+                        </p>
+                      </div>
+                      {pushPermission === "default" ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleEnablePush()}
+                          disabled={pushEnabling}
+                          className="h-8 shrink-0 rounded-lg bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-60"
+                        >
+                          {pushEnabling ? "Enabling…" : "Enable"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : (
                   <p className="mt-4 text-[13px] text-muted-foreground">
                     Your name, email, and avatar are visible to other Katalist accounts. Your phone number is never

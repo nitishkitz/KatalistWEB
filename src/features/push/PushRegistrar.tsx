@@ -1,17 +1,19 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
-import { requestAutojoin } from "@/features/calls/autojoin-signal";
-import { firebaseConfig, VAPID_KEY } from "./push-config";
+import { getPushPermissionState, registerPushForUser } from "./push-registration";
 
 /**
- * Registers the browser for FCM web push when signed in: registers the service
- * worker, requests notification permission, obtains a device token, and stores
- * it in device_tokens. Foreground messages surface as a toast (background
- * messages are handled by public/firebase-messaging-sw.js). Best-effort — any
- * failure (unsupported browser, denied permission) is swallowed silently.
+ * Re-registers this device's push token when signed in and permission was
+ * ALREADY granted in a previous session -- so returning users don't need
+ * to re-click "Enable notifications" every time. G06: this must never be
+ * the thing that shows the browser's permission prompt itself -- an
+ * earlier version requested that permission unconditionally on every
+ * sign-in, which is exactly the unsolicited-prompt pattern this batch's
+ * own instruction calls out. Requesting permission now only ever
+ * happens from an explicit "Enable notifications" action (Me's settings
+ * panel, via the same registerPushForUser this file calls), never from
+ * this passive auto-reconnect effect.
  */
 export function PushRegistrar() {
   const { user } = useSession();
@@ -20,75 +22,12 @@ export function PushRegistrar() {
   useEffect(() => {
     const uid = user?.id;
     if (!uid) return;
-    if (typeof window === "undefined") return;
-    if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
+    if (getPushPermissionState() !== "granted") return; // no prompt -- only reconnect an already-decided "yes"
 
     let cancelled = false;
-    void (async () => {
-      try {
-        const [{ initializeApp, getApps }, messagingMod] = await Promise.all([
-          import("firebase/app"),
-          import("firebase/messaging"),
-        ]);
-        const { getMessaging, getToken, onMessage, isSupported } = messagingMod;
-        if (!(await isSupported()) || cancelled) return;
-
-        const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
-        const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted" || cancelled) return;
-
-        const messaging = getMessaging(app);
-        const token = await getToken(messaging, {
-          vapidKey: VAPID_KEY,
-          serviceWorkerRegistration: reg,
-        });
-        if (!token || cancelled) return;
-
-        await supabase.from("device_tokens").upsert(
-          { profile_id: uid, token },
-          { onConflict: "token" },
-        );
-
-        onMessage(messaging, (payload) => {
-          const title = payload.notification?.title || payload.data?.title || "Katalist";
-          const body = payload.notification?.body || payload.data?.body || "";
-          const data = payload.data ?? {};
-          if (data.kind === "incoming_call" && data.listId) {
-            const listId = data.listId;
-            const isHub = data.hub === "1";
-            toast(title, {
-              description: body,
-              duration: 30000,
-              action: {
-                label: "Join",
-                onClick: () => {
-                  try {
-                    sessionStorage.setItem(`katalist.autojoin.${listId}`, "1");
-                  } catch {
-                    /* ignore */
-                  }
-                  requestAutojoin(listId);
-                  if (isHub) {
-                    void navigate({
-                      to: "/team/$conversationId",
-                      params: { conversationId: listId },
-                      search: { call: "1" },
-                    });
-                  } else {
-                    void navigate({ to: "/lists/$listId", params: { listId } });
-                  }
-                },
-              },
-            });
-          } else {
-            toast(title, { description: body });
-          }
-        });
-      } catch {
-        // Push is optional; never block the app on it.
-      }
-    })();
+    void registerPushForUser(uid, (opts) => {
+      if (!cancelled) void navigate(opts as never);
+    });
 
     return () => {
       cancelled = true;
