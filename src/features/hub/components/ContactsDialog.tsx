@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import { Search, MessageCircle, Phone, UserPlus, Check, X, Clock, Mail, Copy, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +20,7 @@ import { useConversations } from "@/features/hub/use-conversations";
 import { useContacts, useContactRequests, useInvitations, useRefreshContacts } from "@/features/hub/use-contacts";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 type Tab = "people" | "contacts" | "requests" | "invites";
 
@@ -31,6 +33,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const { incoming, outgoing } = useContactRequests();
   const { invitations } = useInvitations();
   const refreshContacts = useRefreshContacts();
+  const qc = useQueryClient();
 
   const [tab, setTab] = useState<Tab>("people");
   const [query, setQuery] = useState("");
@@ -77,12 +80,13 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const connect = async (member: TeamMember) => {
     setBusyId(member.id);
+    const epoch = getIdentityEpoch(qc).epoch;
     try {
       await rpcSendContactRequest(member.id);
-      refreshContacts();
-      toast.success(`Request sent to ${member.name.split(" ")[0]}`);
+      refreshContacts(epoch);
+      if (isEpochCurrent(qc, epoch)) toast.success(`Request sent to ${member.name.split(" ")[0]}`);
     } catch (err) {
-      toast.error(domainErrorMessage(err));
+      if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -90,11 +94,12 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const respond = async (requestId: string, accept: boolean) => {
     setBusyId(requestId);
+    const epoch = getIdentityEpoch(qc).epoch;
     try {
       await rpcRespondContactRequest(requestId, accept);
-      refreshContacts();
+      refreshContacts(epoch);
     } catch (err) {
-      toast.error(domainErrorMessage(err));
+      if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -102,11 +107,12 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const cancelReq = async (requestId: string) => {
     setBusyId(requestId);
+    const epoch = getIdentityEpoch(qc).epoch;
     try {
       await rpcCancelContactRequest(requestId);
-      refreshContacts();
+      refreshContacts(epoch);
     } catch (err) {
-      toast.error(domainErrorMessage(err));
+      if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -119,16 +125,18 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       return;
     }
     setBusyId("invite");
+    const epoch = getIdentityEpoch(qc).epoch;
     try {
       const inv = await rpcCreateInvitation(email);
-      refreshContacts();
+      refreshContacts(epoch);
+      if (!isEpochCurrent(qc, epoch)) return;
       setInviteEmail("");
       if (emailArg) setQuery("");
       const link = `${window.location.origin}/auth?invite=${inv.token}`;
       await navigator.clipboard.writeText(link).catch(() => {});
       toast.success("Invite created — link copied to clipboard");
     } catch (err) {
-      toast.error(domainErrorMessage(err));
+      if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
     } finally {
       setBusyId(null);
     }
@@ -142,11 +150,12 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const revokeInvite = async (id: string) => {
     setBusyId(id);
+    const epoch = getIdentityEpoch(qc).epoch;
     try {
       await rpcRevokeInvitation(id);
-      refreshContacts();
+      refreshContacts(epoch);
     } catch (err) {
-      toast.error(domainErrorMessage(err));
+      if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
     } finally {
       setBusyId(null);
     }

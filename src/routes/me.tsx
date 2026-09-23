@@ -35,6 +35,7 @@ import { useTrophy } from "@/features/me/use-trophy";
 import { useAvatarUrl } from "@/features/people/directory";
 import { isDoormanEnabled } from "@/features/doorman/use-doorman";
 import { cn } from "@/lib/utils";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export const Route = createFileRoute("/me")({
   head: () => ({
@@ -139,16 +140,24 @@ function MePage() {
 
   const onAvatarFile = (file?: File | null) => {
     if (!file) return;
+    const epoch = getIdentityEpoch(qc).epoch;
     uploadAvatar.mutate(file, {
-      onSuccess: () => toast.success("Photo updated."),
-      onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn’t save photo."),
+      onSuccess: () => { if (isEpochCurrent(qc, epoch)) toast.success("Photo updated."); },
+      onError: (err) => {
+        if (isEpochCurrent(qc, epoch)) toast.error(err instanceof Error ? err.message : "Couldn’t save photo.");
+      },
     });
   };
   const saveCover = (key: string) => {
     setCoverOpen(false);
+    const epoch = getIdentityEpoch(qc).epoch;
     updateProfile.mutate(
       { cover_theme: key },
-      { onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn’t save cover.") },
+      {
+        onError: (err) => {
+          if (isEpochCurrent(qc, epoch)) toast.error(err instanceof Error ? err.message : "Couldn’t save cover.");
+        },
+      },
     );
   };
   const openEdit = () => {
@@ -162,14 +171,18 @@ function MePage() {
       toast.error("Name can’t be empty.");
       return;
     }
+    const epoch = getIdentityEpoch(qc).epoch;
     updateProfile.mutate(
       { display_name: dn, occupation: editOccupation.trim() || null },
       {
         onSuccess: () => {
+          if (!isEpochCurrent(qc, epoch)) return;
           toast.success("Profile updated.");
           setEditOpen(false);
         },
-        onError: (err) => toast.error(err instanceof Error ? err.message : "Couldn’t save."),
+        onError: (err) => {
+          if (isEpochCurrent(qc, epoch)) toast.error(err instanceof Error ? err.message : "Couldn’t save.");
+        },
       },
     );
   };

@@ -18,6 +18,7 @@ import { mapDbListRows, type DbListRow } from "./map-list-rows";
 import { fetchListDetail } from "./fetch-list-detail";
 import { getListDetailSeed } from "./list-detail-seed";
 import type { ListRow } from "./fixtures";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 async function fetchLists(profileId: string, context: "work" | "home"): Promise<ListRow[]> {
   const columns = "id,name,context,owner_profile_id,updated_at,description,cover_storage_path";
@@ -68,13 +69,17 @@ export function useLists() {
   const create = useMutation({
     mutationFn: (input: { name: string; description?: string | null }) =>
       rpcCreateList({ ...input, context }),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: keys.lists(user?.id, context) });
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: async (_data, _vars, mutationContext) => {
+      if (isEpochCurrent(qc, mutationContext.epoch)) {
+        await qc.invalidateQueries({ queryKey: keys.lists(user?.id, context) });
+      }
     },
   });
 
   const refetch = async () => {
-    await qc.invalidateQueries({ queryKey: keys.lists(user?.id, context) });
+    const epoch = getIdentityEpoch(qc).epoch;
+    if (isEpochCurrent(qc, epoch)) await qc.invalidateQueries({ queryKey: keys.lists(user?.id, context) });
   };
 
   return {

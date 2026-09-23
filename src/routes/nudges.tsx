@@ -25,6 +25,7 @@ import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailW
 import { useThing } from "@/features/things/use-thing";
 import { useQueryClient } from "@tanstack/react-query";
 import { domainErrorMessage } from "@/lib/domain-error";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import type { Thing } from "@/domain/thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 
@@ -120,10 +121,12 @@ function NudgesPage() {
   const handleNudge = (id: string, dbReason?: NudgeReason) => {
     if (nudgingId) return;
     setNudgingId(id);
+    const epoch = getIdentityEpoch(qc).epoch;
     void rpcNudgeThing(id, dbReason).then(
       () => {
-        toast.success("Just a gentle paw tap on this one.");
         setNudgingId(null);
+        if (!isEpochCurrent(qc, epoch)) return;
+        toast.success("Just a gentle paw tap on this one.");
         void qc.invalidateQueries({ queryKey: ["nudges"] });
         void qc.invalidateQueries({ queryKey: ["nudge-history"] });
         void qc.invalidateQueries({ queryKey: ["thing"] });
@@ -132,7 +135,7 @@ function NudgesPage() {
       },
       (err: unknown) => {
         setNudgingId(null);
-        toast.error(domainErrorMessage(err));
+        if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
       },
     );
   };

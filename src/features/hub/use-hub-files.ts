@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { fetchProfileIdentities } from "@/features/people/directory";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 const FILES_BUCKET = "hub-files";
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -108,7 +109,9 @@ export function useHubFiles(listId: string, parentId: string | null) {
     queryFn: () => fetchFiles(listId, parentId),
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["hub-files", listId] });
+  const invalidate = (epoch: number) => {
+    if (isEpochCurrent(qc, epoch)) return qc.invalidateQueries({ queryKey: ["hub-files", listId] });
+  };
 
   const createFolder = useMutation({
     mutationFn: async (name: string) => {
@@ -124,7 +127,8 @@ export function useHubFiles(listId: string, parentId: string | null) {
       });
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const upload = useMutation({
@@ -149,7 +153,8 @@ export function useHubFiles(listId: string, parentId: string | null) {
       });
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const rename = useMutation({
@@ -159,7 +164,8 @@ export function useHubFiles(listId: string, parentId: string | null) {
       const { error } = await supabase.from("hub_files").update({ name: clean }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   /** Pin/unpin a file so it stays at the top of the list. Direct update — the
@@ -173,7 +179,8 @@ export function useHubFiles(listId: string, parentId: string | null) {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const move = useMutation({
@@ -181,7 +188,8 @@ export function useHubFiles(listId: string, parentId: string | null) {
       const { error } = await supabase.from("hub_files").update({ parent_id: targetParentId }).eq("id", id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const remove = useMutation({
@@ -193,7 +201,8 @@ export function useHubFiles(listId: string, parentId: string | null) {
         void supabase.storage.from(FILES_BUCKET).remove([item.storagePath]);
       }
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   return {

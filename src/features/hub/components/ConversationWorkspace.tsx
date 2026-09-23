@@ -50,8 +50,8 @@ export function ConversationWorkspace({
   // through the chat-heads bubble/pop-out already does (both read from the
   // same device-local last-read mark).
   useEffect(() => {
-    markConversationAsRead(listId);
-  }, [listId]);
+    markConversationAsRead(listId, user?.id);
+  }, [listId, user?.id]);
 
   const sessionSuffix = useMemo(
     () =>

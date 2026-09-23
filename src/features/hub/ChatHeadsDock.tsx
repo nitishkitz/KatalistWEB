@@ -187,8 +187,8 @@ export function ChatHeadsDock() {
   const selected = conversations.find((c) => c.id === selectedId) ?? conversations[0] ?? null;
 
   useEffect(() => {
-    if ((open || pipWindow) && selected) markConversationAsRead(selected.id);
-  }, [open, pipWindow, selected]);
+    if ((open || pipWindow) && selected) markConversationAsRead(selected.id, user?.id);
+  }, [open, pipWindow, selected, user?.id]);
 
   // If the user closes the PiP window from its own chrome (not our button),
   // fall back to the normal in-tab popover state.

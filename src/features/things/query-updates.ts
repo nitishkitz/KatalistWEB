@@ -268,8 +268,16 @@ export function patchThingInCaches(qc: QueryClient, thingId: string, patch: Thin
     touched.push({ queryKey: thingKey, kind: "thing" });
   }
 
+  // Court's real key is ["court", profileId, context] (see domain/query-keys.ts).
+  // A bare ["court"] prefix scan would match every profile's cached Court --
+  // e.g. a previous profile's entry that hasn't been evicted/gc'd yet after a
+  // switch -- and patch a Thing into a cache the current identity can no
+  // longer see. Scope to the profile owning the current epoch.
+  const identity = getIdentityEpoch(qc).identity;
+  const myProfileId = identity.kind === "live" || identity.kind === "preview" ? identity.profileId : null;
   for (const query of qc.getQueryCache().findAll({ queryKey: ["court"] })) {
     const key = query.queryKey;
+    if (myProfileId === null || key[1] !== myProfileId) continue;
     const previous = qc.getQueryData<CourtCache>(key);
     const index = previous?.things.findIndex((t) => t.id === thingId) ?? -1;
     if (!previous || index === -1) continue;

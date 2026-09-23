@@ -9,26 +9,45 @@ import type { Conversation } from "./use-conversations";
  * that would need a server-side last_read_at per profile per conversation,
  * a larger follow-up if ever needed. Good enough to drive the chat-heads
  * dock's unread badges on the device where the app is actually open.
+ *
+ * Scoped by profile id: this browser/device can be shared by more than one
+ * signed-in account (a shared machine, or preview mode followed by a real
+ * sign-in), and an unscoped key would leak one profile's read/unread state
+ * onto another's conversations. A pre-scoping build of this feature wrote a
+ * single unscoped `${READ_STORAGE_PREFIX}${listId}` key; that legacy value is
+ * never read as a fallback for a *different* profile (there is no way to
+ * know which profile actually wrote it), so on first scoped read for a given
+ * profile+conversation this treats it as unset and starts fresh rather than
+ * crediting the legacy value to whichever account happens to sign in next.
+ * The legacy key is opportunistically removed on the next write so it can't
+ * keep resurfacing in a future scan of localStorage.
  */
 const READ_STORAGE_PREFIX = "katalist_conversation_read_";
+const LEGACY_UNSCOPED_PREFIX = "katalist_conversation_read_";
 const READ_EVENT_NAME = "katalist-conversation-read";
 
-export function getConversationLastReadAt(listId: string): number {
-  if (typeof window === "undefined") return 0;
+function scopedKey(profileId: string, listId: string): string {
+  return `${READ_STORAGE_PREFIX}${profileId}_${listId}`;
+}
+
+export function getConversationLastReadAt(listId: string, profileId: string | undefined): number {
+  if (!profileId || typeof window === "undefined") return 0;
   try {
-    const val = localStorage.getItem(`${READ_STORAGE_PREFIX}${listId}`);
+    const val = localStorage.getItem(scopedKey(profileId, listId));
     return val ? parseInt(val, 10) || 0 : 0;
   } catch {
     return 0;
   }
 }
 
-export function markConversationAsRead(listId: string | null | undefined) {
-  if (!listId || typeof window === "undefined") return;
+export function markConversationAsRead(listId: string | null | undefined, profileId: string | undefined) {
+  if (!listId || !profileId || typeof window === "undefined") return;
   try {
     const now = Date.now();
-    localStorage.setItem(`${READ_STORAGE_PREFIX}${listId}`, String(now));
-    window.dispatchEvent(new CustomEvent(READ_EVENT_NAME, { detail: { listId, timestamp: now } }));
+    localStorage.setItem(scopedKey(profileId, listId), String(now));
+    // Best-effort cleanup of the pre-scoping unscoped key -- never read, only removed.
+    localStorage.removeItem(`${LEGACY_UNSCOPED_PREFIX}${listId}`);
+    window.dispatchEvent(new CustomEvent(READ_EVENT_NAME, { detail: { listId, profileId, timestamp: now } }));
   } catch {
     // ignore local storage errors
   }
@@ -60,7 +79,7 @@ export function isConversationUnread(c: Conversation, myId: string | undefined, 
  *  the chat-heads bubble and the Team Hub sidebar so both surfaces agree. */
 export function useConversationUnreadCount(conversation: Conversation, myId: string | undefined): number {
   useConversationReadState();
-  const lastReadAt = getConversationLastReadAt(conversation.id);
+  const lastReadAt = getConversationLastReadAt(conversation.id, myId);
   const unread = isConversationUnread(conversation, myId, lastReadAt);
   const query = useQuery({
     queryKey: ["conversation-unread-count", conversation.id, lastReadAt, conversation.lastAt],
@@ -87,7 +106,7 @@ export function useConversationUnreadCount(conversation: Conversation, myId: str
  *  conversation on every render. */
 export function useConversationMentionCount(conversation: Conversation, myId: string | undefined): number {
   useConversationReadState();
-  const lastReadAt = getConversationLastReadAt(conversation.id);
+  const lastReadAt = getConversationLastReadAt(conversation.id, myId);
   const unread = isConversationUnread(conversation, myId, lastReadAt);
   const query = useQuery({
     queryKey: ["conversation-mention-count", conversation.id, lastReadAt, conversation.lastAt, myId],

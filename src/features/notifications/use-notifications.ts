@@ -5,6 +5,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { getNotifications, markNotificationsRead, markNotificationRead } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { keys } from "@/domain/query-keys";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type NotificationItem = {
   id: string;
@@ -61,7 +62,9 @@ export function useNotifications() {
       const { error } = await supabase.rpc("mark_all_notifications_read");
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       void qc.invalidateQueries({ queryKey: keys.notifications(user?.id) });
       void qc.invalidateQueries({ queryKey: ["notifications-unread", user?.id] });
     },
@@ -76,7 +79,9 @@ export function useNotifications() {
       const { error } = await supabase.rpc("mark_notification_read", { p_notification_id: id });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => {
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       void qc.invalidateQueries({ queryKey: keys.notifications(user?.id) });
       void qc.invalidateQueries({ queryKey: ["notifications-unread", user?.id] });
     },

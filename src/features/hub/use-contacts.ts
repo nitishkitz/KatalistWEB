@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { fetchProfileIdentities, matchAvatarByName } from "@/features/people/directory";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type ContactPerson = {
   id: string;
@@ -122,7 +123,10 @@ export function useContactRequests() {
     },
   });
 
-  const refetch = () => qc.invalidateQueries({ queryKey: ["hub-contact-requests", user?.id] });
+  const refetch = () => {
+    const epoch = getIdentityEpoch(qc).epoch;
+    if (isEpochCurrent(qc, epoch)) void qc.invalidateQueries({ queryKey: ["hub-contact-requests", user?.id] });
+  };
 
   return {
     incoming: query.data?.incoming ?? [],
@@ -158,16 +162,26 @@ export function useInvitations() {
     },
   });
 
-  const refetch = () => qc.invalidateQueries({ queryKey: ["hub-invitations", user?.id] });
+  const refetch = () => {
+    const epoch = getIdentityEpoch(qc).epoch;
+    if (isEpochCurrent(qc, epoch)) void qc.invalidateQueries({ queryKey: ["hub-invitations", user?.id] });
+  };
 
   return { invitations: query.data ?? [], isLoading: query.isLoading, refetch };
 }
 
-/** Invalidate all contact-related caches (after mutations). */
+/**
+ * Invalidate all contact-related caches (after a mutation). `epoch`
+ * must be the caller's own captured epoch (before its own mutation's
+ * first await) -- this function has no earlier point of its own to
+ * capture from, since it's called from several different plain async
+ * handlers (ContactsDialog.tsx), not from a single useMutation.
+ */
 export function useRefreshContacts() {
   const qc = useQueryClient();
   const { user } = useSession();
-  return () => {
+  return (epoch: number) => {
+    if (!isEpochCurrent(qc, epoch)) return;
     void qc.invalidateQueries({ queryKey: ["hub-contacts", user?.id] });
     void qc.invalidateQueries({ queryKey: ["hub-contact-requests", user?.id] });
     void qc.invalidateQueries({ queryKey: ["hub-invitations", user?.id] });

@@ -27,7 +27,13 @@ function makeThing(id, overrides = {}) {
 }
 
 function newClient() {
-  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // Every courtKey in this file is scoped to profile "p1" -- patchThingInCaches
+  // only scans Court caches belonging to the current identity's own profile
+  // (see query-updates.ts), so tests need a live identity established up front,
+  // same as any real caller (a Thing mutation only ever runs while signed in).
+  advanceIdentityEpoch(qc, { kind: "live", profileId: "p1" });
+  return qc;
 }
 
 test("rollback undoes only the failed mutation's own Thing, not an unrelated Thing's independent update", () => {
@@ -186,6 +192,33 @@ test("when two overlapping mutations both fail in reverse order (newest first), 
 
   assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "not_started", "Court unwinds to the true original once op1 also fails");
   assert.equal(qc.getQueryData(thingKey).workStatus, "not_started", "single-Thing cache unwinds to the true original once op1 also fails");
+});
+
+test("patchThingInCaches only touches the current identity's own profile's Court cache, not another profile's leftover entry", () => {
+  // A previous profile's Court cache can still be sitting in the QueryClient
+  // (not yet evicted/gc'd) when the current identity patches a Thing that
+  // happens to share an id with something in that other cache -- a bare
+  // ["court"] prefix scan would patch both; it must only touch the caller's
+  // own profile's entry.
+  const qc = newClient(); // identity is profile "p1"
+  const otherProfileCourtKey = ["court", "other-profile", "work"];
+  const myCourtKey = ["court", "p1", "work"];
+  const shared = makeThing("shared-id", { workStatus: "not_started" });
+  qc.setQueryData(otherProfileCourtKey, { things: [shared], myActorId: "other-profile" });
+  qc.setQueryData(myCourtKey, { things: [shared], myActorId: "p1" });
+
+  patchThingInCaches(qc, "shared-id", { workStatus: "under_progress" }, epochOf(qc));
+
+  assert.equal(
+    qc.getQueryData(myCourtKey).things[0].workStatus,
+    "under_progress",
+    "the current profile's own Court cache is patched",
+  );
+  assert.equal(
+    qc.getQueryData(otherProfileCourtKey).things[0].workStatus,
+    "not_started",
+    "a different profile's Court cache is left untouched",
+  );
 });
 
 test("two Things sharing the same Court query key track independent chains", () => {

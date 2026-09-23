@@ -17,6 +17,19 @@ function demoContextKey(): string {
   }
 }
 
+/**
+ * Live (non-preview) sessions used to store this under the bare STORAGE_KEY,
+ * with no profile scoping at all -- on a shared device (or after switching
+ * from one signed-in account to another) that let one profile's saved
+ * work/home context leak onto a different profile. A prior unscoped value is
+ * never read as a fallback for a *specific* profile below (there is no way
+ * to know which profile actually wrote it); it is only best-effort removed
+ * once a scoped key has been written, so it stops lingering in storage.
+ */
+function liveContextKey(profileId: string): string {
+  return `${STORAGE_KEY}.live.${profileId}`;
+}
+
 type AppCtx = {
   context: ContextKind;
   setContext: (next: ContextKind) => Promise<void>;
@@ -31,8 +44,12 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
   const [context, setContextState] = useState<ContextKind>(() => {
     if (typeof window === "undefined") return "work";
-    const key = preview ? demoContextKey() : STORAGE_KEY;
-    const stored = window.localStorage.getItem(key);
+    if (preview) {
+      const stored = window.localStorage.getItem(demoContextKey());
+      return stored === "home" || stored === "work" ? stored : "work";
+    }
+    if (!user) return "work";
+    const stored = window.localStorage.getItem(liveContextKey(user.id));
     return stored === "home" || stored === "work" ? stored : "work";
   });
 
@@ -42,6 +59,15 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     const stored = window.localStorage.getItem(key);
     setContextState(stored === "home" || stored === "work" ? stored : "work");
   }, [preview, session, user?.id]);
+
+  // Seed from this profile's own scoped local cache as soon as its id is
+  // known (e.g. session resolving after mount) -- fast, and avoids ever
+  // reading another profile's or an unowned legacy unscoped value.
+  useEffect(() => {
+    if (preview || typeof window === "undefined" || !user) return;
+    const stored = window.localStorage.getItem(liveContextKey(user.id));
+    if (stored === "home" || stored === "work") setContextState(stored);
+  }, [preview, user?.id]);
 
   useEffect(() => {
     if (!user || isPreviewSession(session)) return;
@@ -54,7 +80,8 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       .then(({ data }) => {
         if (cancelled || !data?.active_context) return;
         setContextState(data.active_context);
-        window.localStorage.setItem(STORAGE_KEY, data.active_context);
+        window.localStorage.setItem(liveContextKey(user.id), data.active_context);
+        window.localStorage.removeItem(STORAGE_KEY);
       });
     return () => {
       cancelled = true;
@@ -73,12 +100,13 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       // can be guarded even though nothing about context itself is
       // epoch-scoped.
       const epoch = getIdentityEpoch(qc).epoch;
+      const isPreview = isPreviewSession(session);
       setContextState(next);
       if (typeof window !== "undefined") {
-        const key = isPreviewSession(session) ? demoContextKey() : STORAGE_KEY;
-        window.localStorage.setItem(key, next);
+        const key = isPreview ? demoContextKey() : user ? liveContextKey(user.id) : null;
+        if (key) window.localStorage.setItem(key, next);
       }
-      if (user && !isPreviewSession(session)) {
+      if (user && !isPreview) {
         const { error } = await supabase.from("profiles").update({ active_context: next }).eq("id", user.id);
         if (error) {
           // Only roll back the optimistic context flip if this identity
@@ -87,7 +115,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
           // overwrite B's own context state.
           if (isEpochCurrent(qc, epoch)) {
             setContextState(prev);
-            window.localStorage.setItem(STORAGE_KEY, prev);
+            window.localStorage.setItem(liveContextKey(user.id), prev);
           }
           throw error;
         }

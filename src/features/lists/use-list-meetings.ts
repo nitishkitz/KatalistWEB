@@ -10,6 +10,7 @@ import {
 } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type ListMeeting = {
   id: string;
@@ -55,7 +56,9 @@ export function useListMeetings(listId: string) {
     staleTime: 15_000,
   });
 
-  const invalidate = () => void qc.invalidateQueries({ queryKey: keys.listMeetings(listId) });
+  const invalidate = (epoch: number) => {
+    if (isEpochCurrent(qc, epoch)) void qc.invalidateQueries({ queryKey: keys.listMeetings(listId) });
+  };
 
   const schedule = useMutation({
     mutationFn: async (input: { title: string; startsAt: Date; endsAt: Date }) => {
@@ -78,7 +81,8 @@ export function useListMeetings(listId: string) {
       if (error) throw error;
       return data;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const cancel = useMutation({
@@ -90,7 +94,8 @@ export function useListMeetings(listId: string) {
       const { error } = await supabase.rpc("cancel_list_meeting", { p_meeting_id: meetingId });
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const meetings: ListMeeting[] = hidden

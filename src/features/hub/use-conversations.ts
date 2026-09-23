@@ -1,10 +1,9 @@
-import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { fetchProfileIdentities, matchAvatarByName } from "@/features/people/directory";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type ConversationParticipant = {
   id: string;
@@ -173,21 +172,14 @@ export function useConversations() {
     queryFn: () => fetchConversations(user!.id),
   });
 
-  // Refresh the rail whenever any conversation's chat broadcasts a change.
-  useEffect(() => {
-    if (!user || preview) return;
-    const channel: RealtimeChannel = supabase
-      .channel("hub-conversations")
-      .on("broadcast", { event: "changed" }, () => {
-        void qc.invalidateQueries({ queryKey: ["hub-conversations", user.id] });
-      })
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [user, preview, qc]);
+  // The rail is kept fresh by RealtimeInvalidationProvider, which routes every
+  // list_messages postgres_changes event to the "hub-conversations" invalidation
+  // target (see event-invalidation-map.ts) -- no per-hook subscription needed here.
 
-  const refetch = () => qc.invalidateQueries({ queryKey: ["hub-conversations", user?.id] });
+  const refetch = () => {
+    const epoch = getIdentityEpoch(qc).epoch;
+    if (isEpochCurrent(qc, epoch)) void qc.invalidateQueries({ queryKey: ["hub-conversations", user?.id] });
+  };
 
   return { conversations: query.data ?? [], isLoading: !preview && query.isLoading, refetch };
 }
