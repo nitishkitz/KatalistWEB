@@ -160,6 +160,10 @@ export function useNudges() {
     counts,
     preview: court.preview,
     rowsLoading,
+    // Rows come from Court, so "has this ever produced a confirmed
+    // result" tracks Court's own hasFetchedOnce — see its definition for
+    // why this can't just be derived from `!rowsLoading && !rowsError`.
+    rowsHasFetchedOnce: court.hasFetchedOnce,
     eligibilityLoading,
     eligibilityError,
     // Backward-compatible combined flag/alias: reflects row readiness and

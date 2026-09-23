@@ -62,22 +62,29 @@ export type AsyncBranch = "offline-blocked" | "error-blocked" | "loading" | "emp
  * for "loaded successfully with nothing in it" — see AsyncState's own
  * docs for why a `data == null`/truthiness check can't stand in for it
  * (an empty array is truthy).
+ *
+ * `hasFetchedOnce` must come from the query itself (e.g. `query.data !==
+ * undefined`), not be derived here from `!isLoading && !hasError`: when a
+ * query is "paused" offline (network mode "online", never yet fetched),
+ * react-query reports `isLoading: false` and no error — status stays
+ * `"pending"` the whole time, it just isn't actively fetching — which
+ * would be indistinguishable from a confirmed empty result if derived
+ * from those two flags alone.
  */
 export function resolveAsyncBranch(input: {
   online: boolean;
   isLoading: boolean;
   hasError: boolean;
   isEmpty: boolean;
+  hasFetchedOnce: boolean;
 }): AsyncBranch {
-  const { online, isLoading, hasError, isEmpty } = input;
-  // A successfully-loaded-but-empty result (settled, no error) is a
-  // confirmed fact ("you genuinely have zero Lists"), not an unknown —
-  // blocking it behind "offline, nothing cached yet" would misrepresent a
-  // known result as unknown. Only block offline when there's neither
-  // non-empty data to fall back on (isEmpty is false) nor a confirmed
-  // result to trust (still loading, or errored, counts as unconfirmed).
-  const hasConfirmedResult = !isLoading && !hasError;
-  if (!online && isEmpty && !hasConfirmedResult) return "offline-blocked";
+  const { online, isLoading, hasError, isEmpty, hasFetchedOnce } = input;
+  // A successfully-loaded-but-empty result is a confirmed fact ("you
+  // genuinely have zero Lists"), not an unknown — blocking it behind
+  // "offline, nothing cached yet" would misrepresent a known result as
+  // unknown. Only block offline when there's neither non-empty data to
+  // fall back on (isEmpty is false) nor a confirmed result to trust.
+  if (!online && isEmpty && !hasFetchedOnce) return "offline-blocked";
   if (hasError && isEmpty) return "error-blocked";
   if (isLoading) return "loading";
   if (isEmpty) return "empty";

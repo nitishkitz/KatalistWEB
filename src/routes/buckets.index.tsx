@@ -123,7 +123,7 @@ function BucketTableRow({ bucket }: { bucket: BucketCard }) {
 
 function BucketsPage() {
   useLocalVersion();
-  const { buckets, create, isLoading, error: bucketsError, refetch: refetchBuckets } = useBuckets();
+  const { buckets, create, isLoading, error: bucketsError, refetch: refetchBuckets, hasFetchedOnce } = useBuckets();
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -235,6 +235,7 @@ function BucketsPage() {
           error={bucketsError}
           onRetry={refetchBuckets}
           isEmpty={buckets.length === 0}
+          hasFetchedOnce={hasFetchedOnce}
           emptyTitle="No Buckets yet"
           emptyDescription="Create a Bucket to privately organize references to Things and Lists you already have access to."
           loadingContent={<BucketsSkeleton />}

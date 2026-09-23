@@ -109,6 +109,12 @@ export function useCourt() {
 
   return {
     isLoading: liveAuth && query.isLoading,
+    // See useLists'/useBuckets' identical field: react-query's isLoading
+    // reads false while a query is "paused" offline (never fetched, no
+    // error, no data), which would otherwise look identical to a
+    // confirmed empty Court. query.data persists across later
+    // pauses/errors once populated.
+    hasFetchedOnce: preview || query.data !== undefined,
     error: query.error,
     live: source.live,
     preview,

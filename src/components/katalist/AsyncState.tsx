@@ -45,6 +45,15 @@ type AsyncStateProps<T> = {
   onRetry?: () => void;
   /** True when data has loaded successfully but there's nothing in it. */
   isEmpty: boolean;
+  /**
+   * Whether the underlying query has ever produced a real result — pass
+   * `query.data !== undefined` (or the hook's equivalent), NOT
+   * `!isLoading`. A query "paused" offline (never fetched, no error) also
+   * reports `isLoading: false`, which would otherwise look identical to a
+   * confirmed empty result and misrepresent "we don't know" as "you have
+   * zero" (or vice versa for the offline-blocking screen).
+   */
+  hasFetchedOnce: boolean;
   emptyTitle: string;
   emptyDescription?: string;
   emptyAction?: ReactNode;
@@ -66,6 +75,7 @@ export function AsyncState<T>({
   error,
   onRetry,
   isEmpty,
+  hasFetchedOnce,
   emptyTitle,
   emptyDescription,
   emptyAction,
@@ -88,7 +98,7 @@ export function AsyncState<T>({
     };
   }, [isLoading]);
 
-  const branch = resolveAsyncBranch({ online, isLoading, hasError: Boolean(error), isEmpty });
+  const branch = resolveAsyncBranch({ online, isLoading, hasError: Boolean(error), isEmpty, hasFetchedOnce });
 
   if (branch === "offline-blocked") {
     return (

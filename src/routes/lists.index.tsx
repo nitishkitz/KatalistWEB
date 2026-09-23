@@ -323,7 +323,7 @@ function GroupSection({
 
 function ListsPage() {
   useLocalVersion();
-  const { lists, create, refetch: refetchLists, isLoading, error: listsError } = useLists();
+  const { lists, create, refetch: refetchLists, isLoading, error: listsError, hasFetchedOnce } = useLists();
   const { context: appContext } = useAppContext();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
@@ -612,6 +612,7 @@ function ListsPage() {
             error={listsError}
             onRetry={refetchLists}
             isEmpty={lists.length === 0}
+            hasFetchedOnce={hasFetchedOnce}
             emptyTitle="No Lists yet"
             emptyDescription="Create your first List to start organizing shared work."
             loadingContent={<ListsSkeleton />}

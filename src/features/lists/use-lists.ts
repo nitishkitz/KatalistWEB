@@ -75,7 +75,21 @@ export function useLists() {
     await qc.invalidateQueries({ queryKey: keys.lists(user?.id, context) });
   };
 
-  return { lists, isLoading: !preview && query.isLoading, error: query.error, preview, create, refetch };
+  return {
+    lists,
+    isLoading: !preview && query.isLoading,
+    // Whether this query has ever produced a real result, distinct from
+    // `!isLoading` — react-query's `isLoading` is false while a query is
+    // "paused" offline (never fetched, no error, no data), which would
+    // otherwise look identical to a confirmed empty result. `query.data`
+    // itself persists across later pauses/errors once populated, so this
+    // stays true even if a later background refetch fails.
+    hasFetchedOnce: preview || query.data !== undefined,
+    error: query.error,
+    preview,
+    create,
+    refetch,
+  };
 }
 
 export function useList(listId: string | undefined) {

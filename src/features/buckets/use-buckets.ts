@@ -198,6 +198,12 @@ export function useBuckets() {
   return {
     buckets,
     isLoading: !preview && query.isLoading,
+    // See useLists' identical field: react-query's isLoading reads false
+    // while a query is "paused" offline (never fetched, no error, no
+    // data), which would otherwise look identical to a confirmed empty
+    // result. query.data persists across later pauses/errors once
+    // populated, so this stays true even through a later failed refetch.
+    hasFetchedOnce: preview || query.data !== undefined,
     error: query.error,
     preview,
     create,

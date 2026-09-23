@@ -125,6 +125,54 @@ test("an older failure cannot erase a newer patch even when both compute the ide
   );
 });
 
+test("when two overlapping mutations on the same Thing both fail, the Thing unwinds all the way to its true original value", () => {
+  // The specific gap in the previous "still the most recent write" model:
+  // op1 fails first and is correctly recognized as no longer the tail (op2
+  // is), so its rollback is a no-op for the cache — but if op2 *also*
+  // fails afterward, its own rollback must not restore op1's (also
+  // failed) intermediate value. It has to unwind through the whole chain
+  // back to the value before either mutation ran.
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  const a = makeThing("a", { workStatus: "not_started" });
+  qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
+
+  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" });
+
+  rollbackFirst(); // op1 fails — not the tail, so this is a no-op for the cache.
+  assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "sorted", "op2's write is still visible after op1's no-op rollback");
+
+  rollbackSecond(); // op2 also fails — must unwind past op1's value too.
+
+  assert.equal(
+    qc.getQueryData(courtKey).things[0].workStatus,
+    "not_started",
+    "both mutations failed, so the Thing must be back to its true original value, not op1's already-failed intermediate value",
+  );
+});
+
+test("two Things sharing the same Court query key track independent chains", () => {
+  // Both mutations land in the *same* Court query cache entry (same
+  // profile/context) but on different Things — the chain bookkeeping must
+  // key by (queryKey, thingId), not queryKey alone, or one Thing's history
+  // would corrupt another's.
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  const a = makeThing("a", { workStatus: "not_started" });
+  const b = makeThing("b", { workStatus: "not_started" });
+  qc.setQueryData(courtKey, { things: [a, b], myActorId: "p1" });
+
+  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  patchThingInCaches(qc, "b", { workStatus: "sorted" }); // succeeds, no rollback
+
+  rollbackA();
+
+  const after = qc.getQueryData(courtKey);
+  assert.equal(after.things.find((t) => t.id === "a").workStatus, "not_started", "A rolled back correctly");
+  assert.equal(after.things.find((t) => t.id === "b").workStatus, "sorted", "B's unrelated write is untouched");
+});
+
 test("the current owner's rollback restores what it actually saw before it wrote, not the original value", () => {
   const qc = newClient();
   const courtKey = ["court", "p1", "work"];
@@ -184,4 +232,32 @@ test("patching a Thing that isn't in any cache yet does not create a malformed e
 
   // Rollback of a no-op patch must also be a no-op, not throw.
   assert.doesNotThrow(() => rollback());
+});
+
+test("a stale chain from a much earlier mutation cannot resurface after an untracked external change", () => {
+  // If chain bookkeeping persisted forever regardless of what actually
+  // happens to the cache, a long-dead failed rollback could resurrect an
+  // ancient optimistic guess: mutation 1 succeeds (chain: [v1]); later, an
+  // untracked external write (a completed refetch, a realtime event)
+  // replaces the cache with fresh server data; mutation 2 then runs and
+  // fails. Mutation 2's rollback must restore to the external value it
+  // actually overwrote, not resurrect mutation 1's old patched value.
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  const a = makeThing("a", { workStatus: "not_started" });
+  qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
+
+  patchThingInCaches(qc, "a", { workStatus: "under_progress" }); // succeeds
+
+  // Untracked external change: a refetch lands with fresh server data.
+  const serverA = makeThing("a", { workStatus: "sorted", title: "Server truth" });
+  qc.setQueryData(courtKey, { things: [serverA], myActorId: "p1" });
+
+  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "cancelled" });
+  rollbackSecond();
+
+  const after = qc.getQueryData(courtKey);
+  const finalA = after.things.find((t) => t.id === "a");
+  assert.equal(finalA.workStatus, "sorted", "rollback restores the external value it overwrote, not the ancient chain's value");
+  assert.equal(finalA.title, "Server truth");
 });

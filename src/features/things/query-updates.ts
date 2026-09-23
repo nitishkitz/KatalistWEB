@@ -11,9 +11,9 @@ function applyPatch(thing: Thing, patch: ThingPatch): Thing {
  * Plain structural equality for Thing objects (only plain
  * strings/booleans/nulls/nested plain objects/arrays — no Date/Map/Set
  * fields). Used instead of `===` to detect "has anyone else touched this
- * Thing since my patch": QueryClient's structural sharing rebuilds a new
- * object on every setQueryData call even when the values are unchanged, so
- * a reference-identity check would treat every write as "something else
+ * cache entry": QueryClient's structural sharing rebuilds a new object on
+ * every setQueryData call even when the values are unchanged, so a
+ * reference-identity check would treat every write as "something else
  * changed it" and skip rollback far too often.
  */
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -44,37 +44,86 @@ export async function cancelThingReads(qc: QueryClient, thingId: string): Promis
 }
 
 /**
- * Per-Thing ownership counters, scoped per QueryClient (so independent
- * QueryClients — e.g. in tests — never share state). One counter per
- * thingId, incremented once per patchThingInCaches call and stamped onto
- * every cache entry that call touches. This is what actually establishes
- * "am I still the most recent optimistic write to this Thing" — value
- * equality alone cannot: two different, overlapping mutations can
- * legitimately compute the *same* resulting value (e.g. both set
- * workStatus to "under_progress"), in which case a value-only check would
- * wrongly treat an older, failed mutation's rollback as still "mine" and
- * erase a newer mutation's identical-looking but actually-separate write.
+ * One entry per still-active (not yet rolled back) optimistic write to a
+ * given cache location, in application order. `previousThing` is what was
+ * there immediately before this entry was applied — i.e. the *previous
+ * entry's* `patchedThing`, or the true pre-chain value for the first entry.
  */
-const versionsByClient = new WeakMap<QueryClient, Map<string, number>>();
+type ChainEntry = { version: number; previousThing: Thing; patchedThing: Thing };
 
-function nextThingVersion(qc: QueryClient, thingId: string): number {
-  let versions = versionsByClient.get(qc);
-  if (!versions) {
-    versions = new Map();
-    versionsByClient.set(qc, versions);
+/**
+ * Per-QueryClient, per-cache-location chains (so independent QueryClients —
+ * e.g. in tests — never share state, and the single-Thing cache and each
+ * Court query's copy of this Thing are tracked independently, since they
+ * are independent cached copies that a given call may or may not have
+ * found this Thing in).
+ */
+const chainsByClient = new WeakMap<QueryClient, Map<string, ChainEntry[]>>();
+
+let nextVersionId = 0;
+
+// Keyed by (queryKey, thingId) — not queryKey alone: a single Court query
+// caches *many* Things, so without the thingId component every Thing
+// sharing that Court query would incorrectly share one chain.
+function locationKey(queryKey: readonly unknown[], thingId: string): string {
+  return `${JSON.stringify(queryKey)}::${thingId}`;
+}
+
+function getChain(qc: QueryClient, queryKey: readonly unknown[], thingId: string): ChainEntry[] {
+  let chains = chainsByClient.get(qc);
+  if (!chains) {
+    chains = new Map();
+    chainsByClient.set(qc, chains);
   }
-  const next = (versions.get(thingId) ?? 0) + 1;
-  versions.set(thingId, next);
-  return next;
+  const key = locationKey(queryKey, thingId);
+  let chain = chains.get(key);
+  if (!chain) {
+    chain = [];
+    chains.set(key, chain);
+  }
+  return chain;
 }
 
-function currentThingVersion(qc: QueryClient, thingId: string): number {
-  return versionsByClient.get(qc)?.get(thingId) ?? 0;
+/**
+ * Records a new optimistic write in this location's chain. If the chain's
+ * last known value doesn't match what's actually there (an external
+ * change — a completed refetch, a realtime update, anything that didn't
+ * go through this module) the recorded lineage is stale, so the chain is
+ * reset and starts fresh from the real current value instead of risking a
+ * later rollback resurrecting an old optimistic guess.
+ */
+function pushChainEntry(chain: ChainEntry[], version: number, previousThing: Thing, patchedThing: Thing) {
+  const last = chain.at(-1);
+  if (last && !deepEqual(last.patchedThing, previousThing)) {
+    chain.length = 0;
+  }
+  chain.push({ version, previousThing, patchedThing });
 }
 
-type RestoreEntry =
-  | { kind: "thing"; queryKey: readonly unknown[]; previousThing: Thing; patchedThing: Thing }
-  | { kind: "court"; queryKey: readonly unknown[]; previousThing: Thing; patchedThing: Thing };
+/**
+ * Removes `version`'s entry from this location's chain and, if it was the
+ * most recently applied (tail) entry, returns the value that should now be
+ * visible — the new tail's patchedThing, or the removed entry's own
+ * previousThing if the chain is now empty. Returns `undefined` if the
+ * entry wasn't the tail (nothing else needs to change — a still-active,
+ * more recent write is already showing) or wasn't found at all.
+ *
+ * When the removed entry isn't the tail, the entry now immediately after
+ * it (if any) has its `previousThing` corrected to bridge over the gap, so
+ * a *later* rollback of that entry (or beyond) still unwinds to the right
+ * value instead of one that included the now-removed write.
+ */
+function spliceChainEntry(chain: ChainEntry[], version: number): Thing | undefined {
+  const index = chain.findIndex((entry) => entry.version === version);
+  if (index === -1) return undefined;
+  const [removed] = chain.splice(index, 1);
+  const wasTail = index === chain.length;
+  if (!wasTail) {
+    chain[index] = { ...chain[index], previousThing: removed.previousThing };
+    return undefined;
+  }
+  return chain.length > 0 ? chain.at(-1)!.patchedThing : removed.previousThing;
+}
 
 /**
  * Applies `patch` to this Thing everywhere it's currently cached — the
@@ -83,25 +132,30 @@ type RestoreEntry =
  * that restores just this mutation's own change, for rollback if the
  * mutation that motivated the patch fails.
  *
- * Rollback only undoes this call's own write, verified two ways:
- * 1. Ownership: the per-Thing version counter (see nextThingVersion) must
- *    still equal the version this call was stamped with — if a later
- *    patchThingInCaches call for the same Thing has since run (whether or
- *    not it produced the same-looking value), that call now owns this
- *    Thing and this rollback is a no-op for it.
- * 2. No untracked external change: the cache must still hold (structurally
- *    — see deepEqual, since QueryClient's structural sharing means it
- *    won't be the same *reference*) the value this call wrote. This
- *    catches changes that don't go through this module at all — a
- *    completed refetch or a realtime update — which the version counter
- *    alone can't see since only patchThingInCaches calls bump it.
- * Both must hold; either one failing means something newer wins and
- * rollback leaves this cache entry alone. An earlier version restored the
- * *entire* previous Court query snapshot on rollback, which meant one
- * failed mutation could silently erase an unrelated Thing's independent
- * update, a newly-arrived Thing, or a newer write to this same Thing —
- * this is why rollback re-reads the *current* cache at rollback time
- * rather than replaying an old blob.
+ * Each cache location tracks its own ordered chain of still-active
+ * optimistic writes (see ChainEntry). Rolling back a write:
+ * - If a *more recent* write to the same location is still active, the
+ *   visible value is already that newer write's — this rollback only
+ *   removes its own entry from the chain and leaves the cache alone.
+ * - If it *is* the most recent (visible) write, the cache reverts to
+ *   whichever write is now the new most-recent, or the true pre-chain
+ *   value if none remain — not simply "my own previousThing", which
+ *   would resurrect an already-failed intermediate value if an earlier
+ *   write in the same chain had *also* failed and been removed.
+ * Either way, the actual cache write only happens if the cache still
+ * holds (structurally — see deepEqual) the value this entry produced;
+ * anything else (a newer write already having changed it, or an external
+ * refetch/realtime update) wins and this rollback leaves it alone.
+ *
+ * An earlier version restored the *entire* previous Court query snapshot
+ * on rollback, which meant one failed mutation could silently erase an
+ * unrelated Thing's independent update or a newly-arrived Thing — this is
+ * why rollback re-reads the *current* cache at rollback time rather than
+ * replaying an old blob. A version after that used a single "still the
+ * most recent write" check without chain bookkeeping, which correctly
+ * protected a newer write but — when *two* overlapping writes to the same
+ * Thing both failed — restored the first (also-failed) write's value
+ * instead of unwinding all the way back to the true original.
  *
  * Scope: only the Court and single-Thing caches are patched. List/Bucket
  * caches (list-things, bucket-items) are left to invalidatePersonalSurfaces'
@@ -110,17 +164,16 @@ type RestoreEntry =
  * panel) without guessing at every list/bucket cache's shape.
  */
 export function patchThingInCaches(qc: QueryClient, thingId: string, patch: ThingPatch): () => void {
-  const restoreEntries: RestoreEntry[] = [];
-  let myVersion: number | null = null;
-  const ownVersion = () => (myVersion ??= nextThingVersion(qc, thingId));
+  const version = ++nextVersionId;
+  const touched: Array<{ queryKey: readonly unknown[]; kind: "thing" | "court" }> = [];
 
   const thingKey = ["thing", thingId] as const;
   const previousThing = qc.getQueryData<Thing | null>(thingKey);
   if (previousThing) {
-    ownVersion();
     const patchedThing = applyPatch(previousThing, patch);
+    pushChainEntry(getChain(qc, thingKey, thingId), version, previousThing, patchedThing);
     qc.setQueryData<Thing | null>(thingKey, patchedThing);
-    restoreEntries.push({ kind: "thing", queryKey: thingKey, previousThing, patchedThing });
+    touched.push({ queryKey: thingKey, kind: "thing" });
   }
 
   for (const query of qc.getQueryCache().findAll({ queryKey: ["court"] })) {
@@ -128,36 +181,38 @@ export function patchThingInCaches(qc: QueryClient, thingId: string, patch: Thin
     const previous = qc.getQueryData<CourtCache>(key);
     const index = previous?.things.findIndex((t) => t.id === thingId) ?? -1;
     if (!previous || index === -1) continue;
-    ownVersion();
     const previousCourtThing = previous.things[index];
     const patchedThing = applyPatch(previousCourtThing, patch);
+    pushChainEntry(getChain(qc, key, thingId), version, previousCourtThing, patchedThing);
     const nextThings = previous.things.slice();
     nextThings[index] = patchedThing;
     qc.setQueryData<CourtCache>(key, { ...previous, things: nextThings });
-    restoreEntries.push({ kind: "court", queryKey: key, previousThing: previousCourtThing, patchedThing });
+    touched.push({ queryKey: key, kind: "court" });
   }
 
   return () => {
-    if (myVersion == null || currentThingVersion(qc, thingId) !== myVersion) {
-      // Either nothing was ever patched (no-op call), or a later mutation
-      // on this Thing has since run — that one owns it now.
-      return;
-    }
-    for (const entry of restoreEntries) {
-      if (entry.kind === "thing") {
-        const current = qc.getQueryData<Thing | null>(entry.queryKey);
-        if (current && deepEqual(current, entry.patchedThing)) {
-          qc.setQueryData(entry.queryKey, entry.previousThing);
+    for (const { queryKey, kind } of touched) {
+      const chain = getChain(qc, queryKey, thingId);
+      const removedEntry = chain.find((entry) => entry.version === version);
+      if (!removedEntry) continue;
+      const expectedCurrent = removedEntry.patchedThing;
+      const nextVisible = spliceChainEntry(chain, version);
+      if (nextVisible === undefined) continue; // not the tail — nothing else to update
+
+      if (kind === "thing") {
+        const current = qc.getQueryData<Thing | null>(queryKey);
+        if (current && deepEqual(current, expectedCurrent)) {
+          qc.setQueryData(queryKey, nextVisible);
         }
         continue;
       }
-      const current = qc.getQueryData<CourtCache>(entry.queryKey);
+      const current = qc.getQueryData<CourtCache>(queryKey);
       if (!current) continue;
       const index = current.things.findIndex((t) => t.id === thingId);
-      if (index === -1 || !deepEqual(current.things[index], entry.patchedThing)) continue;
+      if (index === -1 || !deepEqual(current.things[index], expectedCurrent)) continue;
       const nextThings = current.things.slice();
-      nextThings[index] = entry.previousThing;
-      qc.setQueryData<CourtCache>(entry.queryKey, { ...current, things: nextThings });
+      nextThings[index] = nextVisible;
+      qc.setQueryData<CourtCache>(queryKey, { ...current, things: nextThings });
     }
   };
 }

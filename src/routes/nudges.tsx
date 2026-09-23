@@ -99,6 +99,7 @@ function NudgesPage() {
     recent,
     counts,
     isLoading,
+    rowsHasFetchedOnce,
     eligibilityLoading,
     eligibilityError,
     error: nudgesError,
@@ -144,6 +145,7 @@ function NudgesPage() {
         error={nudgesError}
         onRetry={retryNudges}
         isEmpty={allRows.length === 0}
+        hasFetchedOnce={rowsHasFetchedOnce}
         emptyTitle="You're all caught up"
         emptyDescription="No nudges need your attention right now."
         loadingContent={<NudgesSkeleton />}
