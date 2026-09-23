@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Thing } from "@/domain/thing";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type ThingPatch = Partial<Thing> | ((thing: Thing) => Thing);
 
@@ -51,28 +52,71 @@ export async function cancelThingReads(qc: QueryClient, thingId: string): Promis
  * from a swipe and from an open detail panel at the same time. Claiming
  * here is shared across every caller of withOptimisticPatch/this module
  * for a given Thing, regardless of which UI surface is asking.
+ *
+ * Epoch-scoped and self-healing (P3): storage is keyed by the identity
+ * epoch active when it was created, and any access under a NEWER epoch
+ * discards it and starts fresh, the same "reset and start fresh if the
+ * expected value doesn't match" principle pushChainEntry already uses
+ * below, just applied to identity staleness instead of an external cache
+ * change. Without this, a claim made under a retired identity survives
+ * every QueryClient-level disposal (qc.resetQueries()/clear() have no
+ * effect on this module's own WeakMaps, which are keyed by the QueryClient
+ * object itself -- the same object for the app's entire lifetime, across
+ * every identity switch) and can block or, worse, be released by a stale
+ * `finally` that incorrectly releases a *newer* identity's claim on the
+ * same Thing id.
  */
-const inFlightThingIds = new WeakMap<QueryClient, Set<string>>();
+export type ClaimToken = { epoch: number; thingId: string; claimId: number };
+let nextClaimId = 0;
 
-/** Returns false if this Thing already has a claimed mutation in flight (from *any* surface); otherwise claims it and returns true. */
-export function claimThingMutation(qc: QueryClient, thingId: string): boolean {
-  let ids = inFlightThingIds.get(qc);
-  if (!ids) {
-    ids = new Set();
-    inFlightThingIds.set(qc, ids);
-  }
-  if (ids.has(thingId)) return false;
-  ids.add(thingId);
-  return true;
+type InFlightState = { epoch: number; claims: Map<string, number> };
+const inFlightState = new WeakMap<QueryClient, InFlightState>();
+
+function currentInFlight(qc: QueryClient): InFlightState {
+  const epoch = getIdentityEpoch(qc).epoch;
+  const existing = inFlightState.get(qc);
+  if (existing && existing.epoch === epoch) return existing;
+  const fresh: InFlightState = { epoch, claims: new Map() };
+  inFlightState.set(qc, fresh);
+  return fresh;
 }
 
-/** Releases a claim made by claimThingMutation. Always call from a `finally`. */
-export function releaseThingMutation(qc: QueryClient, thingId: string): void {
-  inFlightThingIds.get(qc)?.delete(thingId);
+/**
+ * Returns `null` if this Thing already has a claimed mutation in flight
+ * (from *any* surface, under the current epoch) or if `epoch` is no
+ * longer current; otherwise claims it and returns an opaque token.
+ * `epoch` must be captured by the caller before any `await`, at the
+ * point the mutation was constructed — see withEpochGuard's contract in
+ * identity-cache-policy.ts for why.
+ */
+export function claimThingMutation(qc: QueryClient, thingId: string, epoch: number): ClaimToken | null {
+  if (!isEpochCurrent(qc, epoch)) return null;
+  const state = currentInFlight(qc);
+  if (state.claims.has(thingId)) return null;
+  const claimId = ++nextClaimId;
+  state.claims.set(thingId, claimId);
+  return { epoch: state.epoch, thingId, claimId };
+}
+
+/**
+ * Releases a claim made by claimThingMutation. Always call from a
+ * `finally`, passing the exact token that was returned — only releases
+ * if that token is still the live claim for its epoch, so a stale
+ * release (an old epoch's token, or a same-epoch token superseded by a
+ * newer claim for the same thingId) can never release a claim it doesn't
+ * own. This is what stops "A's late finally from releasing B's newer
+ * claim."
+ */
+export function releaseThingMutation(qc: QueryClient, token: ClaimToken | null): void {
+  if (!token) return;
+  const state = currentInFlight(qc);
+  if (state.epoch !== token.epoch) return;
+  if (state.claims.get(token.thingId) !== token.claimId) return;
+  state.claims.delete(token.thingId);
 }
 
 export function isThingMutationInFlight(qc: QueryClient, thingId: string): boolean {
-  return inFlightThingIds.get(qc)?.has(thingId) ?? false;
+  return currentInFlight(qc).claims.has(thingId);
 }
 
 /**
@@ -89,8 +133,19 @@ type ChainEntry = { version: number; previousThing: Thing; patchedThing: Thing }
  * Court query's copy of this Thing are tracked independently, since they
  * are independent cached copies that a given call may or may not have
  * found this Thing in).
+ *
+ * Epoch-scoped and self-healing (P3), same rationale as inFlightState
+ * above: an access under a newer epoch than what's stored discards the
+ * old chains and starts fresh. This has a useful consequence downstream —
+ * spliceChainEntry's existing "entry not found -> return undefined, do
+ * nothing" behavior already handles the epoch-stale case correctly once
+ * the storage itself is epoch-scoped: a rollback closure invoked after
+ * the epoch advanced looks up a chain that's already been reset to
+ * empty, finds nothing, and safely no-ops. No change needed to
+ * spliceChainEntry/pushChainEntry's own logic, only to what they read.
  */
-const chainsByClient = new WeakMap<QueryClient, Map<string, ChainEntry[]>>();
+type ChainState = { epoch: number; chains: Map<string, ChainEntry[]> };
+const chainsByClient = new WeakMap<QueryClient, ChainState>();
 
 let nextVersionId = 0;
 
@@ -101,17 +156,22 @@ function locationKey(queryKey: readonly unknown[], thingId: string): string {
   return `${JSON.stringify(queryKey)}::${thingId}`;
 }
 
+function currentChains(qc: QueryClient): ChainState {
+  const epoch = getIdentityEpoch(qc).epoch;
+  const existing = chainsByClient.get(qc);
+  if (existing && existing.epoch === epoch) return existing;
+  const fresh: ChainState = { epoch, chains: new Map() };
+  chainsByClient.set(qc, fresh);
+  return fresh;
+}
+
 function getChain(qc: QueryClient, queryKey: readonly unknown[], thingId: string): ChainEntry[] {
-  let chains = chainsByClient.get(qc);
-  if (!chains) {
-    chains = new Map();
-    chainsByClient.set(qc, chains);
-  }
+  const state = currentChains(qc);
   const key = locationKey(queryKey, thingId);
-  let chain = chains.get(key);
+  let chain = state.chains.get(key);
   if (!chain) {
     chain = [];
-    chains.set(key, chain);
+    state.chains.set(key, chain);
   }
   return chain;
 }
@@ -195,7 +255,7 @@ function spliceChainEntry(chain: ChainEntry[], version: number): Thing | undefin
  * covers the two highest-traffic surfaces (Court, an open Thing detail
  * panel) without guessing at every list/bucket cache's shape.
  */
-export function patchThingInCaches(qc: QueryClient, thingId: string, patch: ThingPatch): () => void {
+export function patchThingInCaches(qc: QueryClient, thingId: string, patch: ThingPatch, epoch: number): () => void {
   const version = ++nextVersionId;
   const touched: Array<{ queryKey: readonly unknown[]; kind: "thing" | "court" }> = [];
 
@@ -223,6 +283,12 @@ export function patchThingInCaches(qc: QueryClient, thingId: string, patch: Thin
   }
 
   return () => {
+    // Guard the rollback write itself, not only the initial patch: a
+    // rollback invoked after the epoch has advanced (a mutation that
+    // started under identity A settling after B is active) must not
+    // write to caches B is now looking at, even if the chain lookup
+    // below would otherwise have found a matching entry.
+    if (!isEpochCurrent(qc, epoch)) return;
     for (const { queryKey, kind } of touched) {
       const chain = getChain(qc, queryKey, thingId);
       const removedEntry = chain.find((entry) => entry.version === version);
@@ -265,13 +331,32 @@ export function withOptimisticPatch(
   fn: () => Promise<unknown>,
 ): () => Promise<unknown> {
   return async () => {
+    // Captured here, synchronously, before any `await` in this thunk —
+    // not read fresh later, which would just compare the epoch to
+    // itself and always pass. This is what makes every check below
+    // actually detect an identity switch that happened while this
+    // mutation was in flight, rather than a check that can never fail.
+    const epoch = getIdentityEpoch(qc).epoch;
     // Claimed cross-surface (see claimThingMutation) — if a Court swipe or
     // another detail panel already has this exact Thing mid-mutation,
     // this call is a no-op rather than firing a second, conflicting RPC.
-    if (!claimThingMutation(qc, thingId)) return;
+    // Also returns null (and this becomes a no-op) if the epoch was
+    // already stale at construction time.
+    const token = claimThingMutation(qc, thingId, epoch);
+    if (!token) return;
     try {
       await cancelThingReads(qc, thingId);
-      const rollback = patchThingInCaches(qc, thingId, patch);
+      // Re-check after the await: a guard at entry does not protect
+      // work after it. If identity switched while cancelThingReads was
+      // in flight, neither the optimistic patch nor the RPC dispatch
+      // itself should run under a session that's already moved on —
+      // the Supabase client always authenticates with whatever session
+      // is current *now*, not whatever was current when this closure
+      // was created, so dispatching `fn()` late would run its RPC under
+      // the new identity's credentials for a mutation the old identity
+      // initiated.
+      if (!isEpochCurrent(qc, epoch)) return;
+      const rollback = patchThingInCaches(qc, thingId, patch, epoch);
       try {
         return await fn();
       } catch (error) {
@@ -279,7 +364,7 @@ export function withOptimisticPatch(
         throw error;
       }
     } finally {
-      releaseThingMutation(qc, thingId);
+      releaseThingMutation(qc, token);
     }
   };
 }

@@ -8,6 +8,11 @@ import {
   releaseThingMutation,
   withOptimisticPatch,
 } from "@/features/things/query-updates";
+import { getIdentityEpoch, advanceIdentityEpoch } from "@/features/realtime/identity-cache-policy";
+
+function epochOf(qc) {
+  return getIdentityEpoch(qc).epoch;
+}
 
 function makeThing(id, overrides = {}) {
   return {
@@ -32,9 +37,9 @@ test("rollback undoes only the failed mutation's own Thing, not an unrelated Thi
   const b = makeThing("b", { workStatus: "not_started" });
   qc.setQueryData(courtKey, { things: [a, b], myActorId: "p1" });
 
-  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
   // Independent mutation on B applied after A's optimistic patch.
-  const rollbackB = patchThingInCaches(qc, "b", { workStatus: "sorted" });
+  const rollbackB = patchThingInCaches(qc, "b", { workStatus: "sorted" }, epochOf(qc));
   void rollbackB; // B's mutation succeeds — no rollback call.
 
   rollbackA(); // A's mutation failed.
@@ -50,7 +55,7 @@ test("rollback does not remove a Thing that entered the cache after the patch", 
   const a = makeThing("a");
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
-  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
 
   // A new Thing C lands in the cache (e.g. a refetch merged in a new row)
   // before A's mutation is known to have failed.
@@ -71,7 +76,7 @@ test("rollback does not restore a stale collection over newer server data for th
   const a = makeThing("a", { workStatus: "not_started", title: "Original" });
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
-  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
 
   // Newer server data (a completed refetch) replaces the whole Thing A
   // object with fresh data reflecting reality server-side.
@@ -92,9 +97,9 @@ test("an older failure cannot erase a newer successful patch to the same Thing",
   const a = makeThing("a", { workStatus: "not_started" });
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
-  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
   // A second, later mutation on the same Thing succeeds and re-patches it.
-  patchThingInCaches(qc, "a", { workStatus: "sorted" });
+  patchThingInCaches(qc, "a", { workStatus: "sorted" }, epochOf(qc));
 
   // The first mutation now fails and rolls back — it must not clobber the
   // second mutation's result.
@@ -116,9 +121,9 @@ test("an older failure cannot erase a newer patch even when both compute the ide
   const a = makeThing("a", { workStatus: "not_started" });
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
-  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
   // Second, independent mutation computes the identical resulting value.
-  patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
 
   // First mutation fails.
   rollbackFirst();
@@ -143,8 +148,8 @@ test("when two overlapping mutations on the same Thing both fail, the Thing unwi
   const a = makeThing("a", { workStatus: "not_started" });
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
-  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
-  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" });
+  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
+  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" }, epochOf(qc));
 
   rollbackFirst(); // op1 fails — not the tail, so this is a no-op for the cache.
   assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "sorted", "op2's write is still visible after op1's no-op rollback");
@@ -170,8 +175,8 @@ test("when two overlapping mutations both fail in reverse order (newest first), 
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
   qc.setQueryData(thingKey, a);
 
-  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
-  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" });
+  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
+  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" }, epochOf(qc));
 
   rollbackSecond(); // op2 fails first — it *is* the tail, so the cache reverts to op1's value.
   assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "under_progress", "Court reverts to op1's value once op2 (the tail) fails");
@@ -194,8 +199,8 @@ test("two Things sharing the same Court query key track independent chains", () 
   const b = makeThing("b", { workStatus: "not_started" });
   qc.setQueryData(courtKey, { things: [a, b], myActorId: "p1" });
 
-  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
-  patchThingInCaches(qc, "b", { workStatus: "sorted" }); // succeeds, no rollback
+  const rollbackA = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
+  patchThingInCaches(qc, "b", { workStatus: "sorted" }, epochOf(qc)); // succeeds, no rollback
 
   rollbackA();
 
@@ -210,10 +215,10 @@ test("the current owner's rollback restores what it actually saw before it wrote
   const a = makeThing("a", { workStatus: "not_started" });
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
-  patchThingInCaches(qc, "a", { workStatus: "under_progress" }); // succeeds, no rollback call
+  patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc)); // succeeds, no rollback call
   // Second mutation runs after the first succeeded, so its own "previous"
   // is "under_progress", not the very first "not_started".
-  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" });
+  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" }, epochOf(qc));
 
   rollbackSecond();
 
@@ -233,7 +238,7 @@ test("single-Thing and Court caches both reconcile after a failed mutation", () 
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
   qc.setQueryData(thingKey, a);
 
-  const rollback = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  const rollback = patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
   assert.equal(qc.getQueryData(thingKey).workStatus, "under_progress");
   assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "under_progress");
 
@@ -249,14 +254,14 @@ test("a successful mutation's optimistic patch is left in place (no rollback cal
   const a = makeThing("a", { workStatus: "not_started" });
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
-  patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc));
 
   assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "under_progress");
 });
 
 test("patching a Thing that isn't in any cache yet does not create a malformed entry", () => {
   const qc = newClient();
-  const rollback = patchThingInCaches(qc, "does-not-exist", { workStatus: "under_progress" });
+  const rollback = patchThingInCaches(qc, "does-not-exist", { workStatus: "under_progress" }, epochOf(qc));
 
   assert.equal(qc.getQueryData(["thing", "does-not-exist"]), undefined);
   assert.deepEqual(qc.getQueryCache().findAll({ queryKey: ["court"] }), []);
@@ -278,13 +283,13 @@ test("a stale chain from a much earlier mutation cannot resurface after an untra
   const a = makeThing("a", { workStatus: "not_started" });
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
-  patchThingInCaches(qc, "a", { workStatus: "under_progress" }); // succeeds
+  patchThingInCaches(qc, "a", { workStatus: "under_progress" }, epochOf(qc)); // succeeds
 
   // Untracked external change: a refetch lands with fresh server data.
   const serverA = makeThing("a", { workStatus: "sorted", title: "Server truth" });
   qc.setQueryData(courtKey, { things: [serverA], myActorId: "p1" });
 
-  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "cancelled" });
+  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "cancelled" }, epochOf(qc));
   rollbackSecond();
 
   const after = qc.getQueryData(courtKey);
@@ -300,18 +305,53 @@ test("claimThingMutation prevents a second concurrent claim on the same Thing", 
   // prevents both surfaces from mutating the same Thing at once.
   // claimThingMutation is shared per QueryClient, regardless of caller.
   const qc = newClient();
-  assert.equal(claimThingMutation(qc, "a"), true, "first claim succeeds");
-  assert.equal(claimThingMutation(qc, "a"), false, "a second concurrent claim on the same Thing is rejected");
+  const tokenA1 = claimThingMutation(qc, "a", epochOf(qc));
+  assert.ok(tokenA1, "first claim succeeds");
+  assert.equal(claimThingMutation(qc, "a", epochOf(qc)), null, "a second concurrent claim on the same Thing is rejected");
   assert.equal(isThingMutationInFlight(qc, "a"), true);
-  releaseThingMutation(qc, "a");
+  releaseThingMutation(qc, tokenA1);
   assert.equal(isThingMutationInFlight(qc, "a"), false);
-  assert.equal(claimThingMutation(qc, "a"), true, "claimable again after release");
+  assert.ok(claimThingMutation(qc, "a", epochOf(qc)), "claimable again after release");
 });
 
 test("claimThingMutation on different Things does not serialize unrelated work", () => {
   const qc = newClient();
-  assert.equal(claimThingMutation(qc, "a"), true);
-  assert.equal(claimThingMutation(qc, "b"), true, "an unrelated Thing is unaffected by A's claim");
+  assert.ok(claimThingMutation(qc, "a", epochOf(qc)));
+  assert.ok(claimThingMutation(qc, "b", epochOf(qc)), "an unrelated Thing is unaffected by A's claim");
+});
+
+test("this is the reviewer's exact reproduction: a stale finally-release cannot release a newer identity's claim on the same thingId", () => {
+  const qc = newClient();
+  const epochA = epochOf(qc);
+  const tokenA = claimThingMutation(qc, "shared-thing", epochA);
+  assert.ok(tokenA, "A claims the Thing");
+
+  // Identity switch: the epoch advances (as identity-boundary.tsx does on
+  // a real account switch), but A's mutation is still mid-flight and
+  // hasn't reached its `finally` yet.
+  advanceIdentityEpoch(qc, { kind: "live", profileId: "B" });
+
+  // B claims the same Thing under the new epoch -- must succeed; A's
+  // claim belongs to a retired epoch and must not block it.
+  const epochB = epochOf(qc);
+  const tokenB = claimThingMutation(qc, "shared-thing", epochB);
+  assert.ok(tokenB, "B can claim the same Thing id once the epoch has advanced");
+
+  // A's mutation now reaches its stale `finally` and releases its
+  // (old-epoch) token -- this must be a no-op, not a release of B's
+  // live claim.
+  releaseThingMutation(qc, tokenA);
+  assert.equal(isThingMutationInFlight(qc, "shared-thing"), true, "A's stale release must not release B's newer claim");
+
+  releaseThingMutation(qc, tokenB);
+  assert.equal(isThingMutationInFlight(qc, "shared-thing"), false, "B's own release still works normally");
+});
+
+test("claimThingMutation rejects a claim attempt made with an already-stale epoch", () => {
+  const qc = newClient();
+  const staleEpoch = epochOf(qc);
+  advanceIdentityEpoch(qc, { kind: "live", profileId: "B" });
+  assert.equal(claimThingMutation(qc, "a", staleEpoch), null, "a claim captured under a since-retired epoch must not succeed");
 });
 
 test("withOptimisticPatch is a no-op if the Thing is already claimed by another surface", async () => {
@@ -321,7 +361,7 @@ test("withOptimisticPatch is a no-op if the Thing is already claimed by another 
   qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
 
   // Simulate a detail panel already mid-mutation on this Thing.
-  claimThingMutation(qc, "a");
+  const existingToken = claimThingMutation(qc, "a", epochOf(qc));
 
   let called = false;
   await withOptimisticPatch(qc, "a", { workStatus: "under_progress" }, async () => {
@@ -331,7 +371,7 @@ test("withOptimisticPatch is a no-op if the Thing is already claimed by another 
   assert.equal(called, false, "the wrapped mutation never runs while another surface holds the claim");
   assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "not_started", "no patch was applied either");
 
-  releaseThingMutation(qc, "a");
+  releaseThingMutation(qc, existingToken);
 });
 
 test("withOptimisticPatch releases its claim after success and after failure", async () => {

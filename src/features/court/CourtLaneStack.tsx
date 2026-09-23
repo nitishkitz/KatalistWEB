@@ -25,6 +25,7 @@ import {
   withOptimisticPatch,
   type ThingPatch,
 } from "@/features/things/query-updates";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import {
   invalidateSnoozeSurfaces,
   snoozeUntilFor,
@@ -515,10 +516,15 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       // with no patch at all — see runSnooze below.
       async (thing: Thing, label: string, patch: ThingPatch | undefined, mutate: () => Promise<unknown>) => {
         if (inFlightRef.current.has(thing.id)) return;
+        // Captured before any await, at construction time — see
+        // withOptimisticPatch's identical comment in query-updates.ts for
+        // why this can't be read fresh later in this function.
+        const epoch = getIdentityEpoch(qc).epoch;
         // inFlightRef only dedupes within this one lane instance; claimThingMutation
         // is shared across every surface (a detail panel's own mutation, another
         // lane) that goes through query-updates.ts for this Thing.
-        if (!claimThingMutation(qc, thing.id)) return;
+        const token = claimThingMutation(qc, thing.id, epoch);
+        if (!token) return;
         inFlightRef.current.add(thing.id);
         // Snapshot before removing, so a later failure can tell whether
         // anything has explicitly navigated away since (see
@@ -534,25 +540,35 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         let rollbackPatch: (() => void) | null = null;
         if (patch) {
           await cancelThingReads(qc, thing.id);
-          rollbackPatch = patchThingInCaches(qc, thing.id, patch);
+          // Re-check after the await, before applying the optimistic
+          // patch or dispatching the RPC below — a guard at entry alone
+          // does not protect this.
+          if (!isEpochCurrent(qc, epoch)) {
+            inFlightRef.current.delete(thing.id);
+            releaseThingMutation(qc, token);
+            return;
+          }
+          rollbackPatch = patchThingInCaches(qc, thing.id, patch, epoch);
         }
         try {
           await mutate();
-          await onRefresh();
+          if (isEpochCurrent(qc, epoch)) await onRefresh();
         } catch (error) {
           rollbackPatch?.();
-          pendingSelectionRestoreRef.current = { thingId: thing.id, navigationVersionAtRemoval };
-          // Roll back — the card slides back into the stack.
-          setRemovedIds((prev) => {
-            if (!prev.has(thing.id)) return prev;
-            const next = new Set(prev);
-            next.delete(thing.id);
-            return next;
-          });
-          toast.error(domainErrorMessage(error));
+          if (isEpochCurrent(qc, epoch)) {
+            pendingSelectionRestoreRef.current = { thingId: thing.id, navigationVersionAtRemoval };
+            // Roll back — the card slides back into the stack.
+            setRemovedIds((prev) => {
+              if (!prev.has(thing.id)) return prev;
+              const next = new Set(prev);
+              next.delete(thing.id);
+              return next;
+            });
+            toast.error(domainErrorMessage(error));
+          }
         } finally {
           inFlightRef.current.delete(thing.id);
-          releaseThingMutation(qc, thing.id);
+          releaseThingMutation(qc, token);
         }
       },
       [onRefresh, qc],
