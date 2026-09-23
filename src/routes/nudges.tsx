@@ -28,6 +28,13 @@ import { domainErrorMessage } from "@/lib/domain-error";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import type { Thing } from "@/domain/thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/nudges")({
   head: () => ({
@@ -95,6 +102,10 @@ function NudgesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [nudgingId, setNudgingId] = useState<string | null>(null);
+  // G05: "All lists" -- null means no filter (the "All lists" state itself).
+  const [listFilter, setListFilter] = useState<string | null>(null);
+  const [howNudgesWorkOpen, setHowNudgesWorkOpen] = useState(false);
+  const [showAllRecent, setShowAllRecent] = useState(false);
   const {
     rows: allRows,
     recent,
@@ -113,9 +124,25 @@ function NudgesPage() {
 
   const thingById = useMemo(() => new Map(court.all.map((t) => [t.id, t])), [court.all]);
 
+  // G05: the Lists available to filter by -- derived from the actually-
+  // loaded, already-authorization-filtered rows (never a separate,
+  // unscoped Lists fetch), so this can't surface a List the viewer
+  // couldn't otherwise see here.
+  const availableLists = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of allRows) {
+      if (row.listId && row.listName) map.set(row.listId, row.listName);
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [allRows]);
+  const listFilterLabel = listFilter ? availableLists.find(([id]) => id === listFilter)?.[1] ?? "All lists" : "All lists";
+
   const q = search.trim().toLowerCase();
   const activeRows = allRows.filter(
-    (n) => n.group === active && (!q || n.title.toLowerCase().includes(q) || n.person.toLowerCase().includes(q)),
+    (n) =>
+      n.group === active &&
+      (!q || n.title.toLowerCase().includes(q) || n.person.toLowerCase().includes(q)) &&
+      (!listFilter || n.listId === listFilter),
   );
 
   const handleNudge = (id: string, dbReason?: NudgeReason) => {
@@ -170,24 +197,37 @@ function NudgesPage() {
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search people, teams, or skills"
+                  placeholder="Search Things or people"
                   className="w-52 bg-transparent text-[12px] outline-none placeholder:text-[#8487a7]"
                 />
               </label>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#eaeffa] bg-white px-3 text-[13px] text-[#1d1d1d]"
+                  >
+                    <ListFilter className="h-4 w-4 text-[#6a769c]" />
+                    {listFilterLabel}
+                    <ChevronDown className="h-3.5 w-3.5 text-[#6a769c]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => setListFilter(null)}>All lists</DropdownMenuItem>
+                  {availableLists.map(([id, name]) => (
+                    <DropdownMenuItem key={id} onSelect={() => setListFilter(id)}>
+                      {name}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               <button
                 type="button"
-                className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#eaeffa] bg-white px-3 text-[13px] text-[#1d1d1d]"
-              >
-                <ListFilter className="h-4 w-4 text-[#6a769c]" />
-                All lists
-                <ChevronDown className="h-3.5 w-3.5 text-[#6a769c]" />
-              </button>
-              <button
-                type="button"
+                onClick={() => setHowNudgesWorkOpen(true)}
                 className="inline-flex h-9 items-center gap-2 rounded-[7px] border border-[#eaeffa] bg-white px-3 text-[13px] text-[#1d1d1d]"
               >
                 <Settings2 className="h-4 w-4 text-[#6a769c]" />
-                Nudge settings
+                How nudges work
               </button>
             </div>
           </div>
@@ -381,13 +421,26 @@ function NudgesPage() {
               <section className="rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-[16px] font-semibold text-black">Recent nudge activity</h2>
-                  <span className="text-[12px] text-[#975ee2]">See all</span>
+                  {/* G05: "See all"/"Show less" toggles the already-loaded
+                      list (there is no separate paginated history to
+                      fetch -- recent is derived client-side from the same
+                      data already in memory), and only appears when
+                      there's actually more to reveal. */}
+                  {recent.length > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllRecent((v) => !v)}
+                      className="text-[12px] text-[#975ee2] hover:underline"
+                    >
+                      {showAllRecent ? "Show less" : "See all"}
+                    </button>
+                  )}
                 </div>
                 {recent.length === 0 ? (
                   <p className="py-4 text-[12px] text-[#6a769c]">No recent nudge activity.</p>
                 ) : (
                   <ul className="space-y-4">
-                    {recent.slice(0, 5).map((r) => {
+                    {(showAllRecent ? recent : recent.slice(0, 5)).map((r) => {
                       const thing = thingById.get(r.id);
                       return (
                         <li key={r.id} className="flex items-start gap-3">
@@ -417,6 +470,27 @@ function NudgesPage() {
       </InlineThingDetailWorkspace>
         )}
       </AsyncState>
+
+      {/* G05: replaces the old inert "Nudge settings" button -- there is
+          no per-user editable nudge configuration to open here; this
+          explains the actual, fixed server-side rules instead. */}
+      <Dialog open={howNudgesWorkOpen} onOpenChange={setHowNudgesWorkOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>How nudges work</DialogTitle>
+            <DialogDescription>
+              Coey's nudging rules are fixed server-side, not a per-user setting.
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="space-y-2.5 text-[13px] text-[#3d3f74]">
+            <li>• At most one automatic nudge per Thing every 24 hours.</li>
+            <li>• Quiet hours: no nudges are sent between 9 PM and 8 AM.</li>
+            <li>• A Morning Brief digest is sent at most once per morning.</li>
+            <li>• A weekly "spring clean" and upgrade nudge are each capped at once per week.</li>
+            <li>• Reactivation nudges for a fully stale Thing stop after two attempts (3-day, then 7-day).</li>
+          </ul>
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

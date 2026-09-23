@@ -17,6 +17,9 @@ export type NudgeRow = {
   lastMovement: string;
   group: NudgeGroup;
   canNudge: boolean;
+  /** G05: for the "All lists" filter -- null/absent for a standalone Thing (no List). */
+  listId?: string | null;
+  listName?: string | null;
 };
 
 export type RecentNudge = {

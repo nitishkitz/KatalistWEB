@@ -26,6 +26,8 @@ function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string, d
     lastMovement: t.updatedAt,
     group,
     canNudge,
+    listId: t.listId,
+    listName: t.listName,
   };
 }
 
