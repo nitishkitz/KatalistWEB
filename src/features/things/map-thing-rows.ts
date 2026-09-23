@@ -141,10 +141,13 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
 
   // These four lookups are independent of each other — only the final
   // per-row assembly below needs all of their results — so they run
-  // concurrently instead of as a sequential await chain. See
-  // scripts/map-thing-rows-concurrency.test.mjs for the measured
-  // before/after (sequential ~208ms vs. concurrent ~40ms for four
-  // 40ms-delayed dependencies).
+  // concurrently instead of as a sequential await chain. This reduces
+  // serialized *latency* (they overlap instead of queuing one after
+  // another); it does not reduce request *volume* — the same calls still
+  // happen, and more of them can now be in flight at once. See
+  // scripts/map-thing-rows-concurrency.test.mjs for a deterministic
+  // (event-order, not wall-clock) proof that all four start before any
+  // of them resolves.
   const [people, listNames, commentCountsByThing, realAttachmentsByThing] = await Promise.all([
     resolveActorPeople([...actorIds]),
     resolveListNames(listIds),

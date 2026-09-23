@@ -2,54 +2,80 @@ import assert from "node:assert/strict";
 import { test, mock } from "node:test";
 
 /**
- * Batch C1 baseline/regression: mapDbThingRows makes four independent
- * lookups per call (actor/people resolution, list-name resolution,
- * comment counts, real attachments) — none of their results depend on
- * each other, only the final per-row assembly does. This measures wall-
- * clock time with each dependency mocked to an artificial delay, so a
- * sequential await chain and a parallelized one are numerically
- * distinguishable without touching a live backend: sequential totals
- * ~= sum of the delays; parallel totals ~= the slowest single delay.
+ * Batch C1: mapDbThingRows makes four independent lookups per call
+ * (actor/people resolution, list-name resolution, comment counts, real
+ * attachments) — none of their results depend on each other, only the
+ * final per-row assembly does. This proves they run concurrently by
+ * recording the *order* of start/end events from each mocked dependency,
+ * not by measuring wall-clock time — a timing threshold is inherently
+ * flaky (CI load, scheduler jitter) and was also based on a wrong
+ * assumption (that every leg is a single step; list-name resolution has
+ * its own internal RPC-then-table fallback). Event ordering is
+ * deterministic regardless of how long each mock's delay actually takes.
+ *
+ * This reduces serialized *latency*, not request *volume* — the same
+ * network calls still happen; live latency/backend-load validation is
+ * explicitly deferred until it can be measured against a real backend.
  */
 
-const DELAY_MS = 40;
+const DELAY_MS = 5;
 
 function delay(value) {
   return new Promise((resolve) => setTimeout(() => resolve(value), DELAY_MS));
 }
 
-test("mapDbThingRows fetches its four independent lookups concurrently, not sequentially", async () => {
+function makeTracker() {
+  const events = [];
+  return {
+    events,
+    track: (name, promiseFactory) => {
+      events.push(`${name}:start`);
+      return promiseFactory().then((value) => {
+        events.push(`${name}:end`);
+        return value;
+      });
+    },
+  };
+}
+
+test("mapDbThingRows starts its four independent lookups before any of them resolves", async () => {
+  const { events, track } = makeTracker();
+
   const peopleMock = mock.module("@/features/people/resolve-actors", {
     namedExports: {
-      resolveActorPeople: () => delay(new Map()),
-      personOrSomeone: (people, id) => ({ id, name: "Someone", initials: "S" }),
+      resolveActorPeople: () =>
+        track("people", () => delay(new Map([["a1", { id: "a1", name: "Ada", initials: "A" }]]))),
+      personOrSomeone: (people, id) => people.get(id) ?? { id, name: "Someone", initials: "S" },
     },
   });
   const attachmentsMock = mock.module("@/features/things/attachments", {
     namedExports: {
-      fetchRealAttachments: () => delay(new Map()),
+      fetchRealAttachments: () => track("attachments", () => delay(new Map())),
     },
   });
   const authedFetchMock = mock.module("@/lib/authed-fetch", {
     namedExports: {
-      // Resolves the list-name lookup fully on its first (API) attempt, so
-      // that chain's own internal fallback steps never fire.
-      authedFetch: () => delay({ ok: true, json: async () => ({ lists: [] }) }),
+      // Never actually called in this test: `typeof window === "undefined"`
+      // in Node skips straight to the RPC step — asserted below.
+      authedFetch: () => track("authedFetch", () => delay({ ok: false })),
     },
   });
   const rpcsMock = mock.module("@/integrations/supabase/rpcs", {
     namedExports: {
-      callUngeneratedRpc: () => delay({ data: null, error: null }),
+      // Resolves the list name fully on this one step, so the internal
+      // table-fallback step never fires — asserted below.
+      callUngeneratedRpc: () =>
+        track("resolve-list-names-rpc", () => delay({ data: [{ id: "l1", name: "Groceries" }], error: null })),
     },
   });
-  const chainable = (result) => {
+  const chainable = (name, result) => {
     const node = {
       select: () => node,
       in: () => node,
       is: () => node,
       eq: () => node,
       then: (resolve) => {
-        delay(result).then(resolve);
+        track(name, () => delay(result)).then(resolve);
       },
     };
     return node;
@@ -57,7 +83,10 @@ test("mapDbThingRows fetches its four independent lookups concurrently, not sequ
   const clientMock = mock.module("@/integrations/supabase/client", {
     namedExports: {
       supabase: {
-        from: () => chainable({ data: [], error: null }),
+        from: (table) =>
+          table === "thing_comments"
+            ? chainable("comments", { data: [], error: null })
+            : chainable("lists-table-fallback", { data: [], error: null }),
       },
     },
   });
@@ -86,25 +115,40 @@ test("mapDbThingRows fetches its four independent lookups concurrently, not sequ
       notes: null,
     };
 
-    const start = Date.now();
-    await mapDbThingRows([row], "a1");
-    const elapsed = Date.now() - start;
+    const [thing] = await mapDbThingRows([row], "a1");
 
-    // Not all four legs are single-step: list-name resolution has its own
-    // internal RPC-then-table fallback (this test runs in Node, so the
-    // `typeof window` guard skips the first, authedFetch, step), which
-    // alone takes ~2 * DELAY_MS when nothing resolves — the worst case
-    // exercised here. That's still only *one* of the four legs; running
-    // concurrently, the total should track that single slowest leg
-    // (~2 * DELAY_MS, ~80ms), not the sum of all four
-    // (people + list-names' ~2 steps + comments + attachments,
-    // ~5 * DELAY_MS, ~200ms — confirmed against the unmodified code before
-    // this fix). The threshold sits well below the sequential sum so this
-    // fails loudly against a regression back to sequential awaits.
-    assert.ok(
-      elapsed < DELAY_MS * 3.5,
-      `expected the four independent lookups to run concurrently (~${DELAY_MS * 2}ms, bounded by list-name resolution's own 2-step fallback), took ${elapsed}ms`,
+    // Deterministic concurrency proof: the four independent top-level
+    // legs must all have *started* before any of them *finished* — i.e.
+    // they were genuinely in flight together, not queued behind each
+    // other. This holds regardless of how long each mock's delay is.
+    const firstEndIndex = events.findIndex((e) => e.endsWith(":end"));
+    const startedBeforeAnyEnd = new Set(events.slice(0, firstEndIndex).filter((e) => e.endsWith(":start")));
+    assert.deepEqual(
+      startedBeforeAnyEnd,
+      new Set(["people:start", "attachments:start", "comments:start", "resolve-list-names-rpc:start"]),
+      `expected all four independent lookups to start before any resolved; event order was: ${events.join(", ")}`,
     );
+
+    // authedFetch is skipped outside a browser (no `window`) — list-name
+    // resolution goes straight to its RPC step in this test.
+    assert.ok(!events.some((e) => e.startsWith("authedFetch")), "authedFetch should not run without window");
+    // The table fallback should never fire since the RPC mock already
+    // resolved the list name — confirms list-name resolution's own
+    // internal fallback chain is otherwise unchanged by this refactor.
+    assert.ok(
+      !events.some((e) => e.startsWith("lists-table-fallback")),
+      "table fallback should not run when the RPC already resolved the list name",
+    );
+
+    // Output assertions: the mapped Thing actually reflects each of the
+    // four lookups' results, not just that they ran.
+    assert.equal(thing.id, "t1");
+    assert.equal(thing.title, "Thing 1");
+    assert.equal(thing.listName, "Groceries", "list name resolved via the RPC mock");
+    assert.equal(thing.creator.name, "Ada", "person resolution flows through to the mapped Thing");
+    assert.equal(thing.commentCount, 0);
+    assert.equal(thing.unreadCommentCount, 0);
+    assert.equal(thing.files, undefined, "no real attachments and no notes-derived files for this row");
   } finally {
     peopleMock.restore();
     attachmentsMock.restore();
