@@ -94,7 +94,17 @@ function NudgesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [nudgingId, setNudgingId] = useState<string | null>(null);
-  const { rows: allRows, recent, counts, isLoading, eligibilityLoading, error: nudgesError, retry: retryNudges } = useNudges();
+  const {
+    rows: allRows,
+    recent,
+    counts,
+    isLoading,
+    eligibilityLoading,
+    eligibilityError,
+    error: nudgesError,
+    retry: retryNudges,
+    retryEligibility,
+  } = useNudges();
   const court = useCourt();
   const live = useThing(selectedId);
   const selected = live.thing;
@@ -176,6 +186,29 @@ function NudgesPage() {
               </button>
             </div>
           </div>
+
+          {eligibilityError ? (
+            // Rows loaded fine (from Court) — only the eligibility check
+            // (which rows can actually be nudged) and/or cooldown history
+            // failed. A failed check is not evidence a row is ineligible,
+            // so this stays a dismissible warning alongside the still-real
+            // rows rather than replacing them or silently rendering every
+            // row as "not eligible" (see the eligibilityError handling in
+            // the action column below).
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-amber-200 bg-amber-50 px-4 py-2.5 text-[12.5px] text-amber-900">
+              <span>
+                Couldn't check nudge eligibility or recent nudge activity — some actions and cooldown
+                status below may be out of date. {domainErrorMessage(eligibilityError)}
+              </span>
+              <button
+                type="button"
+                onClick={() => retryEligibility()}
+                className="inline-flex h-7 items-center rounded-[6px] border border-amber-300 bg-white px-2.5 text-[12px] font-medium text-amber-900 hover:bg-amber-100"
+              >
+                Retry
+              </button>
+            </div>
+          ) : null}
 
           {/* Body */}
           <div className="grid gap-5 xl:grid-cols-[1fr_372px]">
@@ -286,6 +319,18 @@ function NudgesPage() {
                                     <span className="inline-flex items-center rounded-[5px] border border-border px-3 py-1.5 text-[13px] text-muted-foreground opacity-60">
                                       Checking…
                                     </span>
+                                  ) : eligibilityError ? (
+                                    // A failed eligibility check is not evidence this row is
+                                    // ineligible — don't render a plain "Open" that looks like a
+                                    // confirmed determination. Detail always stays reachable.
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedId(row.id)}
+                                      title="Couldn't confirm whether this can be nudged"
+                                      className="inline-flex items-center gap-1.5 rounded-[5px] border border-amber-200 bg-amber-50 px-3 py-1.5 text-[13px] text-amber-900 hover:bg-amber-100"
+                                    >
+                                      Open (unconfirmed)
+                                    </button>
                                   ) : row.canNudge ? (
                                     <button
                                       type="button"

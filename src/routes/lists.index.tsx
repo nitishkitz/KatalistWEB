@@ -491,18 +491,6 @@ function ListsPage() {
 
   return (
     <AppShell>
-      <AsyncState
-        isLoading={isLoading}
-        data={lists}
-        error={listsError}
-        onRetry={refetchLists}
-        isEmpty={lists.length === 0}
-        emptyTitle="No Lists yet"
-        emptyDescription="Create your first List to start organizing shared work."
-        loadingContent={<ListsSkeleton />}
-      >
-        {() => (
-      <>
       <div className="space-y-4">
         {/* Toolbar: search, filters, role pills, sort, New List — single row */}
         <div className="flex flex-wrap items-center gap-2">
@@ -618,32 +606,45 @@ function ListsPage() {
 
         {/* Categorized Lists Sections */}
         <div className="space-y-6 pt-2">
-          {filteredAndSorted.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/80 bg-white p-12 text-center">
-              <p className="text-[14px] font-semibold text-foreground">No lists match your criteria</p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                Try changing your search keywords or resetting filters.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setQuery("");
-                  setRoleFilter("all");
-                  setContextFilter("all");
-                  setSelectedMember(null);
-                }}
-                className="mt-4 inline-flex h-8 items-center rounded-lg border border-border px-3 text-[12px] font-medium text-primary hover:bg-muted/50"
-              >
-                Clear all filters
-              </button>
-            </div>
-          ) : (
-            <>
-              <GroupSection title="Owned by Me" count={owned.length} rows={owned} onEdit={openEditList} />
-              <GroupSection title="Collaborating" count={collab.length} rows={collab} />
-              <GroupSection title="View Only" count={viewOnly.length} rows={viewOnly} />
-            </>
-          )}
+          <AsyncState
+            isLoading={isLoading}
+            data={lists}
+            error={listsError}
+            onRetry={refetchLists}
+            isEmpty={lists.length === 0}
+            emptyTitle="No Lists yet"
+            emptyDescription="Create your first List to start organizing shared work."
+            loadingContent={<ListsSkeleton />}
+          >
+            {() =>
+              filteredAndSorted.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border/80 bg-white p-12 text-center">
+                  <p className="text-[14px] font-semibold text-foreground">No lists match your criteria</p>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    Try changing your search keywords or resetting filters.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery("");
+                      setRoleFilter("all");
+                      setContextFilter("all");
+                      setSelectedMember(null);
+                    }}
+                    className="mt-4 inline-flex h-8 items-center rounded-lg border border-border px-3 text-[12px] font-medium text-primary hover:bg-muted/50"
+                  >
+                    Clear all filters
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <GroupSection title="Owned by Me" count={owned.length} rows={owned} onEdit={openEditList} />
+                  <GroupSection title="Collaborating" count={collab.length} rows={collab} />
+                  <GroupSection title="View Only" count={viewOnly.length} rows={viewOnly} />
+                </>
+              )
+            }
+          </AsyncState>
         </div>
       </div>
 
@@ -768,9 +769,6 @@ function ListsPage() {
           </form>
         </div>
       ) : null}
-      </>
-        )}
-      </AsyncState>
     </AppShell>
   );
 }

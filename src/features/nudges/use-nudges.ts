@@ -137,12 +137,23 @@ export function useNudges() {
   // rather than blocking the whole list on it.
   const rowsLoading = liveAuth && court.isLoading;
   const eligibilityLoading = liveAuth && (nudgeable.isLoading || history.isLoading);
-  const error = nudgeable.error ?? history.error ?? court.error ?? null;
-  const retry = useCallback(() => {
-    void court.refetch();
+  // Kept separate rather than merged into one `error`: a failed eligibility
+  // check is not evidence a row is ineligible, and conflating it with a
+  // failed row load meant AsyncState (which only surfaces an error when
+  // there's no data at all) silently swallowed it whenever Court had
+  // already loaded some rows — the eligibility failure just vanished,
+  // rendered identically to "checked, and genuinely not eligible."
+  const rowsError = court.error ?? null;
+  const eligibilityError = nudgeable.error ?? history.error ?? null;
+  const retryRows = useCallback(() => void court.refetch(), [court]);
+  const retryEligibility = useCallback(() => {
     void nudgeable.refetch();
     void history.refetch();
-  }, [court, nudgeable, history]);
+  }, [nudgeable, history]);
+  const retry = useCallback(() => {
+    retryRows();
+    retryEligibility();
+  }, [retryRows, retryEligibility]);
 
   return {
     ...derived,
@@ -150,10 +161,14 @@ export function useNudges() {
     preview: court.preview,
     rowsLoading,
     eligibilityLoading,
-    // Backward-compatible combined flag: reflects row readiness only, per
-    // the note above — never blocks on eligibility.
+    eligibilityError,
+    // Backward-compatible combined flag/alias: reflects row readiness and
+    // the row-load error only, per the note above — never blocks on
+    // eligibility, which callers should surface separately via
+    // eligibilityError.
     isLoading: rowsLoading,
-    error,
+    error: rowsError,
     retry,
+    retryEligibility,
   };
 }

@@ -169,18 +169,6 @@ function BucketsPage() {
 
   return (
     <AppShell>
-      <AsyncState
-        isLoading={isLoading}
-        data={buckets}
-        error={bucketsError}
-        onRetry={refetchBuckets}
-        isEmpty={buckets.length === 0}
-        emptyTitle="No Buckets yet"
-        emptyDescription="Create a Bucket to privately organize references to Things and Lists you already have access to."
-        loadingContent={<BucketsSkeleton />}
-      >
-        {() => (
-      <>
       {/* Toolbar: search, people avatars (instead of a sort dropdown), create */}
       <div className="-mt-2 mb-6 flex flex-wrap items-center gap-3 border-b border-[#ececf2] pb-4">
         <label className="flex h-10 flex-1 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-white px-3 sm:max-w-md">
@@ -241,29 +229,42 @@ function BucketsPage() {
 
       {/* Buckets */}
       <div>
-        {filtered.length === 0 ? (
-          <p className="py-12 text-center text-[13px] text-[#6a769c]">No buckets found.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[880px] text-left">
-              <thead>
-                <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
-                  <th className="px-3 py-2.5 font-semibold">Bucket</th>
-                  <th className="px-3 py-2.5 font-semibold">Members</th>
-                  <th className="px-3 py-2.5 font-semibold">Things</th>
-                  <th className="px-3 py-2.5 font-semibold">Lists</th>
-                  <th className="px-3 py-2.5 font-semibold">Progress</th>
-                  <th className="px-3 py-2.5 font-semibold">Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((b) => (
-                  <BucketTableRow key={b.id} bucket={b} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <AsyncState
+          isLoading={isLoading}
+          data={buckets}
+          error={bucketsError}
+          onRetry={refetchBuckets}
+          isEmpty={buckets.length === 0}
+          emptyTitle="No Buckets yet"
+          emptyDescription="Create a Bucket to privately organize references to Things and Lists you already have access to."
+          loadingContent={<BucketsSkeleton />}
+        >
+          {() =>
+            filtered.length === 0 ? (
+              <p className="py-12 text-center text-[13px] text-[#6a769c]">No buckets found.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[880px] text-left">
+                  <thead>
+                    <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                      <th className="px-3 py-2.5 font-semibold">Bucket</th>
+                      <th className="px-3 py-2.5 font-semibold">Members</th>
+                      <th className="px-3 py-2.5 font-semibold">Things</th>
+                      <th className="px-3 py-2.5 font-semibold">Lists</th>
+                      <th className="px-3 py-2.5 font-semibold">Progress</th>
+                      <th className="px-3 py-2.5 font-semibold">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((b) => (
+                      <BucketTableRow key={b.id} bucket={b} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          }
+        </AsyncState>
       </div>
 
       {creating ? (
@@ -312,9 +313,6 @@ function BucketsPage() {
           </form>
         </div>
       ) : null}
-      </>
-        )}
-      </AsyncState>
     </AppShell>
   );
 }

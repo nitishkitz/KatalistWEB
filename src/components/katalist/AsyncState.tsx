@@ -88,7 +88,12 @@ export function AsyncState<T>({
     };
   }, [isLoading]);
 
-  if (!online) {
+  // Only blocks with the full-screen offline state when there's no usable
+  // data to show (nothing cached yet, or a successful-but-empty result —
+  // that's still worth stating plainly rather than blaming connectivity for
+  // it). Already-loaded, non-empty data stays on screen; see the offline
+  // banner layered over `children` below instead of replacing it.
+  if (!online && (data == null || isEmpty)) {
     return (
       <EmptyState
         title="You're offline"
@@ -181,5 +186,17 @@ export function AsyncState<T>({
     return <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />;
   }
 
-  return <>{children(data as T)}</>;
+  return (
+    <>
+      {!online ? (
+        <div
+          role="status"
+          className="mb-3 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"
+        >
+          <span>You're offline. Showing what was already loaded.</span>
+        </div>
+      ) : null}
+      {children(data as T)}
+    </>
+  );
 }
