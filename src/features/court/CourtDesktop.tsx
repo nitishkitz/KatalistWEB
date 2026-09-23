@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
 import {
   ChevronRight,
   Clock,
@@ -187,6 +189,15 @@ export function CourtDesktop({
   const [filters, setFilters] = useState<CourtFilterState>(DEFAULT_COURT_FILTERS);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<CourtSort>("due");
+  const qc = useQueryClient();
+  // Catch/pace/sort mutations (swipe gestures, the detail modal's buttons)
+  // only refetched Court's own query, so a Thing sorted here stayed stale
+  // in Nudges/Lists/Buckets until those screens' own staleTime elapsed or
+  // they remounted. invalidatePersonalSurfaces already invalidates
+  // ["court"] itself (no need to also call refetch()) — it's the same
+  // reconciliation ThingDetailContent's button path already uses on every
+  // mutation.
+  const refreshAfterMutation = useCallback(() => invalidatePersonalSurfaces(qc), [qc]);
   const [focusSelection, setFocusSelection] = useState<CourtFocusSelection | null>(null);
   const [modalSelection, setModalSelection] = useState<{ lane: FocusViewTabId; thing: Thing } | null>(null);
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
@@ -676,7 +687,7 @@ export function CourtDesktop({
               )
             }
             onClose={closeFocus}
-            onRefresh={refetch}
+            onRefresh={refreshAfterMutation}
             onViewAll={handleViewAll}
           />
           {!focusSelection && (
@@ -722,7 +733,7 @@ export function CourtDesktop({
             setModalSelection(null);
             setFocusSelection({ lane, thingId: thing.id });
           }}
-          onRefresh={refetch}
+          onRefresh={refreshAfterMutation}
         />
       )}
 
