@@ -62,7 +62,12 @@ test("Court preserves With Others and one desktop Magic Box", () => {
   assert.match(court, /Moving/);
   assert.match(court, /Needs Attention/);
   assert.equal((court.match(/<MagicBox desktop/g) ?? []).length, 1);
-  assert.match(route, /<div className="lg:hidden">\s*<InlineThingDetailWorkspace/);
+  // The mobile branch now shows a dedicated retry state when Court's query
+  // has failed (previously falsely rendered as "Your Court is clear" on a
+  // fetch failure), so InlineThingDetailWorkspace is the *fallback* branch
+  // of that check rather than the div's only child.
+  assert.match(route, /<div className="lg:hidden">[\s\S]*<InlineThingDetailWorkspace/);
+  assert.match(route, /The Court could not be loaded\./);
   assert.doesNotMatch(route, /className="lg:hidden"\s*>\s*<div>/);
 });
 

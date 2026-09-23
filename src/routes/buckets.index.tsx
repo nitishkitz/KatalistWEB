@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { BucketsSkeleton } from "@/components/katalist/ScreenSkeletons";
+import { AsyncState } from "@/components/katalist/AsyncState";
 import { type BucketCard } from "@/features/buckets/fixtures";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { useBuckets } from "@/features/buckets/use-buckets";
@@ -122,7 +123,7 @@ function BucketTableRow({ bucket }: { bucket: BucketCard }) {
 
 function BucketsPage() {
   useLocalVersion();
-  const { buckets, create, isLoading } = useBuckets();
+  const { buckets, create, isLoading, error: bucketsError, refetch: refetchBuckets } = useBuckets();
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
@@ -166,16 +167,20 @@ function BucketsPage() {
     return source;
   }, [buckets, query, personFilter]);
 
-  if (isLoading) {
-    return (
-      <AppShell>
-        <BucketsSkeleton />
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell>
+      <AsyncState
+        isLoading={isLoading}
+        data={buckets}
+        error={bucketsError}
+        onRetry={refetchBuckets}
+        isEmpty={buckets.length === 0}
+        emptyTitle="No Buckets yet"
+        emptyDescription="Create a Bucket to privately organize references to Things and Lists you already have access to."
+        loadingContent={<BucketsSkeleton />}
+      >
+        {() => (
+      <>
       {/* Toolbar: search, people avatars (instead of a sort dropdown), create */}
       <div className="-mt-2 mb-6 flex flex-wrap items-center gap-3 border-b border-[#ececf2] pb-4">
         <label className="flex h-10 flex-1 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-white px-3 sm:max-w-md">
@@ -307,6 +312,9 @@ function BucketsPage() {
           </form>
         </div>
       ) : null}
+      </>
+        )}
+      </AsyncState>
     </AppShell>
   );
 }

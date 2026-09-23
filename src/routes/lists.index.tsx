@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { ListsSkeleton } from "@/components/katalist/ScreenSkeletons";
+import { AsyncState } from "@/components/katalist/AsyncState";
 import { supabase } from "@/integrations/supabase/client";
 import { rpcSetListCover, rpcSetListDescription } from "@/features/things/rpc";
 import { isPreviewMode } from "@/lib/session-mode";
@@ -322,7 +323,7 @@ function GroupSection({
 
 function ListsPage() {
   useLocalVersion();
-  const { lists, create, refetch: refetchLists, isLoading } = useLists();
+  const { lists, create, refetch: refetchLists, isLoading, error: listsError } = useLists();
   const { context: appContext } = useAppContext();
   const [query, setQuery] = useState("");
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
@@ -488,16 +489,20 @@ function ListsPage() {
     progress: "Progress",
   };
 
-  if (isLoading) {
-    return (
-      <AppShell>
-        <ListsSkeleton />
-      </AppShell>
-    );
-  }
-
   return (
     <AppShell>
+      <AsyncState
+        isLoading={isLoading}
+        data={lists}
+        error={listsError}
+        onRetry={refetchLists}
+        isEmpty={lists.length === 0}
+        emptyTitle="No Lists yet"
+        emptyDescription="Create your first List to start organizing shared work."
+        loadingContent={<ListsSkeleton />}
+      >
+        {() => (
+      <>
       <div className="space-y-4">
         {/* Toolbar: search, filters, role pills, sort, New List — single row */}
         <div className="flex flex-wrap items-center gap-2">
@@ -763,6 +768,9 @@ function ListsPage() {
           </form>
         </div>
       ) : null}
+      </>
+        )}
+      </AsyncState>
     </AppShell>
   );
 }

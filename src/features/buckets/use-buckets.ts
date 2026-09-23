@@ -195,7 +195,14 @@ export function useBuckets() {
     },
   });
 
-  return { buckets, isLoading: !preview && query.isLoading, error: query.error, preview, create };
+  return {
+    buckets,
+    isLoading: !preview && query.isLoading,
+    error: query.error,
+    preview,
+    create,
+    refetch: query.refetch,
+  };
 }
 
 export function useBucket(bucketId: string | undefined) {
@@ -252,7 +259,7 @@ export function useBucket(bucketId: string | undefined) {
 
   if (preview) {
     const bucket = getBuckets().find((b) => b.id === bucketId);
-    return { bucket, isLoading: false, error: null, preview: true, rename, remove };
+    return { bucket, isLoading: false, error: null, preview: true, rename, remove, refetch: query.refetch };
   }
   return {
     bucket: query.data ?? undefined,
@@ -261,5 +268,6 @@ export function useBucket(bucketId: string | undefined) {
     preview: false,
     rename,
     remove,
+    refetch: query.refetch,
   };
 }

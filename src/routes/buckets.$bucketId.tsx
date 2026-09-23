@@ -163,7 +163,7 @@ function BucketItemsShimmer({ view }: { view: "things" | "lists" }) {
 function BucketDetailPage() {
   const { bucketId } = Route.useParams();
   const navigate = useNavigate();
-  const { bucket, isLoading, error, rename, remove: deleteBucket } = useBucket(bucketId);
+  const { bucket, isLoading, error, rename, remove: deleteBucket, refetch: refetchBucket } = useBucket(bucketId);
   const { items, add, remove, isLoading: itemsLoading, error: itemsError } = useBucketItems(bucketId);
   const things = useAccessibleThings();
   const lists = useAccessibleLists();
@@ -261,10 +261,27 @@ function BucketDetailPage() {
     );
   }
 
-  if (error || !bucket) {
+  if (error) {
+    // A failed fetch, not a genuinely missing/inaccessible Bucket — offer
+    // Retry instead of implying the Bucket doesn't exist.
+    return (
+      <AppShell title="Bucket" subtitle="Couldn’t load">
+        <p className="text-sm text-muted-foreground">{domainErrorMessage(error)}</p>
+        <button
+          type="button"
+          onClick={() => void refetchBucket()}
+          className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
+        >
+          Retry
+        </button>
+      </AppShell>
+    );
+  }
+
+  if (!bucket) {
     return (
       <AppShell title="Bucket" subtitle="Not found">
-        <p className="text-sm text-muted-foreground">{error ? domainErrorMessage(error) : "Bucket not found."}</p>
+        <p className="text-sm text-muted-foreground">Bucket not found.</p>
         <Link to="/buckets" className="mt-2 inline-block text-sm font-semibold text-primary">
           Back to Buckets
         </Link>

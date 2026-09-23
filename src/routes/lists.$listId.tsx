@@ -144,7 +144,7 @@ function ListDetailPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   useLocalVersion();
-  const { list, isLoading, error } = useList(listId);
+  const { list, isLoading, error, refetch: refetchList } = useList(listId);
   const chat = useListMessages(listId);
   const { things: listThings, myActorId } = useListThings(listId);
   const { user, session } = useSession();
@@ -535,6 +535,13 @@ function ListDetailPage() {
     return (
       <AppShell title="List" subtitle="Couldn’t load">
         <p className="text-sm text-muted-foreground">{domainErrorMessage(error)}</p>
+        <button
+          type="button"
+          onClick={() => void refetchList()}
+          className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
+        >
+          Retry
+        </button>
         <ListCallPanel call={call} selfName={selfName} listId={listId} onInvite={() => setInviteOpen(true)} />
       </AppShell>
     );

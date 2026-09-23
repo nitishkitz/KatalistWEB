@@ -246,6 +246,25 @@ function CourtPage() {
       />
 
       <div className="lg:hidden">
+        {error ? (
+          // Court's query settled into an error, not an empty result — the
+          // mobile branch had no error handling of its own, so this used to
+          // fall straight through to "Your Court is clear", a false
+          // successful-empty state for what was actually a failed load.
+          <div className="px-4 py-10 text-center">
+            <p className="text-sm font-semibold">The Court could not be loaded.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Your Things are unchanged. Try loading the Court again.
+            </p>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="mt-4 h-10 rounded-lg border border-primary px-4 text-xs font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
         <InlineThingDetailWorkspace
           thing={selected}
           onClose={() => setSelectedId(null)}
@@ -438,6 +457,7 @@ function CourtPage() {
             </p>
           </div>
         </InlineThingDetailWorkspace>
+        )}
       </div>
     </AppShell>
   );

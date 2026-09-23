@@ -115,15 +115,16 @@ export function useList(listId: string | undefined) {
 
   if (preview) {
     const list = getLists().find((l) => l.id === listId);
-    return { list, isLoading: false, error: null, preview: true };
+    return { list, isLoading: false, error: null, preview: true, refetch: byId.refetch };
   }
   if (hidden) {
-    return { list: undefined, isLoading: false, error: null, preview: false };
+    return { list: undefined, isLoading: false, error: null, preview: false, refetch: byId.refetch };
   }
   return {
     list: excludePersonallyShreddedList(byId.data ?? undefined, shred),
     isLoading: byId.isLoading,
     error: byId.error,
     preview: false,
+    refetch: byId.refetch,
   };
 }
