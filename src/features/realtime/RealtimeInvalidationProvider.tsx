@@ -47,6 +47,11 @@ export function RealtimeInvalidationProvider() {
   // Demo/preview sessions use local-state, not real Postgres tables --
   // matches use-realtime.ts's original `provider !== "demo"` exclusion.
   const shouldSubscribe = identity.kind === "live";
+  // A plain string (or undefined for pending/none), narrowed once here
+  // via a direct check on identity.kind -- unlike identity itself,
+  // this is safe to read unconditionally in the effect's dependency
+  // array below, which is evaluated outside any narrowing scope.
+  const myProfileId = identity.kind === "live" || identity.kind === "preview" ? identity.profileId : undefined;
   const subscriptionStatusRef = useRef<"never-subscribed" | "initial" | "reconnected">("never-subscribed");
 
   useEffect(() => {
@@ -75,9 +80,33 @@ export function RealtimeInvalidationProvider() {
 
     const channel = supabase.channel("katalist-movement");
     for (const table of WATCHED_TABLES) {
-      channel.on("postgres_changes", { event: "*", schema: "public", table }, () => {
+      channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
         if (!isEpochCurrent(qc, epoch)) return;
         batcher.enqueue(targetsForEvent({ table }));
+        // P8 membership-revocation fast path: best-effort, NOT the
+        // primary mechanism. If this DELETE's old row happens to
+        // identify OUR OWN removed membership, proactively evict the
+        // now-inaccessible List's cached detail/messages instead of
+        // waiting for the batched invalidate-and-refetch above to
+        // discover it. Deliberately conditional on the payload
+        // actually containing these fields: a DELETE payload may only
+        // include primary-key columns unless the table's REPLICA
+        // IDENTITY is FULL, which this code has no way to verify
+        // without live database access (an open, blocked verification
+        // item -- see the P8/P10 report). The batched invalidate above
+        // is the real guarantee: it forces a refetch that discovers
+        // "no longer accessible" via RLS regardless of whether this
+        // fast path fires at all.
+        if (
+          table === "list_members" &&
+          payload?.eventType === "DELETE" &&
+          payload.old?.profile_id === myProfileId &&
+          typeof payload.old?.list_id === "string"
+        ) {
+          const listId = payload.old.list_id;
+          qc.removeQueries({ queryKey: ["list", listId] });
+          qc.removeQueries({ queryKey: ["list-messages", listId] });
+        }
       });
     }
     // Distinguishes an initial subscription from a later reconnect --
@@ -96,7 +125,14 @@ export function RealtimeInvalidationProvider() {
       batcher.dispose();
       void supabase.removeChannel(channel);
     };
-  }, [qc, shouldSubscribe]);
+    // myProfileId is read inside this effect (the membership-revocation
+    // fast path) but should never actually change while this component
+    // stays mounted -- a real identity change already remounts this
+    // whole subtree via IdentityBoundary's key, tearing this effect down
+    // and running a fresh one for the new identity before this
+    // dependency could differ. Included anyway for defense-in-depth
+    // rather than suppressed, in case that invariant is ever violated.
+  }, [qc, shouldSubscribe, myProfileId]);
 
   return null;
 }

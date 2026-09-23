@@ -87,6 +87,18 @@ function newTestClient() {
   return new QueryClient({ defaultOptions: { queries: { gcTime: 0, staleTime: 0, retry: false } } });
 }
 
+// gcTime: 0 (used everywhere else in this file to avoid lingering
+// timers keeping the process alive) also garbage-collects any
+// UNOBSERVED query almost immediately -- fine for the other tests,
+// which never check unobserved cache persistence, but wrong here: the
+// membership tests below seed cache data with no live observer and
+// need it to survive until the assertion regardless of GC timing, so
+// the ABSENCE of data in the assertion reflects the fast path's own
+// removeQueries() call, not an unrelated gcTime side effect.
+function newTestClientWithPersistentCache() {
+  return new QueryClient({ defaultOptions: { queries: { gcTime: Infinity, staleTime: 0, retry: false } } });
+}
+
 function Harness({ strict }) {
   const tree = h(IdentityBoundary, null, h(RealtimeInvalidationProvider));
   return strict ? h(StrictMode, null, tree) : tree;
@@ -239,6 +251,113 @@ test("an event delivered to a stale (already-retired) channel handler does not i
   await settle();
 
   assert.equal(invalidateCallCount, 0, "a stale post-retirement event must not trigger any invalidation");
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("membership revocation: a DELETE removing MY OWN membership proactively evicts that List's cached detail/messages", async () => {
+  resetHarness();
+  const qc = newTestClientWithPersistentCache();
+
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+
+  // Seeded AFTER the identity has settled to "ready" -- IdentityBoundary's
+  // own resetQueries() during the pending -> aligning -> ready transition
+  // would otherwise evict this unobserved seed data itself, before the
+  // membership handler ever runs, and make this test pass for the wrong
+  // reason.
+  qc.setQueryData(["list", "list-1"], { id: "list-1", name: "stale" });
+  qc.setQueryData(["list-messages", "list-1"], [{ id: "m1" }]);
+
+  const handlers = handlersByChannel.get(channelsCreated[0].name);
+  const listMembersHandler = handlers.find((h2) => h2.filter.table === "list_members");
+  assert.ok(listMembersHandler, "sanity: a list_members handler was registered");
+
+  listMembersHandler.cb({
+    eventType: "DELETE",
+    old: { profile_id: "profile-A", list_id: "list-1" },
+  });
+
+  assert.equal(qc.getQueryData(["list", "list-1"]), undefined, "the now-inaccessible List's detail cache must be evicted");
+  assert.equal(qc.getQueryData(["list-messages", "list-1"]), undefined, "the now-inaccessible List's messages cache must be evicted");
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("membership revocation fast path does not fire for someone ELSE's removed membership", async () => {
+  resetHarness();
+  const qc = newTestClientWithPersistentCache();
+
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+
+  // Seeded after settling -- see the comment in the previous test.
+  qc.setQueryData(["list", "list-1"], { id: "list-1", name: "still valid for me" });
+
+  const handlers = handlersByChannel.get(channelsCreated[0].name);
+  const listMembersHandler = handlers.find((h2) => h2.filter.table === "list_members");
+
+  listMembersHandler.cb({
+    eventType: "DELETE",
+    old: { profile_id: "profile-SOMEONE-ELSE", list_id: "list-1" },
+  });
+
+  assert.notEqual(
+    qc.getQueryData(["list", "list-1"]),
+    undefined,
+    "removing a DIFFERENT profile's membership must not evict MY cached access to the same List",
+  );
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("membership revocation fast path does nothing when the payload lacks the needed fields (incomplete DELETE payload)", async () => {
+  resetHarness();
+  const qc = newTestClientWithPersistentCache();
+
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+
+  // Seeded after settling -- see the comment in the first membership test.
+  qc.setQueryData(["list", "list-1"], { id: "list-1" });
+
+  const handlers = handlersByChannel.get(channelsCreated[0].name);
+  const listMembersHandler = handlers.find((h2) => h2.filter.table === "list_members");
+
+  // A DELETE payload with only a primary key, no profile_id/list_id --
+  // the realistic case if the table's REPLICA IDENTITY isn't FULL.
+  assert.doesNotThrow(() => listMembersHandler.cb({ eventType: "DELETE", old: { id: "membership-row-id" } }));
+
+  assert.notEqual(
+    qc.getQueryData(["list", "list-1"]),
+    undefined,
+    "an incomplete payload must not be treated as grounds to evict -- the batched invalidate-and-refetch is the real mechanism, not this fast path",
+  );
 
   unmount();
   qc.clear();

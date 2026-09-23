@@ -1,7 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { acquireListChatChannel, broadcastListChatChange } from "@/features/lists/list-chat-channel-registry";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { addListMessage, getListMessages, pinListMessageLocal } from "@/features/things/local-state";
@@ -113,24 +113,26 @@ export function useListMessages(listId: string) {
   // Live chat: a per-list broadcast channel guarantees every viewer refetches
   // the moment a message is posted (postgres_changes can be filtered out by RLS
   // at the realtime layer, so broadcast is the reliable path here).
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  //
+  // Acquired through the P8 ref-counted registry (list-chat-channel-registry.ts)
+  // instead of creating its own channel directly -- multiple mounted
+  // consumers of this hook for the SAME listId (a chat dock and a full
+  // List-detail view both open at once, say) now share one underlying
+  // channel, detached only once the last consumer releases it. Broadcast
+  // payloads here are refresh hints only (this handler ignores the
+  // payload entirely and just triggers a real, RLS-checked refetch) --
+  // never treated as a trusted cache record or as proof of access.
   useEffect(() => {
     if (!listId || preview || hidden) return;
-    const channel = supabase
-      .channel(`list-chat:${listId}`)
-      .on("broadcast", { event: "changed" }, () => {
-        void qc.invalidateQueries({ queryKey: ["list-messages", listId] });
-      })
-      .subscribe();
-    channelRef.current = channel;
-    return () => {
-      channelRef.current = null;
-      void supabase.removeChannel(channel);
-    };
+    const release = acquireListChatChannel(listId, () => {
+      void qc.invalidateQueries({ queryKey: ["list-messages", listId] });
+    });
+    return release;
   }, [listId, preview, hidden, qc]);
 
   const broadcastChange = () => {
-    void channelRef.current?.send({ type: "broadcast", event: "changed", payload: {} });
+    if (!listId) return;
+    broadcastListChatChange(listId);
   };
 
   const send = useMutation({
