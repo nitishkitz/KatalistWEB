@@ -80,7 +80,7 @@ export function MagicBox({
           newFiles.push(processed);
         } catch (err) {
           console.error("Failed to process file:", err);
-          toast.error(`Could not attach ${files[i].name}`);
+          toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
         }
       }
       if (newFiles.length > 0) {

@@ -419,8 +419,8 @@ export function ThingDetailContent({
         try {
           const processed = await processFileForUpload(files[i]);
           newFiles.push(processed);
-        } catch {
-          toast.error(`Could not attach ${files[i].name}`);
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
         }
       }
       setCommentAttachments((prev) => [...prev, ...newFiles]);

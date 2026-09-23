@@ -75,7 +75,16 @@ function getSafeFileUrl(file: File): string {
   return "";
 }
 
+// H01: the same 50MB cap already enforced client-side for Hub Files
+// (HubFilesPanel.tsx) and List chat (ListChatPanel.tsx) attachments --
+// Thing attachments (Magic Box, comment composer) had no size boundary
+// at all before this, unlike those other two upload paths.
+export const MAX_THING_ATTACHMENT_BYTES = 50 * 1024 * 1024;
+
 export async function processFileForUpload(file: File): Promise<ThingFile> {
+  if (file.size > MAX_THING_ATTACHMENT_BYTES) {
+    throw new Error(`${file.name} is larger than 50 MB.`);
+  }
   const type = detectFileType(file.name, file.type);
   const sizeLabel = formatFileSize(file.size);
   const id = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

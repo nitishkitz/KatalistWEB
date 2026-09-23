@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ThingFile } from "@/domain/thing";
-import { detectFileType, formatFileSize } from "@/lib/file-utils";
+import { detectFileType, formatFileSize, MAX_THING_ATTACHMENT_BYTES } from "@/lib/file-utils";
 import { authedFetch } from "@/lib/authed-fetch";
 
 const BUCKET = "thing-attachments";
@@ -63,6 +63,12 @@ export async function fetchRealAttachments(thingIds: string[]): Promise<Map<stri
  * doesn't have). Returns the real, persisted ThingFile - never a blob: URL.
  */
 export async function uploadThingAttachment(thingId: string, file: File): Promise<ThingFile> {
+  // H01: same 50MB cap as processFileForUpload (file-utils.ts) -- checked
+  // here too since this is a separate upload path (real storage + the
+  // reserve_thing_attachment RPC), not a caller of that function.
+  if (file.size > MAX_THING_ATTACHMENT_BYTES) {
+    throw new Error(`${file.name} is larger than 50 MB.`);
+  }
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   if (authErr || !authData.user) throw new Error("Sign in to attach files.");
 
