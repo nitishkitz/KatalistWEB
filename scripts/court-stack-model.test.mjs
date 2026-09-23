@@ -5,6 +5,7 @@ import {
   reconcileStackIndex,
   resistedDragOffset,
   resolveHorizontalAction,
+  shouldRestoreFocusAfterFailedRemoval,
   shouldRestoreSelectionAfterFailedRemoval,
   stepStackIndex,
 } from "@/features/court/court-stack-model";
@@ -93,6 +94,46 @@ test("restoration requires the Thing to actually be back in the stack", () => {
       currentNavigationVersion: 1,
       removedThingId: "z",
       things: items("a", "b", "c"),
+    }),
+    false,
+  );
+});
+
+test("DOM focus restoration: no intervening interaction restores focus to the card", () => {
+  assert.equal(
+    shouldRestoreFocusAfterFailedRemoval({
+      navigationVersionAtSchedule: 2,
+      currentNavigationVersion: 2,
+      focusIsWithinLane: true,
+    }),
+    true,
+  );
+});
+
+test("DOM focus restoration: focus moved to an input or another panel since scheduling preserves it", () => {
+  // Simulates the requestAnimationFrame re-check: by the time the deferred
+  // callback fires, the user has clicked into an input or opened another
+  // panel, so focus is no longer inside this lane at all.
+  assert.equal(
+    shouldRestoreFocusAfterFailedRemoval({
+      navigationVersionAtSchedule: 2,
+      currentNavigationVersion: 2,
+      focusIsWithinLane: false,
+    }),
+    false,
+  );
+});
+
+test("DOM focus restoration: navigation between scheduling and the animation frame firing is not overridden", () => {
+  // The version advanced (an arrow/wheel navigation, the navigator strip,
+  // or an external focusThing() call happened) in the gap between
+  // scheduling the rAF and it actually running — the deferred call must
+  // not steal focus back from wherever that newer navigation landed.
+  assert.equal(
+    shouldRestoreFocusAfterFailedRemoval({
+      navigationVersionAtSchedule: 2,
+      currentNavigationVersion: 3,
+      focusIsWithinLane: true,
     }),
     false,
   );

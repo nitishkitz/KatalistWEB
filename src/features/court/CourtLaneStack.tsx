@@ -33,7 +33,12 @@ import {
 } from "@/features/things/personal-snooze";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
-import { reconcileStackIndex, shouldRestoreSelectionAfterFailedRemoval, stepStackIndex } from "./court-stack-model";
+import {
+  reconcileStackIndex,
+  shouldRestoreFocusAfterFailedRemoval,
+  shouldRestoreSelectionAfterFailedRemoval,
+  stepStackIndex,
+} from "./court-stack-model";
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
@@ -309,10 +314,33 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       if (restoring) {
         // Also restore actual keyboard focus, not just which card is
         // logically selected — matching what focusThing() does for the
-        // same "return attention to this specific card" case.
-        requestAnimationFrame(() => {
-          (activeButtonRef.current ?? headingRef.current)?.focus();
-        });
+        // same "return attention to this specific card" case. Deferred to
+        // a rAF, so re-check at fire time (not just now): the user can
+        // navigate again, or focus something entirely outside this lane
+        // (an input, another panel), in the gap between scheduling and
+        // the callback actually running — either of those must be able to
+        // veto stealing focus back.
+        const focusIsWithinLane = () =>
+          typeof document === "undefined" ||
+          document.activeElement == null ||
+          document.activeElement === document.body ||
+          Boolean(sectionRef.current?.contains(document.activeElement));
+        // Skip scheduling entirely if focus has already moved outside this
+        // lane by now (e.g. it never was here to begin with).
+        if (focusIsWithinLane()) {
+          const navigationVersionAtSchedule = navigationVersionRef.current;
+          requestAnimationFrame(() => {
+            if (
+              shouldRestoreFocusAfterFailedRemoval({
+                navigationVersionAtSchedule,
+                currentNavigationVersion: navigationVersionRef.current,
+                focusIsWithinLane: focusIsWithinLane(),
+              })
+            ) {
+              (activeButtonRef.current ?? headingRef.current)?.focus();
+            }
+          });
+        }
       }
     }, [things]);
 

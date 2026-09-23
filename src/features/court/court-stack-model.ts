@@ -90,6 +90,32 @@ export function shouldRestoreSelectionAfterFailedRemoval(input: {
   );
 }
 
+/**
+ * Decides whether to actually move DOM/keyboard focus back to the
+ * restored card, separately from (and more conservatively than)
+ * shouldRestoreSelectionAfterFailedRemoval above. Moving focus is
+ * deferred to a requestAnimationFrame after the logical-selection
+ * decision, so between scheduling that callback and it actually firing,
+ * the user can navigate again or click/focus something entirely outside
+ * this lane (an input, another panel) — this must be re-checked at fire
+ * time, not just decided once when scheduling, or the deferred focus call
+ * steals focus from whatever the user has since moved to.
+ *
+ * `focusIsWithinLane` should be true if the currently focused element is
+ * either absent (null/document.body) or inside this lane's own DOM
+ * subtree — i.e. the user hasn't focused something unrelated (a dialog,
+ * a text input elsewhere) since the removal. Callers must compute this at
+ * both schedule time (skip scheduling entirely if already false) and
+ * fire time (skip the actual focus() call if it became false meanwhile).
+ */
+export function shouldRestoreFocusAfterFailedRemoval(input: {
+  navigationVersionAtSchedule: number;
+  currentNavigationVersion: number;
+  focusIsWithinLane: boolean;
+}): boolean {
+  return input.currentNavigationVersion === input.navigationVersionAtSchedule && input.focusIsWithinLane;
+}
+
 export function lockGestureAxis(
   current: GestureAxis,
   deltaX: number,
