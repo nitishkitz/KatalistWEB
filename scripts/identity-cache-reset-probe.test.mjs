@@ -91,6 +91,57 @@ test("qc.resetQueries() (no filter) refreshes an active observer and evicts an i
   unsub();
 });
 
+test("resetQueries() on a query using initialData falls back to re-evaluating the (possibly stale) initialData while refetching -- it does NOT go empty like a plain query does", async () => {
+  // This is the specific behavior IdentityBoundary's design relies on
+  // being unmounted-around, not exposed to: a query built with
+  // `initialData: () => <read from some other cache slot>` does not
+  // drop to pending/no-data on resetQueries() the way a plain query
+  // does (previous test) -- it re-invokes `initialData()` and shows
+  // whatever that currently returns while the real refetch runs. If
+  // `initialData()` reads a cache slot that itself wasn't updated for
+  // the new identity, this would show a stale value during the reset
+  // window. In this app, useList's getListDetailSeed() reads
+  // keys.lists(profileId, context) -- profile-scoped, so a new
+  // identity's initialData() call reads a DIFFERENT cache key than the
+  // old identity's, not a stale value from the same key -- but that
+  // safety comes from the seed being profile-scoped, not from
+  // resetQueries() itself clearing anything here. Documented as a
+  // regression guard: if this ever starts returning `undefined`/
+  // pending instead, TanStack's own behavior changed and the reasoning
+  // in IdentityBoundary's comments should be re-checked.
+  const qc = new QueryClient();
+  let who = "A";
+  qc.setQueryData(["seed-source"], { owner: "A-seed" });
+
+  const observer = new QueryObserver(qc, {
+    queryKey: ["list", "shared-list"],
+    initialData: () => qc.getQueryData(["seed-source"]),
+    initialDataUpdatedAt: 0,
+    queryFn: async () => {
+      await delay(30);
+      return { owner: who };
+    },
+  });
+  const seen = [];
+  const unsub = observer.subscribe((r) => seen.push({ data: r.data, isFetching: r.isFetching }));
+
+  await delay(40);
+  assert.deepEqual(seen.at(-1), { data: { owner: "A" }, isFetching: false });
+
+  who = "B";
+  // seed-source is NOT updated here -- simulating a stale seed slot.
+  const resetPromise = qc.resetQueries();
+  assert.deepEqual(
+    seen.at(-1),
+    { data: { owner: "A-seed" }, isFetching: true },
+    "expected the observer to fall back to re-evaluated (here, stale) initialData while the real refetch is in flight, not to pending/undefined",
+  );
+  await resetPromise;
+  assert.deepEqual(seen.at(-1), { data: { owner: "B" }, isFetching: false });
+
+  unsub();
+});
+
 test("a slow fetch started under the old identity cannot clobber a newer post-switch fetch for the same key", async () => {
   const qc = new QueryClient();
   let who = "A";

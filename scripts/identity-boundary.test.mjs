@@ -81,8 +81,37 @@ function ProtectedConsumer() {
   );
 }
 
-function Harness({ strict }) {
-  const tree = h(IdentityBoundary, null, h(ProtectedConsumer));
+let seededMountCount = 0;
+let currentProfileId = "profile-A";
+
+// Mirrors useList()'s real shape: an entity-only-keyed query seeded via
+// initialData from a PROFILE-SCOPED cache slot (keys.lists(profileId,
+// context)-equivalent). This is the pattern that matters for the
+// initialData-vs-resetQueries() finding in identity-cache-reset-probe.test.mjs
+// -- proving here that the real boundary+remount flow never exposes it,
+// not just that the underlying library behavior is as documented.
+function SeededConsumer() {
+  const qc = useQueryClient();
+  const mountedRef = useRef(false);
+  if (!mountedRef.current) {
+    mountedRef.current = true;
+    seededMountCount += 1;
+  }
+  const { data, status } = useQuery({
+    queryKey: ["list", "shared-list"],
+    initialData: () => qc.getQueryData(["lists", currentProfileId])?.find((l) => l.id === "shared-list"),
+    initialDataUpdatedAt: 0,
+    queryFn: async () => ({ id: "shared-list", owner: currentOwner }),
+  });
+  return h(
+    "div",
+    { "data-testid": "seeded-content" },
+    status === "success" && data ? `owner:${data.owner}` : `status:${status}`,
+  );
+}
+
+function Harness({ strict, seeded }) {
+  const tree = h(IdentityBoundary, null, seeded ? h(SeededConsumer) : h(ProtectedConsumer));
   return strict ? h(StrictMode, null, tree) : tree;
 }
 
@@ -90,6 +119,8 @@ function resetHarness() {
   testSession = { loading: true, session: null };
   sessionListeners.clear();
   mountCount = 0;
+  seededMountCount = 0;
+  currentProfileId = "profile-A";
   currentOwner = "A";
 }
 
@@ -232,6 +263,50 @@ test("Strict Mode: the consumer does not appear mounted more than once for one r
     1,
     "Strict Mode's dev-only double-invocation must not cause the consumer to appear mounted more than once for one real transition",
   );
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("a seeded (initialData-backed) consumer never shows A's stale seed after a live A -> live B switch, because it's remounted, not merely reset", async () => {
+  // identity-cache-reset-probe.test.mjs proves resetQueries() alone
+  // does NOT clear an initialData-backed observer the way it clears a
+  // plain one -- it falls back to re-evaluating (possibly stale)
+  // initialData while refetching. This test proves the real boundary
+  // flow never exposes that: the seeded consumer is unmounted (via the
+  // keyed remount) before resetQueries() even runs, so no stale
+  // initialData-backed observer survives into the reset window at all.
+  resetHarness();
+  const qc = newTestClient();
+  qc.setQueryData(["lists", "profile-A"], [{ id: "shared-list", owner: "A-seed" }]);
+  let container, unmount;
+  await act(async () => {
+    ({ container, unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, { seeded: true }))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+  assert.equal(container.textContent, "owner:A");
+  assert.equal(seededMountCount, 1);
+
+  currentOwner = "B";
+  currentProfileId = "profile-B";
+  // Deliberately do NOT seed ["lists", "profile-B"] with anything --
+  // simulating a fresh identity with no stale carryover at all.
+  await act(async () => {
+    setTestSession(liveSession("profile-B"));
+  });
+
+  const immediatelyAfter = container.textContent;
+  assert.ok(
+    !immediatelyAfter.includes("A-seed") && !immediatelyAfter.includes("owner:A"),
+    `must never show A's seed or data after the switch begins; saw: ${immediatelyAfter}`,
+  );
+
+  await settle();
+  assert.equal(container.textContent, "owner:B");
+  assert.equal(seededMountCount, 2, "the seeded consumer must have been unmounted and remounted, not merely reset in place");
   unmount();
   qc.clear();
   cleanup();

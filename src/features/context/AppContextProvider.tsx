@@ -5,6 +5,7 @@ import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { useQueryClient } from "@tanstack/react-query";
 import { currentDemoActorId } from "@/features/demo/identities";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 const STORAGE_KEY = "katalist.active_context";
 
@@ -63,6 +64,15 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   const setContext = useCallback(
     async (next: ContextKind) => {
       const prev = context;
+      // Context changes don't advance the identity epoch (they aren't an
+      // identity change), but this function can still straddle one: an
+      // update started under identity A can complete after a switch to
+      // B, and the profile-update RPC above binds `user.id` from this
+      // closure's own render, which may already be A's stale id by the
+      // time the awaited call resolves. Captured here so the completion
+      // can be guarded even though nothing about context itself is
+      // epoch-scoped.
+      const epoch = getIdentityEpoch(qc).epoch;
       setContextState(next);
       if (typeof window !== "undefined") {
         const key = isPreviewSession(session) ? demoContextKey() : STORAGE_KEY;
@@ -71,11 +81,23 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       if (user && !isPreviewSession(session)) {
         const { error } = await supabase.from("profiles").update({ active_context: next }).eq("id", user.id);
         if (error) {
-          setContextState(prev);
-          window.localStorage.setItem(STORAGE_KEY, prev);
+          // Only roll back the optimistic context flip if this identity
+          // is still the one that's current -- rolling back to A's
+          // `prev` value after B is already active would incorrectly
+          // overwrite B's own context state.
+          if (isEpochCurrent(qc, epoch)) {
+            setContextState(prev);
+            window.localStorage.setItem(STORAGE_KEY, prev);
+          }
           throw error;
         }
       }
+      // A full, keyless invalidateQueries() after a since-completed
+      // identity switch would force an unnecessary refetch storm right
+      // as B's UI has settled -- IdentityBoundary's own resetQueries()
+      // on the switch already handles B's cache correctly, so this call
+      // has nothing useful left to do once the epoch has moved on.
+      if (!isEpochCurrent(qc, epoch)) return;
       await qc.invalidateQueries();
     },
     [user, session, qc, context],
