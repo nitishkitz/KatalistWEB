@@ -12,6 +12,7 @@ import {
 import type { Thing } from "@/domain/thing";
 import { laneOf, theirStateFor } from "@/domain/thing";
 import { useCatchup } from "@/features/catchup/use-catchup";
+import { useMorningBrief } from "@/features/catchup/use-morning-brief";
 import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
 import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
 import { cn } from "@/lib/utils";
@@ -207,8 +208,13 @@ export function CourtDesktop({
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
   const [theirSelectedId, setTheirSelectedId] = useState<string | null>(null);
   const [heroRect, setHeroRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
-  const [catchUpOpen, setCatchUpOpen] = useState(false);
   const catchup = useCatchup();
+  // F04: one presentation controller for this Court surface -- CourtDesktop
+  // is the only place Catch Up/Morning Brief renders (mobile Court reuses
+  // this same component, CSS-hidden rather than a separate mount), so this
+  // is already "one owner per active Court surface" with nothing further
+  // to dedupe.
+  const morningBrief = useMorningBrief();
   const directory = useProfileDirectory();
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{
@@ -378,10 +384,11 @@ export function CourtDesktop({
     setModalSelection({ lane, thing });
   };
 
-  // Open a Thing from the Catch Up overlay. Closes the overlay and opens the
+  // Open a Thing from the Morning Brief overlay. Closes the overlay (as a
+  // real dismissal, same as Escape/X/backdrop -- see F03) and opens the
   // usual detail modal; no hero animation (the origin card lives in the overlay).
   const openCatchUpThing = (thing: Thing) => {
-    setCatchUpOpen(false);
+    morningBrief.dismiss();
     setHeroRect(null);
     const lane: FocusViewTabId = thing.assignee.id === myActorId ? laneOf(thing) : "theirs";
     setModalSelection({ lane, thing });
@@ -691,7 +698,7 @@ export function CourtDesktop({
       </div>
 
       {!focusSelection && catchup.count > 0 ? (
-        <CatchUpBanner moments={catchup.moments} onReview={() => setCatchUpOpen(true)} />
+        <CatchUpBanner moments={catchup.moments} onReview={morningBrief.reopen} />
       ) : null}
 
       <div className="flex w-full min-w-0 items-start gap-4">
@@ -768,8 +775,8 @@ export function CourtDesktop({
       )}
 
       <CatchUpOverlay
-        open={catchUpOpen}
-        onClose={() => setCatchUpOpen(false)}
+        open={morningBrief.open}
+        onClose={morningBrief.dismiss}
         moments={catchup.moments}
         myActorId={myActorId}
         surfaceMoment={catchup.surfaceMoment}

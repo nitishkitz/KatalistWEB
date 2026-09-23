@@ -31,7 +31,8 @@ export function CatchUpOverlay({
     >
       <DialogContent className="max-w-xl gap-5 rounded-2xl border-none bg-slate-50 p-6">
         <div className="pr-6">
-          <DialogTitle className="text-[20px] font-bold text-slate-900">Catch Up</DialogTitle>
+          {/* F03: internal name (CatchUp*) stays -- only the user-visible label changes. */}
+          <DialogTitle className="text-[20px] font-bold text-slate-900">Morning Brief</DialogTitle>
           <DialogDescription className="text-[12.5px] text-slate-500">
             {moments.length} {moments.length === 1 ? "moment needs" : "moments need"} you
           </DialogDescription>

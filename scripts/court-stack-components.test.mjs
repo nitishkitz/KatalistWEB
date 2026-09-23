@@ -167,6 +167,16 @@ test("Court desktop switches only the three personal lanes between stacks and in
   assert.doesNotMatch(courtDesktop, /focusIndex:\s*number/);
 });
 
+test("F04: Court desktop's Morning Brief is owned by useMorningBrief(), not its own local open/close state", () => {
+  assert.match(courtDesktop, /useMorningBrief\(\)/);
+  assert.match(courtDesktop, /onReview=\{morningBrief\.reopen\}/);
+  assert.match(courtDesktop, /onClose=\{morningBrief\.dismiss\}/);
+  assert.match(courtDesktop, /open=\{morningBrief\.open\}/);
+  // The old local boolean this replaced -- confirms the swap actually
+  // happened, not just that the new hook is merely ALSO present.
+  assert.doesNotMatch(courtDesktop, /catchUpOpen/);
+});
+
 test("Court desktop retains Magic Box, controls, quick filters, and With Others", () => {
   assert.match(courtDesktop, /<MagicBox desktop/);
   for (const label of ["All", "Due", "Waiting", "In Progress"]) {

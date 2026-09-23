@@ -37,7 +37,8 @@ export function CatchUpBanner({ moments, onReview }: Props) {
             <Layers className="h-4 w-4" />
           </span>
           <div className="leading-tight">
-            <p className="text-[14px] font-bold text-slate-900">Catch Up</p>
+            {/* F03: internal name (CatchUpBanner) stays -- only the user-visible label changes. */}
+            <p className="text-[14px] font-bold text-slate-900">Morning Brief</p>
             <p className="text-[11.5px] text-slate-500">
               {moments.length} {moments.length === 1 ? "moment needs" : "moments need"} you
             </p>
