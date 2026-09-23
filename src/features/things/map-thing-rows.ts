@@ -32,6 +32,102 @@ export type DbThingRow = {
   notes?: string | null;
 };
 
+async function resolveListNames(listIds: string[]): Promise<Map<string, string>> {
+  const listNames = new Map<string, string>();
+  if (!listIds.length) return listNames;
+
+  // 1. Try server endpoint (RLS-scoped to Lists the caller can see)
+  try {
+    if (typeof window !== "undefined") {
+      const res = await authedFetch("/api/lists/resolve-names", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listIds }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        for (const l of json.lists ?? []) {
+          if (l.id && l.name) listNames.set(l.id, l.name);
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2. Try resolve_list_names RPC
+  const missingAfterApi = listIds.filter((id) => !listNames.has(id));
+  if (missingAfterApi.length) {
+    try {
+      const { data, error } = await callUngeneratedRpc("resolve_list_names", { p_list_ids: missingAfterApi });
+      if (!error && data) {
+        for (const l of (data as { id: string; name: string }[])) {
+          if (l.id && l.name) listNames.set(l.id, l.name);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 3. Direct query on lists table for any remaining
+  const missing = listIds.filter((id) => !listNames.has(id));
+  if (missing.length) {
+    try {
+      const { data: lists } = await supabase.from("lists").select("id,name").in("id", missing);
+      for (const l of lists ?? []) {
+        if (l.id && l.name) listNames.set(l.id, l.name);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return listNames;
+}
+
+async function resolveCommentCounts(
+  thingIds: string[],
+  myActorId?: string | null,
+): Promise<Map<string, { commentCount: number; unreadCommentCount: number }>> {
+  const commentCountsByThing = new Map<string, { commentCount: number; unreadCommentCount: number }>();
+  if (!thingIds.length) return commentCountsByThing;
+
+  try {
+    const { data: comments, error: commentsError } = await supabase
+      .from("thing_comments")
+      .select("thing_id, author_actor_id, created_at")
+      .in("thing_id", thingIds)
+      .is("deleted_at", null);
+
+    if (!commentsError && comments) {
+      const commentsByThing = new Map<string, Array<{ author_actor_id: string; created_at: string }>>();
+      for (const c of comments) {
+        const list = commentsByThing.get(c.thing_id) ?? [];
+        list.push({ author_actor_id: c.author_actor_id, created_at: c.created_at });
+        commentsByThing.set(c.thing_id, list);
+      }
+      for (const [tId, cList] of commentsByThing) {
+        commentCountsByThing.set(
+          tId,
+          calculateCommentCounts(
+            tId,
+            cList.map((c) => ({
+              authorActorId: c.author_actor_id,
+              createdAt: c.created_at,
+            })),
+            myActorId,
+          ),
+        );
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return commentCountsByThing;
+}
+
 export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | null): Promise<Thing[]> {
   if (!rows.length) return [];
   const actorIds = new Set<string>();
@@ -40,100 +136,26 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
     actorIds.add(r.owner_actor_id);
     actorIds.add(r.current_assignee_actor_id);
   }
-  const people = await resolveActorPeople([...actorIds]);
-  const fallback = (id: string) => personOrSomeone(people, id);
-
   const listIds = [...new Set(rows.map((r) => r.list_id).filter(Boolean))] as string[];
-  const listNames = new Map<string, string>();
-  if (listIds.length) {
-    // 1. Try server endpoint (RLS-scoped to Lists the caller can see)
-    try {
-      if (typeof window !== "undefined") {
-        const res = await authedFetch("/api/lists/resolve-names", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ listIds }),
-        });
-        if (res.ok) {
-          const json = await res.json();
-          for (const l of json.lists ?? []) {
-            if (l.id && l.name) listNames.set(l.id, l.name);
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    // 2. Try resolve_list_names RPC
-    const missingAfterApi = listIds.filter((id) => !listNames.has(id));
-    if (missingAfterApi.length) {
-      try {
-        const { data, error } = await callUngeneratedRpc("resolve_list_names", { p_list_ids: missingAfterApi });
-        if (!error && data) {
-          for (const l of (data as { id: string; name: string }[])) {
-            if (l.id && l.name) listNames.set(l.id, l.name);
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-
-    // 3. Direct query on lists table for any remaining
-    const missing = listIds.filter((id) => !listNames.has(id));
-    if (missing.length) {
-      try {
-        const { data: lists } = await supabase.from("lists").select("id,name").in("id", missing);
-        for (const l of lists ?? []) {
-          if (l.id && l.name) listNames.set(l.id, l.name);
-        }
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  const commentCountsByThing = new Map<string, { commentCount: number; unreadCommentCount: number }>();
   const thingIds = rows.map((r) => r.id);
-  if (thingIds.length > 0) {
-    try {
-      const { data: comments, error: commentsError } = await supabase
-        .from("thing_comments")
-        .select("thing_id, author_actor_id, created_at")
-        .in("thing_id", thingIds)
-        .is("deleted_at", null);
 
-      if (!commentsError && comments) {
-        const commentsByThing = new Map<string, Array<{ author_actor_id: string; created_at: string }>>();
-        for (const c of comments) {
-          const list = commentsByThing.get(c.thing_id) ?? [];
-          list.push({ author_actor_id: c.author_actor_id, created_at: c.created_at });
-          commentsByThing.set(c.thing_id, list);
-        }
-        for (const [tId, cList] of commentsByThing) {
-          commentCountsByThing.set(
-            tId,
-            calculateCommentCounts(
-              tId,
-              cList.map((c) => ({
-                authorActorId: c.author_actor_id,
-                createdAt: c.created_at,
-              })),
-              myActorId,
-            ),
-          );
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  // Real, persisted attachments (thing_attachments + storage). Takes
-  // priority over the legacy things.notes JSON blob, whose file URLs were
-  // often ephemeral blob: URLs that die outside the tab that created them.
-  const realAttachmentsByThing = await fetchRealAttachments(thingIds).catch(() => new Map<string, ThingFile[]>());
+  // These four lookups are independent of each other — only the final
+  // per-row assembly below needs all of their results — so they run
+  // concurrently instead of as a sequential await chain. See
+  // scripts/map-thing-rows-concurrency.test.mjs for the measured
+  // before/after (sequential ~208ms vs. concurrent ~40ms for four
+  // 40ms-delayed dependencies).
+  const [people, listNames, commentCountsByThing, realAttachmentsByThing] = await Promise.all([
+    resolveActorPeople([...actorIds]),
+    resolveListNames(listIds),
+    resolveCommentCounts(thingIds, myActorId),
+    // Real, persisted attachments (thing_attachments + storage). Takes
+    // priority over the legacy things.notes JSON blob, whose file URLs
+    // were often ephemeral blob: URLs that die outside the tab that
+    // created them.
+    fetchRealAttachments(thingIds).catch(() => new Map<string, ThingFile[]>()),
+  ]);
+  const fallback = (id: string) => personOrSomeone(people, id);
 
   return rows.map((r) => {
     let parsedFiles: ThingFile[] | undefined;
