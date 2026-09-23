@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Thing } from "@/domain/thing";
 import type { ListRow } from "@/features/lists/fixtures";
@@ -8,14 +9,14 @@ export type BucketItem =
   | { kind: "thing"; thingId: string; thing: Thing }
   | { kind: "list"; listId: string; list: ListRow };
 
-async function fetchListsByIds(profileId: string, listIds: string[]): Promise<ListRow[]> {
+async function fetchListsByIds(qc: QueryClient, profileId: string, listIds: string[]): Promise<ListRow[]> {
   if (!listIds.length) return [];
   const { data: lists, error } = await supabase
     .from("lists")
     .select("id,name,context,owner_profile_id,updated_at")
     .in("id", listIds);
   if (error) throw error;
-  return mapDbListRows(profileId, (lists ?? []) as DbListRow[]);
+  return mapDbListRows(qc, profileId, (lists ?? []) as DbListRow[]);
 }
 
 /**
@@ -26,7 +27,7 @@ async function fetchListsByIds(profileId: string, listIds: string[]): Promise<Li
  * plain Node test runner; same reason fetchCourt/fetchBuckets moved out
  * of their hook files).
  */
-export async function fetchBucketItems(bucketId: string, profileId: string): Promise<BucketItem[]> {
+export async function fetchBucketItems(qc: QueryClient, bucketId: string, profileId: string): Promise<BucketItem[]> {
   const { data, error } = await supabase
     .from("bucket_items")
     .select("thing_id, list_id")
@@ -46,7 +47,7 @@ export async function fetchBucketItems(bucketId: string, profileId: string): Pro
       if (thingError) throw thingError;
       return mapDbThingRows((thingRows ?? []) as DbThingRow[]);
     })(),
-    fetchListsByIds(profileId, listIds),
+    fetchListsByIds(qc, profileId, listIds),
   ]);
   const thingById = new Map(things.map((t) => [t.id, t]));
   const listById = new Map(lists.map((l) => [l.id, l]));

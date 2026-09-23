@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
-import { fetchProfileIdentities } from "@/features/people/directory";
+import { getProfileIdentities } from "@/features/people/directory";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 const FILES_BUCKET = "hub-files";
@@ -38,8 +38,8 @@ type HubFileRow = {
 
 const FILE_COLUMNS = "id, list_id, parent_id, is_folder, name, storage_path, mime, size, created_by, created_at, pinned_at";
 
-async function resolveFiles(rows: HubFileRow[]): Promise<HubFile[]> {
-  const identities = await fetchProfileIdentities();
+async function resolveFiles(qc: QueryClient, rows: HubFileRow[]): Promise<HubFile[]> {
+  const identities = await getProfileIdentities(qc);
   const nameById = new Map(identities.map((p) => [p.id, p.display_name?.trim() || "Member"]));
 
   const files = rows.map((r) => ({
@@ -66,18 +66,18 @@ async function resolveFiles(rows: HubFileRow[]): Promise<HubFile[]> {
   return files;
 }
 
-async function fetchFiles(listId: string, parentId: string | null): Promise<HubFile[]> {
+async function fetchFiles(qc: QueryClient, listId: string, parentId: string | null): Promise<HubFile[]> {
   let q = supabase.from("hub_files").select(FILE_COLUMNS).eq("list_id", listId).is("deleted_at", null);
   q = parentId === null ? q.is("parent_id", null) : q.eq("parent_id", parentId);
   const { data, error } = await q;
   if (error) throw error;
-  return resolveFiles((data ?? []) as HubFileRow[]);
+  return resolveFiles(qc, (data ?? []) as HubFileRow[]);
 }
 
 /** Find files by name anywhere in the conversation, regardless of which
  *  folder they're in — unlike fetchFiles, this ignores parent_id entirely.
  *  Backs the combined Chat+Files search in ConversationWorkspace. */
-export async function searchHubFiles(listId: string, query: string): Promise<HubFile[]> {
+export async function searchHubFiles(qc: QueryClient, listId: string, query: string): Promise<HubFile[]> {
   const q = query.trim();
   if (!q) return [];
   const { data, error } = await supabase
@@ -89,7 +89,7 @@ export async function searchHubFiles(listId: string, query: string): Promise<Hub
     .ilike("name", `%${q}%`)
     .limit(20);
   if (error) throw error;
-  return resolveFiles((data ?? []) as HubFileRow[]);
+  return resolveFiles(qc, (data ?? []) as HubFileRow[]);
 }
 
 /** Resolve a fresh signed URL for a stored file (bucket is private). */
@@ -106,7 +106,7 @@ export function useHubFiles(listId: string, parentId: string | null) {
     queryKey: ["hub-files", listId, parentId],
     enabled: Boolean(listId) && Boolean(user),
     staleTime: 10_000,
-    queryFn: () => fetchFiles(listId, parentId),
+    queryFn: () => fetchFiles(qc, listId, parentId),
   });
 
   const invalidate = (epoch: number) => {

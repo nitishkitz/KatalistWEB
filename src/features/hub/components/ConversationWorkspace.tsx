@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Phone, Video, MessageSquare, Folder, PhoneCall, Search, FileText, X } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -39,6 +40,7 @@ export function ConversationWorkspace({
   onStartConsumed?: () => void;
 }) {
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { user } = useSession();
   const online = usePresence();
   const { conversation } = useConversation(listId);
@@ -119,7 +121,7 @@ export function ConversationWorkspace({
     }
     let cancelled = false;
     setFilesSearching(true);
-    void searchHubFiles(listId, debouncedQuery)
+    void searchHubFiles(qc, listId, debouncedQuery)
       .then((files) => {
         if (!cancelled) setFileResults(files);
       })
@@ -129,7 +131,7 @@ export function ConversationWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [listId, debouncedQuery]);
+  }, [listId, debouncedQuery, qc]);
 
   useEffect(() => {
     if (tab === "chat" && pendingScrollToMessageId) {

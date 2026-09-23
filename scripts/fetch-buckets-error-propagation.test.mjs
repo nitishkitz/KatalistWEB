@@ -50,7 +50,7 @@ mock.module("@/features/things/map-thing-rows", {
 });
 mock.module("@/features/lists/map-list-rows", {
   namedExports: {
-    mapDbListRows: async (profileId, rows) => rows.map((r) => ({ id: r.id, name: "l", members: [] })),
+    mapDbListRows: async (qc, profileId, rows) => rows.map((r) => ({ id: r.id, name: "l", members: [] })),
   },
 });
 
@@ -59,7 +59,7 @@ const { fetchBuckets } = await import("@/features/buckets/fetch-buckets");
 test("fetchBuckets rejects when the bucket_items read fails, instead of returning an empty bucket", async () => {
   failingTable = "bucket_items";
   try {
-    await assert.rejects(fetchBuckets("work", "profile-1"), /bucket_items read failed/);
+    await assert.rejects(fetchBuckets({}, "work", "profile-1"), /bucket_items read failed/);
   } finally {
     failingTable = null;
   }
@@ -68,7 +68,7 @@ test("fetchBuckets rejects when the bucket_items read fails, instead of returnin
 test("fetchBuckets rejects when the Things read fails, instead of silently omitting Things", async () => {
   failingTable = "things";
   try {
-    await assert.rejects(fetchBuckets("work", "profile-1"), /things read failed/);
+    await assert.rejects(fetchBuckets({}, "work", "profile-1"), /things read failed/);
   } finally {
     failingTable = null;
   }
@@ -77,14 +77,14 @@ test("fetchBuckets rejects when the Things read fails, instead of silently omitt
 test("fetchBuckets rejects when the Lists read fails, instead of silently omitting Lists", async () => {
   failingTable = "lists";
   try {
-    await assert.rejects(fetchBuckets("work", "profile-1"), /lists read failed/);
+    await assert.rejects(fetchBuckets({}, "work", "profile-1"), /lists read failed/);
   } finally {
     failingTable = null;
   }
 });
 
 test("sanity: fetchBuckets still succeeds when nothing fails", async () => {
-  const buckets = await fetchBuckets("work", "profile-1");
+  const buckets = await fetchBuckets({}, "work", "profile-1");
   assert.equal(buckets.length, 1);
   assert.equal(buckets[0].id, "b1");
 });

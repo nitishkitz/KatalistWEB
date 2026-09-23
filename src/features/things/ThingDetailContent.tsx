@@ -386,7 +386,8 @@ export function ThingDetailContent({
     }
     return rawCaps;
   }, [rawCaps, viewOnly]);
-  const thread = useThingComments(thing?.id ?? null);
+  const [tab, setTab] = useState<"comments" | "activity">("comments");
+  const thread = useThingComments(thing?.id ?? null, tab === "activity");
   const assignableList = useMemo(() => {
     const list = [...people];
     if (thing?.assignee && !list.some((p) => p.id === thing.assignee.id)) {
@@ -395,7 +396,6 @@ export function ThingDetailContent({
     return list;
   }, [people, thing?.assignee]);
   const { buckets, preview: bucketsPreview } = useBuckets();
-  const [tab, setTab] = useState<"comments" | "activity">("comments");
   const [comment, setComment] = useState("");
   const [due, setDue] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);

@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { DEMO_PERSONAS } from "@/hooks/useSession";
 import { authedFetch } from "@/lib/authed-fetch";
@@ -169,11 +169,31 @@ export function useAvatarUrl(name?: string | null, email?: string | null, explic
   return matchAvatarByName(name);
 }
 
+const PROFILE_DIRECTORY_KEY = ["profile-directory"] as const;
+const PROFILE_DIRECTORY_STALE_TIME_MS = 15_000;
+
 export function useProfileDirectoryQuery() {
   return useQuery({
-    queryKey: ["profile-directory"],
+    queryKey: PROFILE_DIRECTORY_KEY,
     queryFn: fetchProfileIdentities,
-    staleTime: 15_000,
+    staleTime: PROFILE_DIRECTORY_STALE_TIME_MS,
+  });
+}
+
+/**
+ * Same cache entry as useProfileDirectoryQuery, for the many plain async
+ * `fetchXxx` helpers (list messages, conversations, contacts, hub files...)
+ * that each used to call fetchProfileIdentities() directly -- every one of
+ * them re-hit the directory endpoint/RPC independently, even when several
+ * were in flight on the same page at once. Routing them through
+ * `qc.fetchQuery` on this same key means they now dedupe against each other
+ * AND against any mounted useProfileDirectoryQuery() consumer.
+ */
+export function getProfileIdentities(qc: QueryClient): Promise<ProfileIdentity[]> {
+  return qc.fetchQuery({
+    queryKey: PROFILE_DIRECTORY_KEY,
+    queryFn: fetchProfileIdentities,
+    staleTime: PROFILE_DIRECTORY_STALE_TIME_MS,
   });
 }
 

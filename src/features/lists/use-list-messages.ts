@@ -1,12 +1,12 @@
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { acquireListChatChannel, broadcastListChatChange } from "@/features/lists/list-chat-channel-registry";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { addListMessage, getListMessages, pinListMessageLocal } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { fetchProfileIdentities, matchProfile } from "@/features/people/directory";
+import { getProfileIdentities, matchProfile } from "@/features/people/directory";
 import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
@@ -37,7 +37,7 @@ export type ListChatMessage = {
 
 type RawAttachment = { key?: string; name?: string; mime?: string | null; size?: number | null };
 
-async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
+async function fetchMessages(qc: QueryClient, listId: string): Promise<ListChatMessage[]> {
   const { data, error } = await supabase
     .from("list_messages")
     .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
@@ -45,7 +45,7 @@ async function fetchMessages(listId: string): Promise<ListChatMessage[]> {
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
   if (error) throw error;
-  const identities = await fetchProfileIdentities();
+  const identities = await getProfileIdentities(qc);
   const rows = (data ?? []) as Array<{
     id: string;
     body: string;
@@ -99,7 +99,7 @@ export function useListMessages(listId: string) {
 
   const query = useQuery({
     queryKey: ["list-messages", listId],
-    queryFn: () => fetchMessages(listId),
+    queryFn: () => fetchMessages(qc, listId),
     enabled: Boolean(listId) && !preview && !hidden,
     staleTime: 10_000,
   });

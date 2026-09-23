@@ -37,7 +37,16 @@ function parseCommentBody(rawBody: string): { body: string; attachments?: ThingF
   }
 }
 
-export function useThingComments(thingId: string | null) {
+/**
+ * `loadActivity` defers the (usually unopened) Activity tab's own fetch
+ * until that tab is actually selected -- ThingDetailContent renders Comments
+ * by default, so fetching thing_activity on every Thing-detail open would
+ * be paying for a request most opens never look at. Comments themselves
+ * still always load: the unread badge/divider need `comments.length`/dates
+ * regardless of which tab is showing. Defaults to `true` so any other
+ * caller keeps its existing eager-load behavior.
+ */
+export function useThingComments(thingId: string | null, loadActivity = true) {
   const { session } = useSession();
   const preview = isPreviewSession(session);
   const qc = useQueryClient();
@@ -78,7 +87,7 @@ export function useThingComments(thingId: string | null) {
 
   const activityQuery = useQuery({
     queryKey: ["thing-activity", thingId],
-    enabled: Boolean(thingId) && !preview,
+    enabled: Boolean(thingId) && !preview && loadActivity,
     queryFn: async (): Promise<ThingActivity[]> => {
       const { data, error } = await supabase
         .from("thing_activity")

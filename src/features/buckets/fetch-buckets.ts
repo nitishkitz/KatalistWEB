@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { mapDbListRows, type DbListRow } from "@/features/lists/map-list-rows";
@@ -13,7 +14,7 @@ const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500",
  * plain Node test runner; same reason fetchCourt moved out of
  * use-court.ts).
  */
-export async function fetchBuckets(context: "work" | "home", profileId: string): Promise<BucketCard[]> {
+export async function fetchBuckets(qc: QueryClient, context: "work" | "home", profileId: string): Promise<BucketCard[]> {
   const { data: buckets, error } = await supabase
     .from("buckets")
     .select("id,name,context,updated_at")
@@ -53,7 +54,7 @@ export async function fetchBuckets(context: "work" | "home", profileId: string):
   // Same reasoning: each mapper only needs its own rows.
   const [mappedThings, mappedLists] = await Promise.all([
     mapDbThingRows((thingRows ?? []) as DbThingRow[]),
-    mapDbListRows(profileId, (listRows ?? []) as DbListRow[]),
+    mapDbListRows(qc, profileId, (listRows ?? []) as DbListRow[]),
   ]);
 
   const thingMap = new Map(mappedThings.map((t) => [t.id, t]));

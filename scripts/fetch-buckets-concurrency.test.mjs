@@ -42,7 +42,7 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
   });
   const mapListsMock = mock.module("@/features/lists/map-list-rows", {
     namedExports: {
-      mapDbListRows: (profileId, rows) => track("map-lists", () => delay(rows.map((r) => ({ id: r.id, name: "l", members: [] })))),
+      mapDbListRows: (qc, profileId, rows) => track("map-lists", () => delay(rows.map((r) => ({ id: r.id, name: "l", members: [] })))),
     },
   });
 
@@ -74,7 +74,7 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
 
   try {
     const { fetchBuckets } = await import("@/features/buckets/fetch-buckets");
-    const buckets = await fetchBuckets("work", "profile-1");
+    const buckets = await fetchBuckets({}, "work", "profile-1");
 
     // Deterministic concurrency proof #1: the Things and Lists queries
     // both start before either resolves (they only run after

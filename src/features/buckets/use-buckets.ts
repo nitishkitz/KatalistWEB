@@ -21,7 +21,7 @@ export function useBuckets() {
 
   const query = useQuery({
     queryKey: keys.buckets(user?.id, context),
-    queryFn: () => fetchBuckets(context, user?.id ?? ""),
+    queryFn: () => fetchBuckets(qc, context, user?.id ?? ""),
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
   });

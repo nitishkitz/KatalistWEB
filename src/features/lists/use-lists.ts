@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
@@ -20,7 +20,7 @@ import { getListDetailSeed } from "./list-detail-seed";
 import type { ListRow } from "./fixtures";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
-async function fetchLists(profileId: string, context: "work" | "home"): Promise<ListRow[]> {
+async function fetchLists(qc: QueryClient, profileId: string, context: "work" | "home"): Promise<ListRow[]> {
   const columns = "id,name,context,owner_profile_id,updated_at,description,cover_storage_path";
   // Only task lists here — conversation-kind rows (dm/group) belong to the Team hub.
   // The `kind` column ships with the Team hub migration; until it is applied we
@@ -39,7 +39,7 @@ async function fetchLists(profileId: string, context: "work" | "home"): Promise<
       .is("archived_at", null));
   }
   if (error) throw error;
-  return mapDbListRows(profileId, (lists ?? []) as DbListRow[]);
+  return mapDbListRows(qc, profileId, (lists ?? []) as DbListRow[]);
 }
 
 export function useLists() {
@@ -52,7 +52,7 @@ export function useLists() {
 
   const query = useQuery({
     queryKey: keys.lists(user?.id, context),
-    queryFn: () => fetchLists(user!.id, context),
+    queryFn: () => fetchLists(qc, user!.id, context),
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
   });
@@ -115,7 +115,7 @@ export function useList(listId: string | undefined) {
     // flash) and the shared-element hero transition has its target present.
     initialData: () => preview ? undefined : getListDetailSeed(qc, user?.id, context, listId),
     initialDataUpdatedAt: 0,
-    queryFn: () => fetchListDetail(user!.id, listId!),
+    queryFn: () => fetchListDetail(qc, user!.id, listId!),
   });
 
   if (preview) {

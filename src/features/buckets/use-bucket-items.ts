@@ -73,7 +73,7 @@ export function useBucketItems(bucketId: string | undefined) {
   const query = useQuery({
     queryKey: keys.bucketItems(bucketId ?? "none"),
     enabled: Boolean(bucketId) && Boolean(user) && !preview,
-    queryFn: () => fetchBucketItems(bucketId!, user!.id),
+    queryFn: () => fetchBucketItems(qc, bucketId!, user!.id),
   });
 
   const invalidate = (epoch: number) => {

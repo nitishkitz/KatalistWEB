@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { mapDbListRows, type DbListRow } from "./map-list-rows";
 import type { ListRow } from "./fixtures";
@@ -18,7 +19,7 @@ const COLUMNS = "id,name,context,owner_profile_id,updated_at,description,cover_s
  * archived List or a Team-hub conversation row (dm/group `kind`) would
  * resolve here even though neither belongs on the Lists surface.
  */
-export async function fetchListDetail(profileId: string, listId: string): Promise<ListRow | null> {
+export async function fetchListDetail(qc: QueryClient, profileId: string, listId: string): Promise<ListRow | null> {
   let { data, error } = await supabase
     .from("lists")
     .select(COLUMNS)
@@ -43,6 +44,6 @@ export async function fetchListDetail(profileId: string, listId: string): Promis
   }
   if (error) throw error;
   if (!data) return null;
-  const [row] = await mapDbListRows(profileId, [data as DbListRow]);
+  const [row] = await mapDbListRows(qc, profileId, [data as DbListRow]);
   return row ?? null;
 }

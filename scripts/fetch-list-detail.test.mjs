@@ -83,7 +83,7 @@ mock.module("@/integrations/supabase/client", {
 });
 mock.module("@/features/lists/map-list-rows", {
   namedExports: {
-    mapDbListRows: async (profileId, rows) => {
+    mapDbListRows: async (qc, profileId, rows) => {
       mapperCalled = true;
       if (mapperShouldThrow) throw new Error("mapper failed");
       return rows.map((r) => ({ id: r.id, name: r.name, thingCount: 0 }));
@@ -102,7 +102,7 @@ function reset(next) {
 
 test("normal task List: exact id + archive/kind filters, mapped result, one base query", async () => {
   reset("normal-task-list");
-  const row = await fetchListDetail("owner-1", "list-1");
+  const row = await fetchListDetail({}, "owner-1", "list-1");
   assert.equal(row.id, "list-1");
   assert.equal(row.name, "Groceries");
   assert.equal(baseQueryCount, 1, "primary path must issue exactly one base query");
@@ -111,38 +111,38 @@ test("normal task List: exact id + archive/kind filters, mapped result, one base
 
 test("archived List: no result, mapper not called", async () => {
   reset("archived-list");
-  const row = await fetchListDetail("owner-1", "list-1");
+  const row = await fetchListDetail({}, "owner-1", "list-1");
   assert.equal(row, null);
   assert.equal(mapperCalled, false, "an archived List must not reach the mapper");
 });
 
 test("DM/group row: not resolved as a task List on a schema supporting kind", async () => {
   reset("dm-group-row");
-  const row = await fetchListDetail("owner-1", "list-1");
+  const row = await fetchListDetail({}, "owner-1", "list-1");
   assert.equal(row, null, "a non-'list'-kind row must not resolve as a task List");
 });
 
 test("missing row: resolves to null", async () => {
   reset("missing-row");
-  const row = await fetchListDetail("owner-1", "list-1");
+  const row = await fetchListDetail({}, "owner-1", "list-1");
   assert.equal(row, null);
 });
 
 test("missing kind column: narrow fallback, same id/archive constraints, at most two base queries", async () => {
   reset("missing-kind-column");
-  const row = await fetchListDetail("owner-1", "list-1");
+  const row = await fetchListDetail({}, "owner-1", "list-1");
   assert.equal(row.id, "list-1");
   assert.equal(baseQueryCount, 2, "compatibility fallback must issue at most two base queries");
 });
 
 test("permission/network failure: rejects, does not trigger the compatibility fallback", async () => {
   reset("permission-failure");
-  await assert.rejects(fetchListDetail("owner-1", "list-1"), /permission denied/);
+  await assert.rejects(fetchListDetail({}, "owner-1", "list-1"), /permission denied/);
   assert.equal(baseQueryCount, 1, "a non-kind error must not trigger a second query");
 });
 
 test("mapper failure: rejects rather than returning a successful empty detail", async () => {
   reset("normal-task-list");
   mapperShouldThrow = true;
-  await assert.rejects(fetchListDetail("owner-1", "list-1"), /mapper failed/);
+  await assert.rejects(fetchListDetail({}, "owner-1", "list-1"), /mapper failed/);
 });

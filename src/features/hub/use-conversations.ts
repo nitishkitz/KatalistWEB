@@ -1,8 +1,8 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { fetchProfileIdentities, matchAvatarByName } from "@/features/people/directory";
+import { getProfileIdentities, matchAvatarByName } from "@/features/people/directory";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type ConversationParticipant = {
@@ -44,7 +44,7 @@ function initialsOf(name: string): string {
   );
 }
 
-async function fetchConversations(myId: string): Promise<Conversation[]> {
+async function fetchConversations(qc: QueryClient, myId: string): Promise<Conversation[]> {
   // RLS scopes SELECT to lists the caller owns or is a member of.
   const { data: listRows, error } = await supabase
     .from("lists")
@@ -71,7 +71,7 @@ async function fetchConversations(myId: string): Promise<Conversation[]> {
       .in("list_id", ids)
       .is("deleted_at", null)
       .order("created_at", { ascending: false }),
-    fetchProfileIdentities(),
+    getProfileIdentities(qc),
   ]);
 
   const identityById = new Map(identities.map((p) => [p.id, p]));
@@ -169,7 +169,7 @@ export function useConversations() {
     queryKey: ["hub-conversations", user?.id],
     enabled: Boolean(user) && !preview,
     staleTime: 10_000,
-    queryFn: () => fetchConversations(user!.id),
+    queryFn: () => fetchConversations(qc, user!.id),
   });
 
   // The rail is kept fresh by RealtimeInvalidationProvider, which routes every
@@ -188,6 +188,7 @@ export function useConversations() {
 export function useConversation(listId: string | undefined) {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
+  const qc = useQueryClient();
 
   const query = useQuery({
     queryKey: ["hub-conversation", listId, user?.id],
@@ -204,7 +205,7 @@ export function useConversation(listId: string | undefined) {
 
       const [{ data: memberRows }, identities] = await Promise.all([
         supabase.from("list_members").select("profile_id").eq("list_id", listId!),
-        fetchProfileIdentities(),
+        getProfileIdentities(qc),
       ]);
       const identityById = new Map(identities.map((p) => [p.id, p]));
       const resolve = (id: string): ConversationParticipant => {

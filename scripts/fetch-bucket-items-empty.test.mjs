@@ -26,7 +26,7 @@ test("fetchBucketItems returns an empty list without querying Things/Lists when 
 
   try {
     const { fetchBucketItems } = await import("@/features/buckets/fetch-bucket-items");
-    const items = await fetchBucketItems("b1", "profile-1");
+    const items = await fetchBucketItems({}, "b1", "profile-1");
     assert.deepEqual(items, []);
   } finally {
     clientMock.restore();

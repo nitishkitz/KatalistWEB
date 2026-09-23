@@ -34,7 +34,7 @@ test("mapDbListRows runs cover signing, members, and Things concurrently", async
 
   const directoryMock = mock.module("@/features/people/directory", {
     namedExports: {
-      fetchProfileIdentities: () => track("directory", () => delay([{ id: "owner-1", display_name: "Ada", avatar_url: null }])),
+      getProfileIdentities: () => track("directory", () => delay([{ id: "owner-1", display_name: "Ada", avatar_url: null }])),
       matchAvatarByName: () => null,
     },
   });
@@ -72,7 +72,7 @@ test("mapDbListRows runs cover signing, members, and Things concurrently", async
 
   try {
     const { mapDbListRows } = await import("@/features/lists/map-list-rows");
-    const [row] = await mapDbListRows("owner-1", [
+    const [row] = await mapDbListRows({}, "owner-1", [
       {
         id: "list-1",
         name: "Groceries",

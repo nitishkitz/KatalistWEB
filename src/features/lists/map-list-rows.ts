@@ -1,5 +1,6 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { fetchProfileIdentities, matchAvatarByName } from "../people/directory";
+import { getProfileIdentities, matchAvatarByName } from "../people/directory";
 import { DEMO_ACTOR_BY_KEY } from "../demo/identities";
 import type { ListRow, ListMember } from "./fixtures";
 
@@ -59,7 +60,7 @@ const DEFAULT_PERSONAS = [
  * Safe List identity mapping: members + owner via public_identities + profiles + actors lens.
  * Resolves complete display names and real avatars. Never returns "Someone" or "S".
  */
-export async function mapDbListRows(profileId: string, lists: DbListRow[]): Promise<ListRow[]> {
+export async function mapDbListRows(qc: QueryClient, profileId: string, lists: DbListRow[]): Promise<ListRow[]> {
   if (!lists.length) return [];
   const ids = lists.map((l) => l.id);
   // These three are independent of each other — cover URLs only need
@@ -95,7 +96,7 @@ export async function mapDbListRows(profileId: string, lists: DbListRow[]): Prom
 
   // 1. Fetch complete directory (server directory + assignable people + demo fallback)
   try {
-    const dir = await fetchProfileIdentities();
+    const dir = await getProfileIdentities(qc);
     for (const p of dir) {
       if (p.id && p.display_name && p.display_name !== "Someone") {
         identities.set(p.id, {

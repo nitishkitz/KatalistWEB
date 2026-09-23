@@ -1,8 +1,8 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { fetchProfileIdentities, matchAvatarByName } from "@/features/people/directory";
+import { getProfileIdentities, matchAvatarByName } from "@/features/people/directory";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type ContactPerson = {
@@ -39,8 +39,8 @@ function initialsOf(name: string): string {
   );
 }
 
-async function resolvePeople(): Promise<Map<string, ContactPerson>> {
-  const identities = await fetchProfileIdentities();
+async function resolvePeople(qc: QueryClient): Promise<Map<string, ContactPerson>> {
+  const identities = await getProfileIdentities(qc);
   const { data: profRows } = await supabase.from("profiles").select("id, occupation");
   const roleById = new Map((profRows ?? []).map((r) => [r.id, (r as { occupation: string | null }).occupation]));
   const map = new Map<string, ContactPerson>();
@@ -61,6 +61,7 @@ async function resolvePeople(): Promise<Map<string, ContactPerson>> {
 export function useContacts() {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
+  const qc = useQueryClient();
 
   const query = useQuery({
     queryKey: ["hub-contacts", user?.id],
@@ -72,7 +73,7 @@ export function useContacts() {
         .select("requester_profile_id, addressee_profile_id, status")
         .eq("status", "accepted");
       if (error) throw error;
-      const people = await resolvePeople();
+      const people = await resolvePeople(qc);
       const me = user!.id;
       const out: ContactPerson[] = [];
       const seen = new Set<string>();
@@ -106,7 +107,7 @@ export function useContactRequests() {
         .select("id, requester_profile_id, addressee_profile_id, status, created_at")
         .eq("status", "pending");
       if (error) throw error;
-      const people = await resolvePeople();
+      const people = await resolvePeople(qc);
       const me = user!.id;
       const incoming: ContactRequest[] = [];
       const outgoing: ContactRequest[] = [];

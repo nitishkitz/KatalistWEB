@@ -41,7 +41,7 @@ mock.module("@/integrations/supabase/client", {
 });
 mock.module("@/features/people/directory", {
   namedExports: {
-    fetchProfileIdentities: async () => [{ id: "owner-1", display_name: "Ada", avatar_url: null }],
+    getProfileIdentities: async () => [{ id: "owner-1", display_name: "Ada", avatar_url: null }],
     matchAvatarByName: () => null,
   },
 });
@@ -61,7 +61,7 @@ const row = {
 test("mapDbListRows rejects when the list_members read fails, instead of returning a memberless List", async () => {
   failingTable = "list_members";
   try {
-    await assert.rejects(mapDbListRows("owner-1", [row]), /list_members read failed/);
+    await assert.rejects(mapDbListRows({}, "owner-1", [row]), /list_members read failed/);
   } finally {
     failingTable = null;
   }
@@ -70,14 +70,14 @@ test("mapDbListRows rejects when the list_members read fails, instead of returni
 test("mapDbListRows rejects when the Things read fails, instead of silently reporting zero Things", async () => {
   failingTable = "things";
   try {
-    await assert.rejects(mapDbListRows("owner-1", [row]), /things read failed/);
+    await assert.rejects(mapDbListRows({}, "owner-1", [row]), /things read failed/);
   } finally {
     failingTable = null;
   }
 });
 
 test("sanity: mapDbListRows still succeeds when nothing fails", async () => {
-  const [mapped] = await mapDbListRows("owner-1", [row]);
+  const [mapped] = await mapDbListRows({}, "owner-1", [row]);
   assert.equal(mapped.id, "list-1");
   assert.equal(mapped.thingCount, 1);
 });
