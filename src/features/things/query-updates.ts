@@ -43,6 +43,35 @@ export async function cancelThingReads(qc: QueryClient, thingId: string): Promis
   ]);
 }
 
+/**
+ * Per-Thing ownership counters, scoped per QueryClient (so independent
+ * QueryClients — e.g. in tests — never share state). One counter per
+ * thingId, incremented once per patchThingInCaches call and stamped onto
+ * every cache entry that call touches. This is what actually establishes
+ * "am I still the most recent optimistic write to this Thing" — value
+ * equality alone cannot: two different, overlapping mutations can
+ * legitimately compute the *same* resulting value (e.g. both set
+ * workStatus to "under_progress"), in which case a value-only check would
+ * wrongly treat an older, failed mutation's rollback as still "mine" and
+ * erase a newer mutation's identical-looking but actually-separate write.
+ */
+const versionsByClient = new WeakMap<QueryClient, Map<string, number>>();
+
+function nextThingVersion(qc: QueryClient, thingId: string): number {
+  let versions = versionsByClient.get(qc);
+  if (!versions) {
+    versions = new Map();
+    versionsByClient.set(qc, versions);
+  }
+  const next = (versions.get(thingId) ?? 0) + 1;
+  versions.set(thingId, next);
+  return next;
+}
+
+function currentThingVersion(qc: QueryClient, thingId: string): number {
+  return versionsByClient.get(qc)?.get(thingId) ?? 0;
+}
+
 type RestoreEntry =
   | { kind: "thing"; queryKey: readonly unknown[]; previousThing: Thing; patchedThing: Thing }
   | { kind: "court"; queryKey: readonly unknown[]; previousThing: Thing; patchedThing: Thing };
@@ -54,17 +83,25 @@ type RestoreEntry =
  * that restores just this mutation's own change, for rollback if the
  * mutation that motivated the patch fails.
  *
- * Rollback is scoped to this one Thing, and only undoes it if the cache
- * still holds (structurally — see deepEqual, since QueryClient's
- * structural sharing means it won't be the same *reference*) the value
- * this call wrote. If anything else touched this Thing since — another
- * mutation's own patch, a realtime update, a completed refetch — that
- * newer value wins and rollback leaves it alone. An earlier version
- * restored the *entire* previous Court query snapshot on rollback, which
- * meant one failed mutation could silently erase an unrelated Thing's
- * independent update, a newly-arrived Thing, or a newer write to this same
- * Thing — this is why rollback re-reads the *current* cache at rollback
- * time rather than replaying an old blob.
+ * Rollback only undoes this call's own write, verified two ways:
+ * 1. Ownership: the per-Thing version counter (see nextThingVersion) must
+ *    still equal the version this call was stamped with — if a later
+ *    patchThingInCaches call for the same Thing has since run (whether or
+ *    not it produced the same-looking value), that call now owns this
+ *    Thing and this rollback is a no-op for it.
+ * 2. No untracked external change: the cache must still hold (structurally
+ *    — see deepEqual, since QueryClient's structural sharing means it
+ *    won't be the same *reference*) the value this call wrote. This
+ *    catches changes that don't go through this module at all — a
+ *    completed refetch or a realtime update — which the version counter
+ *    alone can't see since only patchThingInCaches calls bump it.
+ * Both must hold; either one failing means something newer wins and
+ * rollback leaves this cache entry alone. An earlier version restored the
+ * *entire* previous Court query snapshot on rollback, which meant one
+ * failed mutation could silently erase an unrelated Thing's independent
+ * update, a newly-arrived Thing, or a newer write to this same Thing —
+ * this is why rollback re-reads the *current* cache at rollback time
+ * rather than replaying an old blob.
  *
  * Scope: only the Court and single-Thing caches are patched. List/Bucket
  * caches (list-things, bucket-items) are left to invalidatePersonalSurfaces'
@@ -74,10 +111,13 @@ type RestoreEntry =
  */
 export function patchThingInCaches(qc: QueryClient, thingId: string, patch: ThingPatch): () => void {
   const restoreEntries: RestoreEntry[] = [];
+  let myVersion: number | null = null;
+  const ownVersion = () => (myVersion ??= nextThingVersion(qc, thingId));
 
   const thingKey = ["thing", thingId] as const;
   const previousThing = qc.getQueryData<Thing | null>(thingKey);
   if (previousThing) {
+    ownVersion();
     const patchedThing = applyPatch(previousThing, patch);
     qc.setQueryData<Thing | null>(thingKey, patchedThing);
     restoreEntries.push({ kind: "thing", queryKey: thingKey, previousThing, patchedThing });
@@ -88,6 +128,7 @@ export function patchThingInCaches(qc: QueryClient, thingId: string, patch: Thin
     const previous = qc.getQueryData<CourtCache>(key);
     const index = previous?.things.findIndex((t) => t.id === thingId) ?? -1;
     if (!previous || index === -1) continue;
+    ownVersion();
     const previousCourtThing = previous.things[index];
     const patchedThing = applyPatch(previousCourtThing, patch);
     const nextThings = previous.things.slice();
@@ -97,6 +138,11 @@ export function patchThingInCaches(qc: QueryClient, thingId: string, patch: Thin
   }
 
   return () => {
+    if (myVersion == null || currentThingVersion(qc, thingId) !== myVersion) {
+      // Either nothing was ever patched (no-op call), or a later mutation
+      // on this Thing has since run — that one owns it now.
+      return;
+    }
     for (const entry of restoreEntries) {
       if (entry.kind === "thing") {
         const current = qc.getQueryData<Thing | null>(entry.queryKey);

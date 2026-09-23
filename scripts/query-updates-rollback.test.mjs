@@ -98,6 +98,54 @@ test("an older failure cannot erase a newer successful patch to the same Thing",
   assert.equal(after.things.find((t) => t.id === "a").workStatus, "sorted", "the newer operation's result wins");
 });
 
+test("an older failure cannot erase a newer patch even when both compute the identical value", () => {
+  // The concurrency guard cannot rely on value comparison alone: two
+  // independent, overlapping mutations can legitimately produce the exact
+  // same resulting value (e.g. both set workStatus to "under_progress").
+  // If rollback only checked "does the cache still hold what I wrote",
+  // the older mutation's rollback would look identical to "still mine" and
+  // incorrectly erase the newer mutation's write.
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  const a = makeThing("a", { workStatus: "not_started" });
+  qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
+
+  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  // Second, independent mutation computes the identical resulting value.
+  patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+
+  // First mutation fails.
+  rollbackFirst();
+
+  const after = qc.getQueryData(courtKey);
+  assert.equal(
+    after.things.find((t) => t.id === "a").workStatus,
+    "under_progress",
+    "the second (still-pending) mutation's write survives, even though the first mutation's rollback would restore a value that looks unrelated to it",
+  );
+});
+
+test("the current owner's rollback restores what it actually saw before it wrote, not the original value", () => {
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  const a = makeThing("a", { workStatus: "not_started" });
+  qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
+
+  patchThingInCaches(qc, "a", { workStatus: "under_progress" }); // succeeds, no rollback call
+  // Second mutation runs after the first succeeded, so its own "previous"
+  // is "under_progress", not the very first "not_started".
+  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" });
+
+  rollbackSecond();
+
+  const after = qc.getQueryData(courtKey);
+  assert.equal(
+    after.things.find((t) => t.id === "a").workStatus,
+    "under_progress",
+    "rollback restores the immediately-preceding value, not the Thing's original state",
+  );
+});
+
 test("single-Thing and Court caches both reconcile after a failed mutation", () => {
   const qc = newClient();
   const courtKey = ["court", "p1", "work"];

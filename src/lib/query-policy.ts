@@ -51,3 +51,35 @@ export function classifyAsyncError(error: unknown): AsyncErrorKind {
   if (message.includes("not found")) return "not-found";
   return "failed";
 }
+
+export type AsyncBranch = "offline-blocked" | "error-blocked" | "loading" | "empty" | "ready";
+
+/**
+ * Pure decision logic behind AsyncState's top-level branching, extracted so
+ * it's unit-testable without a DOM/React harness (this repo has neither).
+ *
+ * `isEmpty` is trusted at face value as the caller's authoritative signal
+ * for "loaded successfully with nothing in it" — see AsyncState's own
+ * docs for why a `data == null`/truthiness check can't stand in for it
+ * (an empty array is truthy).
+ */
+export function resolveAsyncBranch(input: {
+  online: boolean;
+  isLoading: boolean;
+  hasError: boolean;
+  isEmpty: boolean;
+}): AsyncBranch {
+  const { online, isLoading, hasError, isEmpty } = input;
+  // A successfully-loaded-but-empty result (settled, no error) is a
+  // confirmed fact ("you genuinely have zero Lists"), not an unknown —
+  // blocking it behind "offline, nothing cached yet" would misrepresent a
+  // known result as unknown. Only block offline when there's neither
+  // non-empty data to fall back on (isEmpty is false) nor a confirmed
+  // result to trust (still loading, or errored, counts as unconfirmed).
+  const hasConfirmedResult = !isLoading && !hasError;
+  if (!online && isEmpty && !hasConfirmedResult) return "offline-blocked";
+  if (hasError && isEmpty) return "error-blocked";
+  if (isLoading) return "loading";
+  if (isEmpty) return "empty";
+  return "ready";
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { extractErrorMessage } from "@/lib/domain-error";
-import { SLOW_QUERY_MS, STALLED_QUERY_MS, classifyAsyncError } from "@/lib/query-policy";
+import { SLOW_QUERY_MS, STALLED_QUERY_MS, classifyAsyncError, resolveAsyncBranch } from "@/lib/query-policy";
 import { EmptyState } from "@/components/katalist/EmptyState";
 
 /**
@@ -88,12 +88,9 @@ export function AsyncState<T>({
     };
   }, [isLoading]);
 
-  // Only blocks with the full-screen offline state when there's no usable
-  // data to show (nothing cached yet, or a successful-but-empty result —
-  // that's still worth stating plainly rather than blaming connectivity for
-  // it). Already-loaded, non-empty data stays on screen; see the offline
-  // banner layered over `children` below instead of replacing it.
-  if (!online && (data == null || isEmpty)) {
+  const branch = resolveAsyncBranch({ online, isLoading, hasError: Boolean(error), isEmpty });
+
+  if (branch === "offline-blocked") {
     return (
       <EmptyState
         title="You're offline"
@@ -113,10 +110,7 @@ export function AsyncState<T>({
     );
   }
 
-  // Uses the caller's isEmpty, not a truthiness check on `data`: for
-  // array-shaped data an empty array is truthy, so `!data` would never be
-  // true and this branch would never fire for list screens.
-  if (error && (data == null || isEmpty)) {
+  if (branch === "error-blocked") {
     const kind = classifyAsyncError(error);
     const retryButton = onRetry ? (
       <button
@@ -146,7 +140,7 @@ export function AsyncState<T>({
     );
   }
 
-  if (isLoading) {
+  if (branch === "loading") {
     if (elapsedTier === "stalled") {
       return (
         <EmptyState
@@ -182,21 +176,30 @@ export function AsyncState<T>({
     return <>{loadingContent}</>;
   }
 
-  if (isEmpty) {
-    return <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />;
+  if (branch === "empty") {
+    return (
+      <>
+        {!online ? <OfflineBanner /> : null}
+        <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />
+      </>
+    );
   }
 
   return (
     <>
-      {!online ? (
-        <div
-          role="status"
-          className="mb-3 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"
-        >
-          <span>You're offline. Showing what was already loaded.</span>
-        </div>
-      ) : null}
+      {!online ? <OfflineBanner /> : null}
       {children(data as T)}
     </>
+  );
+}
+
+function OfflineBanner() {
+  return (
+    <div
+      role="status"
+      className="mb-3 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"
+    >
+      <span>You're offline. Showing what was already loaded.</span>
+    </div>
   );
 }
