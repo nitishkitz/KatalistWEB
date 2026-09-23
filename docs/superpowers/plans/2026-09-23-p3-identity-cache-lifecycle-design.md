@@ -1,229 +1,259 @@
-# P3 — Identity and Cache Lifecycle Design
+# P3 — Identity and Cache Lifecycle Design (Revision 2)
 
 Date: 2026-09-23
 Baseline: `cd8932a` on `katalist-plan/batch-a-baseline`
-Status: **Design proposal only. No implementation in this document.** Per the plan's review gate, this must be approved before P4 (actor cache) or P7 (realtime ownership relocation) starts. P4/P7 remain gated regardless of this doc's approval status until separately signed off.
+Status: **Design proposal only. No implementation in this document.** This revision responds to five specific correctness gaps identified in review of Revision 1 (committed at `6c7a896`), including one bug the reviewer reproduced against the current code. P4/P7 remain gated pending explicit approval, unchanged.
 
-Every claim below is grounded in the current source (`f9754233ec271f58494e67d019cc58f4df0f815d` through `cd8932a`) and the P0 inventory (`2026-09-23-realtime-ownership-inventory.md`). Where I found a concrete, already-existing gap while researching this design (not a hypothetical), it's called out explicitly as a **finding**, separate from the **proposal** text, because those findings are evidence for the design, not the design itself.
+**What changed since Revision 1, and why**: every one of the five review points below turned out to be correct, and researching the fix for point 1 surfaced an empirical finding that changes the core mechanism (`qc.clear()` does not do what Revision 1 assumed — see §3). Nothing here is defended by re-asserting the old argument; where Revision 1 was wrong, that's stated plainly.
+
+1. §4's root-`useEffect` disposal timing was unsound — corrected with a synchronous, render-time gate (no reliance on effect ordering).
+2. §2's "not actively wrong, no correctness benefit" framing for viewer-dependent computed fields (role, "Owned by you", unread counts) was wrong — retracted; the actual argument for keeping entity-only keys now rests entirely on the isolation boundary being provably airtight, not on RLS.
+3. The claim/chain `WeakMap`s in `query-updates.ts` are **not** touched by anything in Revision 1's epoch-guard proposal — reproduced and fixed below with epoch-scoped, token-based ownership.
+4. The guard-point list was incomplete and contained an inaccurate claim about the code (`withOptimisticPatch` has no "finally cache write on success" — corrected).
+5. `use-list-messages.ts`'s mounted-consumer gap is real and is **not** resolved by this revision's mechanism either — named explicitly as an open gap for P8, not silently assumed away.
 
 ---
 
 ## 1. Identity
 
-### Definition
+Expanded to four variants — Revision 1 only had three, and collapsing "auth not yet resolved" into the same bucket as "confirmed logged out" was exactly backwards for deciding what to render:
 
 ```ts
 type Identity =
+  | { kind: "pending" }                        // useSession().loading === true
+  | { kind: "none" }                            // resolved: no session
   | { kind: "live"; profileId: string }
-  | { kind: "preview"; profileId: string } // demo persona, e.g. "demo-priya"
-  | { kind: "none" }; // no session yet, or signed out
+  | { kind: "preview"; profileId: string };      // demo persona
 ```
 
-`profileId` is `session.user.id` (`useSession()`, `src/hooks/useSession.ts:201`). `kind` comes from `isPreviewSession(session)` (`src/lib/session-mode.ts:9-12`), which is already the single existing source of truth for live-vs-demo — this design reuses it rather than inventing a second classification.
+`pending` maps directly to `useSession()`'s own `loading` flag (`src/hooks/useSession.ts:148`, `refreshSession`/`onAuthStateChange` both eventually call `setLoading(false)` once resolved). `none`/`live`/`preview` are computed exactly as in Revision 1, from `session` + `isPreviewSession(session)`.
 
-**Context (work/home) is explicitly not part of identity.** It's a per-profile *setting* (`AppContextProvider.tsx:31-61` reads/writes `profiles.active_context`), already threaded through the query-key factories that need it (`keys.court/lists/buckets/nudges/nudgeHistory/catchup/accessibleThings`, all `(profileId, context) => [...]` — `src/domain/query-keys.ts:2-19`). Switching context must not bump the identity epoch (defined in §3) or dispose any identity-scoped owner — it only needs to select a different context-scoped query, which the existing factories already do correctly.
+| Transition | Identity change? |
+|---|---|
+| App boot, before first `getSession()`/demo check resolves | `pending` (not `none`) |
+| Token refresh, same user | No — `profileId` unchanged, `useSession()` still calls `setSession(next)` for every event type without filtering, but comparison is on `profileId`, not the `Session` object |
+| Account switch (A signs out, B signs in; demo persona swap) | Yes |
+| Logout | Yes (→ `none`) |
+| Live ⇄ preview toggle | Yes (`kind` differs even if a `profileId` string ever collided, which it won't in practice — demo ids are `demo-${persona.key}`) |
+| Work ⇄ home context switch | No — context is a per-profile setting (`AppContextProvider.tsx:31-61`), not part of identity, unchanged from Revision 1 |
 
-### Distinguishing the three cases the plan asks for
-
-| Transition | `onAuthStateChange` event (per Supabase) | `profileId` before/after | Identity changed? |
-|---|---|---|---|
-| Token refresh, same user | `TOKEN_REFRESHED` | same | **No.** `useSession()` (`useSession.ts:168-177`) calls `setSession(next)` unconditionally for every event type — it does not currently distinguish `TOKEN_REFRESHED` from `SIGNED_IN`, but `next.user.id` is unchanged, so a `profileId`-keyed identity comparison naturally treats this as a no-op without needing `useSession()` itself to filter event types. |
-| Account switch (A signs out, B signs in, or a demo-persona swap via `signInAsDemo`) | `SIGNED_OUT` then `SIGNED_IN`, or the custom `katalist_auth_state_change` event (`useSession.ts:66,125,185`) for demo | different | **Yes.** |
-| Work ⇄ home context switch | none (no Supabase auth event at all — `AppContextProvider.tsx`'s `setContext` only writes `profiles.active_context` and local state) | same | **No** (identity unaffected; only the context-scoped query selection changes). |
-| Logout | `SIGNED_OUT` | `profileId` → none | **Yes** (transitions to `{ kind: "none" }`). |
-| Live ⇄ preview (demo) toggle | custom event / `SIGNED_OUT`+`SIGNED_IN` combination, since demo sessions bypass real Supabase auth entirely (`getStoredDemoSession()` checked first in `refreshSession`, `useSession.ts:151-156`) | `kind` changes even if a `profileId` string collides (unlikely — demo ids are `demo-${persona.key}`, `useSession.ts:74`) | **Yes** — comparison must be on the full `Identity` value (kind + profileId), not `profileId` alone. |
-
-**Proposal**: identity equality is `identity.kind === next.kind && identity.profileId === next.profileId` (with `"none"` having no `profileId` to compare). This is computed from `useSession()`'s existing `session`/`isPreviewSession()` output — no new auth listener, no centralized auth provider. This directly satisfies the plan's constraint that `useSession()` is not assumed to be a centralized provider and that any centralization must be justified by a demonstrated lifecycle problem — the demonstrated problem here is narrow (need one place to notice identity changed) and is solved by one new hook, not by rearchitecting `useSession()`.
+Identity equality: `kind` and (where applicable) `profileId` both match. `pending` never equals anything else, including another `pending` (it's a transient state, not a value to compare against for disposal purposes — see §4).
 
 ---
 
-## 2. Query keys
+## 2. Query keys — correction to Revision 1's argument
 
-### Current state (from the P0 inventory, restated here only where it matters for this decision)
+**Retracted**: Revision 1 said profile-namespaced keys have "no correctness benefit given RLS." That's wrong, and the reviewer's examples prove it: `mapDbListRows()` computes `role` and `ownerLine` ("Owned by you") *relative to the calling profile* (`src/features/lists/map-list-rows.ts:154-163` — `mine = listMembers.find((m) => m.profile_id === profileId)`), and `map-thing-rows.ts`'s comment counts are computed with `myActorId` factored in (`calculateCommentCounts(tId, cList, myActorId)`, `map-thing-rows.ts:113-120` — unread status is viewer-relative). These are **not** "the same row, RLS just decides who can see it" — they are *different computed values for the same entity ID*, depending on who's asking. If two identities' data for the same entity ID were ever simultaneously live in one `QueryClient`, an entity-only key would let one identity's viewer-relative fields leak into the other's rendered view of "the same" cached object. RLS has nothing to say about this, because RLS governs what a *query* is allowed to return, not what a *client-side cache slot* is allowed to hold once two different queries have both written into it.
 
-- 12 of 16 `keys.xxx()` factories already embed `profileId` (11 with `context` too, 4 profile-only) — these are already correctly identity-scoped.
-- Entity-only keys exist in two flavors: factory-backed (`keys.thing`, `keys.list`, `keys.bucket`, `keys.bucketItems`, `keys.listMeetings`) and ad-hoc raw arrays with no factory at all (`["list-things", listId]`, `["list-messages", listId]`, `["thing-comments", thingId]`, `["thing-activity", thingId]`, `["hub-files", listId, parentId]`, and others — full list in the inventory doc).
-- 18+ raw-array key prefixes have no factory, and at least 2 confirmed cases (`["list", listId]` in `use-lists.ts:105`, `["profile", ...]` in `use-profile.ts:24`) where a factory exists with the identical shape but the call site doesn't use it — factory and call site have already drifted apart once.
+**Still recommending against a global key migration**, but the justification is now precise, not RLS-based: it's correct **only if** the app enforces, as an invariant, that at most one identity's protected queries are ever active/observed at a time in a given `QueryClient` — i.e., exactly the guarantee §4's transition gate exists to provide. This is the "proven isolation boundary" the reviewer asked for in place of the RLS argument: the boundary is "only one identity observes protected queries at a time," proven by the tests in §6 (specifically the mounted-consumer and race tests), not asserted from RLS semantics.
 
-### Finding: entity-only keys are not a hypothetical risk — one is already broken
+If that invariant ever needs to be relaxed (e.g. a future multi-account-tabs feature that keeps two identities' data live in one `QueryClient` simultaneously), entity-only keys for viewer-relative fields become actively wrong at that point, and the global migration Revision 1 rejected would become necessary. That's a real constraint on this design, not a hypothetical — recorded here so it isn't forgotten if that feature is ever proposed.
 
-`use-lists.ts`'s `useList` seeds its detail query from:
-
-```ts
-initialData: (): ListRow | null | undefined => {
-  const entries = qc.getQueriesData<ListRow[]>({ queryKey: ["lists"] });   // use-lists.ts:110
-  for (const [, data] of entries) {
-    const found = data?.find((l) => l.id === listId);
-    ...
-```
-
-`{ queryKey: ["lists"] }` is a **prefix match** in TanStack Query — it matches every cached entry whose key starts with `"lists"`, i.e. every `keys.lists(profileId, context)` entry for **every profile** currently or previously cached in this `QueryClient`. If profile A's Lists were fetched earlier in this browser session (even after A signed out, if nothing evicted the cache), and profile B later opens a List detail page for a List B can also see (List sharing across members is a real product feature — List X isn't exclusive to one profile), B's detail view can seed from A's cached row instead of B's own. This is precisely the scenario the plan names as a required test ("List initial-data seeding cannot scan another profile's cache") — except it's not a test gap, it's a live bug in the current code. **This must be fixed as part of P3's implementation, not just tested.**
-
-### Proposal: keep the two-tier structure, but close the two real gaps
-
-I'm recommending **against** migrating every entity-only key to embed `profileId` (e.g. rewriting `["thing", id]` → `["thing", profileId, id]` everywhere). Reasons:
-
-1. **Blast radius vs. benefit.** This touches `use-thing.ts`, `use-lists.ts`/`fetch-list-detail.ts`, `use-buckets.ts`/`fetch-bucket-items.ts`, `use-list-meetings.ts`, `use-list-things.ts`, `use-list-messages.ts`, `use-thing-comments.ts`, `use-hub-files.ts`, `query-updates.ts`'s `["thing", thingId]`/`["court"]` cache-location math, every `invalidateQueries`/`cancelQueries` call site targeting these keys (dozens, per the P0 inventory), and every test that asserts on these key shapes. That is exactly the "combine query-key migration ... in one commit" the plan explicitly forbids, and doing it piecemeal across many commits leaves the app in an inconsistent, partially-migrated state for the whole span.
-2. **These are structurally shared entities, not private-to-one-profile data.** A Thing, List, or Bucket with a given ID is the same row regardless of which member is viewing it — RLS decides *whether* a profile can read it, not what the row *is*. Embedding `profileId` in the key would fragment one shared cache entry into N per-viewer copies of the same data, which is a regression (more requests, more cache entries, no correctness benefit — RLS already prevents A's request from ever returning B's inaccessible data in the first place).
-3. **The actual hazard is temporal, not a mislabeling hazard**, and the plan's own text agrees: "RLS remains authoritative on the server, but RLS alone does not isolate already-cached client data." The risk is a *stale, already-cached, or late-arriving* value being shown after the viewer changes — not the server returning the wrong profile's data for a given ID.
-
-**Instead:**
-
-- **Leave the entity-only key shapes as they are** (`["thing", id]`, `["list", id]`, `["bucket", id]`, `["bucket-items", id]`, `["list-meetings", id]`, and the ad-hoc ones), since the entities they name are legitimately shared.
-- **Close the two real gaps that make this unsafe today**, both narrow and independently reviewable:
-  1. Fix `use-lists.ts:110`'s `initialData` scan to use `keys.lists(profileId, context)` as an exact prefix (`["lists", profileId]`, letting `context` vary), not the bare `["lists"]` global prefix. Same audit needed for any other `getQueriesData`/`findAll` call using a bare top-level prefix — the P0 inventory's `query-updates.ts:211` (`qc.getQueryCache().findAll({ queryKey: ["court"] })`) is the other one, and it's discussed in §5 below because it's a Batch B compatibility concern, not a query-key-shape concern.
-  2. On an **identity change** (not context, not token refresh — see §1's table), evict every protected cache entry rather than trying to enumerate and prefix-match every one of the 18+ raw key families by hand. §4 covers this as part of the epoch mechanism, not as a query-key-shape change.
-- **New keys going forward** should use a factory in `query-keys.ts`, and any raw-array key that duplicates a shape a factory already provides (the two drifted cases found) should be migrated to the factory **as an isolated, single-purpose commit** — low risk, easy to review, not bundled with anything else.
-
-### Migration inventory (for the commit sequence in §7, not for this doc to execute)
-
-| Surface | Current key | Action |
-|---|---|---|
-| `use-lists.ts` `useList` initial-data seed | scans bare `["lists"]` | **Fix now (P3 implementation)**: scope to `["lists", profileId]` |
-| `use-profile.ts:24` | ad-hoc `["profile", user?.id ?? "none"]` | Migrate to existing unused `keys.profile(profileId)` — isolated commit |
-| `use-lists.ts:105` (`useList`'s own key) | ad-hoc `["list", listId]` | Migrate to existing `keys.list(listId)` — isolated commit (no shape change, just using the factory) |
-| `use-notifications.ts:45` | ad-hoc `["notifications-unread", user?.id]` parallel to `keys.notifications` | Decide whether this is truly a separate cache entry (unread count vs. full list) or should collapse — separate review, not P3 |
-| Every other ad-hoc entity-only key (`list-things`, `list-messages`, `thing-comments`, `thing-activity`, `hub-files`, `hub-conversations`, `hub-conversation`, `hub-contacts`/`-requests`/`-invitations`, `doorman`, `upcoming-meetings`, `profile-directory`, `assignable-people`, `team-members`) | ad-hoc, no factory | Add factories opportunistically when each file is next touched for another reason; not a dedicated migration — the epoch-based eviction in §4 doesn't require them to have factories, only to be reachable by `qc.clear()` |
-| `personal-shred.ts`, `personal-snooze.ts` | `keys.shredded(profileId)`, `keys.snoozed(profileId)` | Already correct, no change |
-| Cancellation/optimistic-write targets in `query-updates.ts` | bare `["court"]`, `["thing", id]` | Covered in §5 (Batch B compatibility), not a key-shape change |
+The narrow `use-lists.ts:110` fix and the migration-inventory table from Revision 1 are unchanged and still recommended as-is.
 
 ---
 
 ## 3. Epoch lifecycle
 
-### Mechanism
+### Correction: `qc.clear()` does not do what Revision 1 assumed
+
+I wrote and ran (against the actual installed `@tanstack/react-query@^5.101.0`, no mocking — `QueryObserver`/`QueryClient` are plain JS classes, importable and testable without React) four probes before writing this revision, specifically because the reviewer is right that "fake epoch-function tests alone cannot prove old content never renders." Results, all reproducible:
+
+1. **`qc.clear()` does not update an already-subscribed `QueryObserver`.** A `QueryObserver` watching `["thing", "shared-thing-1"]` with cached `{ owner: "A" }` still reports `{ owner: "A" }` after `qc.clear()`, indefinitely, with no further fetch triggered. Revision 1's assumption that `useQuery`'s internal `useSyncExternalStore` usage would "automatically propagate the clear to live observers" was **false**.
+2. **`qc.removeQueries()` has the identical problem** — same stale result, no refetch.
+3. **`qc.resetQueries()` (no filter) is the mechanism that actually works.** The same already-mounted, already-subscribed observer correctly transitions to the fresh value (`{ owner: "B" }`) once the profile that would answer its `queryFn` has changed — no remount, no manual re-subscribe. An unrelated *inactive* (unobserved) cached query is evicted by the same call **without** triggering a wasted background refetch (confirmed: fetch count stayed `0` for an unobserved key across the reset).
+4. **A slow fetch already in flight under the old identity, still pending when `resetQueries()` triggers a second fetch for the same key, does not clobber the newer result on late arrival.** TanStack Query's own internal fetch-generation tracking discards the superseded attempt. This is built-in behavior, not something this design has to build — it narrows where an explicit epoch guard is actually load-bearing (see below).
+
+**Correction to the design**: replace every `qc.clear()` reference from Revision 1 with `qc.resetQueries()` (no filter — reset everything, matching finding 3's active/inactive behavior). This is the mechanism that makes §4's transition gate actually work, and it is why Revision 1's root-`useEffect` design was unsound for a second, independent reason beyond the timing problem the reviewer named: even if the effect *had* run at the right time, `clear()` inside it would still have left already-mounted consumers stale indefinitely.
+
+### Where an explicit epoch guard is still required (narrowed, not eliminated, by finding 4)
+
+| Consumer | Still needs an epoch guard? | Why |
+|---|---|---|
+| Plain entity-only-keyed reads (`fetchListDetail`, `fetchThing`-equivalent, `fetchBucketItems`, etc.), once `resetQueries()` is used at the boundary | **No**, for the specific "late completion from before the switch" race — TanStack's own fetch-generation tracking already handles it (finding 4). An epoch guard here would be redundant defense, not load-bearing. |
+| Optimistic cache writes (`patchThingInCaches`'s `setQueryData` calls) | **Yes.** These are direct `setQueryData` calls made by our own code, entirely outside TanStack's fetch-generation machinery — nothing about `resetQueries()` or the built-in race protection touches a manual `setQueryData` call made after the fact. |
+| Claim/chain `WeakMap`s in `query-updates.ts` | **Yes — and Revision 1 didn't actually guard these at all.** See below. |
+| Caller-level `onSuccess`/`onError`/`invalidateQueries`/toast/navigation side effects | **Yes**, unaudited — see §5. |
+| Future P4/P6/P7/P9 realtime/timer/reconnect callbacks | **Yes**, unchanged from Revision 1. |
+
+### Correction: epoch-owned claims and chains (reviewer's reproduction)
+
+The reviewer ran this against the current code and reported it here verbatim: `claimSurvivesClear: true`, `nextIdentityCanClaim: false`. That's because `inFlightThingIds` and `chainsByClient` (`query-updates.ts:55,93`) are `WeakMap<QueryClient, ...>` — keyed by the `QueryClient` **object**, which is the same single instance for the entire app lifetime (`router.tsx:7`). Nothing about an identity switch changes which `QueryClient` object exists, so nothing in Revision 1's proposal — which only talked about guarding *cache write points* — ever touched these maps. A claim made under identity A survives every mechanism proposed so far, including the corrected `resetQueries()`-based disposal.
+
+**Fix**: make claim/chain storage epoch-scoped and self-healing, and make claim ownership an unforgeable token rather than a boolean:
 
 ```ts
-// Proposed: src/features/realtime/identity-cache-policy.ts
-type IdentityEpoch = { epoch: number; identity: Identity };
+// query-updates.ts, revised
+type ClaimToken = { epoch: number; thingId: string; claimId: number };
+let nextClaimId = 0;
 
-const epochByClient = new WeakMap<QueryClient, IdentityEpoch>();
+const inFlightState = new WeakMap<QueryClient, { epoch: number; claims: Map<string, number> }>();
+
+function currentInFlight(qc: QueryClient): { epoch: number; claims: Map<string, number> } {
+  const epoch = getIdentityEpoch(qc).epoch;
+  const existing = inFlightState.get(qc);
+  if (existing && existing.epoch === epoch) return existing;
+  // Self-healing: a stored epoch that doesn't match means every claim
+  // recorded under it belongs to a retired identity and is void, the
+  // same "reset and start fresh" principle pushChainEntry already uses
+  // for detecting an external change to a chain's expected value.
+  const fresh = { epoch, claims: new Map<string, number>() };
+  inFlightState.set(qc, fresh);
+  return fresh;
+}
+
+export function claimThingMutation(qc: QueryClient, thingId: string): ClaimToken | null {
+  const state = currentInFlight(qc);
+  if (state.claims.has(thingId)) return null;
+  const claimId = ++nextClaimId;
+  state.claims.set(thingId, claimId);
+  return { epoch: state.epoch, thingId, claimId };
+}
+
+export function releaseThingMutation(qc: QueryClient, token: ClaimToken | null): void {
+  if (!token) return;
+  const state = currentInFlight(qc);
+  // Only release if this token is still the live claim for this epoch —
+  // an old epoch's token can never match `state.epoch` (self-healing
+  // already replaced the map), and even a same-epoch, superseded claim
+  // for the same thingId won't match on `claimId`. This is exactly what
+  // stops "A's late finally from releasing B's newer claim."
+  if (state.epoch !== token.epoch) return;
+  if (state.claims.get(token.thingId) !== token.claimId) return;
+  state.claims.delete(token.thingId);
+}
 ```
 
-This follows the exact pattern already proven in this codebase for per-`QueryClient` state that must never leak across independent clients (tests, potential SSR): `query-updates.ts`'s `chainsByClient` and `inFlightThingIds` (`query-updates.ts:55,93`) are both `WeakMap<QueryClient, ...>` for the same reason. No new pattern is introduced — this reuses the one that's already reviewed and in production.
+Same treatment for `chainsByClient`: store `{ epoch, chains: Map<locationKey, ChainEntry[]> }`, self-heal on epoch mismatch via the same pattern. This has a pleasant consequence: `spliceChainEntry`'s **existing** "entry not found → return `undefined`, do nothing" behavior (`query-updates.ts:148-151`) already handles the epoch-stale case correctly once the storage itself is epoch-scoped — a rollback closure invoked after the epoch advanced will look up a chain that's already been reset to empty, find nothing, and safely no-op. No change to `spliceChainEntry`/`pushChainEntry`'s own logic is needed, only to what storage they read from.
 
-- `getIdentityEpoch(qc)` — current `{ epoch, identity }`.
-- `advanceIdentityEpoch(qc, nextIdentity)` — called exactly once, from one place (see §4), whenever computed identity changes. Increments `epoch`, stores `nextIdentity`.
-- `isEpochCurrent(qc, capturedEpoch)` — the guard every consumer calls before applying a side effect.
-
-### Who captures and checks an epoch
-
-| Consumer | Capture point | Check point | Action if stale |
-|---|---|---|---|
-| Entity-only-keyed `queryFn`s (`fetchListDetail`, `fetchThing`-equivalent, `fetchBucketItems`, etc.) | At `queryFn` invocation start | Immediately before returning | Throw a distinguishable `StaleIdentityError` instead of returning data — TanStack treats it as a query error for a query nothing observes anymore (the new identity's UI isn't reading that query instance), so it's inert, not user-facing |
-| `withOptimisticPatch` / `patchThingInCaches` (`query-updates.ts`) | At `withOptimisticPatch()` call start | Inside the returned rollback closure, and before the `finally` cache write on success | If stale: skip the cache write entirely (success or rollback) — the mutation's own RPC still ran (can't be cancelled after the fact), but its cache-side effects must not touch the new identity's view. This is a compatibility-preserving addition to Batch B's existing machinery, not a rewrite of it — see §5 |
-| Future P4 actor-cache | At fetch start | Before caching the result | Discard the result instead of caching it under the new identity |
-| Future P7 realtime controller | At channel creation and at every event callback | Every event callback | Owner disposal itself is epoch-driven (see §4), so a correctly-disposed owner's callbacks simply can't fire after retirement — the epoch check here is defense in depth for any callback already queued in the microtask/event loop at disposal time |
-| Timers (any `setTimeout`/`setInterval` a future phase introduces, e.g. the batcher's debounce in P6) | At schedule time | At fire time | No-op if stale |
-| Reconnect callbacks (P9) | At subscribe-status-change time | At the point the reconnect logic would trigger a refresh | No-op if stale |
-
-### What "stale" causes to happen (and not happen)
-
-- A stale entity-only-keyed query throwing is safe because nothing in the new identity's render tree is `useQuery`-subscribed to that exact query instance anymore (its `queryKey` didn't change, but its *observer* — the component that called `useQuery` under the old identity — either unmounted or the whole subtree remounted; the query object itself becoming an error is invisible to anyone since no one's watching).
-- A stale optimistic patch not writing to cache is safe because the alternative — writing anyway — is the actual bug being prevented ("Pending A mutation settles after B activates: no writes to B's cache" is a named required test in the plan, and `patchThingInCaches`'s existing design of patching "every Court query... any profile/context key" — its own words, `query-updates.ts:191-196` — means an unguarded stale patch could touch a *different profile's* live Court cache entry for a shared Thing, not just a stale copy of the same profile's own data).
+`isThingMutationInFlight` becomes `state.claims.has(thingId)` against `currentInFlight(qc)` — same self-heal, so a query from a new identity asking "is this Thing mid-mutation" correctly sees "no" once the epoch has turned over, even if A's claim was never explicitly released.
 
 ---
 
-## 4. Transition ordering
+## 4. Transition ordering (revised)
 
-### Where identity-change handling lives
+### Correction: why the Revision 1 mechanism was unsound, precisely
 
-One new hook, colocated with (not replacing) `AppContextProvider`, e.g. `useIdentityLifecycle()` called once near the root (inside `QueryClientProvider`, likely as a sibling to or wrapping `AppContextProvider` in `__root.tsx:135-150`, exact nesting decided at P7 implementation time once the realtime controller's actual dependency on this hook is known). It:
+The reviewer's point 1 is correct on both counts: (a) a `useEffect` runs after the commit that rendered the new identity's children, so those children's first render can read old cache contents; and, as the empirical findings above now show, (b) even if the effect ran at the *right* time, calling `qc.clear()` inside it would not have forced already-mounted `useQuery` consumers to stop showing old data anyway. The fix has to address both: run synchronously at the correct point in the render, **and** use `resetQueries()`, not `clear()`.
 
-1. Computes `Identity` from `useSession()` on every render.
-2. In a `useEffect` keyed on the *computed identity value* (not `session` object reference — a `TOKEN_REFRESHED` event produces a new `Session` object with the same `user.id`, and identity equality per §1 correctly treats that as unchanged, so the effect does not re-run and does not touch the epoch):
-   - If the identity actually changed since the last render: run the disposal sequence below, synchronously, before returning from the effect.
+### The gate
 
-### Disposal sequence (runs on every real identity change, in order)
+One component, `IdentityBoundary`, mounted once as the outermost wrapper around the entire protected subtree — inside `QueryClientProvider`, wrapping `AppContextProvider` + `ProfileDirectoryProvider` + `Outlet` (`__root.tsx:135-150`). `CallRingProvider`/`PushRegistrar` placement relative to the boundary is an open question, noted below, not decided here.
 
-1. **Dispose old owners first.** Call disposal hooks for whatever identity-scoped owners exist at that point in the rollout (initially: none beyond this hook itself; after P4: the actor-cache subscription; after P7: the realtime controller). Each disposal is synchronous and idempotent.
-2. **Advance the epoch** (`advanceIdentityEpoch`) — this is what makes any already-in-flight callback from the old identity self-reject per §3, including ones that started *before* step 1's disposal calls even ran (e.g. a promise that was already resolved and queued on the microtask queue).
-3. **Evict protected cache.** Call `qc.clear()` — not a selective `removeQueries` with a hand-maintained key-family list. Rationale: the P0 inventory found 18+ raw key families with no factory and at least 2 already-drifted duplicates between a factory and its call site; a hand-maintained eviction list is exactly the kind of thing that silently misses an entry the same way the factories already have. `qc.clear()` is total, simple, and cannot miss a key nobody remembered to list. The cost is that public/non-identity data (`profile-directory`, `assignable-people`, `team-members`) also gets evicted and must refetch — cheap, and correctness-safe by construction beats an enumeration that's already proven fallible in this codebase.
-4. **Only then** does the new identity's queries become eligible to run. Because step 3 happens in the same effect, synchronously, before the effect returns, React's render for the *new* identity's `enabled: Boolean(user) && !preview` queries (which re-evaluate on the next render pass, after this effect has committed) never observes the pre-eviction cache — by the time anything re-renders and re-subscribes, the cache is already empty and the epoch has already advanced.
+```tsx
+function IdentityBoundary({ children }: { children: ReactNode }) {
+  const { session, loading } = useSession();
+  const preview = isPreviewSession(session);
+  const identity = computeIdentity({ loading, session, preview });
+  const qc = useQueryClient();
 
-### Handling late completions explicitly
+  const lastIdentityRef = useRef<Identity>(identity);
+  if (requiresDisposal(lastIdentityRef.current, identity)) {
+    // Synchronous, inside this render's function body, before returning
+    // JSX -- not deferred to an effect. React guarantees this component's
+    // render executes before any descendant's render in the same commit,
+    // so by the time children render, disposal has already happened.
+    runRegisteredDisposers(qc);          // P4/P7 owners register into this
+    advanceIdentityEpoch(qc, identity);  // resets the claim/chain WeakMaps too (§3)
+    qc.resetQueries();                  // NOT qc.clear() -- see §3's empirical findings
+  }
+  lastIdentityRef.current = identity;
 
-- A **request** that started under identity A, still in flight when the effect above runs: its `queryFn` (for entity-only-keyed queries) checks its captured epoch before returning (per §3) — even though `qc.clear()` in step 3 has already dropped any result it might have cached, the epoch check is what stops it from writing a *new* cache entry after the clear, which `qc.clear()` alone cannot prevent (clear only affects what's in the cache *now*, not future writes from stragglers).
-- A **mutation** that started under identity A, settling after B is active: `withOptimisticPatch`'s epoch-guarded rollback/success paths (§3) skip their cache writes. The mutation's server-side effect (the RPC) already happened and cannot be undone by this design — that's a server-side concern (idempotency, RLS), not a client-cache concern, and out of scope here.
-- A **realtime event or timer** queued before disposal: covered by the owner's own disposal (step 1) plus the epoch check as defense-in-depth (§3's table).
+  if (identity.kind === "pending") return <AuthResolvingFallback />;
+
+  return <IdentityContext.Provider value={identity}>{children}</IdentityContext.Provider>;
+}
+
+function requiresDisposal(prev: Identity, next: Identity): boolean {
+  if (prev.kind === "pending") return false; // nothing existed yet to dispose
+  return !identityEquals(prev, next);
+}
+```
+
+This is a deliberate, narrow use of React's sanctioned "adjust state/refs during render in response to a changed input" pattern (the same category as React's own documented "reset state when a prop changes" recipe) — not a `useEffect`, specifically because the ordering guarantee this needs (parent's disposal *before* any descendant renders in the *same* commit) is something only synchronous-during-render code gets, and `useEffect` does not.
+
+### Does the protected subtree remount?
+
+**No, not by default**, and this is a real answer, not an assumption (per the reviewer's explicit instruction not to assume). `resetQueries()` (proven in §3) already correctly refreshes every actively-observed query without destroying and recreating the component tree — a full remount would be a heavier mechanism than the `QueryClient`-cache problem actually requires, once `resetQueries()` is used instead of `clear()`.
+
+This means the *cache* dimension of the problem is solved without a remount. It does **not** mean every other kind of state a mounted component might hold is automatically safe — see the next two subsections, which the reviewer specifically flagged and which this revision does **not** claim to have solved just by adding the gate.
+
+### What a non-remounting design does not cover, named explicitly
+
+1. **Local component state / open UI tied to a now-inaccessible entity.** A Thing detail panel open for a Thing the new identity can't see isn't addressed by this design at all — that's a routing/authorization-boundary question (does the app's existing 403/404 handling already close or redirect such a view?), not a cache-lifecycle question. **Open question, needs implementation-time verification against how the router currently handles an authorization failure mid-view** — not resolved in this document.
+2. **`use-list-messages.ts`'s mounted-consumer gap (reviewer's point 5, confirmed, not fixed by this revision).** Its effect's dependency array is `[listId, preview, hidden, qc]` (`use-list-messages.ts:128`) — no profile id. If a component using this hook stays mounted across a live A → live B switch on the same route (this requires verifying whether the app's own navigation flow even allows staying on the same route through an account switch — **not verified in this document**), its `list-chat:${listId}` broadcast channel keeps running, and its `invalidate()`/`broadcastChange()` calls keep firing, attributed to whichever identity happens to be active when they run. `resetQueries()` does not touch a component's own `useEffect`-owned channel subscription — only `QueryClient`-observed data. **This is not resolved by `IdentityBoundary` and is not claimed to be.** It's recorded as a named, tracked gap for P8 (which already owns chat/hub redesign per the plan's sequencing) rather than silently deferred — see §5 and §6 for the test that documents it.
+
+### Distinguishing unresolved auth from confirmed logout
+
+Solved directly by the four-variant `Identity` type: `pending` renders `<AuthResolvingFallback />`; `none` renders `children` normally (a logged-out/landing surface is legitimate content, not a loading spinner) — and if `none` was reached *from* a live/preview identity, `requiresDisposal` already ran the full disposal sequence on that transition, so no protected data lingers into the logged-out view either.
 
 ---
 
-## 5. Compatibility
+## 5. Compatibility (revised)
 
-### Batch B rollback/claims (`query-updates.ts`)
+### Batch B rollback/claims
 
-No change to the chain/rollback algorithm itself (`pushChainEntry`, `spliceChainEntry`, the deep-equal "did something else touch this" check) — that machinery is unrelated to identity and stays exactly as reviewed. The only addition is the epoch guard described in §3/§4, wrapping `withOptimisticPatch`'s entry and the rollback closure's cache-write points. `claimThingMutation`/`releaseThingMutation`'s cross-surface dedup is also untouched — it's already `WeakMap<QueryClient, ...>`-scoped and has no identity dimension of its own to worry about (a claim naturally can't outlive the identity change if the mutation itself gets epoch-guarded).
+No change to `pushChainEntry`/`spliceChainEntry`'s algorithm (unchanged from Revision 1). What's different from Revision 1: the epoch-scoped, token-based claim/chain storage in §3 is now the actual mechanism (Revision 1 asserted an "epoch guard on cache-write points" that never touched these `WeakMap`s at all — that was a real gap, not a simplification).
 
-**Finding worth flagging, not fixing in P3**: `patchThingInCaches` patches "every Court query... any profile/context key" (`query-updates.ts:191-196`, `qc.getQueryCache().findAll({ queryKey: ["court"] })` — a bare prefix, matching every profile's Court cache the same way `use-lists.ts:110` does). Today, in practice, this is likely harmless because `qc.clear()` on identity change (once implemented) means only one identity's Court cache exists at a time in the common case. But it's the same *class* of prefix-match-across-profiles pattern as the `use-lists.ts` bug, and if a future change ever keeps two identities' data alive in one `QueryClient` simultaneously (e.g. a multi-account feature), this becomes exploitable the same way. Recommend a follow-up, scoped commit to change this to `findAll({ queryKey: ["court", identity.profileId] })` once `useIdentityLifecycle()` exists and can supply the current profile id — not blocking this design's approval, since today's single-identity-per-client invariant (enforced by `qc.clear()` in step 3 of §4) makes it safe in the meantime.
+**Correction**: Revision 1 referenced "a finally cache write on success" in `withOptimisticPatch` that does not exist in the current code — `withOptimisticPatch` has no additional write on success at all; the pre-flight optimistic write from `patchThingInCaches` *is* the final state once `fn()` resolves without throwing (the function's own comment says exactly this: "On success, the patch is left in place"). The actual guard points, precisely:
 
-### Chat (`use-list-messages.ts`)
+1. After `await cancelThingReads(...)` resolves, **before** calling `patchThingInCaches` or invoking `fn()` (the RPC dispatch) at all: check the claim token's epoch is still current. If not, release nothing new was claimed for and return early. This is stronger than just "don't write a stale patch" — it means a mutation whose *intent* was formed under identity A never fires its RPC once B is active, which matters because the underlying Supabase client always authenticates with whatever session is *currently* active, not whatever was active when the JS closure was created — dispatching `fn()` late would run the RPC under B's credentials for a mutation A initiated, not merely write stale cache data.
+2. Inside the rollback closure, at each cache-write point (unchanged from Revision 1's intent, now correctly grounded — the epoch-scoped chain storage from §3 makes this fall out of `spliceChainEntry`'s existing "not found" handling rather than needing a new explicit check).
+3. **Not yet enumerated, and not claimed to be solved by the core primitive**: every caller-level `onSuccess`/`onError` handler that does its own `qc.invalidateQueries(...)` outside `query-updates.ts` — the P0 inventory lists dozens of these call sites (`CourtWithOthersSidebar.tsx`, `MagicBox.tsx`, `ThingDetailContent.tsx`, `use-thing-comments.ts`, `personal-shred.ts`, `personal-snooze.ts`, `use-profile.ts`, `use-buckets.ts`, and more). A stale-epoch invalidation from one of these after a switch is a smaller, "wastes a request" problem for profile-scoped keys (whose key already differs after a switch) but a real problem for anything targeting an entity-only key. **This needs a file-by-file audit at implementation time**, the same way P2's read-error-policy audit went file-by-file — this design proposes the primitive (an exported `isEpochCurrent`/`withEpochGuard` helper any caller can use) but does not claim the retrofit is complete or even fully scoped yet. Toasts/notifications and any navigation side effect a mutation callback triggers need the same audit; none were found to exist for these specific mutations in the P0/P2 passes, but that was not an exhaustive search for this purpose.
 
-No change proposed here in P3. `["list-messages", listId]` stays entity-only (a List's messages are shared among members, same reasoning as §2). The per-list `list-chat:${listId}` broadcast channel (`use-list-messages.ts:117-122`) is a component-instance-owned channel (created/torn down with the hook's own mount lifecycle, not a global owner), so it isn't in scope for P3's identity-epoch work at all — it's already scoped to whatever's currently mounted, and unmounts naturally on navigation away, independent of identity. P8 (chat/hub integration) is where this gets reconsidered, per the plan's own sequencing.
+### Chat, calls, presence
 
-**Adjacent finding, out of scope for P3 but worth recording**: `chat-read-state.ts:19,30` stores "last read at" timestamps in `localStorage` keyed only by `listId` (`${READ_STORAGE_PREFIX}${listId}`), with no profile scoping at all. On a shared device where profile A signs out and profile B (a different member of the same List) signs in, B would inherit A's last-read timestamp for any List they both belong to, potentially suppressing B's unread indicator for messages B hasn't actually read. This is `localStorage`, not the `QueryClient` cache, so `qc.clear()` in §4 does not touch it — it needs its own fix (profile-scoped storage key) and its own test, scoped to P8 (hub/chat) rather than bundled into P3.
+Calls (`call-room.ts`, `call-lobby.ts`) and presence (`presence.ts`): unchanged from Revision 1 — zero `QueryClient` interaction, nothing in this design touches them.
 
-### Calls and presence
+Chat (`use-list-messages.ts`): the mounted-consumer gap is now a **named, tracked compatibility risk**, not a footnote — see §4. `chat-read-state.ts`'s unscoped `localStorage` "last read" keys (Revision 1's finding) stands unchanged: still `localStorage`, still untouched by `resetQueries()` or anything else in this design, still deferred to P8.
 
-**No change.** `call-room.ts`'s per-call channel and `call-lobby.ts`'s ring mechanism have zero `queryClient` interaction (confirmed in the P0 inventory) — nothing about the identity/cache lifecycle touches them. `presence.ts`'s ref-counted singleton channel is likewise entirely outside `QueryClient` and is explicitly the *precedent* this design's owner-disposal pattern (P4/P7) should follow for its own lifecycle shape — but presence itself needs no code change for P3. Its one known caveat (documented in the P0 inventory: `selfId` isn't re-keyed if a second, different identity calls `ensureChannel` while the channel is already open) is a real gap, but presence's `refCount`-based lifecycle is orthogonal to `QueryClient` identity — if it needs fixing, that's a presence-specific fix, not something this design's epoch mechanism can or should reach into.
+**New finding**: `AppContextProvider.tsx:33` reads a **bare, non-profile-scoped** `STORAGE_KEY` (`"katalist.active_context"`) for live sessions — only the demo path scopes its storage key by persona (`demoContextKey()`, lines 11-17). On a shared device, profile A's last-picked work/home context can render for profile B's very first paint, before the existing DB-driven effect (lines 45-61) corrects it shortly after. This is the same *class* of gap as the `chat-read-state.ts` finding — `localStorage`, not `QueryClient`, unaffected by anything in §3/§4 — named here, not fixed, for whenever `AppContextProvider.tsx` is next touched.
 
 ### Drafts
 
-**Finding**: grepping the tree for persisted draft/compose state found no `QueryClient`-cached or `localStorage`-persisted draft mechanism at all — `ListCallPanel.tsx:164`'s `draft` is local `useState` for an in-call chat compose box, cleared on send (`ListCallPanel.tsx:722-725`) and naturally reset on component unmount. There is currently nothing that needs identity-scoping under "drafts" because nothing persists a draft across an identity change today. If a future feature adds persisted drafts (e.g. a List-message compose box that survives navigation), it should key any such storage by `(profileId, listId)`, following the same principle as everything else in this design — but there's no existing behavior to preserve or migrate here.
+Unchanged from Revision 1 — no persisted draft mechanism found in the tree; nothing to migrate.
 
 ---
 
-## 6. Tests
+## 6. Tests (revised — real `QueryClient`/`QueryObserver`, not just fake epoch functions)
 
-All of these are deterministic (fake `QueryClient` + fake identity transitions + fake scheduling where relevant) and run in the existing plain-Node test runner — no browser needed for any of them. Browser/staging checks are listed separately and explicitly marked **pending** per the plan's own instruction not to claim unverified checks as done.
+### Already run as empirical grounding for this revision (to be formalized as permanent tests, not just scratch probes)
 
-### Deterministic (to be written at P3 implementation time, not in this doc)
+These use the actual installed `@tanstack/react-query` `QueryClient`/`QueryObserver` classes directly — no React, no DOM, runnable today in the existing plain `node:test` runner with zero new dependencies:
 
-1. **Live A → live B**: after `advanceIdentityEpoch`, `qc.getQueryCache().getAll()` is empty; a query enabled for B does not observe any of A's previously-cached entries.
-2. **Live A → logout**: same eviction; identity becomes `{ kind: "none" }`; no query is `enabled`.
-3. **Preview → live, live → preview**: identity `kind` change alone (with or without a `profileId` collision) triggers the same disposal sequence.
-4. **Same-user token refresh**: constructing two `Session` objects with the same `user.id` but different tokens and feeding both through the identity computation does *not* advance the epoch and does not evict the cache (regression guard against `useSession()`'s `setSession(next)` being mistaken for an identity change).
-5. **Context switch preserves identity**: switching `work` ⇄ `home` does not advance the epoch and does not evict the cache; only context-scoped keys' active query changes.
-6. **Pending A request resolves after B activates**: a fake entity-only `queryFn` that captures its epoch, `advanceIdentityEpoch` fires mid-flight, then the `queryFn` resolves — assert it throws `StaleIdentityError` and never calls `qc.setQueryData`.
-7. **Pending A mutation settles after B activates**: a fake `withOptimisticPatch` call, epoch advances mid-flight, mutation resolves (success and failure both) — assert no `setQueryData` call occurs on either path.
-8. **Old-epoch timer/channel callback runs after cleanup**: schedule a fake callback capturing the epoch, advance the epoch, fire the callback — assert it no-ops.
-9. **List initial-data seeding cannot scan another profile's cache**: seed the `QueryClient` with `keys.lists("profile-A", "work")` data, then run `useList`-equivalent initial-data lookup for `profileId: "profile-B"` — assert it does not return A's row. (This test should fail against the *current* code, proving the `use-lists.ts:110` finding in §2 is real, the same "verify it fails against pre-fix source" discipline used for every fix so far this batch.)
+1. **`qc.clear()` leaves an active observer stale** — documents *why* `resetQueries()` is used instead; written as a passing "this is why we don't do X" regression guard, not a bug report.
+2. **`qc.resetQueries()` (no filter) correctly refreshes an active observer and evicts an inactive one without an eager refetch.**
+3. **A slow fetch in flight under the old identity does not clobber a newer post-switch fetch for the same key** — proves TanStack's own fetch-generation tracking, which §3 now relies on instead of an app-level guard for this specific race.
 
-### Browser/staging — explicitly pending, not run
+### To be written at implementation time
 
-- Actual account switch in a real browser tab: confirm no visual flash of the old account's data.
-- Actual token refresh in a real session: confirm no observable re-fetch storm or flicker.
-- Actual work/home switch: confirm no cross-context data appears, and confirm whether the existing `qc.invalidateQueries()` in `AppContextProvider.tsx:79` (full, keyless — see the P0 inventory) can be safely narrowed once the context-scoped keys are confirmed sufficient on their own, or whether it's still covering something the key scoping doesn't. **This needs a browser session to observe actual behavior before touching that line — not something to decide from static reading alone.**
-- Two browser tabs, two different accounts, same device: confirm `localStorage`-based state (session mode, demo persona, the `chat-read-state.ts` finding in §5) doesn't cross-contaminate — this is explicitly a `localStorage` question, not a `QueryClient` question, and needs real multi-tab observation.
+4. **`identity-epoch.test.mjs`** — pure epoch primitive: capture/compare, pending→known vs. known→known transition classification, `requiresDisposal` truth table.
+5. **`thing-mutation-claim-epoch.test.mjs`** — reproduces the reviewer's exact finding (`claimSurvivesClear`, `nextIdentityCanClaim`) against **today's** code first, as a documented, currently-failing regression test (matching this batch's established discipline of proving a fix against a real failure before trusting it), then proves the token+self-heal fix resolves it: A claims, epoch advances, A's stale token fails to release, B successfully claims the same `thingId`, A's late `finally` release is a no-op against B's claim.
+6. **`use-list-messages` mounted-consumer gap** — a test that documents (not fixes) the retained-subscription behavior across a simulated identity change, so P8 inherits a concrete regression check instead of rediscovering the gap.
+7. **Component-level test for a mounted consumer across a live A → live B switch** — this is the one item in the reviewer's request that **cannot be delivered with existing tooling**. `package.json` has `react`/`react-dom`/`@tanstack/react-query` but no `@testing-library/react`, no `@testing-library/dom`, and no DOM environment (`jsdom`/`happy-dom`) — confirmed by inspection, not assumed. Writing a real "render `IdentityBoundary` + a mock protected consumer, simulate a switch, assert the DOM never shows stale content" test requires adding these as new devDependencies. **This is a decision point requiring sign-off, not just a design choice** — proposed as its own dedicated, reviewable, test-infra-only commit (no production code in the same commit) before the component-level test is written. Until that's decided, this specific test category stays **pending**, named honestly rather than substituted with another fake-mock test dressed up as equivalent.
+
+### Browser/staging — unchanged from Revision 1, still explicitly pending
+
+Real account switch, real token refresh, real work/home switch (including whether `AppContextProvider.tsx:79`'s existing full `qc.invalidateQueries()` can be narrowed once this design's key/reset scoping is confirmed sufficient — still needs real browser observation, not static reading), two-tab/two-account `localStorage` contamination (now including the newly-found `AppContextProvider` storage-key gap alongside `chat-read-state.ts`'s).
 
 ---
 
-## 7. Tradeoffs, alternatives, and migration sequence
+## 7. Tradeoffs, alternatives, and migration sequence (revised)
 
-### Recommended approach (summarized)
+### Alternatives considered and rejected (updated)
 
-- Identity = `(kind, profileId)`, computed from existing `useSession()`/`isPreviewSession()` — no new auth listener.
-- Keep entity-only keys as-is; don't do a mechanical profile-namespacing migration.
-- Fix the one already-broken prefix-scan (`use-lists.ts:110`) as a narrow, isolated change.
-- Add one `WeakMap<QueryClient, IdentityEpoch>` (same pattern as `query-updates.ts`'s existing two WeakMaps) plus one root-level effect that disposes owners, advances the epoch, and calls `qc.clear()` — in that order — on real identity changes only.
-- Epoch-guard entity-only `queryFn`s and `withOptimisticPatch`'s cache-write points.
-- Defer the `patchThingInCaches` cross-profile-prefix finding and the `chat-read-state.ts` `localStorage` finding to later, explicitly-scoped commits — name them now, fix them later, don't bundle them into P3.
+1. Global profile-namespaced key migration — still rejected, but for the corrected reason in §2 (contingent on the isolation boundary being proven, not on an RLS argument that doesn't apply to viewer-relative fields).
+2. **Relying on `qc.clear()` alone** — this was Revision 1's actual proposal, and it's now retracted with empirical evidence (§3) rather than replaced with a different assumption.
+3. **Remounting the whole protected subtree as the primary mechanism** — considered again in this revision specifically because the reviewer asked me not to assume it isn't needed. Rejected as the *primary* mechanism because `resetQueries()` is proven sufficient for the `QueryClient`-cache dimension without the cost of destroying local component state (scroll position, open dialogs) that has nothing to do with identity. Not rejected as *categorically* wrong — individual components remain free to key/remount themselves for their own local-state reasons, and §4 names at least one place (a detail view of a now-inaccessible entity) where something in that spirit may still be needed, pending the routing-boundary investigation.
+4. A parallel non-`QueryClient` cache, and centralizing `useSession()` — both still rejected, unchanged reasoning from Revision 1.
 
-### Alternatives considered and rejected
+### Migration sequence (revised)
 
-1. **Global profile-namespaced key migration** (rewrite every entity-only key to embed `profileId`). Rejected: large blast radius, violates the plan's own "don't combine query-key migration ... in one commit," and actively wrong for genuinely shared entities (§2, reason 2).
-2. **Selective `removeQueries` by hand-maintained key-family list instead of `qc.clear()`**. Rejected: the P0 inventory already found 18+ ungoverned raw key families and 2 confirmed drift cases — a hand-maintained list is provably the kind of thing this codebase's own history shows gets missed. `qc.clear()` is simple and can't miss an entry, at the cost of evicting a small amount of non-identity-scoped public data that just refetches.
-3. **A parallel, non-`QueryClient` identity-scoped cache** (e.g. a second `Map` keyed by `profileId`). Rejected outright per the plan's explicit instruction and because there is no evidence it's needed — every problem found (the `use-lists.ts` scan, the `patchThingInCaches` prefix, late completions) is solvable with the existing single `QueryClient` plus an epoch guard.
-4. **Centralizing `useSession()`'s auth listener into a single provider** to make identity computation "cleaner." Rejected for P3: no lifecycle problem *requires* it (identity computation only needs to *read* `useSession()`'s output once, in one new hook, not change how `useSession()` itself works), and the plan explicitly says centralization needs its own justified review, not a ride-along in this one.
+1. Fix `use-lists.ts:110`'s bare `["lists"]` scan — unchanged, still first, still isolated.
+2. Add `identity-cache-policy.ts` (epoch primitive) **together with** the epoch-scoped claim/chain storage rewrite in `query-updates.ts` — these are now one step, not two, because Revision 1's mistake was treating the `WeakMap` fix as if it fell out of "guard cache writes" for free; it doesn't, so it's built at the same time as the primitive it depends on. Includes tests 4-5 above, plus tests 1-3 formalized from the empirical probes.
+3. Add `IdentityBoundary` and wire it into `__root.tsx`, using `resetQueries()` — first behavior-changing commit. Includes the `pending`/`none`/live/preview rendering tests and the account-switch/logout/preview-toggle/context-switch scenarios from Revision 1's original list, rerun against the corrected mechanism.
+4. Guard `withOptimisticPatch`'s pre-RPC-dispatch point, using the now-epoch-scoped claim from step 2. Includes the "mutation settles after switch" test, now precisely specified (§5, guard point 1).
+5. **Decision point requiring separate sign-off**: add `@testing-library/react` + a DOM environment as devDependencies, in their own test-infra-only commit, before attempting the component-level mounted-consumer test.
+6. Named, not fixed, explicitly tracked for later phases: `patchThingInCaches`'s cross-profile `["court"]` prefix scan (Revision 1's finding, unchanged), `chat-read-state.ts` (P8), `AppContextProvider.tsx`'s non-profile-scoped live storage key (this revision's finding), `use-list-messages.ts`'s mounted-consumer gap (P8, now with a regression test to inherit rather than rediscover), and the caller-level `onSuccess`/`onError`/`invalidateQueries` audit (§5) — file-by-file, at implementation time, not resolved by the core primitive alone.
 
-### Migration sequence (small, independently reviewable commits, per the plan's §15)
-
-This design doc is itself commit 4 in the plan's numbering (P0 was commit 1, P1 was commit 2, P2 was commit 3 — already committed as `360c7c0`, `d13582b`, `cd8932a`). If approved, P3's *implementation* (still gated separately per the plan) would be:
-
-1. Fix `use-lists.ts:110`'s bare `["lists"]` scan → `["lists", profileId]`, with the regression test in §6 item 9. Small, isolated, no epoch mechanism needed yet — a correctness fix that stands on its own.
-2. Add `identity-cache-policy.ts` (the `WeakMap`, `advanceIdentityEpoch`, `isEpochCurrent`) with its own unit tests (§6 items 4-8), no wiring into the app yet — pure, testable, reviewable in isolation.
-3. Add the root-level `useIdentityLifecycle()` hook and wire it in (disposal-order + `qc.clear()`), with the account-switch/logout/preview-toggle/context-switch tests (§6 items 1-3, 5). This is the first commit that actually changes runtime behavior.
-4. Epoch-guard `withOptimisticPatch`/`patchThingInCaches`'s cache-write points, with the mutation-settles-late test (§6 item 7). Batch B's own rollback algorithm is untouched — this is additive.
-5. (Separate, later, explicitly not part of this sequence) The `patchThingInCaches` cross-profile-prefix finding and the `chat-read-state.ts` finding, each as their own scoped fix when their respective phases (a hardening pass, and P8) come up.
-
-Only after step 3 lands and is reviewed does P4 (actor cache, which needs `isEpochCurrent` to exist) or P7 (realtime ownership relocation, which needs the same) become unblocked — both remain separately gated per the original plan regardless of this document's approval.
+P4 and P7 remain gated on this design's approval, unchanged. Step 5's dependency addition is called out as needing its own explicit go-ahead separate from the rest of this design, since it's the one part of this proposal that changes the project's dependency surface rather than just its source.
