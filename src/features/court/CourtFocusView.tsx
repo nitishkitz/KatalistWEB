@@ -96,7 +96,12 @@ export function CourtFocusView({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      // D03: only the topmost overlay consumes Escape -- see the matching
+      // comment in CourtDetailModal.tsx for why this check is needed
+      // (a nested Radix layer's own capture-phase Escape handling sets
+      // defaultPrevented before this bubble-phase listener runs).
+      if (e.key === "Escape" && !e.defaultPrevented) {
+        e.preventDefault();
         onClose();
       }
     };

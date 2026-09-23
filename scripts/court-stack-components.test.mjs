@@ -30,6 +30,10 @@ const focusView = readFileSync(
   new URL("../src/features/court/CourtFocusView.tsx", import.meta.url),
   "utf8",
 );
+const detailModal = readFileSync(
+  new URL("../src/features/court/CourtDetailModal.tsx", import.meta.url),
+  "utf8",
+);
 const courtDesktop = readFileSync(
   new URL("../src/features/court/CourtDesktop.tsx", import.meta.url),
   "utf8",
@@ -120,6 +124,22 @@ test("Court focus has a real close control and identity-keyed restrained detail 
   assert.match(focusView, /key=\{`detail-\$\{column\.thingId\}`\}/);
   assert.match(focusView, /duration-\[240ms\]/);
   assert.match(focusView, /motion-reduce:transition-none/);
+});
+
+test("D03: CourtDetailModal and CourtFocusView only consume Escape if no nested overlay already did", () => {
+  // A window-level Escape listener that doesn't check defaultPrevented
+  // would also close the outer view in the same keystroke a nested Radix
+  // layer (a popover, a confirm dialog, a file preview) just used to
+  // dismiss itself with -- Radix's DismissableLayer attaches its own
+  // listener at capture:true and calls preventDefault() once it commits
+  // to closing, so checking !e.defaultPrevented here is what makes "only
+  // the topmost overlay closes" actually hold for these two custom,
+  // non-Radix overlays. (InlineThingDetailWorkspace already had this
+  // check; these two didn't.)
+  assert.match(detailModal, /e\.key === "Escape" && !e\.defaultPrevented/);
+  assert.match(detailModal, /e\.preventDefault\(\);\s*onClose\(\)/);
+  assert.match(focusView, /e\.key === "Escape" && !e\.defaultPrevented/);
+  assert.match(focusView, /e\.preventDefault\(\);\s*onClose\(\)/);
 });
 
 test("Court desktop switches only the three personal lanes between stacks and inline focus", () => {

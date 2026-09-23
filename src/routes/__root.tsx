@@ -17,6 +17,7 @@ import { RealtimeInvalidationProvider } from "@/features/realtime/RealtimeInvali
 import { CallRingProvider } from "@/features/calls/CallRingProvider";
 import { PushRegistrar } from "@/features/push/PushRegistrar";
 import { MotionPreferenceApplier } from "@/components/layout/MotionPreferenceApplier";
+import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlockerProvider";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -156,10 +157,17 @@ function RootComponent() {
         <RealtimeInvalidationProvider />
         <AppContextProvider>
           <ProfileDirectoryProvider>
-            <Outlet />
-            <CallRingProvider />
-            <PushRegistrar />
-            <Toaster />
+            {/* D03: one registry of "don't auto-open Morning Brief right
+                now" reasons (active call, open blocking dialog, dirty
+                composer) -- consumed starting in F04/H02, but mounted
+                here now so those later batches have a real provider to
+                register against instead of inventing their own. */}
+            <InteractionBlockerProvider>
+              <Outlet />
+              <CallRingProvider />
+              <PushRegistrar />
+              <Toaster />
+            </InteractionBlockerProvider>
           </ProfileDirectoryProvider>
         </AppContextProvider>
       </IdentityBoundary>

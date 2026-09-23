@@ -45,7 +45,13 @@ export function CourtDetailModal({
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      // D03: only the topmost overlay consumes Escape. A Radix layer
+      // nested inside this modal (a popover, a confirm dialog, a file
+      // preview) attaches its own Escape listener with capture:true and
+      // calls preventDefault() once it dismisses itself -- checking that
+      // here stops this modal from also closing in the same keystroke.
+      if (e.key === "Escape" && !e.defaultPrevented) {
+        e.preventDefault();
         onClose();
       }
     };
