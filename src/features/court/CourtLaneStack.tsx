@@ -17,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
 import { rpcCatchAndStart, rpcSetPersonalPace, rpcSnoozeThing, rpcSortThing } from "@/features/things/rpc";
+import { cancelThingReads, patchThingInCaches, withOptimisticPatch, type ThingPatch } from "@/features/things/query-updates";
 import {
   invalidateSnoozeSurfaces,
   snoozeUntilFor,
@@ -431,7 +432,14 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     // Hide a card immediately, then reconcile with the server in the background.
     // On failure the card is restored so nothing is silently lost.
     const runOptimisticRemoval = useCallback(
-      async (thing: Thing, label: string, mutate: () => Promise<unknown>) => {
+      // `patch`, when given, is applied to the shared Court/single-Thing
+      // caches via query-updates.ts — the same module ThingDetailContent's
+      // buttons use — so a Thing swiped here and a Thing detail panel open
+      // on the *same* Thing coordinate through one rollback mechanism
+      // instead of two independent ones each thinking they own the cache.
+      // Timed Snooze (personal-visibility, not a shared field) calls this
+      // with no patch at all — see runSnooze below.
+      async (thing: Thing, label: string, patch: ThingPatch | undefined, mutate: () => Promise<unknown>) => {
         if (inFlightRef.current.has(thing.id)) return;
         inFlightRef.current.add(thing.id);
         setRemovedIds((prev) => {
@@ -440,10 +448,16 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           return next;
         });
         setAnnouncement(`${thing.title} ${label}.`);
+        let rollbackPatch: (() => void) | null = null;
+        if (patch) {
+          await cancelThingReads(qc, thing.id);
+          rollbackPatch = patchThingInCaches(qc, thing.id, patch);
+        }
         try {
           await mutate();
           await onRefresh();
         } catch (error) {
+          rollbackPatch?.();
           // Roll back — the card slides back into the stack.
           setRemovedIds((prev) => {
             if (!prev.has(thing.id)) return prev;
@@ -456,7 +470,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           inFlightRef.current.delete(thing.id);
         }
       },
-      [onRefresh],
+      [onRefresh, qc],
     );
 
     const runAction = useCallback(
@@ -469,7 +483,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         // Sort and pace-later remove the card from this lane — do them optimistically.
         if (action === "later") {
           const target = activeThing;
-          void runOptimisticRemoval(target, "snoozed", async () => {
+          void runOptimisticRemoval(target, "snoozed", { personalPace: "later" }, async () => {
             await rpcSetPersonalPace(target.id, "later");
             toast.success("Snoozed.");
           });
@@ -477,10 +491,15 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         }
         if (action === "sort") {
           const target = activeThing;
-          void runOptimisticRemoval(target, `sorted in ${content.label}`, async () => {
-            await rpcSortThing(target.id);
-            toast.success("Nicely sorted.");
-          });
+          void runOptimisticRemoval(
+            target,
+            `sorted in ${content.label}`,
+            { workStatus: "sorted", sortedAt: new Date().toISOString() },
+            async () => {
+              await rpcSortThing(target.id);
+              toast.success("Nicely sorted.");
+            },
+          );
           return;
         }
 
@@ -488,10 +507,17 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         if (pendingAction) return;
         setPendingAction(action);
         try {
-          await rpcCatchAndStart(activeThing.id);
-          toast.success("Caught.");
-          await onRefresh();
-          setAnnouncement(`${activeThing.title} updated in ${content.label}.`);
+          await withOptimisticPatch(
+            qc,
+            activeThing.id,
+            { acknowledgement: "caught", workStatus: "under_progress", personalPace: "next" },
+            async () => {
+              await rpcCatchAndStart(activeThing.id);
+              toast.success("Caught.");
+              await onRefresh();
+              setAnnouncement(`${activeThing.title} updated in ${content.label}.`);
+            },
+          )();
         } catch (error) {
           toast.error(domainErrorMessage(error));
         } finally {
@@ -506,6 +532,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         content.label,
         onRefresh,
         pendingAction,
+        qc,
         runOptimisticRemoval,
       ],
     );
@@ -521,7 +548,10 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             : option === "6h"
               ? "Snoozed for 6 hours."
               : "Snoozed until tomorrow, 9 AM.";
-        void runOptimisticRemoval(target, "snoozed", async () => {
+        // Timed Snooze is personal-visibility (thing_snooze), not a shared
+        // Thing field — no patch to apply here, unlike the pace/sort/catch
+        // actions above.
+        void runOptimisticRemoval(target, "snoozed", undefined, async () => {
           await rpcSnoozeThing(target.id, snoozeUntilFor(option));
           toast.success(label);
           await invalidateSnoozeSurfaces(qc);

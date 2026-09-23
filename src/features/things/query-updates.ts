@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Thing } from "@/domain/thing";
 
-type ThingPatch = Partial<Thing> | ((thing: Thing) => Thing);
+export type ThingPatch = Partial<Thing> | ((thing: Thing) => Thing);
 
 function applyPatch(thing: Thing, patch: ThingPatch): Thing {
   return typeof patch === "function" ? patch(thing) : { ...thing, ...patch };
