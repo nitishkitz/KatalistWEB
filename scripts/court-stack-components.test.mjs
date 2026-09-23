@@ -41,6 +41,17 @@ const courtDesktop = readFileSync(
 const courtRoute = readFileSync(new URL("../src/routes/index.tsx", import.meta.url), "utf8");
 const packageJson = readFileSync(new URL("../package.json", import.meta.url), "utf8");
 
+test("E02: both ThingDetailContent variants render the shared ThingViewOnlyBanner, not their own duplicated markup", () => {
+  // The one block confirmed byte-identical between variant="court" and
+  // the default variant before extraction -- everywhere else the two
+  // render genuinely different UIs (different layouts, different
+  // Comments/Activity implementations), so this is deliberately the only
+  // section pulled out in this pass; see KATALIST_D_TO_H_PROGRESS.md.
+  const occurrences = [...content.matchAll(/<ThingViewOnlyBanner\s*\/>/g)];
+  assert.equal(occurrences.length, 2, "one per variant branch");
+  assert.doesNotMatch(content, /View only mode · You can view details and post comments\./);
+});
+
 test("Thing detail sheet delegates to one shared content implementation", () => {
   assert.match(sheet, /<ThingDetailContent/);
   assert.match(sheet, /initialThing=\{thing\}/);

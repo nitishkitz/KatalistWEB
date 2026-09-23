@@ -10,7 +10,6 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
-  Eye,
   FileText,
   Flag,
   Folder,
@@ -77,6 +76,7 @@ import { useLocalVersion } from "./use-local-version";
 import { type ThingFile } from "@/features/things/PDFViewer";
 import { markThingAsRead } from "@/features/things/read-state";
 import { processFileForUpload } from "@/lib/file-utils";
+import { ThingViewOnlyBanner } from "./components/ThingViewOnlyBanner";
 
 export type ThingDetailContentProps = {
   initialThing: Thing | null;
@@ -559,12 +559,7 @@ export function ThingDetailContent({
           {thing.updatedAt ? ` • Updated ${format(new Date(thing.updatedAt), "MMM d, h:mm a")}` : ""}
         </p>
 
-        {viewOnly && (
-          <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[11.5px] font-semibold text-emerald-800">
-            <Eye className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-            <span>View only mode · You can view details and post comments.</span>
-          </div>
-        )}
+        {viewOnly && <ThingViewOnlyBanner />}
 
         <div className="space-y-4 pt-4">
           {/* People / Status Row */}
@@ -1083,12 +1078,7 @@ export function ThingDetailContent({
           <span aria-hidden="true">·</span>
           <span>Updated {format(new Date(thing.updatedAt), "MMM d · h:mm a")}</span>
         </p>
-        {viewOnly && (
-          <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[11.5px] font-semibold text-emerald-800">
-            <Eye className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-            <span>View only mode · You can view details and post comments.</span>
-          </div>
-        )}
+        {viewOnly && <ThingViewOnlyBanner />}
       </header>
 
       <div className="grid grid-cols-1 gap-4 px-5 py-4 xl:grid-cols-2">
