@@ -1,16 +1,14 @@
-# P3 — Identity and Cache Lifecycle Design (Revision 2)
+# P3 — Identity and Cache Lifecycle Design (Revision 3)
 
 Date: 2026-09-23
 Baseline: `cd8932a` on `katalist-plan/batch-a-baseline`
-Status: **Design proposal only. No implementation in this document.** This revision responds to five specific correctness gaps identified in review of Revision 1 (committed at `6c7a896`), including one bug the reviewer reproduced against the current code. P4/P7 remain gated pending explicit approval, unchanged.
+Status: **Design proposal only. No implementation in this document.** Revision 2 (committed at `b4bd232`) was not approved. This revision replaces §4's transition mechanism entirely in response to three further correctness gaps in that mechanism, plus the reviewer's explicit direction to design around "an aligned fallback + layout-effect disposal + protected-subtree identity snapshot/remount strategy." P4/P7 remain gated.
 
-**What changed since Revision 1, and why**: every one of the five review points below turned out to be correct, and researching the fix for point 1 surfaced an empirical finding that changes the core mechanism (`qc.clear()` does not do what Revision 1 assumed — see §3). Nothing here is defended by re-asserting the old argument; where Revision 1 was wrong, that's stated plainly.
+**What changed since Revision 2, and why**: Revision 2 fixed the five gaps found in Revision 1, but its own transition mechanism (§4) had three further problems, all confirmed on review: (1) it ran real side effects — disposal, epoch advance, `resetQueries()` — synchronously during render, which is not a valid use of React's "adjust state during render" pattern (that pattern covers deriving plain state values, not dispatching subscriptions-teardown and network calls); (2) it never actually *established* that only one identity's queries are ever observed at once — it asserted `resetQueries()` reaches every live observer (true, proven in §3) but treated "eventually reaches them" as equivalent to "never observed under two identities simultaneously," which it isn't; (3) it assumed the whole transition completes within one render pass instead of defining a real, inspectable "transition in progress" state.
 
-1. §4's root-`useEffect` disposal timing was unsound — corrected with a synchronous, render-time gate (no reliance on effect ordering).
-2. §2's "not actively wrong, no correctness benefit" framing for viewer-dependent computed fields (role, "Owned by you", unread counts) was wrong — retracted; the actual argument for keeping entity-only keys now rests entirely on the isolation boundary being provably airtight, not on RLS.
-3. The claim/chain `WeakMap`s in `query-updates.ts` are **not** touched by anything in Revision 1's epoch-guard proposal — reproduced and fixed below with epoch-scoped, token-based ownership.
-4. The guard-point list was incomplete and contained an inaccurate claim about the code (`withOptimisticPatch` has no "finally cache write on success" — corrected).
-5. `use-list-messages.ts`'s mounted-consumer gap is real and is **not** resolved by this revision's mechanism either — named explicitly as an open gap for P8, not silently assumed away.
+Revision 3's §4 replaces the mechanism with: an explicit three-state gate (`pending` / `aligning` / `ready`) where `aligning` withholds the entire protected subtree (nothing renders, so nothing can observe under two identities at once); all real side effects moved into a `useLayoutEffect` (the sanctioned place for post-commit, pre-paint work); and the protected subtree keyed by identity, forcing a genuine unmount/remount on every real identity change rather than relying solely on `resetQueries()` reaching already-mounted observers. §1–§3, §5–§7 are otherwise unchanged from Revision 2 except where §4's new mechanism required a cross-reference update (noted inline).
+
+Also carried forward, unresolved, from earlier revisions and this one: the component-level test needed to actually verify this mechanism's browser/React behavior (Strict Mode double-invocation, layout-effect-before-paint timing) requires `@testing-library/react` + a DOM environment, which are not currently installed. The reviewer's point that "QueryClient probes prove library behavior, not React boundary behavior" is accepted in full — §6 now treats that test as **required before this mechanism can be considered verified**, not as a nice-to-have alongside the probes.
 
 ---
 
@@ -130,62 +128,101 @@ Same treatment for `chainsByClient`: store `{ epoch, chains: Map<locationKey, Ch
 
 ---
 
-## 4. Transition ordering (revised)
+## 4. Transition ordering (Revision 3 — replaces Revision 2's mechanism entirely)
 
-### Correction: why the Revision 1 mechanism was unsound, precisely
+Revision 2's mechanism is withdrawn, not patched. Three specific problems with it, all confirmed correct on review:
 
-The reviewer's point 1 is correct on both counts: (a) a `useEffect` runs after the commit that rendered the new identity's children, so those children's first render can read old cache contents; and, as the empirical findings above now show, (b) even if the effect ran at the *right* time, calling `qc.clear()` inside it would not have forced already-mounted `useQuery` consumers to stop showing old data anyway. The fix has to address both: run synchronously at the correct point in the render, **and** use `resetQueries()`, not `clear()`.
+1. **Doing `runRegisteredDisposers`/`advanceIdentityEpoch`/`resetQueries()` synchronously inside the render body is not a sanctioned use of React's "adjust state during render" pattern — it's a render-purity violation.** That pattern exists for deriving/resetting *plain state values* in response to a changed input (React's own docs example: resetting a `useState` counter to `0` when a `userId` prop changes). It does not cover dispatching real external side effects — disposing subscriptions, mutating module-level `WeakMap`s other code reads, and triggering network fetches via `resetQueries()`. Render can run more than once for the same commit (React Strict Mode's intentional double-invoke in development, and concurrent rendering can discard an in-progress render entirely), and none of those side effects are safe to run an indeterminate number of times or to run and then have their work thrown away.
+2. **Revision 2's gate never actually guaranteed exclusivity.** Even granting the timing were sound, nothing in Revision 2 stopped a `useQuery` inside `children` from being *already mounted* (from before the transition) and continuing to observe under the old identity while disposal was still in progress — Revision 2 asserted `resetQueries()` reaches all live observers, which is true (§3), but "eventually reaches them" is not the same as "they were never observed under two identities in the same instant," and the design never established the latter.
+3. **Revision 2 treated the transition as instantaneous** (render, dispose, render children — all in one pass) instead of defining a real, inspectable state for "a transition is in progress." That's an assumption, not a specification — exactly what was asked not to do.
 
-### The gate
+### The corrected mechanism: an explicit `aligning` state, disposal in a layout effect, and a keyed remount of the protected subtree
 
-One component, `IdentityBoundary`, mounted once as the outermost wrapper around the entire protected subtree — inside `QueryClientProvider`, wrapping `AppContextProvider` + `ProfileDirectoryProvider` + `Outlet` (`__root.tsx:135-150`). `CallRingProvider`/`PushRegistrar` placement relative to the boundary is an open question, noted below, not decided here.
+```ts
+type GateStatus =
+  | { status: "pending" }                                    // auth not yet resolved
+  | { status: "aligning"; identity: Identity }                 // disposal in progress -- protected subtree is not rendered at all
+  | { status: "ready"; identity: Identity };                    // safe: disposal for this identity has completed
+```
 
 ```tsx
 function IdentityBoundary({ children }: { children: ReactNode }) {
   const { session, loading } = useSession();
   const preview = isPreviewSession(session);
-  const identity = computeIdentity({ loading, session, preview });
+  const nextIdentity = computeIdentity({ loading, session, preview });
   const qc = useQueryClient();
 
-  const lastIdentityRef = useRef<Identity>(identity);
-  if (requiresDisposal(lastIdentityRef.current, identity)) {
-    // Synchronous, inside this render's function body, before returning
-    // JSX -- not deferred to an effect. React guarantees this component's
-    // render executes before any descendant's render in the same commit,
-    // so by the time children render, disposal has already happened.
-    runRegisteredDisposers(qc);          // P4/P7 owners register into this
-    advanceIdentityEpoch(qc, identity);  // resets the claim/chain WeakMaps too (§3)
-    qc.resetQueries();                  // NOT qc.clear() -- see §3's empirical findings
+  const [gate, setGate] = useState<GateStatus>(() =>
+    nextIdentity.kind === "pending" ? { status: "pending" } : { status: "aligning", identity: nextIdentity },
+  );
+
+  // Render stays pure: this is a plain comparison and a setState call,
+  // nothing external. It only decides *that* a transition is needed and
+  // records *which* identity it's for -- it does not run disposal,
+  // does not touch the QueryClient, and is safe to execute any number
+  // of times (Strict Mode's double-render, a discarded concurrent
+  // render) because it has no effect beyond computing what to render.
+  const committedIdentity = gate.status === "ready" ? gate.identity : null;
+  if (
+    nextIdentity.kind !== "pending" &&
+    !identityEquals(committedIdentity, nextIdentity) &&
+    !(gate.status === "aligning" && identityEquals(gate.identity, nextIdentity))
+  ) {
+    setGate({ status: "aligning", identity: nextIdentity });
   }
-  lastIdentityRef.current = identity;
 
-  if (identity.kind === "pending") return <AuthResolvingFallback />;
+  // Every real side effect -- disposal, epoch advance, resetQueries()
+  // -- lives here, not in render. useLayoutEffect is the right tool
+  // specifically because React guarantees it runs after this render's
+  // DOM is committed but before the browser paints, and a state update
+  // made inside it is applied (re-rendering and re-committing) before
+  // that paint happens too -- so the transition can require zero, one,
+  // or more extra synchronous passes without ever needing render itself
+  // to do the work. While gate.status is "aligning", the block below
+  // renders <AligningFallback />, not `children` -- nothing under this
+  // boundary is mounted, so no useQuery anywhere in the protected
+  // subtree can be observing under two identities at once. This is the
+  // exclusivity guarantee Revision 2 asserted but never established.
+  useLayoutEffect(() => {
+    if (gate.status !== "aligning") return;
+    runRegisteredDisposers(qc);           // P4/P7 owners register into this; must be idempotent (Strict Mode)
+    advanceIdentityEpoch(qc, gate.identity); // also resets the claim/chain WeakMaps (§3)
+    qc.resetQueries();                    // NOT qc.clear() -- see §3's empirical findings
+    setGate({ status: "ready", identity: gate.identity });
+  }, [gate, qc]);
 
-  return <IdentityContext.Provider value={identity}>{children}</IdentityContext.Provider>;
-}
+  if (gate.status === "pending") return <AuthResolvingFallback />;
+  if (gate.status === "aligning") return <AligningFallback />;
 
-function requiresDisposal(prev: Identity, next: Identity): boolean {
-  if (prev.kind === "pending") return false; // nothing existed yet to dispose
-  return !identityEquals(prev, next);
+  return (
+    <IdentityContext.Provider value={gate.identity}>
+      {/* Keyed by identity: forces React to fully unmount the previous
+          identity's protected subtree and mount a genuinely fresh one,
+          rather than reusing existing component instances/observers.
+          See "Why remount" below for what this buys beyond resetQueries(). */}
+      <Fragment key={identityKey(gate.identity)}>{children}</Fragment>
+    </IdentityContext.Provider>
+  );
 }
 ```
 
-This is a deliberate, narrow use of React's sanctioned "adjust state/refs during render in response to a changed input" pattern (the same category as React's own documented "reset state when a prop changes" recipe) — not a `useEffect`, specifically because the ordering guarantee this needs (parent's disposal *before* any descendant renders in the *same* commit) is something only synchronous-during-render code gets, and `useEffect` does not.
+### Why remount, given `resetQueries()` already works (§3)
 
-### Does the protected subtree remount?
+`resetQueries()` is still necessary and correct — it's what makes the layout effect's disposal actually take effect on any observer that happens to still exist. But relying on it *alone*, as Revision 2 did, means the guarantee depends on trusting `QueryObserver` internals (that every currently-mounted observer, however deeply nested, correctly receives and acts on the reset) rather than on something directly verifiable from the tree structure. Keying the protected subtree by `identityKey(identity)` makes the guarantee structural instead: React unmounts every component in the old subtree (running all their cleanup effects — closing the per-list chat channel, releasing local `useState`/refs, discarding any component holding a reference to a now-stale `QueryObserver`) and mounts entirely new component instances only after the layout effect's disposal has already run (`aligning` is rendered first; `ready` — and the remount — only happens after `setGate({ status: "ready", ... })`, which is itself sequenced after `resetQueries()` in the same effect). There is no window where an old component instance is still alive holding an old `QueryObserver` subscription while a new identity's data exists in the cache.
 
-**No, not by default**, and this is a real answer, not an assumption (per the reviewer's explicit instruction not to assume). `resetQueries()` (proven in §3) already correctly refreshes every actively-observed query without destroying and recreating the component tree — a full remount would be a heavier mechanism than the `QueryClient`-cache problem actually requires, once `resetQueries()` is used instead of `clear()`.
+This directly resolves the reviewer's point 5 (`use-list-messages.ts`'s mounted-consumer gap): if the component calling that hook is anywhere inside `children`, the remount tears down its effect (closing the `list-chat:${listId}` channel) unconditionally on every real identity change, regardless of whether `listId`/`preview`/`hidden`/`qc` themselves changed. This was unresolved in Revision 2 and is resolved here, **provided** the component sits inside the boundary — see the placement note below.
 
-This means the *cache* dimension of the problem is solved without a remount. It does **not** mean every other kind of state a mounted component might hold is automatically safe — see the next two subsections, which the reviewer specifically flagged and which this revision does **not** claim to have solved just by adding the gate.
+**Accepted cost, stated plainly**: a live account switch (not a context switch, not a token refresh) unmounts and remounts the entire protected subtree — scroll position, open dialogs/menus, and any other local UI state tied to a specific entity are lost. This is judged acceptable because switching accounts is exactly the kind of event where a user does not expect their previous session's open modal to persist, and it only fires on the transitions in §1's table that are marked "identity changed," not on context switches or token refreshes.
 
-### What a non-remounting design does not cover, named explicitly
+### What this still does not cover, named explicitly
 
-1. **Local component state / open UI tied to a now-inaccessible entity.** A Thing detail panel open for a Thing the new identity can't see isn't addressed by this design at all — that's a routing/authorization-boundary question (does the app's existing 403/404 handling already close or redirect such a view?), not a cache-lifecycle question. **Open question, needs implementation-time verification against how the router currently handles an authorization failure mid-view** — not resolved in this document.
-2. **`use-list-messages.ts`'s mounted-consumer gap (reviewer's point 5, confirmed, not fixed by this revision).** Its effect's dependency array is `[listId, preview, hidden, qc]` (`use-list-messages.ts:128`) — no profile id. If a component using this hook stays mounted across a live A → live B switch on the same route (this requires verifying whether the app's own navigation flow even allows staying on the same route through an account switch — **not verified in this document**), its `list-chat:${listId}` broadcast channel keeps running, and its `invalidate()`/`broadcastChange()` calls keep firing, attributed to whichever identity happens to be active when they run. `resetQueries()` does not touch a component's own `useEffect`-owned channel subscription — only `QueryClient`-observed data. **This is not resolved by `IdentityBoundary` and is not claimed to be.** It's recorded as a named, tracked gap for P8 (which already owns chat/hub redesign per the plan's sequencing) rather than silently deferred — see §5 and §6 for the test that documents it.
+1. **Placement matters, and isn't fully decided.** The remount guarantee only covers components that are descendants of `IdentityBoundary`. If a persistent, always-mounted surface (e.g. the hub chat dock, if it turns out to be rendered outside `<Outlet />` rather than inside it — **not yet verified against the actual component tree**) sits as a *sibling* to the boundary rather than a descendant, it is not remounted and its identity-unsafe state is not addressed by this design. This needs an implementation-time trace of exactly what's mounted where relative to the proposed boundary position (inside `QueryClientProvider`, wrapping `AppContextProvider` + `ProfileDirectoryProvider` + `Outlet`) before this can be called complete for every consumer, not just the ones inspected so far.
+2. **A now-inaccessible entity's detail view**, if reached via a route that itself survives the remount somehow (e.g. the router's own state is outside this boundary) — still an open routing/authorization-boundary question, unchanged from Revision 2, not resolved here either.
+3. **Strict Mode double-invocation of the layout effect itself needs a real test, not an assertion.** The effect's `if (gate.status !== "aligning") return` guard should make a second, dev-only invocation a no-op (the first invocation already advanced `gate` to `ready`), but "should" is exactly the word the reviewer is pushing back on — this needs the component-level test named in §6, not a claim of correctness from reading the code.
 
 ### Distinguishing unresolved auth from confirmed logout
 
-Solved directly by the four-variant `Identity` type: `pending` renders `<AuthResolvingFallback />`; `none` renders `children` normally (a logged-out/landing surface is legitimate content, not a loading spinner) — and if `none` was reached *from* a live/preview identity, `requiresDisposal` already ran the full disposal sequence on that transition, so no protected data lingers into the logged-out view either.
+Unchanged in substance from Revision 2, now expressed as `GateStatus` variants instead of `Identity` variants: `pending` renders `<AuthResolvingFallback />`; a transition from any known identity to `{ kind: "none" }` (confirmed logout) goes through `aligning` exactly like any other real identity change (disposal runs, then `ready` renders `children` normally — a logged-out/landing surface is legitimate content, not a loading state).
 
 ---
 
@@ -205,7 +242,7 @@ No change to `pushChainEntry`/`spliceChainEntry`'s algorithm (unchanged from Rev
 
 Calls (`call-room.ts`, `call-lobby.ts`) and presence (`presence.ts`): unchanged from Revision 1 — zero `QueryClient` interaction, nothing in this design touches them.
 
-Chat (`use-list-messages.ts`): the mounted-consumer gap is now a **named, tracked compatibility risk**, not a footnote — see §4. `chat-read-state.ts`'s unscoped `localStorage` "last read" keys (Revision 1's finding) stands unchanged: still `localStorage`, still untouched by `resetQueries()` or anything else in this design, still deferred to P8.
+Chat (`use-list-messages.ts`): the mounted-consumer gap is **addressed structurally by §4's keyed-remount mechanism**, provided the component sits inside `IdentityBoundary` (placement not yet fully verified — see §4's "what this still does not cover"). This is a change from Revision 2, where the gap was named but left open. `chat-read-state.ts`'s unscoped `localStorage` "last read" keys (Revision 1's finding) stands unchanged: still `localStorage`, still untouched by a component remount or anything else in this design (remounting doesn't clear `localStorage`), still deferred to P8.
 
 **New finding**: `AppContextProvider.tsx:33` reads a **bare, non-profile-scoped** `STORAGE_KEY` (`"katalist.active_context"`) for live sessions — only the demo path scopes its storage key by persona (`demoContextKey()`, lines 11-17). On a shared device, profile A's last-picked work/home context can render for profile B's very first paint, before the existing DB-driven effect (lines 45-61) corrects it shortly after. This is the same *class* of gap as the `chat-read-state.ts` finding — `localStorage`, not `QueryClient`, unaffected by anything in §3/§4 — named here, not fixed, for whenever `AppContextProvider.tsx` is next touched.
 
@@ -227,10 +264,18 @@ These use the actual installed `@tanstack/react-query` `QueryClient`/`QueryObser
 
 ### To be written at implementation time
 
-4. **`identity-epoch.test.mjs`** — pure epoch primitive: capture/compare, pending→known vs. known→known transition classification, `requiresDisposal` truth table.
+4. **`identity-epoch.test.mjs`** — pure epoch primitive: capture/compare, pending→known vs. known→known transition classification, `requiresDisposal`-equivalent truth table for `GateStatus` transitions.
 5. **`thing-mutation-claim-epoch.test.mjs`** — reproduces the reviewer's exact finding (`claimSurvivesClear`, `nextIdentityCanClaim`) against **today's** code first, as a documented, currently-failing regression test (matching this batch's established discipline of proving a fix against a real failure before trusting it), then proves the token+self-heal fix resolves it: A claims, epoch advances, A's stale token fails to release, B successfully claims the same `thingId`, A's late `finally` release is a no-op against B's claim.
-6. **`use-list-messages` mounted-consumer gap** — a test that documents (not fixes) the retained-subscription behavior across a simulated identity change, so P8 inherits a concrete regression check instead of rediscovering the gap.
-7. **Component-level test for a mounted consumer across a live A → live B switch** — this is the one item in the reviewer's request that **cannot be delivered with existing tooling**. `package.json` has `react`/`react-dom`/`@tanstack/react-query` but no `@testing-library/react`, no `@testing-library/dom`, and no DOM environment (`jsdom`/`happy-dom`) — confirmed by inspection, not assumed. Writing a real "render `IdentityBoundary` + a mock protected consumer, simulate a switch, assert the DOM never shows stale content" test requires adding these as new devDependencies. **This is a decision point requiring sign-off, not just a design choice** — proposed as its own dedicated, reviewable, test-infra-only commit (no production code in the same commit) before the component-level test is written. Until that's decided, this specific test category stays **pending**, named honestly rather than substituted with another fake-mock test dressed up as equivalent.
+
+### Required before this mechanism can be considered verified — not optional, not substitutable by the probes above
+
+The reviewer's point stands in full: "the QueryClient probes prove library behavior, not the React boundary behavior you need... treat adding a DOM/component harness as a separate required decision, not as equivalent coverage." Tests 1-5 above (the `QueryClient`/`QueryObserver` probes and the pure epoch-primitive tests) are real and worth keeping, but none of them exercise `IdentityBoundary` itself — none of them can observe whether `aligning` is actually rendered before `ready`, whether the layout effect actually runs before paint, whether Strict Mode's double-invocation is actually idempotent in practice, or whether a mounted `use-list-messages`-style consumer's effect actually tears down on the keyed remount. Those are exactly the claims §4 makes, and none of them are proven by anything in this document yet.
+
+6. **Decision point requiring separate sign-off, now elevated to a precondition, not an optional follow-up**: add `@testing-library/react`, `@testing-library/dom`, and a DOM environment (`jsdom` or `happy-dom`) as devDependencies, in their own dedicated, reviewable, test-infra-only commit (no production code in the same commit) — confirmed absent from `package.json` by inspection, not assumed.
+7. **`identity-boundary.test.tsx`** (or equivalent, gated on item 6): render `IdentityBoundary` wrapping a minimal mock protected consumer (a component that calls a real `useQuery` against a real `QueryClient` for an entity-only key) inside a real DOM. Simulate a live A → live B switch by changing what `useSession()` returns. Assert, in order: (a) the DOM shows the `aligning` fallback, never identity A's data, at any point after the switch begins; (b) the mock consumer's mount effect count increases by exactly one across the switch (proving a real unmount+remount happened, not a reuse); (c) after settling, the DOM shows identity B's data; (d) React Strict Mode wrapping does not cause disposal/`resetQueries()`/the mount-effect count to run more than once per real transition.
+8. **`use-list-messages`-style mounted-consumer test** (gated on item 6, supersedes Revision 2's "document, don't fix" version): a mock component using the same effect-dependency shape as `use-list-messages.ts` (`[listId, preview, hidden, qc]`, no profile id) rendered inside `IdentityBoundary`'s protected subtree — assert its channel-subscription effect tears down and re-runs across a live A → live B switch, proving §4's remount claim for this specific, previously-unresolved gap rather than asserting it from the design alone.
+
+Until item 6 is decided and items 7-8 exist and pass, **§4's mechanism is a design, not a verified one** — this document does not claim otherwise.
 
 ### Browser/staging — unchanged from Revision 1, still explicitly pending
 
@@ -243,17 +288,17 @@ Real account switch, real token refresh, real work/home switch (including whethe
 ### Alternatives considered and rejected (updated)
 
 1. Global profile-namespaced key migration — still rejected, but for the corrected reason in §2 (contingent on the isolation boundary being proven, not on an RLS argument that doesn't apply to viewer-relative fields).
-2. **Relying on `qc.clear()` alone** — this was Revision 1's actual proposal, and it's now retracted with empirical evidence (§3) rather than replaced with a different assumption.
-3. **Remounting the whole protected subtree as the primary mechanism** — considered again in this revision specifically because the reviewer asked me not to assume it isn't needed. Rejected as the *primary* mechanism because `resetQueries()` is proven sufficient for the `QueryClient`-cache dimension without the cost of destroying local component state (scroll position, open dialogs) that has nothing to do with identity. Not rejected as *categorically* wrong — individual components remain free to key/remount themselves for their own local-state reasons, and §4 names at least one place (a detail view of a now-inaccessible entity) where something in that spirit may still be needed, pending the routing-boundary investigation.
+2. **Relying on `qc.clear()` alone** — this was Revision 1's actual proposal, retracted with empirical evidence (§3).
+3. **Relying on `resetQueries()` alone, with no explicit `aligning` state and no remount** — this was Revision 2's actual proposal. Rejected in this revision because it never established the exclusivity guarantee (§4, problem 2) and ran real side effects during render (§4, problem 1) — not because `resetQueries()` itself is wrong; it's still used, just no longer trusted as the *sole* mechanism.
 4. A parallel non-`QueryClient` cache, and centralizing `useSession()` — both still rejected, unchanged reasoning from Revision 1.
 
 ### Migration sequence (revised)
 
 1. Fix `use-lists.ts:110`'s bare `["lists"]` scan — unchanged, still first, still isolated.
-2. Add `identity-cache-policy.ts` (epoch primitive) **together with** the epoch-scoped claim/chain storage rewrite in `query-updates.ts` — these are now one step, not two, because Revision 1's mistake was treating the `WeakMap` fix as if it fell out of "guard cache writes" for free; it doesn't, so it's built at the same time as the primitive it depends on. Includes tests 4-5 above, plus tests 1-3 formalized from the empirical probes.
-3. Add `IdentityBoundary` and wire it into `__root.tsx`, using `resetQueries()` — first behavior-changing commit. Includes the `pending`/`none`/live/preview rendering tests and the account-switch/logout/preview-toggle/context-switch scenarios from Revision 1's original list, rerun against the corrected mechanism.
-4. Guard `withOptimisticPatch`'s pre-RPC-dispatch point, using the now-epoch-scoped claim from step 2. Includes the "mutation settles after switch" test, now precisely specified (§5, guard point 1).
-5. **Decision point requiring separate sign-off**: add `@testing-library/react` + a DOM environment as devDependencies, in their own test-infra-only commit, before attempting the component-level mounted-consumer test.
-6. Named, not fixed, explicitly tracked for later phases: `patchThingInCaches`'s cross-profile `["court"]` prefix scan (Revision 1's finding, unchanged), `chat-read-state.ts` (P8), `AppContextProvider.tsx`'s non-profile-scoped live storage key (this revision's finding), `use-list-messages.ts`'s mounted-consumer gap (P8, now with a regression test to inherit rather than rediscover), and the caller-level `onSuccess`/`onError`/`invalidateQueries` audit (§5) — file-by-file, at implementation time, not resolved by the core primitive alone.
+2. Add `identity-cache-policy.ts` (epoch primitive) **together with** the epoch-scoped claim/chain storage rewrite in `query-updates.ts` — these are now one step, not two, because Revision 1's mistake was treating the `WeakMap` fix as if it fell out of "guard cache writes" for free; it doesn't, so it's built at the same time as the primitive it depends on. Includes test 5 above, plus tests 1-3 formalized from the empirical probes and test 4 (pure `GateStatus` transition logic).
+3. **Decision point requiring separate sign-off**: add `@testing-library/react` + a DOM environment as devDependencies, in their own test-infra-only commit. Per §6, this now comes *before* step 4, not after — the mechanism in step 4 is not considered verified until tests 7-8 exist and pass.
+4. Add `IdentityBoundary` (the `pending`/`aligning`/`ready` gate, the layout effect, the identity-keyed remount) and wire it into `__root.tsx` — first behavior-changing commit. Includes tests 7-8 (component-level, real DOM) alongside the account-switch/logout/preview-toggle/context-switch scenarios from earlier revisions, rerun against the corrected mechanism.
+5. Guard `withOptimisticPatch`'s pre-RPC-dispatch point, using the epoch-scoped claim from step 2. Includes the "mutation settles after switch" test, precisely specified in §5's guard point 1.
+6. Named, not fixed, explicitly tracked for later phases: `patchThingInCaches`'s cross-profile `["court"]` prefix scan (Revision 1's finding, unchanged), `chat-read-state.ts` (P8), `AppContextProvider.tsx`'s non-profile-scoped live storage key (Revision 2's finding), the exact component-tree placement audit for §4's "what this still does not cover" item 1, and the caller-level `onSuccess`/`onError`/`invalidateQueries` audit (§5) — file-by-file, at implementation time, not resolved by the core primitive alone.
 
-P4 and P7 remain gated on this design's approval, unchanged. Step 5's dependency addition is called out as needing its own explicit go-ahead separate from the rest of this design, since it's the one part of this proposal that changes the project's dependency surface rather than just its source.
+P4 and P7 remain gated on this design's approval, unchanged. Step 3's dependency addition is called out as needing its own explicit go-ahead separate from the rest of this design, and is now sequenced *before* the behavior-changing commit it gates, not after it as an afterthought.

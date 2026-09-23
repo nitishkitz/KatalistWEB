@@ -50,7 +50,7 @@ Not begun. P0 inventory (see `2026-09-23-realtime-ownership-inventory.md`) is co
 | P0 — baseline, inventory | Completed |
 | P1 — List-detail filters + regression tests | Completed |
 | P2 — remaining read-error policy | Completed |
-| P3 — identity/cache lifecycle design | Revision 2 delivered after review found 5 real correctness gaps in Revision 1 (root-effect timing, viewer-relative-field key argument, claim/chain WeakMaps surviving disposal, incomplete guard-point list, mounted-consumer gap) — one gap's fix required empirically testing `@tanstack/react-query` directly, which found `qc.clear()` does not update already-mounted observers (`qc.resetQueries()` does); 3 real QueryClient/QueryObserver tests added as evidence. Still awaiting approval — no production code changed; P4/P7 remain gated |
+| P3 — identity/cache lifecycle design | Revision 3 delivered. Revision 2 was not approved: its transition mechanism ran real side effects during render, never established query-observation exclusivity, and assumed the transition was instantaneous. Revision 3 replaces §4 with an explicit `pending`/`aligning`/`ready` gate, disposal moved into a `useLayoutEffect`, and an identity-keyed remount of the protected subtree. Component-level DOM tests proving this mechanism are now elevated to *required, not optional* — still blocked on the same missing `@testing-library/react`/DOM-environment devDependency decision. Still awaiting approval — no production code changed; P4/P7 remain gated |
 | P4 — actor cache | Not started (depends on P3) |
 | P5 — summary/detail split, bounded feeds | Not started |
 | P6 — pure realtime routing/batching engine | Not started |
