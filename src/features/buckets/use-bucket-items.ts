@@ -9,27 +9,14 @@ import { useAppContext } from "@/features/context/use-app-context";
 import { useLists } from "@/features/lists/use-lists";
 import { keys } from "@/domain/query-keys";
 import type { Thing } from "@/domain/thing";
-import type { ListRow } from "@/features/lists/fixtures";
-import { mapDbListRows, type DbListRow } from "@/features/lists/map-list-rows";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import {
   excludePersonallyShreddedThings,
   usePersonalShred,
 } from "@/features/things/personal-shred";
+import { fetchBucketItems, type BucketItem } from "./fetch-bucket-items";
 
-export type BucketItem =
-  | { kind: "thing"; thingId: string; thing: Thing }
-  | { kind: "list"; listId: string; list: ListRow };
-
-async function fetchListsByIds(profileId: string, listIds: string[]): Promise<ListRow[]> {
-  if (!listIds.length) return [];
-  const { data: lists, error } = await supabase
-    .from("lists")
-    .select("id,name,context,owner_profile_id,updated_at")
-    .in("id", listIds);
-  if (error) throw error;
-  return mapDbListRows(profileId, (lists ?? []) as DbListRow[]);
-}
+export type { BucketItem };
 
 function resolveDemoItems(bucketId: string): BucketItem[] {
   const items: BucketItem[] = [];
@@ -85,36 +72,7 @@ export function useBucketItems(bucketId: string | undefined) {
   const query = useQuery({
     queryKey: keys.bucketItems(bucketId ?? "none"),
     enabled: Boolean(bucketId) && Boolean(user) && !preview,
-    queryFn: async (): Promise<BucketItem[]> => {
-      const { data, error } = await supabase
-        .from("bucket_items")
-        .select("thing_id, list_id")
-        .eq("bucket_id", bucketId!);
-      if (error) throw error;
-      const thingIds = (data ?? []).map((r) => r.thing_id).filter(Boolean) as string[];
-      const listIds = (data ?? []).map((r) => r.list_id).filter(Boolean) as string[];
-
-      const { data: thingRows, error: thingError } = thingIds.length
-        ? await supabase.from("things").select(THING_COLUMNS).in("id", thingIds)
-        : { data: [], error: null };
-      if (thingError) throw thingError;
-      const things = await mapDbThingRows((thingRows ?? []) as DbThingRow[]);
-      const thingById = new Map(things.map((t) => [t.id, t]));
-      const lists = await fetchListsByIds(user!.id, listIds);
-      const listById = new Map(lists.map((l) => [l.id, l]));
-
-      const items: BucketItem[] = [];
-      for (const r of data ?? []) {
-        if (r.thing_id) {
-          const thing = thingById.get(r.thing_id);
-          if (thing) items.push({ kind: "thing", thingId: thing.id, thing });
-        } else if (r.list_id) {
-          const list = listById.get(r.list_id);
-          if (list) items.push({ kind: "list", listId: list.id, list });
-        }
-      }
-      return items;
-    },
+    queryFn: () => fetchBucketItems(bucketId!, user!.id),
   });
 
   const invalidate = () => {
