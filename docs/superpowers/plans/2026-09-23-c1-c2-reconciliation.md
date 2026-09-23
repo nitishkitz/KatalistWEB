@@ -14,6 +14,16 @@ Purpose: single running status record for the C1 completion + C2 implementation 
 | Session-identity reuse (no redundant `auth.getUser()` in Court) | Completed | `fetch-court.ts`; source-level RLS evidence only, not live-verified — caveat stands |
 | Single-List fetch/mapping extraction, with eligibility filters preserved | Completed | `fetch-list-detail.ts` now requires `archived_at IS NULL` and `kind = "list"` on the primary query, with a narrowly-scoped (missing-`kind`-column only) compatibility fallback that still filters by exact id and archive status; `fetch-list-detail.test.mjs` covers normal/archived/dm-group/missing-row/fallback/permission-failure/mapper-failure, verified to fail 6/7 against the pre-fix unfiltered version |
 
+## C1 — read-error policy (P2)
+
+| Item | Status | Evidence |
+|---|---|---|
+| `map-thing-rows.ts` comment-count read | Completed | `resolveCommentCounts` now throws on failure instead of catching-and-ignoring; `mapDbThingRows` catches that specific failure into an explicit `commentCount: undefined` ("unavailable") per row, distinct from a confirmed `0`, without blanking the rest of the row or the batch. `map-thing-rows-comment-count-policy.test.mjs`, verified to fail against pre-fix source |
+| `use-trophy.ts` actor-read (feeds sorted/caught/streak/weekly) | Completed | Now throws on a real error while still resolving normally for a legitimate no-actor-yet row (`.maybeSingle()`'s `{ data: null, error: null }`) — same distinction as `fetch-court.ts`'s actor lookup |
+| `use-trophy.ts` Shred-history read (`profile_object_state`) | Completed | Error now checked and thrown instead of silently defaulting to an empty shredded list |
+| `use-trophy.ts` name-resolution reads (`things`/`lists`/`buckets` — display names for already-shredded items) | Deferred (deliberately decorative) | The shredded status itself is already established by the (now-required) Shred-history read; a failed name lookup degrades to the `object_type` fallback label rather than dropping the item or rejecting the batch — documented inline, not silently left as an oversight |
+| `map-list-rows.ts` cover-URL signing | Deferred (deliberately decorative, pre-existing) | Already fails open internally via its own try/catch; unchanged in this pass |
+
 ## C1 — broader scope (not yet started at this baseline)
 
 | Item | Status | Reason |
@@ -21,7 +31,6 @@ Purpose: single running status record for the C1 completion + C2 implementation 
 | Actor caching (profile-scoped, QueryClient-based) | Deferred | Needs its own lifecycle design (P3) before implementation (P4) — bundling it into the waterfall pass would repeat the exact mistake being corrected for C2 |
 | Route-level request counts/durations/scaling | Outstanding | No live measurement exists; mocked concurrency tests prove serialization reduction only, not request volume or latency |
 | Summary/detail separation, bounded attachments/activity, pagination | Outstanding | Not addressed by any extraction done so far; scoped to P5 |
-| `use-trophy.ts` decorative-stat error swallowing (`shreddedRows`/`tnames`/`lnames`/`bnames`/`actors`) | Deferred | Outside bucket/Thing/List/Court-partition scope; flagged, not fixed |
 
 ## C2 — realtime ownership (not yet started)
 
@@ -40,7 +49,7 @@ Not begun. P0 inventory (see `2026-09-23-realtime-ownership-inventory.md`) is co
 |---|---|
 | P0 — baseline, inventory | Completed |
 | P1 — List-detail filters + regression tests | Completed |
-| P2 — remaining read-error policy | Not started |
+| P2 — remaining read-error policy | Completed |
 | P3 — identity/cache lifecycle design | Not started (review gate — needs explicit approval before P4/P7) |
 | P4 — actor cache | Not started (depends on P3) |
 | P5 — summary/detail split, bounded feeds | Not started |

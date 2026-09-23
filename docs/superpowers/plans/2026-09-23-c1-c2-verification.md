@@ -8,7 +8,7 @@ Recorded per the plan's verification matrix (§14). Each row is filled in as the
 | Scenario | Automated evidence | Browser/staging evidence |
 |---|---|---|
 | Filter-preserving List detail | `fetch-list-detail.test.mjs` — 7/7 pass, filter-aware mocks assert actual `.eq`/`.is` arguments (not just call counts); 6/7 verified to fail against the pre-fix unfiltered version | Not run |
-| Required read failures | `fetch-buckets-error-propagation.test.mjs`, `map-list-rows-error-propagation.test.mjs`, `fetch-court-error-propagation.test.mjs` — all pass, all independently verified to fail against pre-fix source | Not run |
+| Required read failures | `fetch-buckets-error-propagation.test.mjs`, `map-list-rows-error-propagation.test.mjs`, `fetch-court-error-propagation.test.mjs`, `map-thing-rows-comment-count-policy.test.mjs`, `fetch-trophy-stats-error-propagation.test.mjs` — all pass, all independently verified to fail against pre-fix source | Not run |
 | Actor cache | Not run | Not run |
 | 20-event burst | Not run | Not run |
 | Route changes (controller mount/dispose) | Not run | Not run |
@@ -35,11 +35,13 @@ git diff --check
 | Date | Commit | typecheck | test | lint | build | diff --check | Notes |
 |---|---|---|---|---|---|---|---|
 | 2026-09-23 | `f975423` | pass | 243/243 | 0 errors, 80 warnings | pass | not run this pass | Baseline for P0; no code changed in P0 itself |
-| 2026-09-23 | (pending) | pass | 249/249 | 0 errors, 80 warnings | pass | clean | P1: List-detail eligibility filters restored |
+| 2026-09-23 | `d13582b` | pass | 249/249 | 0 errors, 80 warnings | pass | clean | P1: List-detail eligibility filters restored |
+| 2026-09-23 | (pending) | pass | 255/255 | 0 errors, 80 warnings | pass | clean | P2: comment-count and Trophy actor/Shred-history read-error policy |
 
 ## Deferrals accepted so far
 
 - Actor caching lifecycle (P4) — deferred pending P3 design review, not implemented.
 - Route-level request-count/latency/scaling measurement — deferred pending a safe staging/browser environment.
 - Summary/detail separation, bounded attachments/activity, pagination (P5) — not started.
-- `use-trophy.ts` decorative-stat error swallowing — deferred as out of the bucket/Thing/List/Court scope.
+- `use-trophy.ts` name-resolution reads (`things`/`lists`/`buckets` display names for shredded items) — deliberately decorative, documented inline; the shredded status itself is required data and is now covered.
+- `map-list-rows.ts` cover-URL signing — deliberately decorative, pre-existing, unchanged.

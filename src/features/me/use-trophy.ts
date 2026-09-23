@@ -33,9 +33,21 @@ export async function fetchTrophyStats(profileId: string): Promise<TrophyStats> 
   // independent of each other (shredded rows aren't filtered by actorId
   // at all — profile_object_state is scoped to the caller by RLS), so
   // they run concurrently instead of one after another.
-  const [mine, { data: shreddedRows }] = await Promise.all([
+  // The activity-events count/streak and the Shred history are stats,
+  // not decorative: a failed read must not masquerade as "you haven't
+  // sorted/shredded anything" (a false zero). .maybeSingle() already
+  // distinguishes a genuinely-absent actor row ({ data: null,
+  // error: null }, which legitimately means "no activity yet") from an
+  // actual read failure (error set) — same distinction as
+  // fetch-court.ts's actor lookup.
+  const [mine, { data: shreddedRows, error: shreddedError }] = await Promise.all([
     (async () => {
-      const { data: actor } = await supabase.from("actors").select("id").eq("profile_id", profileId).maybeSingle();
+      const { data: actor, error: actorError } = await supabase
+        .from("actors")
+        .select("id")
+        .eq("profile_id", profileId)
+        .maybeSingle();
+      if (actorError) throw actorError;
       const { data: events, error } = await supabase
         .from("thing_activity")
         .select("event, created_at, actor_id")
@@ -50,6 +62,7 @@ export async function fetchTrophyStats(profileId: string): Promise<TrophyStats> 
       .order("shredded_at", { ascending: false })
       .limit(10),
   ]);
+  if (shreddedError) throw shreddedError;
   const sorted = mine.filter((e) => e.event === "sorted").length;
   const caught = mine.filter((e) => e.event === "caught").length;
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -60,7 +73,11 @@ export async function fetchTrophyStats(profileId: string): Promise<TrophyStats> 
   const listIds = (shreddedRows ?? []).filter((s) => s.object_type === "list").map((s) => s.object_id);
   const bucketIds = (shreddedRows ?? []).filter((s) => s.object_type === "bucket").map((s) => s.object_id);
   // Each of these three depends only on shreddedRows above, not on each
-  // other, so they also run concurrently.
+  // other, so they also run concurrently. Unlike shreddedRows itself,
+  // these are deliberately left decorative: they only resolve a display
+  // *name* for an item whose shredded status is already established
+  // above. A failed name lookup degrades to the object_type fallback
+  // string below, rather than dropping the item or rejecting the batch.
   const [{ data: tnames }, { data: lnames }, { data: bnames }] = await Promise.all([
     thingIds.length
       ? supabase.from("things").select("id,title").in("id", thingIds)

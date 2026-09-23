@@ -93,36 +93,36 @@ async function resolveCommentCounts(
   const commentCountsByThing = new Map<string, { commentCount: number; unreadCommentCount: number }>();
   if (!thingIds.length) return commentCountsByThing;
 
-  try {
-    const { data: comments, error: commentsError } = await supabase
-      .from("thing_comments")
-      .select("thing_id, author_actor_id, created_at")
-      .in("thing_id", thingIds)
-      .is("deleted_at", null);
+  // No catch-and-ignore here: a failed comments read must be
+  // distinguishable from "this Thing genuinely has zero comments" (a
+  // Batch C1/P2 read-error-policy requirement for counts/stats), not
+  // silently collapsed to the same zero. The caller (mapDbThingRows)
+  // is the one that decides how to represent "unavailable" per-row.
+  const { data: comments, error: commentsError } = await supabase
+    .from("thing_comments")
+    .select("thing_id, author_actor_id, created_at")
+    .in("thing_id", thingIds)
+    .is("deleted_at", null);
+  if (commentsError) throw commentsError;
 
-    if (!commentsError && comments) {
-      const commentsByThing = new Map<string, Array<{ author_actor_id: string; created_at: string }>>();
-      for (const c of comments) {
-        const list = commentsByThing.get(c.thing_id) ?? [];
-        list.push({ author_actor_id: c.author_actor_id, created_at: c.created_at });
-        commentsByThing.set(c.thing_id, list);
-      }
-      for (const [tId, cList] of commentsByThing) {
-        commentCountsByThing.set(
-          tId,
-          calculateCommentCounts(
-            tId,
-            cList.map((c) => ({
-              authorActorId: c.author_actor_id,
-              createdAt: c.created_at,
-            })),
-            myActorId,
-          ),
-        );
-      }
-    }
-  } catch {
-    // ignore
+  const commentsByThing = new Map<string, Array<{ author_actor_id: string; created_at: string }>>();
+  for (const c of comments ?? []) {
+    const list = commentsByThing.get(c.thing_id) ?? [];
+    list.push({ author_actor_id: c.author_actor_id, created_at: c.created_at });
+    commentsByThing.set(c.thing_id, list);
+  }
+  for (const [tId, cList] of commentsByThing) {
+    commentCountsByThing.set(
+      tId,
+      calculateCommentCounts(
+        tId,
+        cList.map((c) => ({
+          authorActorId: c.author_actor_id,
+          createdAt: c.created_at,
+        })),
+        myActorId,
+      ),
+    );
   }
 
   return commentCountsByThing;
@@ -148,10 +148,18 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
   // scripts/map-thing-rows-concurrency.test.mjs for a deterministic
   // (event-order, not wall-clock) proof that all four start before any
   // of them resolves.
-  const [people, listNames, commentCountsByThing, realAttachmentsByThing] = await Promise.all([
+  const [people, listNames, commentCountsResult, realAttachmentsByThing] = await Promise.all([
     resolveActorPeople([...actorIds]),
     resolveListNames(listIds),
-    resolveCommentCounts(thingIds, myActorId),
+    // Comment counts are stats, not decorative — a failed read must not
+    // masquerade as "zero comments". Caught here (not inside
+    // resolveCommentCounts) so that failure produces an explicit
+    // unavailable marker per row instead of rejecting the whole batch:
+    // a failed comment-count panel doesn't need to blank every Thing.
+    resolveCommentCounts(thingIds, myActorId).then(
+      (map) => ({ available: true as const, map }),
+      () => ({ available: false as const, map: null }),
+    ),
     // Real, persisted attachments (thing_attachments + storage). Takes
     // priority over the legacy things.notes JSON blob, whose file URLs
     // were often ephemeral blob: URLs that die outside the tab that
@@ -178,7 +186,12 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
     const localThing = getThing(r.id);
     const realFiles = realAttachmentsByThing.get(r.id);
     const finalFiles = realFiles?.length ? realFiles : (parsedFiles ?? localThing?.files);
-    const commentData = commentCountsByThing.get(r.id) ?? { commentCount: 0, unreadCommentCount: 0 };
+    // `undefined` (unavailable) is distinct from `0` (confirmed no
+    // comments) at the data level, even though both currently render
+    // as "no badge" in every consumer (`(thing.commentCount ?? 0) > 0`).
+    const commentData = commentCountsResult.available
+      ? commentCountsResult.map.get(r.id) ?? { commentCount: 0, unreadCommentCount: 0 }
+      : { commentCount: undefined, unreadCommentCount: undefined };
 
     return {
       id: r.id,
