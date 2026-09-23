@@ -68,11 +68,13 @@ function newTestClient() {
 }
 
 let latestSetContext = null;
+let latestContext = null;
 function Consumer() {
-  const { setContext } = useAppContext();
+  const { setContext, context } = useAppContext();
   useEffect(() => {
     latestSetContext = setContext;
-  }, [setContext]);
+    latestContext = context;
+  }, [setContext, context]);
   return null;
 }
 
@@ -148,6 +150,74 @@ test("a context update that resolves before any switch still runs its invalidate
   });
 
   assert.equal(invalidateCallCount, 1, "the normal, no-switch path must still invalidate as before");
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+/**
+ * The live (non-preview) active-context localStorage key used to be a
+ * single bare `katalist.active_context`, unscoped by profile -- on a
+ * shared device (or switching from one signed-in account to another) one
+ * profile's saved work/home context could leak onto a different profile.
+ * The demo path was already scoped by demo actor id; these tests cover
+ * the live path's own new profile scoping and its safe-migration
+ * behavior for a pre-scoping legacy value.
+ */
+test("two different signed-in profiles on the same device do not share a saved active context", async () => {
+  globalThis.localStorage.clear();
+
+  // Profile A sets its context to "home".
+  testSession = { user: { id: "profile-A" }, session: { user: { id: "profile-A", app_metadata: {} } } };
+  resetRpcGate();
+  const qcA = newTestClient();
+  let unmountA;
+  await act(async () => {
+    const r = render(h(QueryClientProvider, { client: qcA }, h(AppContextProvider, null, h(Consumer))));
+    unmountA = r.unmount;
+  });
+  await act(async () => {
+    rpcResolve();
+    await latestSetContext("home");
+  });
+  assert.equal(latestContext, "home", "profile A's own context switch takes effect");
+  unmountA();
+  qcA.clear();
+  cleanup();
+
+  // Profile B mounts fresh on the same device/localStorage -- must not
+  // see profile A's saved "home" value.
+  testSession = { user: { id: "profile-B" }, session: { user: { id: "profile-B", app_metadata: {} } } };
+  resetRpcGate();
+  const qcB = newTestClient();
+  let unmountB;
+  await act(async () => {
+    const r = render(h(QueryClientProvider, { client: qcB }, h(AppContextProvider, null, h(Consumer))));
+    unmountB = r.unmount;
+  });
+  assert.equal(latestContext, "work", "a different profile must default to \"work\", not inherit profile A's saved context");
+
+  unmountB();
+  qcB.clear();
+  cleanup();
+});
+
+test("a pre-scoping unscoped legacy active-context value is never read as a fallback for a signed-in profile", async () => {
+  globalThis.localStorage.clear();
+  // Simulate a value written by the pre-scoping build of this feature.
+  globalThis.localStorage.setItem("katalist.active_context", "home");
+
+  testSession = { user: { id: "profile-A" }, session: { user: { id: "profile-A", app_metadata: {} } } };
+  resetRpcGate();
+  const qc = newTestClient();
+  let unmount;
+  await act(async () => {
+    const r = render(h(QueryClientProvider, { client: qc }, h(AppContextProvider, null, h(Consumer))));
+    unmount = r.unmount;
+  });
+
+  assert.equal(latestContext, "work", "the unscoped legacy value must not be credited to this (or any) signed-in profile");
 
   unmount();
   qc.clear();

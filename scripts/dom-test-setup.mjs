@@ -17,6 +17,12 @@ Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator, co
 globalThis.HTMLElement = dom.window.HTMLElement;
 globalThis.customElements = dom.window.customElements;
 globalThis.getComputedStyle = dom.window.getComputedStyle;
+// Source modules reference the bare global `localStorage`/`CustomEvent`
+// (as in a real browser), not `window.localStorage` -- jsdom only exposes
+// these on its own `window`, so code under test would otherwise silently
+// no-op (both are wrapped in try/catch for real quota/privacy-mode errors).
+globalThis.localStorage = dom.window.localStorage;
+globalThis.CustomEvent = dom.window.CustomEvent;
 
 if (!globalThis.requestAnimationFrame) {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
