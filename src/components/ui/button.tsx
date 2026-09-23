@@ -22,6 +22,12 @@ const buttonVariants = cva(
         sm: "h-8 rounded-md px-3 text-xs",
         lg: "h-10 rounded-md px-8",
         icon: "h-9 w-9",
+        // D01 touch target: a genuine 44px hit target for mobile-critical
+        // primary actions, e.g. calls/capture. [&_svg]:size-4 above keeps
+        // icon artwork the same size as the other variants -- only the hit
+        // target grows, not the icon inside it.
+        touch: "h-11 px-4 py-2",
+        "icon-touch": "h-11 w-11",
       },
     },
     defaultVariants: {

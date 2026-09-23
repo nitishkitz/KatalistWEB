@@ -136,6 +136,24 @@
   --sidebar-accent-foreground: oklch(0.22 0.02 260);
   --sidebar-border: oklch(0.88 0 0);
   --sidebar-ring: oklch(0.55 0.21 285 / 40%);
+
+  /* D01: control density tokens. Desktop's existing controls (Button/Input
+     h-9 = 36px) already clear the 32px desktop minimum; --control-height-touch
+     is for callers that need a genuine 44px hit target (mobile primary
+     actions) without inflating the icon/label artwork inside it -- pair
+     with an unchanged icon size, not a scaled-up one. */
+  --control-height-desktop: 2rem;
+  --control-height-touch: 2.75rem;
+
+  /* D01: restrained elevation tokens for Card/Popover/Dialog surfaces.
+     Defined here as the first step of D01's required surface sequence
+     (tokens -> migrate overlay consumers -> only then remove the global
+     shadow suppression below); not yet applied to any component, so this
+     is a no-op today. Values chosen for a soft, single-direction lift
+     rather than the diffuse default Tailwind shadow. */
+  --elevation-card: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --elevation-popover: 0 2px 8px 0 rgb(0 0 0 / 0.08), 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --elevation-dialog: 0 8px 24px 0 rgb(0 0 0 / 0.12), 0 2px 6px 0 rgb(0 0 0 / 0.06);
 }
 
 .dark {
@@ -245,6 +263,45 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  color: var(--color-muted-foreground);
+}
+
+/*
+ * D01 semantic type roles, additive to the page-title/subtitle/section-title
+ * utilities above (those cover the page-title and all-caps micro-label
+ * tiers already; these fill the remaining tiers the plan calls for).
+ * Existing call sites are unaffected until a page opts in during G.
+ */
+
+/* Subsection/dialog headings -- between the page title and body text. */
+@utility katalist-heading {
+  font-size: 1.0625rem; /* 17px, within the 16-18px band */
+  line-height: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-foreground);
+}
+
+/* Body copy and control labels. */
+@utility katalist-body {
+  font-size: 0.875rem; /* 14px */
+  line-height: 1.375rem; /* ~1.57, within 1.4-1.6 */
+  color: var(--color-foreground);
+}
+
+/* Dense desktop data (tables, list rows) -- never used below md. */
+@utility katalist-data-dense {
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.125rem;
+  color: var(--color-foreground);
+}
+
+/* Secondary metadata -- the 12px floor; nothing in the app should render
+   smaller than this for real content (decorative all-caps labels above
+   are the one deliberate exception). */
+@utility katalist-meta {
+  font-size: 0.75rem; /* 12px */
+  line-height: 1rem;
   color: var(--color-muted-foreground);
 }
 
