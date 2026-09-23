@@ -5,6 +5,7 @@ import {
   reconcileStackIndex,
   resistedDragOffset,
   resolveHorizontalAction,
+  shouldRestoreSelectionAfterFailedRemoval,
   stepStackIndex,
 } from "@/features/court/court-stack-model";
 
@@ -47,4 +48,52 @@ test("actions honor capability, direction, threshold, and LATER resistance", () 
     null,
   );
   assert.equal(resistedDragOffset(-100, true, false), -18);
+});
+
+test("a failed removal with no intervening navigation restores the original selection", () => {
+  // The Thing was swiped away (removedIds gained it) and its mutation then
+  // failed; nothing else navigated in the meantime (the version counter
+  // is unchanged), and the Thing is back in `things` now that the removal
+  // rolled back — so selection should return to it.
+  assert.equal(
+    shouldRestoreSelectionAfterFailedRemoval({
+      navigationVersionAtRemoval: 3,
+      currentNavigationVersion: 3,
+      removedThingId: "a",
+      things: items("a", "b", "c"),
+    }),
+    true,
+  );
+});
+
+test("a failure after intentional navigation preserves the newer selection", () => {
+  // Between the removal starting and its mutation failing, the user (or a
+  // parent component via focusThing) explicitly navigated — the version
+  // counter advanced — so the failure must not yank selection back to the
+  // Thing that was swiped away; the newer selection wins.
+  assert.equal(
+    shouldRestoreSelectionAfterFailedRemoval({
+      navigationVersionAtRemoval: 3,
+      currentNavigationVersion: 4,
+      removedThingId: "a",
+      things: items("a", "b", "c"),
+    }),
+    false,
+  );
+});
+
+test("restoration requires the Thing to actually be back in the stack", () => {
+  // Defensive: even with no intervening navigation, don't claim "restore"
+  // for a Thing that isn't (yet, or ever) back in `things` — e.g. this ran
+  // before the revert actually landed, or the Thing was independently
+  // removed by something else in the meantime.
+  assert.equal(
+    shouldRestoreSelectionAfterFailedRemoval({
+      navigationVersionAtRemoval: 1,
+      currentNavigationVersion: 1,
+      removedThingId: "z",
+      things: items("a", "b", "c"),
+    }),
+    false,
+  );
 });

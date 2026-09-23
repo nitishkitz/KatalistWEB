@@ -17,7 +17,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
 import { rpcCatchAndStart, rpcSetPersonalPace, rpcSnoozeThing, rpcSortThing } from "@/features/things/rpc";
-import { cancelThingReads, patchThingInCaches, withOptimisticPatch, type ThingPatch } from "@/features/things/query-updates";
+import {
+  cancelThingReads,
+  claimThingMutation,
+  patchThingInCaches,
+  releaseThingMutation,
+  withOptimisticPatch,
+  type ThingPatch,
+} from "@/features/things/query-updates";
 import {
   invalidateSnoozeSurfaces,
   snoozeUntilFor,
@@ -26,7 +33,7 @@ import {
 } from "@/features/things/personal-snooze";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
-import { reconcileStackIndex, stepStackIndex } from "./court-stack-model";
+import { reconcileStackIndex, shouldRestoreSelectionAfterFailedRemoval, stepStackIndex } from "./court-stack-model";
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
@@ -237,6 +244,20 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     const sectionRef = useRef<HTMLElement | null>(null);
     const animatingRef = useRef(false);
     const lastWheelTimeRef = useRef(0);
+    // Bumped by every *explicit* selection change (arrow/wheel navigation,
+    // the navigator strip, or an external focusThing() call) — never by the
+    // automatic post-removal reconciliation effect below. A failed
+    // optimistic removal uses this to tell "nothing else happened, restore
+    // the original selection" apart from "the user has since moved on,
+    // leave their newer selection alone."
+    const navigationVersionRef = useRef(0);
+    // Set by a failed removal's rollback, just before reverting removedIds,
+    // so the reconciliation effect below can decide (via
+    // shouldRestoreSelectionAfterFailedRemoval, once `things` reflects the
+    // reverted removal) whether to restore focus to this Thing.
+    const pendingSelectionRestoreRef = useRef<{ thingId: string; navigationVersionAtRemoval: number } | null>(
+      null,
+    );
 
     useLayoutEffect(() => {
       return () => {
@@ -265,11 +286,34 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     // for any card in the person's own Court, regardless of lane.
     const canSnooze = Boolean(activeThing);
     useEffect(() => {
+      const pending = pendingSelectionRestoreRef.current;
+      pendingSelectionRestoreRef.current = null;
+      // Decided here (not at rollback time) because `things` needs to
+      // already reflect the reverted removal for the "is it actually back"
+      // half of the check to mean anything.
+      const restoring = Boolean(
+        pending &&
+          shouldRestoreSelectionAfterFailedRemoval({
+            navigationVersionAtRemoval: pending.navigationVersionAtRemoval,
+            currentNavigationVersion: navigationVersionRef.current,
+            removedThingId: pending.thingId,
+            things,
+          }),
+      );
       setActiveIndex((prev) => {
-        const next = reconcileStackIndex(prev, activeThingIdRef.current, things);
+        const targetId = restoring ? pending!.thingId : activeThingIdRef.current;
+        const next = reconcileStackIndex(prev, targetId, things);
         activeThingIdRef.current = things[next]?.id ?? null;
         return next;
       });
+      if (restoring) {
+        // Also restore actual keyboard focus, not just which card is
+        // logically selected — matching what focusThing() does for the
+        // same "return attention to this specific card" case.
+        requestAnimationFrame(() => {
+          (activeButtonRef.current ?? headingRef.current)?.focus();
+        });
+      }
     }, [things]);
 
     const startNavigation = useCallback(
@@ -278,6 +322,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         const nextIndex = stepStackIndex(renderIndex, things.length, direction);
         const nextThing = things[nextIndex];
         if (!nextThing) return;
+        navigationVersionRef.current += 1;
 
         const reduceMotion =
           typeof window !== "undefined" &&
@@ -305,6 +350,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         const nextIndex = ((targetIndex % things.length) + things.length) % things.length;
         const nextThing = things[nextIndex];
         if (!nextThing || nextIndex === renderIndex) return;
+        navigationVersionRef.current += 1;
 
         const reduceMotion =
           typeof window !== "undefined" &&
@@ -441,7 +487,16 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       // with no patch at all — see runSnooze below.
       async (thing: Thing, label: string, patch: ThingPatch | undefined, mutate: () => Promise<unknown>) => {
         if (inFlightRef.current.has(thing.id)) return;
+        // inFlightRef only dedupes within this one lane instance; claimThingMutation
+        // is shared across every surface (a detail panel's own mutation, another
+        // lane) that goes through query-updates.ts for this Thing.
+        if (!claimThingMutation(qc, thing.id)) return;
         inFlightRef.current.add(thing.id);
+        // Snapshot before removing, so a later failure can tell whether
+        // anything has explicitly navigated away since (see
+        // navigationVersionRef's declaration) — if not, restore focus to
+        // this same Thing; if so, respect the newer selection instead.
+        const navigationVersionAtRemoval = navigationVersionRef.current;
         setRemovedIds((prev) => {
           const next = new Set(prev);
           next.add(thing.id);
@@ -458,6 +513,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           await onRefresh();
         } catch (error) {
           rollbackPatch?.();
+          pendingSelectionRestoreRef.current = { thingId: thing.id, navigationVersionAtRemoval };
           // Roll back — the card slides back into the stack.
           setRemovedIds((prev) => {
             if (!prev.has(thing.id)) return prev;
@@ -468,6 +524,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           toast.error(domainErrorMessage(error));
         } finally {
           inFlightRef.current.delete(thing.id);
+          releaseThingMutation(qc, thing.id);
         }
       },
       [onRefresh, qc],
@@ -589,6 +646,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       () => ({
         getPosition: () => ({ activeIndex: renderIndex, activeThingId: activeThing?.id ?? null }),
         focusThing: (thingId) => {
+          navigationVersionRef.current += 1;
           const nextIndex = reconcileStackIndex(renderIndex, thingId, things);
           setActiveIndex(nextIndex);
           activeThingIdRef.current = things[nextIndex]?.id ?? null;

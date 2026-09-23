@@ -44,6 +44,38 @@ export async function cancelThingReads(qc: QueryClient, thingId: string): Promis
 }
 
 /**
+ * Cross-surface duplicate-mutation prevention, per QueryClient. A Court
+ * swipe stack's own in-flight tracking and a Thing detail panel's own
+ * useMutation().isPending are each local to that one component instance —
+ * neither knows about the other, so the same Thing could be Caught (say)
+ * from a swipe and from an open detail panel at the same time. Claiming
+ * here is shared across every caller of withOptimisticPatch/this module
+ * for a given Thing, regardless of which UI surface is asking.
+ */
+const inFlightThingIds = new WeakMap<QueryClient, Set<string>>();
+
+/** Returns false if this Thing already has a claimed mutation in flight (from *any* surface); otherwise claims it and returns true. */
+export function claimThingMutation(qc: QueryClient, thingId: string): boolean {
+  let ids = inFlightThingIds.get(qc);
+  if (!ids) {
+    ids = new Set();
+    inFlightThingIds.set(qc, ids);
+  }
+  if (ids.has(thingId)) return false;
+  ids.add(thingId);
+  return true;
+}
+
+/** Releases a claim made by claimThingMutation. Always call from a `finally`. */
+export function releaseThingMutation(qc: QueryClient, thingId: string): void {
+  inFlightThingIds.get(qc)?.delete(thingId);
+}
+
+export function isThingMutationInFlight(qc: QueryClient, thingId: string): boolean {
+  return inFlightThingIds.get(qc)?.has(thingId) ?? false;
+}
+
+/**
  * One entry per still-active (not yet rolled back) optimistic write to a
  * given cache location, in application order. `previousThing` is what was
  * there immediately before this entry was applied — i.e. the *previous
@@ -233,13 +265,21 @@ export function withOptimisticPatch(
   fn: () => Promise<unknown>,
 ): () => Promise<unknown> {
   return async () => {
-    await cancelThingReads(qc, thingId);
-    const rollback = patchThingInCaches(qc, thingId, patch);
+    // Claimed cross-surface (see claimThingMutation) — if a Court swipe or
+    // another detail panel already has this exact Thing mid-mutation,
+    // this call is a no-op rather than firing a second, conflicting RPC.
+    if (!claimThingMutation(qc, thingId)) return;
     try {
-      return await fn();
-    } catch (error) {
-      rollback();
-      throw error;
+      await cancelThingReads(qc, thingId);
+      const rollback = patchThingInCaches(qc, thingId, patch);
+      try {
+        return await fn();
+      } catch (error) {
+        rollback();
+        throw error;
+      }
+    } finally {
+      releaseThingMutation(qc, thingId);
     }
   };
 }

@@ -68,6 +68,28 @@ export function stepStackIndex(index: number, count: number, direction: 1 | -1):
   return (index + direction + count) % count;
 }
 
+/**
+ * Decides whether a failed optimistic removal (Sort/Snooze/pace-later on a
+ * Court stack card) should restore selection/focus to the Thing it
+ * removed, once the card is back in `things`. Only true if nothing has
+ * explicitly navigated (arrow/wheel/navigator-strip/focusThing) since the
+ * removal started — a version counter bumped only by those explicit
+ * actions, never by the automatic reconciliation that runs when `things`
+ * changes, is what distinguishes "the user did something else in the
+ * meantime" from "this failure is the only thing that happened."
+ */
+export function shouldRestoreSelectionAfterFailedRemoval(input: {
+  navigationVersionAtRemoval: number;
+  currentNavigationVersion: number;
+  removedThingId: string;
+  things: readonly { id: string }[];
+}): boolean {
+  return (
+    input.currentNavigationVersion === input.navigationVersionAtRemoval &&
+    input.things.some((thing) => thing.id === input.removedThingId)
+  );
+}
+
 export function lockGestureAxis(
   current: GestureAxis,
   deltaX: number,

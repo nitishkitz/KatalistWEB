@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { QueryClient } from "@tanstack/react-query";
-import { patchThingInCaches } from "@/features/things/query-updates";
+import {
+  claimThingMutation,
+  isThingMutationInFlight,
+  patchThingInCaches,
+  releaseThingMutation,
+  withOptimisticPatch,
+} from "@/features/things/query-updates";
 
 function makeThing(id, overrides = {}) {
   return {
@@ -285,4 +291,59 @@ test("a stale chain from a much earlier mutation cannot resurface after an untra
   const finalA = after.things.find((t) => t.id === "a");
   assert.equal(finalA.workStatus, "sorted", "rollback restores the external value it overwrote, not the ancient chain's value");
   assert.equal(finalA.title, "Server truth");
+});
+
+test("claimThingMutation prevents a second concurrent claim on the same Thing", () => {
+  // This is the cross-surface guarantee: a Court swipe stack's own
+  // in-flight tracking and a Thing detail panel's own useMutation()
+  // pending state are each local to that component — neither alone
+  // prevents both surfaces from mutating the same Thing at once.
+  // claimThingMutation is shared per QueryClient, regardless of caller.
+  const qc = newClient();
+  assert.equal(claimThingMutation(qc, "a"), true, "first claim succeeds");
+  assert.equal(claimThingMutation(qc, "a"), false, "a second concurrent claim on the same Thing is rejected");
+  assert.equal(isThingMutationInFlight(qc, "a"), true);
+  releaseThingMutation(qc, "a");
+  assert.equal(isThingMutationInFlight(qc, "a"), false);
+  assert.equal(claimThingMutation(qc, "a"), true, "claimable again after release");
+});
+
+test("claimThingMutation on different Things does not serialize unrelated work", () => {
+  const qc = newClient();
+  assert.equal(claimThingMutation(qc, "a"), true);
+  assert.equal(claimThingMutation(qc, "b"), true, "an unrelated Thing is unaffected by A's claim");
+});
+
+test("withOptimisticPatch is a no-op if the Thing is already claimed by another surface", async () => {
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  const a = makeThing("a", { workStatus: "not_started" });
+  qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
+
+  // Simulate a detail panel already mid-mutation on this Thing.
+  claimThingMutation(qc, "a");
+
+  let called = false;
+  await withOptimisticPatch(qc, "a", { workStatus: "under_progress" }, async () => {
+    called = true;
+  })();
+
+  assert.equal(called, false, "the wrapped mutation never runs while another surface holds the claim");
+  assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "not_started", "no patch was applied either");
+
+  releaseThingMutation(qc, "a");
+});
+
+test("withOptimisticPatch releases its claim after success and after failure", async () => {
+  const qc = newClient();
+
+  await withOptimisticPatch(qc, "a", { workStatus: "under_progress" }, async () => {})();
+  assert.equal(isThingMutationInFlight(qc, "a"), false, "claim released after success");
+
+  await assert.rejects(
+    withOptimisticPatch(qc, "a", { workStatus: "under_progress" }, async () => {
+      throw new Error("boom");
+    })(),
+  );
+  assert.equal(isThingMutationInFlight(qc, "a"), false, "claim released after failure too");
 });
