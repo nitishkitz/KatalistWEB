@@ -1,14 +1,16 @@
-# P3 — Identity and Cache Lifecycle Design (Revision 3)
+# P3 — Identity and Cache Lifecycle Design (Revision 4)
 
 Date: 2026-09-23
 Baseline: `cd8932a` on `katalist-plan/batch-a-baseline`
-Status: **Design proposal only. No implementation in this document.** Revision 2 (committed at `b4bd232`) was not approved. This revision replaces §4's transition mechanism entirely in response to three further correctness gaps in that mechanism, plus the reviewer's explicit direction to design around "an aligned fallback + layout-effect disposal + protected-subtree identity snapshot/remount strategy." P4/P7 remain gated.
+Status: **Design proposal only. No implementation in this document.** Revision 3 (committed at `c2cf0d0`) was not yet approved — one correctness gap in the new mechanism, plus two items explicitly left as open approval gates. All three are addressed in this revision. P4/P7 remain gated.
 
-**What changed since Revision 2, and why**: Revision 2 fixed the five gaps found in Revision 1, but its own transition mechanism (§4) had three further problems, all confirmed on review: (1) it ran real side effects — disposal, epoch advance, `resetQueries()` — synchronously during render, which is not a valid use of React's "adjust state during render" pattern (that pattern covers deriving plain state values, not dispatching subscriptions-teardown and network calls); (2) it never actually *established* that only one identity's queries are ever observed at once — it asserted `resetQueries()` reaches every live observer (true, proven in §3) but treated "eventually reaches them" as equivalent to "never observed under two identities simultaneously," which it isn't; (3) it assumed the whole transition completes within one render pass instead of defining a real, inspectable "transition in progress" state.
+**What changed since Revision 3, and why**:
 
-Revision 3's §4 replaces the mechanism with: an explicit three-state gate (`pending` / `aligning` / `ready`) where `aligning` withholds the entire protected subtree (nothing renders, so nothing can observe under two identities at once); all real side effects moved into a `useLayoutEffect` (the sanctioned place for post-commit, pre-paint work); and the protected subtree keyed by identity, forcing a genuine unmount/remount on every real identity change rather than relying solely on `resetQueries()` reaching already-mounted observers. §1–§3, §5–§7 are otherwise unchanged from Revision 2 except where §4's new mechanism required a cross-reference update (noted inline).
+1. **Correctness gap, fixed**: the `aligning`/`ready` gate's render-time comparison only triggered on `nextIdentity.kind !== "pending"` — meaning a hypothetical transition from a committed, ready identity back to `pending` (auth becoming unconfirmed again) left `gate` at its old `{ status: "ready", identity: A }` value, and the boundary would keep rendering A's protected content while identity was actually unconfirmed. Fixed in §4: `nextIdentity.kind === "pending"` is now checked first and unconditionally, before any comparison against what was previously committed. (Today's `useSession()` never re-enters `loading: true` after initial mount, so this specific transition isn't reachable yet — the fix doesn't depend on that staying true, deliberately, since baking in an assumption about a security-relevant boundary's own dependency is exactly the wrong place to do it.)
+2. **The caller-level invalidation audit — previously deferred, now part of the gate itself.** The reviewer's fourth (previously hidden) comment: a stale identity-A mutation callback calling `qc.invalidateQueries()` on an entity-only key after the switch can trigger a fetch under B's session, and this isn't touched by `resetQueries()`, the keyed remount, or `withOptimisticPatch`'s own guard points — all three protect *reads* and *query-updates.ts's own* writes, not arbitrary callers' `onSuccess`/`onError` handlers. §5 now defines `withEpochGuard` concretely and provides a complete, prioritized inventory of every `invalidateQueries` call site the P0 sweep found (excluding `use-realtime.ts`'s own handlers, which are P7's remit) — the "Required" tier (entity-only keys, mutation-callback-driven) must be retrofitted before this gate closes, even though the retrofit itself can land as multiple commits, per the reviewer's explicit allowance.
+3. **Component-tree placement — traced against the real code, not left as an open question.** §4's "what this still does not cover" now reports the actual result: `AppShell`, `ChatHeadsDock`, and `useRealtimeInvalidation()` are all confirmed descendants of `<Outlet />` (reached only via route `component`s — never referenced from `__root.tsx` directly), so the specific "chat dock" case named in review is inside the boundary. Two real exceptions were found — `CallRingProvider` and `PushRegistrar`, both structural siblings of `<Outlet />` — with a concrete placement recommendation to close even that gap.
 
-Also carried forward, unresolved, from earlier revisions and this one: the component-level test needed to actually verify this mechanism's browser/React behavior (Strict Mode double-invocation, layout-effect-before-paint timing) requires `@testing-library/react` + a DOM environment, which are not currently installed. The reviewer's point that "QueryClient probes prove library behavior, not React boundary behavior" is accepted in full — §6 now treats that test as **required before this mechanism can be considered verified**, not as a nice-to-have alongside the probes.
+§1–§3, and everything in §4/§5/§6/§7 not called out above, are unchanged from Revision 3.
 
 ---
 
@@ -162,9 +164,22 @@ function IdentityBoundary({ children }: { children: ReactNode }) {
   // does not touch the QueryClient, and is safe to execute any number
   // of times (Strict Mode's double-render, a discarded concurrent
   // render) because it has no effect beyond computing what to render.
+  //
+  // `nextIdentity.kind === "pending"` always wins, checked first and
+  // unconditionally -- not guarded behind a comparison against what
+  // was previously committed. useSession() currently only reports
+  // `loading: true` once, at initial mount (useSession.ts never calls
+  // setLoading(true) again after that), so a ready(A) -> pending
+  // transition isn't reachable with today's implementation -- but this
+  // boundary is exactly the wrong place to bake in an assumption about
+  // that staying true forever. If identity ever becomes unconfirmed
+  // again for any reason, "we don't currently know who this is" must
+  // never render as "keep showing who it was a moment ago," so the
+  // check does not depend on that assumption holding.
   const committedIdentity = gate.status === "ready" ? gate.identity : null;
-  if (
-    nextIdentity.kind !== "pending" &&
+  if (nextIdentity.kind === "pending") {
+    if (gate.status !== "pending") setGate({ status: "pending" });
+  } else if (
     !identityEquals(committedIdentity, nextIdentity) &&
     !(gate.status === "aligning" && identityEquals(gate.identity, nextIdentity))
   ) {
@@ -206,6 +221,8 @@ function IdentityBoundary({ children }: { children: ReactNode }) {
 }
 ```
 
+**Stated tradeoff in this fix**: any resolution out of `pending` — even back to the exact same identity that was committed before — goes through `aligning` again, since `committedIdentity` is derived only from `gate.status === "ready"` and `gate.status` was `"pending"`, not `"ready"`, going in. This means a hypothetical future `loading: true` blip that resolves back to the same profile would trigger an unnecessary disposal/remount rather than resuming untouched. This is accepted deliberately: correctness (never render an unconfirmed identity's stale content) is prioritized over avoiding a redundant remount for a transition that isn't reachable with today's `useSession()` implementation anyway. If `pending` ever becomes reachable mid-session in the future and the redundant remount turns out to matter in practice, a `lastKnownIdentityRef` (tracking the last committed identity independently of transient `pending` detours) is the natural follow-up optimization — deliberately not built now, since it's unneeded complexity for a currently-unreachable path.
+
 ### Why remount, given `resetQueries()` already works (§3)
 
 `resetQueries()` is still necessary and correct — it's what makes the layout effect's disposal actually take effect on any observer that happens to still exist. But relying on it *alone*, as Revision 2 did, means the guarantee depends on trusting `QueryObserver` internals (that every currently-mounted observer, however deeply nested, correctly receives and acts on the reset) rather than on something directly verifiable from the tree structure. Keying the protected subtree by `identityKey(identity)` makes the guarantee structural instead: React unmounts every component in the old subtree (running all their cleanup effects — closing the per-list chat channel, releasing local `useState`/refs, discarding any component holding a reference to a now-stale `QueryObserver`) and mounts entirely new component instances only after the layout effect's disposal has already run (`aligning` is rendered first; `ready` — and the remount — only happens after `setGate({ status: "ready", ... })`, which is itself sequenced after `resetQueries()` in the same effect). There is no window where an old component instance is still alive holding an old `QueryObserver` subscription while a new identity's data exists in the cache.
@@ -216,7 +233,8 @@ This directly resolves the reviewer's point 5 (`use-list-messages.ts`'s mounted-
 
 ### What this still does not cover, named explicitly
 
-1. **Placement matters, and isn't fully decided.** The remount guarantee only covers components that are descendants of `IdentityBoundary`. If a persistent, always-mounted surface (e.g. the hub chat dock, if it turns out to be rendered outside `<Outlet />` rather than inside it — **not yet verified against the actual component tree**) sits as a *sibling* to the boundary rather than a descendant, it is not remounted and its identity-unsafe state is not addressed by this design. This needs an implementation-time trace of exactly what's mounted where relative to the proposed boundary position (inside `QueryClientProvider`, wrapping `AppContextProvider` + `ProfileDirectoryProvider` + `Outlet`) before this can be called complete for every consumer, not just the ones inspected so far.
+1. **Placement — now verified against the actual component tree, not assumed.** Traced the real JSX: `__root.tsx:139-148` nests `QueryClientProvider → AppContextProvider → ProfileDirectoryProvider → { <Outlet />, <CallRingProvider />, <PushRegistrar />, <Toaster /> }` (the last four as siblings inside `ProfileDirectoryProvider`, not `Outlet`'s children). `AppShell.tsx` is never referenced from `__root.tsx` or any router-config file — it's only rendered from individual route `component`s (`index.tsx`, `team.tsx`, `buckets.$bucketId.tsx`, `nudges.tsx`, `buckets.index.tsx`, `lists.$listId.tsx`, `lists.index.tsx`, `me.tsx`), which is exactly what renders inside `<Outlet />`. `ChatHeadsDock` (`AppShell.tsx:60`) and `useRealtimeInvalidation()` (`AppShell.tsx:28`) are therefore both confirmed descendants of `<Outlet />` — the specific "chat dock" case named in review is **inside** the boundary, not a sibling exception. (`ChatHeadsDock` uses `createPortal` for its DOM output, but portaling doesn't change its position in the React tree for mount/unmount purposes — that's still `AppShell`'s child.)
+   - **Two real exceptions found**: `CallRingProvider` (`__root.tsx:143`) and `PushRegistrar` (`__root.tsx:144`) are structural siblings of `<Outlet />`, both nested inside `ProfileDirectoryProvider`. If `IdentityBoundary` replaces `AppContextProvider` (wrapping everything `ProfileDirectoryProvider` currently wraps, as one unit), both fall inside the boundary and get the remount treatment. If it's placed more narrowly (wrapping only `<Outlet />`), they don't. Both already call `useSession()` and key their own effects on `user?.id` directly (`CallRingProvider.tsx:18,36`; `PushRegistrar.tsx:17,21`) — so both already correctly react to an identity change on their own, independent of this design. They don't strictly *need* the remount to be correct, but leaving them outside it means their correctness rests on their own existing `user?.id`-keyed effects rather than the same structural guarantee everything else gets. **Recommendation**: place `IdentityBoundary` where `AppContextProvider` currently sits (wrapping the same four-sibling group `ProfileDirectoryProvider` wraps today), so `CallRingProvider`/`PushRegistrar` get the same guarantee as everything else rather than relying on a second, independent correctness argument — but per the plan's own instruction not to touch call-room/lobby/presence in this phase, this is a placement recommendation for P3's implementation, not a change to either provider's own code.
 2. **A now-inaccessible entity's detail view**, if reached via a route that itself survives the remount somehow (e.g. the router's own state is outside this boundary) — still an open routing/authorization-boundary question, unchanged from Revision 2, not resolved here either.
 3. **Strict Mode double-invocation of the layout effect itself needs a real test, not an assertion.** The effect's `if (gate.status !== "aligning") return` guard should make a second, dev-only invocation a no-op (the first invocation already advanced `gate` to `ready`), but "should" is exactly the word the reviewer is pushing back on — this needs the component-level test named in §6, not a claim of correctness from reading the code.
 
@@ -236,7 +254,53 @@ No change to `pushChainEntry`/`spliceChainEntry`'s algorithm (unchanged from Rev
 
 1. After `await cancelThingReads(...)` resolves, **before** calling `patchThingInCaches` or invoking `fn()` (the RPC dispatch) at all: check the claim token's epoch is still current. If not, release nothing new was claimed for and return early. This is stronger than just "don't write a stale patch" — it means a mutation whose *intent* was formed under identity A never fires its RPC once B is active, which matters because the underlying Supabase client always authenticates with whatever session is *currently* active, not whatever was active when the JS closure was created — dispatching `fn()` late would run the RPC under B's credentials for a mutation A initiated, not merely write stale cache data.
 2. Inside the rollback closure, at each cache-write point (unchanged from Revision 1's intent, now correctly grounded — the epoch-scoped chain storage from §3 makes this fall out of `spliceChainEntry`'s existing "not found" handling rather than needing a new explicit check).
-3. **Not yet enumerated, and not claimed to be solved by the core primitive**: every caller-level `onSuccess`/`onError` handler that does its own `qc.invalidateQueries(...)` outside `query-updates.ts` — the P0 inventory lists dozens of these call sites (`CourtWithOthersSidebar.tsx`, `MagicBox.tsx`, `ThingDetailContent.tsx`, `use-thing-comments.ts`, `personal-shred.ts`, `personal-snooze.ts`, `use-profile.ts`, `use-buckets.ts`, and more). A stale-epoch invalidation from one of these after a switch is a smaller, "wastes a request" problem for profile-scoped keys (whose key already differs after a switch) but a real problem for anything targeting an entity-only key. **This needs a file-by-file audit at implementation time**, the same way P2's read-error-policy audit went file-by-file — this design proposes the primitive (an exported `isEpochCurrent`/`withEpochGuard` helper any caller can use) but does not claim the retrofit is complete or even fully scoped yet. Toasts/notifications and any navigation side effect a mutation callback triggers need the same audit; none were found to exist for these specific mutations in the P0/P2 passes, but that was not an exhaustive search for this purpose.
+
+### Caller-level invalidation audit — the reviewer's fourth point, now part of the P3 gate, not later work
+
+The concern, stated precisely: `resetQueries()` (§3) and the keyed remount (§4) both protect *reads* — a component's own `useQuery`. Neither protects a **mutation's completion callback** that was already running under identity A when the switch happened. `withOptimisticPatch`'s own guard point 1 above covers `query-updates.ts`'s internal callers, but every *other* file that does its own `qc.invalidateQueries(...)` inside a `useMutation`'s `onSuccess`/`onError` is untouched by anything in §3/§4. A stale A-mutation's `onSuccess` firing after the switch and calling `qc.invalidateQueries({ queryKey: ["thing", someId] })` would trigger a fresh fetch for that entity-only key under B's now-active session — exactly the reviewer's example. **This was previously deferred as "later work"; it is not later work — it's part of what "the boundary is complete" has to mean, even though the retrofit itself can land as multiple commits.**
+
+**The primitive**, defined concretely (not just gestured at):
+
+```ts
+// identity-cache-policy.ts
+export function withEpochGuard<Args extends unknown[]>(
+  qc: QueryClient,
+  capturedEpoch: number,
+  fn: (...args: Args) => void,
+): (...args: Args) => void {
+  return (...args) => {
+    if (!isEpochCurrent(qc, capturedEpoch)) return;
+    fn(...args);
+  };
+}
+```
+
+Usage at a call site (illustrative, matches the shape every entry in the inventory below would take):
+
+```ts
+const epoch = getIdentityEpoch(qc).epoch; // captured when the mutation is created/dispatched
+useMutation({
+  mutationFn: ...,
+  onSuccess: withEpochGuard(qc, epoch, () => {
+    qc.invalidateQueries({ queryKey: keys.court(profileId, context) });
+  }),
+});
+```
+
+**Complete inventory of every `invalidateQueries` call site this audit covers**, pulled from the P0 inventory (`2026-09-23-realtime-ownership-inventory.md`), *excluding* the ten `use-realtime.ts` postgres_changes handlers (those are P7's realtime-controller remit — they get epoch-guarded as part of that owner's own lifecycle, not this retrofit) and `query-updates.ts`'s own calls (already covered by guard points 1-2 above):
+
+| Priority | File:line | Key family / shape | Why this priority |
+|---|---|---|---|
+| **Required before the P3 gate closes** — entity-only key, mutation-callback-driven | `ThingDetailContent.tsx:448,449,463,465,466` | `thing`, `court`, `buckets`/`bucket`/`bucket-items` | Entity-only keys targeted from a mutation's own completion callback — exactly the reviewer's scenario |
+| Required | `CourtWithOthersSidebar.tsx:68-72` | `nudges`, `nudge-history`, `court`, `thing`, `notifications` | Same — mutation-driven, mixed entity-only and profile-scoped targets in one handler |
+| Required | `MagicBox.tsx:319,321,322,325` | `court`, `list-things`, `lists`, `buckets` | Same |
+| Required | `use-thing-comments.ts:143-145` | `thing-comments`, `thing-activity`, `court` | Same |
+| Required | `use-list-messages.ts:107,108,120` | `list-messages` (entity-only), `lists` | `list-messages` is entity-only and this file already has a documented mounted-consumer gap (§4) — even after the remount fixes the *subscription* lifetime, the mutation callbacks themselves (`onSuccess` at lines 177-180, 195-198, 215-218 per the P0 inventory) still need the guard for the window before any remount completes |
+| Required | `use-buckets.ts:96,97,103-105`; `use-bucket-items.ts:79-81`; `SpringLoadedBucketFlyout.tsx:107-109`; `CourtBucketsSidePanel.tsx:51,154-156` | `bucket`, `bucket-items`, `buckets` | Entity-only and profile-scoped mixed; several independent call sites for the same key families |
+| **Lower priority, still tracked, not blocking** — profile-scoped key only | `personal-shred.ts:86-99`; `personal-snooze.ts:86-88`; `use-profile.ts:78-83,112-120`; `use-catchup.ts:212`; `nudges.tsx:127-131`; `use-notifications.ts:65,80`; `use-list-meetings.ts:58`; `use-doorman.ts:70,82`; `me.tsx:494`; `use-hub-files.ts:111`; `use-contacts.ts:125,161,171-173`; `use-lists.ts:71,76`; `use-conversations.ts:182,190` | All profile-scoped (`keys.xxx(profileId, ...)`) or already-namespaced ad-hoc (`["hub-conversations", user.id]`, etc.) | A stale-epoch invalidation here targets a key that already differs after a real switch (the profile id is baked into the key) — the *practical* risk is a wasted request against an orphaned cache slot, not cross-identity data exposure. Still gets the wrapper for defense-in-depth and consistency, but does not block calling the boundary safe |
+| **Named, not retrofitted, tracked separately** | `AppContextProvider.tsx:79` (`qc.invalidateQueries()`, no key at all) | n/a | This fires on a *context* switch, not an identity change — out of scope for the epoch guard by definition (§1: context switches don't advance the epoch). Unchanged from earlier revisions' finding. |
+
+**What "required before the gate closes" means concretely, per the instruction that the retrofit can span multiple commits**: every row in the "Required" tier must be wrapped with `withEpochGuard` (or have its containing `useMutation` call demonstrated safe by some other explicit argument, on a case-by-case basis, if wrapping turns out to be the wrong shape for a given call site) before P3 is declared complete and P4/P7 are unblocked. The "Lower priority" tier should also be retrofitted, but a gap there does not, by this design's own reasoning, block the safety property the gate exists to establish. This inventory is exhaustive against the P0 sweep's `invalidateQueries` findings; it is not exhaustive against every possible side effect a mutation callback could have (toasts, navigation) — no instance of either was found attached to these specific mutations in the P0/P2 passes, but that was not a search conducted for this specific purpose, and implementation should re-check rather than rely on this document's absence-of-evidence.
 
 ### Chat, calls, presence
 
@@ -264,8 +328,9 @@ These use the actual installed `@tanstack/react-query` `QueryClient`/`QueryObser
 
 ### To be written at implementation time
 
-4. **`identity-epoch.test.mjs`** — pure epoch primitive: capture/compare, pending→known vs. known→known transition classification, `requiresDisposal`-equivalent truth table for `GateStatus` transitions.
+4. **`identity-epoch.test.mjs`** — pure epoch primitive: capture/compare, pending→known vs. known→known transition classification, `requiresDisposal`-equivalent truth table for `GateStatus` transitions — including the ready(A)→pending→live(A) case (this revision's fix): asserts the gate renders `pending` (never A's stale committed identity) the instant `nextIdentity.kind` becomes `"pending"`, regardless of what was previously `ready`.
 5. **`thing-mutation-claim-epoch.test.mjs`** — reproduces the reviewer's exact finding (`claimSurvivesClear`, `nextIdentityCanClaim`) against **today's** code first, as a documented, currently-failing regression test (matching this batch's established discipline of proving a fix against a real failure before trusting it), then proves the token+self-heal fix resolves it: A claims, epoch advances, A's stale token fails to release, B successfully claims the same `thingId`, A's late `finally` release is a no-op against B's claim.
+6. **`with-epoch-guard.test.mjs`** — pure test of the `withEpochGuard` primitive itself (§5): a wrapped callback fires when the captured epoch is still current and is a no-op when it isn't, independent of any specific call site. This is necessary but not sufficient — it proves the primitive works, not that any specific one of the "Required" inventory rows in §5 has actually been wrapped. Each retrofitted call site needs its own test at the point it's retrofitted (e.g. extending `fetch-buckets-error-propagation.test.mjs`-style existing files, or new ones alongside them), the same file-by-file discipline P2's read-error-policy audit used — not enumerated exhaustively in this document.
 
 ### Required before this mechanism can be considered verified — not optional, not substitutable by the probes above
 
@@ -295,10 +360,12 @@ Real account switch, real token refresh, real work/home switch (including whethe
 ### Migration sequence (revised)
 
 1. Fix `use-lists.ts:110`'s bare `["lists"]` scan — unchanged, still first, still isolated.
-2. Add `identity-cache-policy.ts` (epoch primitive) **together with** the epoch-scoped claim/chain storage rewrite in `query-updates.ts` — these are now one step, not two, because Revision 1's mistake was treating the `WeakMap` fix as if it fell out of "guard cache writes" for free; it doesn't, so it's built at the same time as the primitive it depends on. Includes test 5 above, plus tests 1-3 formalized from the empirical probes and test 4 (pure `GateStatus` transition logic).
+2. Add `identity-cache-policy.ts` (epoch primitive, including `withEpochGuard` — §5) **together with** the epoch-scoped claim/chain storage rewrite in `query-updates.ts` — these are now one step, not two, because Revision 1's mistake was treating the `WeakMap` fix as if it fell out of "guard cache writes" for free; it doesn't, so it's built at the same time as the primitive it depends on. Includes tests 4-6 above, plus tests 1-3 formalized from the empirical probes.
 3. **Decision point requiring separate sign-off**: add `@testing-library/react` + a DOM environment as devDependencies, in their own test-infra-only commit. Per §6, this now comes *before* step 4, not after — the mechanism in step 4 is not considered verified until tests 7-8 exist and pass.
-4. Add `IdentityBoundary` (the `pending`/`aligning`/`ready` gate, the layout effect, the identity-keyed remount) and wire it into `__root.tsx` — first behavior-changing commit. Includes tests 7-8 (component-level, real DOM) alongside the account-switch/logout/preview-toggle/context-switch scenarios from earlier revisions, rerun against the corrected mechanism.
+4. Add `IdentityBoundary` (the `pending`/`aligning`/`ready` gate, the layout effect, the identity-keyed remount), placed where `AppContextProvider` currently sits so `CallRingProvider`/`PushRegistrar` fall inside it too (§4's placement recommendation), and wire it into `__root.tsx` — first behavior-changing commit. Includes tests 7-8 (component-level, real DOM) alongside the account-switch/logout/preview-toggle/context-switch scenarios from earlier revisions, rerun against the corrected mechanism.
 5. Guard `withOptimisticPatch`'s pre-RPC-dispatch point, using the epoch-scoped claim from step 2. Includes the "mutation settles after switch" test, precisely specified in §5's guard point 1.
-6. Named, not fixed, explicitly tracked for later phases: `patchThingInCaches`'s cross-profile `["court"]` prefix scan (Revision 1's finding, unchanged), `chat-read-state.ts` (P8), `AppContextProvider.tsx`'s non-profile-scoped live storage key (Revision 2's finding), the exact component-tree placement audit for §4's "what this still does not cover" item 1, and the caller-level `onSuccess`/`onError`/`invalidateQueries` audit (§5) — file-by-file, at implementation time, not resolved by the core primitive alone.
+6. **Retrofit every "Required" row in §5's caller-level invalidation inventory with `withEpochGuard`** — this is part of the P3 gate itself, not later work, though it may span multiple commits (one per file or small group, matching P2's file-by-file precedent): `ThingDetailContent.tsx`, `CourtWithOthersSidebar.tsx`, `MagicBox.tsx`, `use-thing-comments.ts`, `use-list-messages.ts`, `use-buckets.ts`/`use-bucket-items.ts`/`SpringLoadedBucketFlyout.tsx`/`CourtBucketsSidePanel.tsx`. Each commit includes its own regression test proving the specific call site's `onSuccess`/`onError` no-ops once the epoch has advanced.
+7. The "Lower priority" tier from §5's inventory (profile-scoped keys) — retrofitted for consistency, but explicitly not blocking P3's closure per §5's own reasoning.
+8. Named, not fixed, explicitly tracked for later phases: `patchThingInCaches`'s cross-profile `["court"]` prefix scan (Revision 1's finding, unchanged), `chat-read-state.ts` (P8), `AppContextProvider.tsx`'s non-profile-scoped live storage key (Revision 2's finding), and any toast/navigation side effect discovered during step 6's file-by-file audit that wasn't caught by the P0/P2 passes.
 
-P4 and P7 remain gated on this design's approval, unchanged. Step 3's dependency addition is called out as needing its own explicit go-ahead separate from the rest of this design, and is now sequenced *before* the behavior-changing commit it gates, not after it as an afterthought.
+P4 and P7 remain gated on this design's approval, unchanged. Step 3's dependency addition is called out as needing its own explicit go-ahead separate from the rest of this design, sequenced *before* the behavior-changing commit it gates. Steps 6-7 are the reviewer's fourth point made concrete — P3 is not complete until the "Required" tier of step 6 has landed, even across multiple commits.
