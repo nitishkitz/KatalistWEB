@@ -32,10 +32,20 @@ export async function fetchCourt(
   // The actor lookup and the things query are independent of each other
   // (the things query only needs `context`), so they run concurrently
   // instead of the actor lookup blocking the things query behind it.
-  const [{ data: actor }, { data: rows, error }] = await Promise.all([
+  // The actor lookup's result isn't decorative: myActorId feeds
+  // partitionCourt()'s "mine" vs "theirs" split. A failed lookup must
+  // reject, not silently resolve to null — a null myActorId despite
+  // successfully fetched Things would make both partitions look empty
+  // (a false-empty state), not just "this profile has no actor yet".
+  // .maybeSingle() already distinguishes those two cases for us: a
+  // legitimate missing actor comes back as { data: null, error: null };
+  // an actual failure (network, RLS denial, etc.) comes back with
+  // `error` set. Only the latter should throw.
+  const [{ data: actor, error: actorError }, { data: rows, error }] = await Promise.all([
     supabase.from("actors").select("id").eq("profile_id", profileId).maybeSingle(),
     supabase.from("things").select(THING_COLUMNS).eq("context", context).is("cancelled_at", null),
   ]);
+  if (actorError) throw actorError;
   const myActorId = actor?.id ?? null;
 
   if (error) throw error;

@@ -15,6 +15,7 @@ import {
   usePersonalShred,
 } from "@/features/things/personal-shred";
 import { mapDbListRows, type DbListRow } from "./map-list-rows";
+import { fetchListDetail } from "./fetch-list-detail";
 import type { ListRow } from "./fixtures";
 
 async function fetchLists(profileId: string, context: "work" | "home"): Promise<ListRow[]> {
@@ -114,17 +115,7 @@ export function useList(listId: string | undefined) {
       return undefined;
     },
     initialDataUpdatedAt: 0,
-    queryFn: async (): Promise<ListRow | null> => {
-      const { data, error } = await supabase
-        .from("lists")
-        .select("id,name,context,owner_profile_id,updated_at")
-        .eq("id", listId!)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) return null;
-      const rows = await fetchLists(user!.id, data.context);
-      return rows.find((l) => l.id === data.id) ?? null;
-    },
+    queryFn: () => fetchListDetail(user!.id, listId!),
   });
 
   if (preview) {
