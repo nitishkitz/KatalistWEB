@@ -50,9 +50,19 @@ export function ConversationWorkspace({
   // Opening a conversation here — via the sidebar, a direct link, or
   // anywhere else — should clear its unread state, same as opening it
   // through the chat-heads bubble/pop-out already does (both read from the
-  // same device-local last-read mark).
+  // same device-local last-read mark). G04: only while the tab is actually
+  // active -- marking read the instant a backgrounded/hidden tab happens
+  // to hold this conversation would clear "unread" for content the user
+  // never actually looked at. Re-checked on visibilitychange so returning
+  // to an already-open conversation still marks it read.
   useEffect(() => {
-    markConversationAsRead(listId, user?.id);
+    if (typeof document === "undefined") return;
+    const markIfVisible = () => {
+      if (document.visibilityState !== "hidden") markConversationAsRead(listId, user?.id);
+    };
+    markIfVisible();
+    document.addEventListener("visibilitychange", markIfVisible);
+    return () => document.removeEventListener("visibilitychange", markIfVisible);
   }, [listId, user?.id]);
 
   const sessionSuffix = useMemo(

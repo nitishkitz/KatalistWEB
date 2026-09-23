@@ -1,5 +1,5 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Search, MessageSquare, Paperclip, AtSign, Smile, Download, FileText, Phone, Pin, PinOff } from "lucide-react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { Search, MessageSquare, Paperclip, AtSign, Smile, Download, FileText, Phone, Pin, PinOff, ArrowDown } from "lucide-react";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { ChatMessagesSkeleton } from "@/components/katalist/ScreenSkeletons";
@@ -128,6 +128,30 @@ export const ListChatPanel = forwardRef<
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const msgInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // G04: "New messages while scrolled away show a control and do not jump
+  // to bottom." Tracks the scroll position continuously (not just at the
+  // moment a new message arrives, since by then the DOM has already
+  // grown) so the length-triggered effect below knows whether the user
+  // was already near the bottom BEFORE this update.
+  const isNearBottomRef = useRef(true);
+  const [hasNewMessages, setHasNewMessages] = useState(false);
+  const NEAR_BOTTOM_THRESHOLD_PX = 80;
+
+  const updateNearBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD_PX;
+    isNearBottomRef.current = nearBottom;
+    if (nearBottom) setHasNewMessages(false);
+  }, []);
+
+  const scrollToBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    isNearBottomRef.current = true;
+    setHasNewMessages(false);
+  }, []);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const mentionMatches = useMemo(() => {
@@ -168,7 +192,17 @@ export const ListChatPanel = forwardRef<
   };
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    if (isNearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+    } else {
+      // The user is reading history further up -- yanking them down to
+      // the bottom on every new message would interrupt that. Surface a
+      // "New messages" control instead (rendered below) and leave the
+      // scroll position alone.
+      setHasNewMessages(true);
+    }
   }, [chat.messages.length]);
 
   const q = search.trim().toLowerCase();
@@ -265,7 +299,8 @@ export const ListChatPanel = forwardRef<
         </div>
       )}
 
-      <div ref={scrollRef} className="mt-3 min-h-0 flex-1 space-y-4 overflow-y-auto px-5 pb-2">
+      <div className="relative mt-3 min-h-0 flex-1">
+      <div ref={scrollRef} onScroll={updateNearBottom} className="h-full space-y-4 overflow-y-auto px-5 pb-2">
         {chat.isLoading ? (
           <ChatMessagesSkeleton />
         ) : filtered.length === 0 ? (
@@ -327,6 +362,17 @@ export const ListChatPanel = forwardRef<
             ),
           )
         )}
+      </div>
+      {hasNewMessages && (
+        <button
+          type="button"
+          onClick={scrollToBottom}
+          className="absolute bottom-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#975ee2] px-3 py-1.5 text-[11.5px] font-medium text-white shadow-lg transition hover:brightness-95"
+        >
+          New messages
+          <ArrowDown className="h-3.5 w-3.5" />
+        </button>
+      )}
       </div>
 
       {viewOnly ? (
