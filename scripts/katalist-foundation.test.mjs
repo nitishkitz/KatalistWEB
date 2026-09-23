@@ -167,7 +167,10 @@ test("Live personal shred is one reusable lens applied to Court, Lists, Doorman,
   const listMessages = readFileSync(new URL("../src/features/lists/use-list-messages.ts", import.meta.url), "utf8");
   const doorman = readFileSync(new URL("../src/features/doorman/use-doorman.ts", import.meta.url), "utf8");
   const buckets = readFileSync(new URL("../src/features/buckets/use-bucket-items.ts", import.meta.url), "utf8");
-  const realtime = readFileSync(new URL("../src/features/realtime/use-realtime.ts", import.meta.url), "utf8");
+  // use-realtime.ts's global-invalidation logic moved to
+  // RealtimeInvalidationProvider.tsx (P7) -- same personal-shred lens,
+  // now event-routed/batched instead of inlined per-table.
+  const realtime = readFileSync(new URL("../src/features/realtime/RealtimeInvalidationProvider.tsx", import.meta.url), "utf8");
   const trophy = readFileSync(new URL("../src/features/me/use-trophy.ts", import.meta.url), "utf8");
   const detail = readFileSync(new URL("../src/features/things/ThingDetailContent.tsx", import.meta.url), "utf8");
   const lens = readFileSync(new URL("../src/features/things/personal-shred.ts", import.meta.url), "utf8");

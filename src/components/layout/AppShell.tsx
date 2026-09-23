@@ -9,7 +9,6 @@ import katalistMark from "@/assets/katalist-mark.png.asset.json";
 import { GhostCard } from "@/features/doorman/GhostCard";
 import { MeetingReminderCard } from "@/features/lists/MeetingReminderCard";
 import { ChatHeadsDock } from "@/features/hub/ChatHeadsDock";
-import { useRealtimeInvalidation } from "@/features/realtime/use-realtime";
 import { usePresence } from "@/features/people/presence";
 
 interface AppShellProps {
@@ -25,7 +24,10 @@ interface AppShellProps {
 export function AppShell({ title, subtitle, actions, children, noPadding, hideTopNav }: AppShellProps) {
   const { session, loading } = useSession();
   const navigate = useNavigate();
-  useRealtimeInvalidation();
+  // Global database-change invalidation moved to RealtimeInvalidationProvider
+  // (P7), mounted once at the root instead of once per AppShell instance --
+  // route transitions (Court -> Lists -> Buckets -> Nudges, all AppShell-hosted)
+  // no longer create/destroy a global owner on every navigation.
   // Track this client as online app-wide so the Team screen's presence is real.
   usePresence();
 

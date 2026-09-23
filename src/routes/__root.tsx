@@ -13,6 +13,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { ProfileDirectoryProvider } from "@/features/people/ProfileDirectoryProvider";
 import { AppContextProvider } from "@/features/context/AppContextProvider";
 import { IdentityBoundary } from "@/features/realtime/IdentityBoundary";
+import { RealtimeInvalidationProvider } from "@/features/realtime/RealtimeInvalidationProvider";
 import { CallRingProvider } from "@/features/calls/CallRingProvider";
 import { PushRegistrar } from "@/features/push/PushRegistrar";
 import appCss from "../styles.css?url";
@@ -144,6 +145,13 @@ function RootComponent() {
           guarantee as routed content, rather than resting solely on
           their own independent user?.id-keyed effects. */}
       <IdentityBoundary>
+        {/* P7: mounted once here, inside the remounted subtree, instead of
+            once per AppShell instance -- route transitions never multiply
+            this owner, and a real identity change (which remounts this
+            whole subtree) disposes the old owner and mounts a fresh one
+            automatically, in that order, via the same mechanism that
+            already makes IdentityBoundary's other guarantees hold. */}
+        <RealtimeInvalidationProvider />
         <AppContextProvider>
           <ProfileDirectoryProvider>
             <Outlet />

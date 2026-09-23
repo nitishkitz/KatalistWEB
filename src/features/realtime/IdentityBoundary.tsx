@@ -9,6 +9,7 @@ import {
   runRegisteredDisposers,
   type Identity,
 } from "@/features/realtime/identity-cache-policy";
+import { IdentityContext } from "@/features/realtime/use-current-identity";
 
 type GateStatus =
   | { status: "pending" }
@@ -110,13 +111,15 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
   if (gate.status === "aligning") return <AligningFallback />;
 
   return (
-    // Keyed by identity: forces React to fully unmount the previous
-    // identity's protected subtree and mount a genuinely fresh one on
-    // every real identity change, rather than reusing existing component
-    // instances/observers. This is what closes the mounted-consumer gap
-    // (e.g. a per-list chat channel whose effect deps don't include
-    // profile id) -- the remount tears its effect down unconditionally,
-    // regardless of whether its own dependencies changed.
-    <Fragment key={identityKey(gate.identity)}>{children}</Fragment>
+    <IdentityContext.Provider value={gate.identity}>
+      {/* Keyed by identity: forces React to fully unmount the previous
+          identity's protected subtree and mount a genuinely fresh one on
+          every real identity change, rather than reusing existing component
+          instances/observers. This is what closes the mounted-consumer gap
+          (e.g. a per-list chat channel whose effect deps don't include
+          profile id) -- the remount tears its effect down unconditionally,
+          regardless of whether its own dependencies changed. */}
+      <Fragment key={identityKey(gate.identity)}>{children}</Fragment>
+    </IdentityContext.Provider>
   );
 }
