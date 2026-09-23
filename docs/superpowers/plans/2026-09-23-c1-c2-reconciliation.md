@@ -50,7 +50,7 @@ Not begun. P0 inventory (see `2026-09-23-realtime-ownership-inventory.md`) is co
 | P0 — baseline, inventory | Completed |
 | P1 — List-detail filters + regression tests | Completed |
 | P2 — remaining read-error policy | Completed |
-| P3 — identity/cache lifecycle design | Not started (review gate — needs explicit approval before P4/P7) |
+| P3 — identity/cache lifecycle design | Proposal delivered (`2026-09-23-p3-identity-cache-lifecycle-design.md`), awaiting approval — no implementation yet; P4/P7 remain gated |
 | P4 — actor cache | Not started (depends on P3) |
 | P5 — summary/detail split, bounded feeds | Not started |
 | P6 — pure realtime routing/batching engine | Not started |
