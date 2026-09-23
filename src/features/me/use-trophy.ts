@@ -21,6 +21,80 @@ export type TrophyStats = {
   shredded: { id: string; title: string; kind: "thing" | "list" | "bucket" }[];
 };
 
+/**
+ * Exported (not just a queryFn closure) so it's directly callable from
+ * scripts/fetch-trophy-stats-concurrency.test.mjs — no extraction to a
+ * separate module needed here, unlike fetchCourt/fetchBuckets/
+ * fetchBucketItems: this file has no useAppContext (.tsx) import, so it
+ * already loads fine in the plain Node test runner.
+ */
+export async function fetchTrophyStats(profileId: string): Promise<TrophyStats> {
+  // The actor+events chain and the shredded-objects lookup are
+  // independent of each other (shredded rows aren't filtered by actorId
+  // at all — profile_object_state is scoped to the caller by RLS), so
+  // they run concurrently instead of one after another.
+  const [mine, { data: shreddedRows }] = await Promise.all([
+    (async () => {
+      const { data: actor } = await supabase.from("actors").select("id").eq("profile_id", profileId).maybeSingle();
+      const { data: events, error } = await supabase
+        .from("thing_activity")
+        .select("event, created_at, actor_id")
+        .eq("actor_id", actor?.id ?? "00000000-0000-0000-0000-000000000000");
+      if (error) throw error;
+      return events ?? [];
+    })(),
+    supabase
+      .from("profile_object_state")
+      .select("object_id, object_type, shredded_at")
+      .not("shredded_at", "is", null)
+      .order("shredded_at", { ascending: false })
+      .limit(10),
+  ]);
+  const sorted = mine.filter((e) => e.event === "sorted").length;
+  const caught = mine.filter((e) => e.event === "caught").length;
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const weekly = mine.filter((e) => new Date(e.created_at).getTime() >= weekAgo).length;
+  // Real consecutive-day streak from "sorted" events (shared, unit-tested logic).
+  const streakDays = computeStreak(mine.filter((e) => e.event === "sorted").map((e) => e.created_at as string));
+  const thingIds = (shreddedRows ?? []).filter((s) => s.object_type === "thing").map((s) => s.object_id);
+  const listIds = (shreddedRows ?? []).filter((s) => s.object_type === "list").map((s) => s.object_id);
+  const bucketIds = (shreddedRows ?? []).filter((s) => s.object_type === "bucket").map((s) => s.object_id);
+  // Each of these three depends only on shreddedRows above, not on each
+  // other, so they also run concurrently.
+  const [{ data: tnames }, { data: lnames }, { data: bnames }] = await Promise.all([
+    thingIds.length
+      ? supabase.from("things").select("id,title").in("id", thingIds)
+      : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+    listIds.length
+      ? supabase.from("lists").select("id,name").in("id", listIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    bucketIds.length
+      ? supabase.from("buckets").select("id,name").in("id", bucketIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  ]);
+  return {
+    sorted,
+    caught,
+    inProgress: 0,
+    waiting: 0,
+    streak: streakDays > 0 ? `${streakDays}d` : "—",
+    weekly,
+    achievement: sorted > 0 ? "Movement on the board" : "—",
+    shredded: (shreddedRows ?? []).map((s) => ({
+      id: s.object_id,
+      title:
+        tnames?.find((t) => t.id === s.object_id)?.title ??
+        lnames?.find((l) => l.id === s.object_id)?.name ??
+        bnames?.find((b) => b.id === s.object_id)?.name ??
+        s.object_type,
+      kind: (s.object_type === "list" || s.object_type === "bucket" ? s.object_type : "thing") as
+        | "thing"
+        | "list"
+        | "bucket",
+    })),
+  };
+}
+
 export function useTrophy() {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
@@ -29,57 +103,7 @@ export function useTrophy() {
 
   const query = useQuery({
     queryKey: keys.trophy(user?.id),
-    queryFn: async (): Promise<TrophyStats> => {
-      const { data: actor } = await supabase.from("actors").select("id").eq("profile_id", user!.id).maybeSingle();
-      const actorId = actor?.id;
-      const { data: events, error } = await supabase
-        .from("thing_activity")
-        .select("event, created_at, actor_id")
-        .eq("actor_id", actorId ?? "00000000-0000-0000-0000-000000000000");
-      if (error) throw error;
-      const mine = events ?? [];
-      const sorted = mine.filter((e) => e.event === "sorted").length;
-      const caught = mine.filter((e) => e.event === "caught").length;
-      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      const weekly = mine.filter((e) => new Date(e.created_at).getTime() >= weekAgo).length;
-      // Real consecutive-day streak from "sorted" events (shared, unit-tested logic).
-      const streakDays = computeStreak(
-        mine.filter((e) => e.event === "sorted").map((e) => e.created_at as string),
-      );
-      const { data: shreddedRows } = await supabase
-        .from("profile_object_state")
-        .select("object_id, object_type, shredded_at")
-        .not("shredded_at", "is", null)
-        .order("shredded_at", { ascending: false })
-        .limit(10);
-      const thingIds = (shreddedRows ?? []).filter((s) => s.object_type === "thing").map((s) => s.object_id);
-      const listIds = (shreddedRows ?? []).filter((s) => s.object_type === "list").map((s) => s.object_id);
-      const bucketIds = (shreddedRows ?? []).filter((s) => s.object_type === "bucket").map((s) => s.object_id);
-      const { data: tnames } = thingIds.length ? await supabase.from("things").select("id,title").in("id", thingIds) : { data: [] };
-      const { data: lnames } = listIds.length ? await supabase.from("lists").select("id,name").in("id", listIds) : { data: [] };
-      const { data: bnames } = bucketIds.length ? await supabase.from("buckets").select("id,name").in("id", bucketIds) : { data: [] };
-      return {
-        sorted,
-        caught,
-        inProgress: 0,
-        waiting: 0,
-        streak: streakDays > 0 ? `${streakDays}d` : "—",
-        weekly,
-        achievement: sorted > 0 ? "Movement on the board" : "—",
-        shredded: (shreddedRows ?? []).map((s) => ({
-          id: s.object_id,
-          title:
-            tnames?.find((t) => t.id === s.object_id)?.title ??
-            lnames?.find((l) => l.id === s.object_id)?.name ??
-            bnames?.find((b) => b.id === s.object_id)?.name ??
-            s.object_type,
-          kind: (s.object_type === "list" || s.object_type === "bucket" ? s.object_type : "thing") as
-            | "thing"
-            | "list"
-            | "bucket",
-        })),
-      };
-    },
+    queryFn: () => fetchTrophyStats(user!.id),
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
   });
