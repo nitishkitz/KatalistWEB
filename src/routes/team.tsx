@@ -1,10 +1,14 @@
 import { useState } from "react";
-import { createFileRoute, Outlet, useParams } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useParams, useSearch } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
 import { HubSidebar } from "@/features/hub/components/HubSidebar";
 import { ContactsDialog } from "@/features/hub/components/ContactsDialog";
 import { HubContext } from "@/features/hub/hub-context";
 import { cn } from "@/lib/utils";
+
+type TeamSearch = {
+  openContacts?: boolean;
+};
 
 export const Route = createFileRoute("/team")({
   head: () => ({
@@ -13,13 +17,24 @@ export const Route = createFileRoute("/team")({
       { name: "description", content: "Message, call, and share files with your team." },
     ],
   }),
+  // G01: lets an external link (onboarding's "Find people" step) open the
+  // real Contacts flow on arrival, instead of only being reachable once
+  // already on this page. `openContacts` is read once on mount below, not
+  // kept in sync with the URL afterward -- this is a one-shot "arrive with
+  // it open" signal, not a persisted view-state param.
+  validateSearch: (search: Record<string, unknown>): TeamSearch => {
+    const openContacts =
+      search.openContacts === true || search.openContacts === "true" ? true : undefined;
+    return { openContacts };
+  },
   component: TeamHubLayout,
 });
 
 function TeamHubLayout() {
   const params = useParams({ strict: false }) as { conversationId?: string };
   const inConversation = Boolean(params.conversationId);
-  const [contactsOpen, setContactsOpen] = useState(false);
+  const { openContacts: openContactsOnArrival } = useSearch({ from: "/team" });
+  const [contactsOpen, setContactsOpen] = useState(Boolean(openContactsOnArrival));
 
   return (
     <HubContext.Provider value={{ openContacts: () => setContactsOpen(true) }}>

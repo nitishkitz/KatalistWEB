@@ -2,6 +2,11 @@ import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Logo } from "@/components/katalist/Logo";
 import { cn } from "@/lib/utils";
+import { useSession } from "@/hooks/useSession";
+import { ImportanceBadge, PaceBadge } from "@/components/katalist/ImportanceBadge";
+import { AcknowledgementBadge } from "@/components/katalist/AcknowledgementBadge";
+import { WorkStatusBadge } from "@/components/katalist/WorkStatusBadge";
+import { PersonCell } from "@/components/katalist/PersonCell";
 
 export const Route = createFileRoute("/onboarding")({
   component: OnboardingPage,
@@ -40,10 +45,18 @@ const STEPS = [
   },
 ];
 
+// G01: illustrative-only data for the preview panel below -- explicitly
+// labeled as such (never presented as this person's real Things), built
+// from the SAME badge/cell primitives Court itself uses (ImportanceBadge,
+// PaceBadge, AcknowledgementBadge, WorkStatusBadge, PersonCell), not a new
+// bespoke preview component.
+const PREVIEW_PERSON = { id: "preview-person", name: "Priya Sharma", initials: "PS", avatarUrl: null };
+
 function OnboardingPage() {
   const [i, setI] = useState(0);
   const [contacts, setContacts] = useState(false);
   const navigate = useNavigate();
+  const { session } = useSession();
   const step = STEPS[i];
 
   if (contacts) {
@@ -60,7 +73,18 @@ function OnboardingPage() {
             <button
               type="button"
               className="h-10 rounded-lg bg-primary px-4 text-[13px] text-primary-foreground"
-              onClick={() => navigate({ to: "/", replace: true })}
+              onClick={() =>
+                // G01: opens the real Contacts flow (Team Hub's own
+                // ContactsDialog) instead of just navigating home --
+                // "Connect" used to do exactly what "Maybe Later" does,
+                // with no actual contacts request ever made. An
+                // unauthenticated visitor previewing onboarding has no
+                // account to send a request from yet, so this sends them
+                // to sign in first rather than silently no-op.
+                session
+                  ? navigate({ to: "/team", search: { openContacts: true }, replace: true })
+                  : navigate({ to: "/auth", replace: true })
+              }
             >
               Connect
             </button>
@@ -106,8 +130,22 @@ function OnboardingPage() {
           </div>
         </div>
         <div className="rounded-2xl border border-border bg-card p-6">
-          <p className="text-[12px] font-medium text-muted-foreground">Product preview</p>
-          <div className="mt-4 h-56 rounded-xl border border-dashed border-border bg-background" />
+          <p className="text-[12px] font-medium text-muted-foreground">
+            Product preview <span className="italic">(illustrative example, not your real data)</span>
+          </p>
+          <div className="mt-4 flex flex-col gap-2 rounded-xl border border-border bg-background p-3">
+            <p className="text-[13px] font-medium text-foreground">Draft the Q3 proposal</p>
+            <div className="flex flex-wrap gap-1.5">
+              <ImportanceBadge value="now" />
+              <PaceBadge value="next" />
+              <AcknowledgementBadge value="waiting_for_catch" />
+              <WorkStatusBadge value="under_progress" />
+            </div>
+            <div className="flex items-center justify-between">
+              <PersonCell person={PREVIEW_PERSON} />
+              <span className="text-[11px] text-muted-foreground">Q3 Planning</span>
+            </div>
+          </div>
         </div>
       </div>
       <div className="mx-auto mt-12 flex max-w-5xl justify-center gap-1.5">
