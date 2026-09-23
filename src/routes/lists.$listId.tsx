@@ -96,6 +96,7 @@ export const Route = createFileRoute("/lists/$listId")({
 type TabType = "things" | "chat" | "members";
 type QuickFilterType =
   | "all"
+  | "active"
   | "mine"
   | "theirs"
   | "waiting"
@@ -282,8 +283,30 @@ function ListDetailPage() {
   const [navSearch, setNavSearch] = useState("");
   const [selectedFile, setSelectedFile] = useState<ThingFile | null>(null);
 
-  // Things tab filters & search
-  const [thingsFilter, setThingsFilter] = useState<QuickFilterType>("all");
+  // Things tab filters & search. G02: persisted per profile+List so it
+  // survives navigating away and back -- "all" (every Thing, including
+  // sorted/cancelled) is the compatibility default when nothing has been
+  // saved yet, matching the pre-existing behavior before this filter had a
+  // UI control at all.
+  const thingsFilterStorageKey = `katalist.lists.things_filter.${user?.id ?? "anon"}.${listId}`;
+  const [thingsFilter, setThingsFilter] = useState<QuickFilterType>(() => {
+    if (typeof window === "undefined") return "all";
+    try {
+      const stored = window.localStorage.getItem(thingsFilterStorageKey);
+      return (stored as QuickFilterType) || "all";
+    } catch {
+      return "all";
+    }
+  });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(thingsFilterStorageKey, thingsFilter);
+    } catch {
+      // Storage unavailable (quota/privacy mode) -- the filter still
+      // applies for this session, it just won't survive a reload.
+    }
+  }, [thingsFilterStorageKey, thingsFilter]);
   const [dueFilter, setDueFilter] = useState<DueFilterType>("all");
   const [personFilter, setPersonFilter] = useState<string | null>(null);
   const [sortOption, setSortOption] = useState<SortOption>("due");
@@ -349,7 +372,10 @@ function ListDetailPage() {
   // Filtered & Sorted Things
   const filteredThings = useMemo(() => {
     const list_ = listThings.filter((t) => {
-      // Quick filter
+      // Quick filter. "active" = nonterminal (neither sorted nor
+      // cancelled) -- G02's own default view; "all" (the pre-existing
+      // default, kept for compatibility) includes terminal Things too.
+      if (thingsFilter === "active" && (t.workStatus === "sorted" || t.workStatus === "cancelled")) return false;
       if (thingsFilter === "mine" && t.assignee.id !== myActorId) return false;
       if (thingsFilter === "theirs" && t.assignee.id === myActorId) return false;
       if (thingsFilter === "waiting" && t.acknowledgement !== "waiting_for_catch") return false;
@@ -751,6 +777,39 @@ function ListDetailPage() {
                         placeholder="Search Things..."
                         className="h-[40px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
                       />
+                    </div>
+                    {/* G02: thingsFilter already drove filteredThings/grouped/
+                        laneThings, but had no control to actually change it --
+                        "all" (every Thing, including sorted/cancelled) stays
+                        the default for compatibility with existing behavior. */}
+                    <div
+                      role="tablist"
+                      aria-label="Filter Things by status"
+                      className="mt-2 flex items-center gap-1 rounded-[9px] bg-[#f4f5fb] p-1"
+                    >
+                      {(
+                        [
+                          ["active", "Active"],
+                          ["all", "All"],
+                          ["completed", "Completed"],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          role="tab"
+                          aria-selected={thingsFilter === id}
+                          onClick={() => setThingsFilter(id)}
+                          className={cn(
+                            "flex-1 rounded-[7px] py-1.5 text-[11.5px] font-medium transition-colors",
+                            thingsFilter === id
+                              ? "bg-white text-[#000533] shadow-2xs"
+                              : "text-[#6a769c] hover:text-[#000533]",
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
