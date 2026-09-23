@@ -62,11 +62,17 @@ const DEFAULT_PERSONAS = [
 export async function mapDbListRows(profileId: string, lists: DbListRow[]): Promise<ListRow[]> {
   if (!lists.length) return [];
   const ids = lists.map((l) => l.id);
-  const coverUrls = await signCoverUrls(
-    lists.map((l) => l.cover_storage_path).filter((p): p is string => Boolean(p)),
-  );
-  const { data: members } = await supabase.from("list_members").select("list_id,profile_id,role").in("list_id", ids);
-  const { data: things } = await supabase.from("things").select("id,list_id,work_status").in("list_id", ids);
+  // These three are independent of each other — cover URLs only need
+  // `lists`' own cover paths, and the members/things queries only need
+  // `ids`, none of the three needs another's result — so they run
+  // concurrently instead of cover-then-members-then-things. (The
+  // identity-resolution chain below does depend on `members`, so it
+  // still waits for this Promise.all to settle.)
+  const [coverUrls, { data: members }, { data: things }] = await Promise.all([
+    signCoverUrls(lists.map((l) => l.cover_storage_path).filter((p): p is string => Boolean(p))),
+    supabase.from("list_members").select("list_id,profile_id,role").in("list_id", ids),
+    supabase.from("things").select("id,list_id,work_status").in("list_id", ids),
+  ]);
 
   const memberRows = members ?? [];
   const profileIds = [
