@@ -13,10 +13,25 @@ export async function fetchCourt(
 ): Promise<{ things: Thing[]; myActorId: string | null }> {
   // profileId comes from the session useCourt() already holds (see its
   // enabled: liveAuth gate) — no need to re-fetch the current user via
-  // supabase.auth.getUser() just to get an id we already have. The actor
-  // lookup and the things query are independent of each other (the
-  // things query only needs `context`), so they run concurrently instead
-  // of the actor lookup blocking the things query behind it.
+  // supabase.auth.getUser() just to get an id we already have. This
+  // isn't a weaker identity check: both RLS policies this function
+  // depends on key off auth.uid() (the server-validated JWT claim), not
+  // any client-supplied id —
+  //   actors: "profile_id = auth.uid()" (supabase/migrations/
+  //     20260818125511_...sql)
+  //   things: katalist_priv.can_view_thing(), which checks
+  //     "a.profile_id = auth.uid()" internally (supabase/migrations/
+  //     20260818142601_...sql) — the things query below doesn't even
+  //     pass myActorId as a filter, only `context`.
+  // A stale/wrong profileId here can only ever cause the actors lookup
+  // to return no row (myActorId becomes null); it can't leak another
+  // account's data, since the database enforces the real boundary
+  // independent of this argument. This also matches use-lists.ts and
+  // use-buckets.ts, neither of which ever called auth.getUser() either.
+  //
+  // The actor lookup and the things query are independent of each other
+  // (the things query only needs `context`), so they run concurrently
+  // instead of the actor lookup blocking the things query behind it.
   const [{ data: actor }, { data: rows, error }] = await Promise.all([
     supabase.from("actors").select("id").eq("profile_id", profileId).maybeSingle(),
     supabase.from("things").select(THING_COLUMNS).eq("context", context).is("cancelled_at", null),
