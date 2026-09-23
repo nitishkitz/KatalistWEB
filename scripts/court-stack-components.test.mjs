@@ -162,6 +162,18 @@ test("Court desktop retains Magic Box, controls, quick filters, and With Others"
   assert.match(courtDesktop, /setTheirSelectedId\(selectedThing\.id\)/);
 });
 
+test("E01: With Others sits behind a named lg-only toggle, and is always visible at xl", () => {
+  // 1024-1279px (Tailwind lg but not xl): three lanes plus a permanently
+  // visible sidebar left each lane too narrow to be readable there --
+  // the toggle exists only in that band (hidden lg:inline-flex xl:hidden),
+  // and the sidebar wrapper is CSS-hidden unless toggled open UNLESS xl
+  // is reached, at which point xl:block makes it always visible again
+  // regardless of the toggle's state.
+  assert.match(courtDesktop, /hidden lg:inline-flex xl:hidden[\s\S]{0,400}With Others/);
+  assert.match(courtDesktop, /withOthersOpenNarrow \? "block" : "hidden", "xl:block"/);
+  assert.match(courtDesktop, /setWithOthersOpenNarrow/);
+});
+
 test("Court route provides actor identity while retaining the existing inline selection flow", () => {
   assert.match(courtRoute, /myActorId,[\s\S]*= useCourt\(\)/);
   assert.match(courtRoute, /<CourtDesktop[\s\S]*myActorId=\{myActorId\}/);

@@ -388,6 +388,12 @@ export function CourtDesktop({
   };
 
   const [showBucketsPanel, setShowBucketsPanel] = useState(false);
+  // E01: at 1024-1279px (Tailwind's lg but not yet xl), the lanes grid
+  // plus a permanently-visible With Others sidebar leaves each lane too
+  // narrow to be readable -- With Others sits behind this named toggle in
+  // that range instead. At >=1280px (xl) it's back to always visible,
+  // regardless of this state, via the xl:block override on its wrapper.
+  const [withOthersOpenNarrow, setWithOthersOpenNarrow] = useState(false);
 
   useEffect(() => {
     const handleDragStart = (e: DragEvent) => {
@@ -536,6 +542,21 @@ export function CourtDesktop({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* E01: only rendered in the 1024-1279px band (lg but not xl) --
+              at xl and up the sidebar is always visible, so this toggle
+              would be redundant there. */}
+          <button
+            type="button"
+            onClick={() => setWithOthersOpenNarrow((open) => !open)}
+            aria-pressed={withOthersOpenNarrow}
+            className="hidden lg:inline-flex xl:hidden h-8 items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 text-[11px] font-medium text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            With Others
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {theirGroups.waiting_for_catch.length + theirGroups.moving.length + theirGroups.needs_attention.length}
+            </span>
+          </button>
+
           <label className="flex h-8 w-48 items-center gap-2 rounded-lg border border-border bg-white px-2.5 focus-within:border-primary focus-within:ring-2 focus-within:ring-ring">
             <KatalistIcon name="search" className="h-3.5 w-3.5 text-muted-foreground" />
             <input
@@ -708,21 +729,26 @@ export function CourtDesktop({
           <CourtBucketsSidePanel onClose={() => setShowBucketsPanel(false)} />
         )}
 
-        {/* WITH OTHERS permanent right sidebar — hidden while buckets panel is open
+        {/* WITH OTHERS right sidebar — hidden while buckets panel is open.
+            Always visible at xl (>=1280px); at lg-only (1024-1279px) it's
+            behind the "With Others" toggle above, since three lanes plus
+            this sidebar leaves each lane too narrow to be readable there.
             Section groups: "Needs Attention", "Waiting for Catch", "Moving"
             Selected detail renders InlineThingDetailWorkspace with theirSelectedId / setTheirSelectedId(selectedThing.id) */}
         {!showBucketsPanel && (
-          <CourtWithOthersSidebar
-            theirGroups={theirGroups}
-            theirFocus={theirFocus}
-            setTheirFocus={setTheirFocus}
-            theirs={view.theirs}
-            onOpenThing={(thing, origin) => handleOpen("theirs", thing, origin)}
-            onViewAllTheirs={() => handleViewAll("theirs")}
-            theirSelectedId={theirSelectedId}
-            setTheirSelectedId={setTheirSelectedId}
-            directory={directory}
-          />
+          <div className={cn(withOthersOpenNarrow ? "block" : "hidden", "xl:block")}>
+            <CourtWithOthersSidebar
+              theirGroups={theirGroups}
+              theirFocus={theirFocus}
+              setTheirFocus={setTheirFocus}
+              theirs={view.theirs}
+              onOpenThing={(thing, origin) => handleOpen("theirs", thing, origin)}
+              onViewAllTheirs={() => handleViewAll("theirs")}
+              theirSelectedId={theirSelectedId}
+              setTheirSelectedId={setTheirSelectedId}
+              directory={directory}
+            />
+          </div>
         )}
       </div>
 
