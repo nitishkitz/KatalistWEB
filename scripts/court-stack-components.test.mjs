@@ -85,12 +85,18 @@ test("Court lane stacks render one active Thing over a capped, hidden decorative
 
 test("Court stack actions are capability-gated and route to canonical RPCs", () => {
   assert.match(laneStack, /getThingCapabilities\(activeThing, myActorId\)/);
-  // Pace/sort capability gating and their RPC calls moved from the card
-  // into the lane's swipe-gesture handler (runAction); the card itself
-  // only gates its one remaining button, Catch.
+  // Pace capability gating and its RPC call live in the lane's
+  // swipe-gesture handler (runAction) only, with no button equivalent
+  // (that's the timed Snooze picker, a separate concept -- see the next
+  // test). Catch and Sort each have their own capability-gated button on
+  // the card itself (E01: Sort's button is new -- it used to be
+  // swipe-right/Thing-detail-only) that calls the same onAction() the
+  // gesture handler already dispatches to, not a second RPC path.
   assert.match(stackCard, /capabilities\.canCatch && \(/);
   assert.match(stackCard, />\s*Catch\s*</);
-  assert.doesNotMatch(stackCard, />\s*Later\s*<|>\s*Sorted\s*</);
+  assert.match(stackCard, /capabilities\.canSort && \(/);
+  assert.match(stackCard, />\s*Mark Sorted\s*</);
+  assert.doesNotMatch(stackCard, />\s*Later\s*</);
   assert.match(laneStack, /actionCapabilities\.canMoveLater/);
   assert.match(laneStack, /capabilities\.canSort/);
   assert.match(laneStack, /await rpcCatchAndStart\(activeThing\.id\)/);

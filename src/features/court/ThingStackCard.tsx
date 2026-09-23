@@ -369,8 +369,13 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
             })()}
         </button>
 
-        {/* Card action: only Catch (Things awaiting catch). Sorting happens by
-            swiping right or from the Thing detail. */}
+        {/* Card action: Catch (Things awaiting catch) or Sort (already
+            caught) -- capabilities.canCatch/canSort are mutually exclusive
+            (see domain/capabilities.ts), so exactly one of these renders.
+            E01: Sort used to be swipe-right/Thing-detail-only, with no
+            keyboard/click equivalent in the stack itself -- this button
+            calls the exact same onAction("sort") the swipe gesture already
+            dispatches (CourtLaneStack's runAction), not a second path. */}
         {capabilities.canCatch && (
           <div
             onPointerDown={(e) => e.stopPropagation()}
@@ -384,6 +389,22 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[11.5px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
             >
               <span>Catch</span>
+            </button>
+          </div>
+        )}
+        {capabilities.canSort && (
+          <div
+            onPointerDown={(e) => e.stopPropagation()}
+            className="flex items-center gap-2 p-3 pt-2.5 border-t border-slate-100"
+          >
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={(event) => run(event, "sort")}
+              style={{ backgroundColor: laneFigma[lane].primaryBtn }}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[11.5px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
+            >
+              <span>Mark Sorted</span>
             </button>
           </div>
         )}
