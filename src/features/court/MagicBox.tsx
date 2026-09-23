@@ -41,6 +41,16 @@ export function MagicBox({
   // tracks which person ID the user has explicitly dismissed from the suggestion prompt
   const [dismissedSuggestionId, setDismissedSuggestionId] = useState<string | null>(null);
   const [attachedFiles, setAttachedFiles] = useState<ThingFile[]>([]);
+  // E04: a multi-assignee toss used to Promise.all() every rpcCreateThing
+  // call -- if even one rejected, the whole mutation rejected too, but the
+  // OTHER assignees' Things were already really created (Promise.all
+  // doesn't undo settled work). Pressing Toss again then replayed the
+  // ENTIRE assignee list, including the ones that already succeeded,
+  // creating duplicates for them. This tracks which assignee ids from the
+  // last attempt still need retrying, so the next submit only retries
+  // those -- set on a partial failure, cleared on a fresh edit or a fully
+  // successful toss.
+  const [retryAssigneeIds, setRetryAssigneeIds] = useState<string[] | null>(null);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -253,39 +263,65 @@ export function MagicBox({
       if (blocked) throw new Error("Pick a person — Coey won't guess.");
       const live = !isPreviewMode();
 
-      const assigneeIds = parsed.assigneeIds.filter(
+      // E04: after a partial multi-toss failure, retry ONLY the assignees
+      // that actually failed -- re-parsing `value` here would include the
+      // ones that already succeeded, creating duplicate Things for them.
+      const parsedAssigneeIds = parsed.assigneeIds.filter(
         (id) => !(live && id.startsWith("p-")),
       );
+      const assigneeIds = retryAssigneeIds ?? parsedAssigneeIds;
 
       const titleToUse =
         parsed.title.trim() ||
         (attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "New Thing");
 
-      // Multi-toss: one Thing per assignee in parallel
+      // Multi-toss: one Thing per assignee in parallel. E04: uses
+      // allSettled and reports which specific assignees failed, rather
+      // than Promise.all's "one rejects, the mutation rejects" -- the
+      // OTHER assignees' Things are already real, committed rows the
+      // instant their own call resolves, so a naive full-mutation retry
+      // after a partial failure would create duplicates for them.
       if (assigneeIds.length > 1) {
-        const results = await Promise.all(
-          assigneeIds.map((assigneeActorId) =>
-            rpcCreateThing({
-              title: titleToUse,
-              context,
-              ownerImportance: parsed.importance,
-              listId: effectiveListId,
-              assigneeActorId,
-              dueAt: parsed.dueAt,
-              dueHasTime: parsed.dueHasTime,
-              files: attachedFiles.length > 0 ? attachedFiles : undefined,
-            }),
-          ),
+        const settled = await Promise.all(
+          assigneeIds.map(async (assigneeActorId) => {
+            try {
+              const created = await rpcCreateThing({
+                title: titleToUse,
+                context,
+                ownerImportance: parsed.importance,
+                listId: effectiveListId,
+                assigneeActorId,
+                dueAt: parsed.dueAt,
+                dueHasTime: parsed.dueHasTime,
+                files: attachedFiles.length > 0 ? attachedFiles : undefined,
+              });
+              return { assigneeActorId, id: created?.id ?? null, ok: true as const };
+            } catch (err) {
+              return { assigneeActorId, error: err, ok: false as const };
+            }
+          }),
         );
 
-        if (effectiveBucketId) {
-          await Promise.allSettled(
-            results
-              .filter((r) => r?.id)
-              .map((r) => rpcAddToBucket(effectiveBucketId, r!.id)),
-          );
+        const succeeded = settled.filter((r) => r.ok);
+        const failed = settled.filter((r) => !r.ok);
+        const createdIds = succeeded.map((r) => r.id).filter((id): id is string => Boolean(id));
+
+        if (effectiveBucketId && createdIds.length > 0) {
+          await Promise.allSettled(createdIds.map((id) => rpcAddToBucket(effectiveBucketId, id)));
         }
-        return { count: results.length };
+
+        if (failed.length === settled.length) {
+          // Every assignee failed -- nothing was created, so this is a
+          // plain failure like any other; existing onError handling and
+          // full-mutation retry are both correct here.
+          throw failed[0].error instanceof Error ? failed[0].error : new Error("Couldn’t toss that.");
+        }
+
+        return {
+          count: succeeded.length,
+          createdIds,
+          failedAssigneeIds: failed.map((r) => r.assigneeActorId),
+        };
       }
 
       // Single-toss (0 or 1 assignee)
@@ -308,13 +344,22 @@ export function MagicBox({
           // ignore bucket link error
         }
       }
-      return { count: 1 };
+      return { count: 1, createdIds: created?.id ? [created.id] : [], failedAssigneeIds: [] };
     },
     onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
     onSuccess: async (result, _vars, mutationContext) => {
+      const failedAssigneeIds = result?.failedAssigneeIds ?? [];
+      const hasPartialFailure = failedAssigneeIds.length > 0;
+
       setTossed(true);
-      setValue("");
-      setAttachedFiles([]);
+      // A partial multi-toss failure keeps the input (title/files) so the
+      // retry attempt below reuses the same content -- only a full
+      // success or a fresh edit (see the input's onChange) clears it.
+      if (!hasPartialFailure) {
+        setValue("");
+        setAttachedFiles([]);
+      }
+      setRetryAssigneeIds(hasPartialFailure ? failedAssigneeIds : null);
       setTrigger(null);
       setDismissedSuggestionId(null);
       if (!isEpochCurrent(qc, mutationContext.epoch)) return;
@@ -328,7 +373,13 @@ export function MagicBox({
         await qc.invalidateQueries({ queryKey: ["buckets"] });
       }
       const count = result?.count ?? 1;
-      toast.success(count > 1 ? `${count} things tossed ✓` : "Tossed.");
+      if (hasPartialFailure) {
+        toast.error(
+          `${count} tossed, ${failedAssigneeIds.length} failed — press Toss again to retry just the failed ${failedAssigneeIds.length > 1 ? "ones" : "one"}.`,
+        );
+      } else {
+        toast.success(count > 1 ? `${count} things tossed ✓` : "Tossed.");
+      }
       window.setTimeout(() => setTossed(false), 240);
     },
     onError: (err, _vars, mutationContext) => {
@@ -604,6 +655,11 @@ export function MagicBox({
             onChange={(e) => {
               const next = e.target.value;
               setValue(next);
+              // A fresh edit means the user is composing something new, not
+              // retrying the last partial failure -- the next submit should
+              // parse `next` normally again, not silently narrow to
+              // whichever assignees failed last time.
+              setRetryAssigneeIds(null);
               const cursor = e.target.selectionStart ?? next.length;
               checkMentionTrigger(next, cursor);
             }}
