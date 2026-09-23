@@ -58,6 +58,7 @@ import {
   rpcShred,
   rpcSortThing,
 } from "./rpc";
+import { withOptimisticPatch } from "./query-updates";
 import { invalidatePersonalSurfaces } from "./personal-shred";
 import { isPreviewMode } from "@/lib/session-mode";
 import { uploadThingAttachment } from "./attachments";
@@ -657,10 +658,17 @@ export function ThingDetailContent({
                   type="button"
                   disabled={busy}
                   onClick={() =>
-                    run.mutate(async () => {
-                      await rpcCatchAndStart(thing.id);
-                      toast.success("Caught — now in progress.");
-                    })
+                    run.mutate(
+                      withOptimisticPatch(
+                        qc,
+                        thing.id,
+                        { acknowledgement: "caught", workStatus: "under_progress", personalPace: "next" },
+                        async () => {
+                          await rpcCatchAndStart(thing.id);
+                          toast.success("Caught — now in progress.");
+                        },
+                      ),
+                    )
                   }
                   className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-[#975ee2] px-3.5 text-[12px] font-medium text-white hover:brightness-95 disabled:opacity-60 transition cursor-pointer"
                 >
@@ -671,11 +679,18 @@ export function ThingDetailContent({
                   type="button"
                   disabled={busy}
                   onClick={() =>
-                    run.mutate(async () => {
-                      await rpcSortThing(thing.id);
-                      toast.success("Nicely sorted.");
-                      onAfterTerminalAction?.();
-                    })
+                    run.mutate(
+                      withOptimisticPatch(
+                        qc,
+                        thing.id,
+                        { workStatus: "sorted", sortedAt: new Date().toISOString() },
+                        async () => {
+                          await rpcSortThing(thing.id);
+                          toast.success("Nicely sorted.");
+                          onAfterTerminalAction?.();
+                        },
+                      ),
+                    )
                   }
                   className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-[#975ee2] px-3.5 text-[12px] font-medium text-white hover:brightness-95 disabled:opacity-60 transition cursor-pointer"
                 >
