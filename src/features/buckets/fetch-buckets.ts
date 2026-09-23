@@ -35,11 +35,17 @@ export async function fetchBuckets(qc: QueryClient, context: "work" | "home", pr
   const thingIds = (items ?? []).map((i) => i.thing_id).filter(Boolean) as string[];
   const listIds = (items ?? []).map((i) => i.list_id).filter(Boolean) as string[];
 
-  // Both queries depend only on bucket_items' output above, not on each
-  // other, so they run concurrently instead of things-then-lists.
+  // Three independent reads, run concurrently: direct Things, referenced
+  // Lists' own metadata, and the referenced Lists' MEMBER Thing ids
+  // (id/list_id/work_status only -- just enough to deduplicate against
+  // bucketThingIds below; mapDbListRows' own aggregate thingCount/
+  // doneCount don't expose which specific Things they counted, so this is
+  // a second, narrower query rather than a shared-type change to
+  // ListRow).
   const [
     { data: thingRows, error: thingsError },
     { data: listRows, error: listsError },
+    { data: listMemberThingRows, error: listMemberThingsError },
   ] = await Promise.all([
     thingIds.length
       ? supabase.from("things").select(THING_COLUMNS).in("id", thingIds)
@@ -47,9 +53,13 @@ export async function fetchBuckets(qc: QueryClient, context: "work" | "home", pr
     listIds.length
       ? supabase.from("lists").select("id,name,context,owner_profile_id,updated_at").in("id", listIds)
       : Promise.resolve({ data: [] as DbListRow[], error: null }),
+    listIds.length
+      ? supabase.from("things").select("id,list_id,work_status").in("list_id", listIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; list_id: string; work_status: string }>, error: null }),
   ]);
   if (thingsError) throw thingsError;
   if (listsError) throw listsError;
+  if (listMemberThingsError) throw listMemberThingsError;
 
   // Same reasoning: each mapper only needs its own rows.
   const [mappedThings, mappedLists] = await Promise.all([
@@ -59,19 +69,43 @@ export async function fetchBuckets(qc: QueryClient, context: "work" | "home", pr
 
   const thingMap = new Map(mappedThings.map((t) => [t.id, t]));
   const listMap = new Map(mappedLists.map((l) => [l.id, l]));
+  // G03: list_id -> that list's member Thing rows, for the dedup below.
+  const memberThingsByListId = new Map<string, Array<{ id: string; work_status: string }>>();
+  for (const row of listMemberThingRows ?? []) {
+    if (!row.list_id || !row.id) continue;
+    const arr = memberThingsByListId.get(row.list_id) ?? [];
+    arr.push({ id: row.id, work_status: row.work_status ?? "" });
+    memberThingsByListId.set(row.list_id, arr);
+  }
 
   return (buckets ?? []).map((b, i) => {
     const refs = (items ?? []).filter((it) => it.bucket_id === b.id);
     const bucketThingIds = refs.map((r) => r.thing_id).filter(Boolean) as string[];
     const bucketListIds = refs.map((r) => r.list_id).filter(Boolean) as string[];
     const directThings = bucketThingIds.map((id) => thingMap.get(id)).filter(Boolean);
-    const bucketLists = bucketListIds.map((id) => listMap.get(id)).filter(Boolean);
     const activeDirectThings = directThings.filter((thing) => thing?.workStatus !== "cancelled");
-    const progressCompleted =
-      activeDirectThings.filter((thing) => thing?.workStatus === "sorted").length +
-      bucketLists.reduce((sum, list) => sum + (list?.doneCount ?? 0), 0);
-    const progressTotal =
-      activeDirectThings.length + bucketLists.reduce((sum, list) => sum + (list?.thingCount ?? 0), 0);
+
+    // G03: denominator is UNIQUE accessible non-cancelled Things across
+    // BOTH direct bucket items and every referenced List's own members --
+    // a Thing that's a direct item AND also belongs to a referenced List
+    // must only be counted once. Naively adding activeDirectThings.length
+    // to each list's own thingCount (the previous behavior) double-counted
+    // exactly that overlap.
+    const uniqueActiveThingIds = new Set<string>();
+    const uniqueSortedThingIds = new Set<string>();
+    for (const thing of activeDirectThings) {
+      uniqueActiveThingIds.add(thing!.id);
+      if (thing!.workStatus === "sorted") uniqueSortedThingIds.add(thing!.id);
+    }
+    for (const lid of bucketListIds) {
+      for (const row of memberThingsByListId.get(lid) ?? []) {
+        if (row.work_status === "cancelled") continue;
+        uniqueActiveThingIds.add(row.id);
+        if (row.work_status === "sorted") uniqueSortedThingIds.add(row.id);
+      }
+    }
+    const progressCompleted = uniqueSortedThingIds.size;
+    const progressTotal = uniqueActiveThingIds.size;
 
     const bucketCollaborators: { id: string; name: string; avatarUrl: string | null; initials: string }[] = [];
     const seenCollab = new Set<string>();
