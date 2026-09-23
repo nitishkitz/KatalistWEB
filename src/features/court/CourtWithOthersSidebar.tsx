@@ -11,6 +11,7 @@ import { KatalistIcon } from "./KatalistIcon";
 import { rpcNudgeThing, type NudgeReason } from "@/features/things/rpc";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 type CourtWithOthersSidebarProps = {
   theirGroups: {
@@ -58,10 +59,12 @@ export function CourtWithOthersSidebar({
     const reason: NudgeReason =
       state === "waiting_for_catch" ? "waiting_for_catch" : state === "moving" ? "quiet" : "stale";
     setNudgingId(thing.id);
+    const epoch = getIdentityEpoch(qc).epoch;
     void rpcNudgeThing(thing.id, reason).then(
       () => {
         setNudgedIds((prev) => ({ ...prev, [thing.id]: true }));
         setNudgingId(null);
+        if (!isEpochCurrent(qc, epoch)) return;
         toast.success(
           alreadyNudged ? "Nudged again — they'll get another gentle tap." : "Just a gentle paw tap on this one.",
         );
@@ -73,6 +76,7 @@ export function CourtWithOthersSidebar({
       },
       (err: unknown) => {
         setNudgingId(null);
+        if (!isEpochCurrent(qc, epoch)) return;
         // Nudges are soft. Never show the scary generic error — keep it calm.
         const raw = domainErrorMessage(err);
         const friendly =

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export type BucketNote = {
   id: string;
@@ -37,7 +38,9 @@ export function useBucketNotes(bucketId: string) {
     },
   });
 
-  const invalidate = () => void qc.invalidateQueries({ queryKey: key });
+  const invalidate = (epoch: number) => {
+    if (isEpochCurrent(qc, epoch)) void qc.invalidateQueries({ queryKey: key });
+  };
 
   const create = useMutation({
     mutationFn: async (input: { title: string; body: string }): Promise<string> => {
@@ -50,7 +53,8 @@ export function useBucketNotes(bucketId: string) {
       if (error) throw error;
       return data.id;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const update = useMutation({
@@ -61,7 +65,8 @@ export function useBucketNotes(bucketId: string) {
         .eq("id", input.id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   const remove = useMutation({
@@ -72,7 +77,8 @@ export function useBucketNotes(bucketId: string) {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: invalidate,
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
   return { notes: query.data ?? [], isLoading: query.isLoading, create, update, remove };

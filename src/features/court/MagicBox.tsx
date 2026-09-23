@@ -15,6 +15,7 @@ import { parseToss, tossBlockedByPerson } from "./parse-toss";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import type { ThingFile, Person } from "@/domain/thing";
 import { processFileForUpload } from "@/lib/file-utils";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 export function MagicBox({
   listId,
@@ -309,12 +310,14 @@ export function MagicBox({
       }
       return { count: 1 };
     },
-    onSuccess: async (result) => {
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onSuccess: async (result, _vars, mutationContext) => {
       setTossed(true);
       setValue("");
       setAttachedFiles([]);
       setTrigger(null);
       setDismissedSuggestionId(null);
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
       await qc.invalidateQueries({ queryKey: ["court"] });
       if (effectiveListId) {
@@ -328,7 +331,8 @@ export function MagicBox({
       toast.success(count > 1 ? `${count} things tossed ✓` : "Tossed.");
       window.setTimeout(() => setTossed(false), 240);
     },
-    onError: (err) => {
+    onError: (err, _vars, mutationContext) => {
+      if (mutationContext && !isEpochCurrent(qc, mutationContext.epoch)) return;
       toast.error(err instanceof Error ? err.message : "Couldn’t toss that.");
     },
   });
