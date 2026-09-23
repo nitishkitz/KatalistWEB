@@ -28,7 +28,7 @@ Purpose: single running status record for the C1 completion + C2 implementation 
 
 | Item | Status | Reason |
 |---|---|---|
-| Actor caching (profile-scoped, QueryClient-based) | Deferred | Needs its own lifecycle design (P3) before implementation (P4) — bundling it into the waterfall pass would repeat the exact mistake being corrected for C2 |
+| Actor caching (profile-scoped, QueryClient-based) | Outstanding (unblocked) | P3's lifecycle design is now implemented, so P4 (actor cache) can begin — not yet started |
 | Route-level request counts/durations/scaling | Outstanding | No live measurement exists; mocked concurrency tests prove serialization reduction only, not request volume or latency |
 | Summary/detail separation, bounded attachments/activity, pagination | Outstanding | Not addressed by any extraction done so far; scoped to P5 |
 
@@ -50,13 +50,13 @@ Not begun. P0 inventory (see `2026-09-23-realtime-ownership-inventory.md`) is co
 | P0 — baseline, inventory | Completed |
 | P1 — List-detail filters + regression tests | Completed |
 | P2 — remaining read-error policy | Completed |
-| P3 — identity/cache lifecycle design | Revision 5 delivered. Architecture direction approved at Revision 4; three corrections required before P3 itself is approved: (1) entering `pending` from a known identity skipped disposal entirely, leaving the old epoch/claims "current" for the whole pending window — fixed, disposal now runs for both `aligning` and `pending`; (2) disposer ordering hardened both ways (epoch advances before disposers run, *and* disposers are teardown-only); (3) the caller-level invalidation inventory was checked against wrong assumptions, not real source — reconciled against actual current code: `use-profile.ts`/`use-catchup.ts`/`use-doorman.ts` reclassified from "non-blocking" to "required," `personal-shred.ts`/`personal-snooze.ts` and `routes/lists.$listId.tsx` were missing entirely, and the claim "no toast/timer side effects found" was wrong (`MagicBox.tsx:328-329` has both, inside a mutation's `onSuccess`). Still awaiting approval — no production code changed; P4/P7 remain gated |
-| P4 — actor cache | Not started (depends on P3) |
+| P3 — identity/cache lifecycle | **Implemented.** Design (revision 5, `8e41a9a`) approved for implementation. Delivered: `use-lists.ts`'s bare-prefix seed scan fixed (`ae2bf3a`); `identity-cache-policy.ts` epoch primitive + epoch-scoped, self-healing, token-based claim/chain storage in `query-updates.ts` fixing the reviewer-reproduced bug (`60255d7`); `@testing-library/react`/`jsdom` devDependencies + a `.tsx`-transpiling loader hook (`8d47911`); `IdentityBoundary` (pending/aligning/ready gate, layout-effect disposal, identity-keyed remount) wired into `__root.tsx`, verified with 6 real DOM/React tests (`f93930c`); the "Required" tier of the caller-level invalidation audit retrofitted across 19 files (`c8c6604`); `AppContextProvider.tsx`'s context-update race fixed and `resetQueries()`+`initialData` interaction verified with both a library-level probe and a real component test (`bad8810`). 289/289 tests, typecheck/lint/build clean at every step. **Outstanding within P3's own scope**: the "Lower priority" invalidation tier (profile-scoped keys — `nudges.tsx`, `use-notifications.ts`, `use-list-meetings.ts`, `me.tsx`, `use-hub-files.ts`, `use-contacts.ts`, `use-lists.ts`'s own mutations, `use-conversations.ts`) not yet retrofitted — doesn't block safety per the design's own reasoning, but not done; `use-list-messages.ts`'s per-list broadcast-received handler and `use-realtime.ts`'s postgres_changes handlers were NOT epoch-guarded (explicitly P7's remit); browser/staging verification of the actual boundary in a live browser is still unrun. |
+| P4 — actor cache | Not started (depends on P3, now unblocked) |
 | P5 — summary/detail split, bounded feeds | Not started |
 | P6 — pure realtime routing/batching engine | Not started |
-| P7 — application-level ownership relocation | Not started (depends on P3/P6) |
+| P7 — application-level ownership relocation | Not started (depends on P3/P6; P3 is done, P6 is not) |
 | P8 — chat/hub/membership safety | Not started (depends on P7) |
 | P9 — reconnect/focus recovery, browser/staging validation | Not started |
 | P10 — final reconciliation, handoff | Not started |
 
-No behavior changes have been made in P0. No files edited except the addition of this tracker and the inventory doc.
+P0 was docs-only, no behavior changes. P1 onward are real, tested, committed source changes — see individual commit messages for full evidence per step.
