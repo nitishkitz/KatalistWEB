@@ -1,6 +1,7 @@
 import { pathToFileURL, fileURLToPath } from "node:url";
 import path from "node:path";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, readFileSync } from "node:fs";
+import ts from "typescript";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -37,4 +38,34 @@ export async function resolve(specifier, context, nextResolve) {
     if (hit) return nextResolve(pathToFileURL(hit).href, context);
   }
   return nextResolve(specifier, context);
+}
+
+/**
+ * Node's own --experimental-strip-types only recognizes .ts/.mts/.cts --
+ * .tsx is unconditionally unknown to it (ERR_UNKNOWN_FILE_EXTENSION),
+ * regardless of whether the file actually contains JSX. Real .tsx
+ * components (e.g. IdentityBoundary.tsx) still need to be importable
+ * directly from plain node:test component-level tests, so this hook
+ * transpiles .tsx source with the TypeScript compiler already installed
+ * in this project (used for `tsc --noEmit` too) -- strips types AND
+ * transforms JSX via the automatic runtime, then hands the emitted JS to
+ * Node as a normal ES module. Only .tsx is intercepted; .ts/.mjs keep
+ * using Node's own native type-stripping unchanged.
+ */
+export async function load(url, context, nextLoad) {
+  if (url.endsWith(".tsx") && url.startsWith("file:")) {
+    const filePath = fileURLToPath(url);
+    const source = readFileSync(filePath, "utf8");
+    const { outputText } = ts.transpileModule(source, {
+      fileName: filePath,
+      compilerOptions: {
+        jsx: ts.JsxEmit.ReactJSX,
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ES2022,
+        esModuleInterop: true,
+      },
+    });
+    return { format: "module", source: outputText, shortCircuit: true };
+  }
+  return nextLoad(url, context);
 }

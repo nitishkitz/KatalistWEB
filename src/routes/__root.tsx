@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { ProfileDirectoryProvider } from "@/features/people/ProfileDirectoryProvider";
 import { AppContextProvider } from "@/features/context/AppContextProvider";
+import { IdentityBoundary } from "@/features/realtime/IdentityBoundary";
 import { CallRingProvider } from "@/features/calls/CallRingProvider";
 import { PushRegistrar } from "@/features/push/PushRegistrar";
 import appCss from "../styles.css?url";
@@ -137,15 +138,21 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContextProvider>
-        <ProfileDirectoryProvider>
-          <Outlet />
-          <CallRingProvider />
-          <PushRegistrar />
-          <Toaster />
-        </ProfileDirectoryProvider>
-      </AppContextProvider>
+      {/* P3: the identity/cache-lifecycle boundary sits here, wrapping
+          everything AppContextProvider used to wrap directly -- so
+          CallRingProvider/PushRegistrar get the same disposal/remount
+          guarantee as routed content, rather than resting solely on
+          their own independent user?.id-keyed effects. */}
+      <IdentityBoundary>
+        <AppContextProvider>
+          <ProfileDirectoryProvider>
+            <Outlet />
+            <CallRingProvider />
+            <PushRegistrar />
+            <Toaster />
+          </ProfileDirectoryProvider>
+        </AppContextProvider>
+      </IdentityBoundary>
     </QueryClientProvider>
-
   );
 }
