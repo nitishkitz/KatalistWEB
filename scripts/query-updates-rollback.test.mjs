@@ -152,6 +152,31 @@ test("when two overlapping mutations on the same Thing both fail, the Thing unwi
   );
 });
 
+test("when two overlapping mutations both fail in reverse order (newest first), the Thing still unwinds to its true original value", () => {
+  // Same guarantee as the older-first case above, but failing the *tail*
+  // (most recent) mutation first, then the earlier one — verified against
+  // both the Court cache and the single-Thing cache, matching how a real
+  // mutation touches both simultaneously.
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  const thingKey = ["thing", "a"];
+  const a = makeThing("a", { workStatus: "not_started" });
+  qc.setQueryData(courtKey, { things: [a], myActorId: "p1" });
+  qc.setQueryData(thingKey, a);
+
+  const rollbackFirst = patchThingInCaches(qc, "a", { workStatus: "under_progress" });
+  const rollbackSecond = patchThingInCaches(qc, "a", { workStatus: "sorted" });
+
+  rollbackSecond(); // op2 fails first — it *is* the tail, so the cache reverts to op1's value.
+  assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "under_progress", "Court reverts to op1's value once op2 (the tail) fails");
+  assert.equal(qc.getQueryData(thingKey).workStatus, "under_progress", "single-Thing cache reverts to op1's value once op2 (the tail) fails");
+
+  rollbackFirst(); // op1 also fails — now the only (and tail) entry, unwinds to the true original.
+
+  assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "not_started", "Court unwinds to the true original once op1 also fails");
+  assert.equal(qc.getQueryData(thingKey).workStatus, "not_started", "single-Thing cache unwinds to the true original once op1 also fails");
+});
+
 test("two Things sharing the same Court query key track independent chains", () => {
   // Both mutations land in the *same* Court query cache entry (same
   // profile/context) but on different Things — the chain bookkeeping must
