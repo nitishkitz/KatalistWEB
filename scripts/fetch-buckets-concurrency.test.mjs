@@ -52,6 +52,7 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
       eq: () => node,
       is: () => node,
       in: () => node,
+      abortSignal: () => node,
       then: (resolve) => {
         track(name, () => delay(result)).then(resolve);
       },

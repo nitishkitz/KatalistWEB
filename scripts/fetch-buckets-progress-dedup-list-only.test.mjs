@@ -31,6 +31,7 @@ const chainableByColumn = (resultsByColumn) => {
     select: () => node,
     eq: () => node,
     is: () => node,
+    abortSignal: () => node,
     in: (col) => {
       node.__col = col;
       return node;
@@ -45,6 +46,7 @@ const chainable = (table, byTable) => {
     eq: () => node,
     is: () => node,
     in: (_col, _values) => node,
+    abortSignal: () => node,
     then: (resolve) => resolve(byTable[table] ?? { data: [], error: null }),
   };
   return node;

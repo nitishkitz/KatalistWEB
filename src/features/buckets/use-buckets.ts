@@ -11,6 +11,7 @@ import { rpcCreateBucket, rpcDeleteBucket, rpcRenameBucket } from "@/features/th
 import { fetchBuckets } from "./fetch-buckets";
 import type { BucketCard } from "./fixtures";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { withReadDeadline } from "@/lib/read-request";
 
 export function useBuckets() {
   const { session, user } = useSession();
@@ -21,7 +22,7 @@ export function useBuckets() {
 
   const query = useQuery({
     queryKey: keys.buckets(user?.id, context),
-    queryFn: () => fetchBuckets(qc, context, user?.id ?? ""),
+    queryFn: ({ signal }) => fetchBuckets(qc, context, user?.id ?? "", signal),
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
   });
@@ -69,18 +70,24 @@ export function useBucket(bucketId: string | undefined) {
   const query = useQuery({
     queryKey: keys.bucket(bucketId ?? "none"),
     enabled: Boolean(bucketId) && Boolean(user) && !preview,
-    queryFn: async (): Promise<BucketCard | null> => {
-      const { data, error } = await supabase
-        .from("buckets")
-        .select("id,name,context,updated_at")
-        .eq("id", bucketId!)
-        .maybeSingle();
-      if (error) throw error;
+    queryFn: async ({ signal }): Promise<BucketCard | null> => {
+      const { data, items } = await withReadDeadline(signal, async (combined) => {
+        const { data, error } = await supabase
+          .from("buckets")
+          .select("id,name,context,updated_at")
+          .eq("id", bucketId!)
+          .abortSignal(combined)
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) return { data: null, items: null };
+        const { data: items } = await supabase
+          .from("bucket_items")
+          .select("thing_id,list_id")
+          .eq("bucket_id", data.id)
+          .abortSignal(combined);
+        return { data, items };
+      });
       if (!data) return null;
-      const { data: items } = await supabase
-        .from("bucket_items")
-        .select("thing_id,list_id")
-        .eq("bucket_id", data.id);
       return {
         id: data.id,
         name: data.name,

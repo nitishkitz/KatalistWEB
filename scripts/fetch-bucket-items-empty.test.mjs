@@ -15,7 +15,12 @@ test("fetchBucketItems returns an empty list without querying Things/Lists when 
       supabase: {
         from: (table) => {
           if (table === "bucket_items") {
-            const node = { select: () => node, eq: () => node, then: (resolve) => resolve({ data: [], error: null }) };
+            const node = {
+              select: () => node,
+              eq: () => node,
+              abortSignal: () => node,
+              then: (resolve) => resolve({ data: [], error: null }),
+            };
             return node;
           }
           throw new Error(`fetchBucketItems should not query ${table} when bucket_items is empty`);

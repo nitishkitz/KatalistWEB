@@ -20,6 +20,7 @@ const chainable = (table) => {
     eq: () => node,
     is: () => node,
     in: () => node,
+    abortSignal: () => node,
     then: (resolve) => {
       if (table === failingTable) {
         resolve({ data: null, error: new Error(`${table} read failed`) });

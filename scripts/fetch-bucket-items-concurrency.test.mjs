@@ -49,6 +49,7 @@ test("fetchBucketItems runs the Things and Lists lookups concurrently", async ()
       select: () => node,
       eq: () => node,
       in: () => node,
+      abortSignal: () => node,
       then: (resolve) => {
         track(name, () => delay(result)).then(resolve);
       },

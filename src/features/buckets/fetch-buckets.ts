@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { mapDbListRows, type DbListRow } from "@/features/lists/map-list-rows";
 import type { BucketCard } from "./fixtures";
+import { withReadDeadline } from "@/lib/read-request";
 
 const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
 
@@ -14,52 +15,68 @@ const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500",
  * plain Node test runner; same reason fetchCourt moved out of
  * use-court.ts).
  */
-export async function fetchBuckets(qc: QueryClient, context: "work" | "home", profileId: string): Promise<BucketCard[]> {
-  const { data: buckets, error } = await supabase
-    .from("buckets")
-    .select("id,name,context,updated_at")
-    .eq("context", context)
-    .is("archived_at", null);
-  if (error) throw error;
-  const ids = (buckets ?? []).map((b) => b.id);
-  // Required data: a failed bucket_items/Things/Lists read must not
-  // silently become "this bucket has nothing in it" — that's a false
-  // empty state, not the truth. Only decorative data (none in this
-  // function; see mapDbListRows' cover-URL signing) is allowed to fail
-  // open.
-  const { data: items, error: itemsError } = ids.length
-    ? await supabase.from("bucket_items").select("bucket_id,thing_id,list_id").in("bucket_id", ids)
-    : { data: [], error: null };
-  if (itemsError) throw itemsError;
+export async function fetchBuckets(
+  qc: QueryClient,
+  context: "work" | "home",
+  profileId: string,
+  querySignal?: AbortSignal,
+): Promise<BucketCard[]> {
+  // T01: all four reads below (buckets, its dependent bucket_items read,
+  // then three more dependent on THAT) are one logical read operation --
+  // bounded together under a single deadline (read-request.ts), not one
+  // 15s window per phase, and wired to React Query's own cancellation
+  // signal so a superseded/refetched call or unmount stops whichever
+  // request is actually in flight.
+  const { buckets, items, thingRows, listRows, listMemberThingRows } = await withReadDeadline(querySignal, async (signal) => {
+    const { data: buckets, error } = await supabase
+      .from("buckets")
+      .select("id,name,context,updated_at")
+      .eq("context", context)
+      .is("archived_at", null)
+      .abortSignal(signal);
+    if (error) throw error;
+    const ids = (buckets ?? []).map((b) => b.id);
+    // Required data: a failed bucket_items/Things/Lists read must not
+    // silently become "this bucket has nothing in it" — that's a false
+    // empty state, not the truth. Only decorative data (none in this
+    // function; see mapDbListRows' cover-URL signing) is allowed to fail
+    // open.
+    const { data: items, error: itemsError } = ids.length
+      ? await supabase.from("bucket_items").select("bucket_id,thing_id,list_id").in("bucket_id", ids).abortSignal(signal)
+      : { data: [], error: null };
+    if (itemsError) throw itemsError;
 
-  const thingIds = (items ?? []).map((i) => i.thing_id).filter(Boolean) as string[];
-  const listIds = (items ?? []).map((i) => i.list_id).filter(Boolean) as string[];
+    const thingIds = (items ?? []).map((i) => i.thing_id).filter(Boolean) as string[];
+    const listIds = (items ?? []).map((i) => i.list_id).filter(Boolean) as string[];
 
-  // Three independent reads, run concurrently: direct Things, referenced
-  // Lists' own metadata, and the referenced Lists' MEMBER Thing ids
-  // (id/list_id/work_status only -- just enough to deduplicate against
-  // bucketThingIds below; mapDbListRows' own aggregate thingCount/
-  // doneCount don't expose which specific Things they counted, so this is
-  // a second, narrower query rather than a shared-type change to
-  // ListRow).
-  const [
-    { data: thingRows, error: thingsError },
-    { data: listRows, error: listsError },
-    { data: listMemberThingRows, error: listMemberThingsError },
-  ] = await Promise.all([
-    thingIds.length
-      ? supabase.from("things").select(THING_COLUMNS).in("id", thingIds)
-      : Promise.resolve({ data: [] as DbThingRow[], error: null }),
-    listIds.length
-      ? supabase.from("lists").select("id,name,context,owner_profile_id,updated_at").in("id", listIds)
-      : Promise.resolve({ data: [] as DbListRow[], error: null }),
-    listIds.length
-      ? supabase.from("things").select("id,list_id,work_status").in("list_id", listIds)
-      : Promise.resolve({ data: [] as Array<{ id: string; list_id: string; work_status: string }>, error: null }),
-  ]);
-  if (thingsError) throw thingsError;
-  if (listsError) throw listsError;
-  if (listMemberThingsError) throw listMemberThingsError;
+    // Three independent reads, run concurrently: direct Things, referenced
+    // Lists' own metadata, and the referenced Lists' MEMBER Thing ids
+    // (id/list_id/work_status only -- just enough to deduplicate against
+    // bucketThingIds below; mapDbListRows' own aggregate thingCount/
+    // doneCount don't expose which specific Things they counted, so this is
+    // a second, narrower query rather than a shared-type change to
+    // ListRow).
+    const [
+      { data: thingRows, error: thingsError },
+      { data: listRows, error: listsError },
+      { data: listMemberThingRows, error: listMemberThingsError },
+    ] = await Promise.all([
+      thingIds.length
+        ? supabase.from("things").select(THING_COLUMNS).in("id", thingIds).abortSignal(signal)
+        : Promise.resolve({ data: [] as DbThingRow[], error: null }),
+      listIds.length
+        ? supabase.from("lists").select("id,name,context,owner_profile_id,updated_at").in("id", listIds).abortSignal(signal)
+        : Promise.resolve({ data: [] as DbListRow[], error: null }),
+      listIds.length
+        ? supabase.from("things").select("id,list_id,work_status").in("list_id", listIds).abortSignal(signal)
+        : Promise.resolve({ data: [] as Array<{ id: string; list_id: string; work_status: string }>, error: null }),
+    ]);
+    if (thingsError) throw thingsError;
+    if (listsError) throw listsError;
+    if (listMemberThingsError) throw listMemberThingsError;
+
+    return { buckets, items, thingRows, listRows, listMemberThingRows };
+  });
 
   // Same reasoning: each mapper only needs its own rows.
   const [mappedThings, mappedLists] = await Promise.all([
