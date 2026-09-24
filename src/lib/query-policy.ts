@@ -1,6 +1,28 @@
 import { extractErrorMessage } from "@/lib/domain-error";
 
 /**
+ * R-09: `classifyAsyncError()` used to look only at the lowercased message
+ * text, extracted via `extractErrorMessage()`. A caller that supplies a
+ * structured `{status: 403}` or `{code: "42501"}` without a message
+ * substring the classifier recognized (e.g. Supabase's PostgrestError shape,
+ * or a fetch Response-derived error with only a numeric `status`) fell
+ * through to "failed", which `resolveAsyncBranch()` does NOT treat as a
+ * confirmed access loss — stale protected data kept rendering. Structured
+ * status/code are checked first and take precedence over message text.
+ */
+function extractErrorStatus(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const status = (error as { status?: unknown; statusCode?: unknown }).status ?? (error as { statusCode?: unknown }).statusCode;
+  return typeof status === "number" ? status : undefined;
+}
+
+function extractErrorCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+/**
  * Shared read-query retry/timeout policy (Batch B2 of the Katalist
  * implementation plan). React Query's own default — 3 retries with
  * exponential backoff on every failure — retries authorization and
@@ -12,6 +34,11 @@ import { extractErrorMessage } from "@/lib/domain-error";
 
 /** A failure that retrying is unlikely to fix — the caller must act (sign in) or nothing will change (permission, not found, bad input). */
 export function isPermanentQueryError(error: unknown): boolean {
+  const status = extractErrorStatus(error);
+  const code = extractErrorCode(error);
+  if (status === 401 || status === 403 || status === 404 || code === "42501" || code === "PGRST116") return true;
+  if (status !== undefined && status >= 500) return false;
+
   const message = (extractErrorMessage(error) ?? "").toLowerCase();
   if (!message) return false;
   return (
@@ -41,6 +68,16 @@ export type AsyncErrorKind = "unauthenticated" | "forbidden" | "not-found" | "fa
 
 /** Classifies a caught query error for AsyncState's distinct empty/error states. */
 export function classifyAsyncError(error: unknown): AsyncErrorKind {
+  const status = extractErrorStatus(error);
+  const code = extractErrorCode(error);
+  if (status === 401) return "unauthenticated";
+  if (status === 403 || code === "42501") return "forbidden";
+  if (status === 404 || code === "PGRST116") return "not-found";
+  // A structured 5xx or network-shaped status is a confirmed transient
+  // failure -- do not let coincidental message text below reclassify it
+  // as a denial.
+  if (status !== undefined && status >= 500) return "failed";
+
   const message = (extractErrorMessage(error) ?? "").toLowerCase();
   if (message.includes("not authenticated") || message.includes("jwt") || message.includes("unauthorized")) {
     return "unauthenticated";

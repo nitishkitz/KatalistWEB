@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resolveAsyncBranch } from "@/lib/query-policy";
+import { resolveAsyncBranch, classifyAsyncError, isPermanentQueryError } from "@/lib/query-policy";
 
 const TRANSIENT_ERROR = new Error("network request failed");
 const FORBIDDEN_ERROR = new Error("permission denied (row-level security policy)");
@@ -178,4 +178,89 @@ test("online, never fetched (e.g. an intentionally disabled query), no error: fa
     resolveAsyncBranch({ online: true, isLoading: false, error: null, isEmpty: true, hasFetchedOnce: false }),
     "empty",
   );
+});
+
+// R-09: classifyAsyncError() previously looked only at lowercased message
+// text. A caller supplying a structured {status} or {code} without a
+// recognized message substring (Supabase's PostgrestError shape, or a
+// fetch-Response-derived error exposing only a numeric status) fell
+// through to "failed", which resolveAsyncBranch() does not treat as a
+// confirmed access loss -- stale protected data kept rendering. Verified
+// directly against the pre-fix resolver: {status: 403, message:
+// "Forbidden"} and {code: "42501", message: "access denied"} both
+// returned "ready" with stale non-empty data loaded.
+
+test("classifyAsyncError: a structured status:401 with no recognized message text is unauthenticated", () => {
+  assert.equal(classifyAsyncError({ status: 401, message: "Unauthorized" }), "unauthenticated");
+});
+
+test("classifyAsyncError: a structured status:403 with no recognized message text is forbidden", () => {
+  assert.equal(classifyAsyncError({ status: 403, message: "Forbidden" }), "forbidden");
+});
+
+test("classifyAsyncError: a structured code:42501 (Postgres RLS) with no recognized message text is forbidden", () => {
+  assert.equal(classifyAsyncError({ code: "42501", message: "access denied" }), "forbidden");
+});
+
+test("classifyAsyncError: a structured status:404 with no recognized message text is not-found", () => {
+  assert.equal(classifyAsyncError({ status: 404, message: "Gone" }), "not-found");
+});
+
+test("classifyAsyncError: a structured code:PGRST116 (PostgREST not-found) is not-found", () => {
+  assert.equal(classifyAsyncError({ code: "PGRST116", message: "no rows" }), "not-found");
+});
+
+test("classifyAsyncError: a structured status:500 is failed (transient), not misread as a denial", () => {
+  assert.equal(classifyAsyncError({ status: 500, message: "Internal Server Error" }), "failed");
+});
+
+test("resolveAsyncBranch: a structured 403 with stale non-empty data is error-blocked, not ready", () => {
+  assert.equal(
+    resolveAsyncBranch({
+      online: true,
+      isLoading: false,
+      error: { status: 403, message: "Forbidden" },
+      isEmpty: false,
+      hasFetchedOnce: true,
+    }),
+    "error-blocked",
+  );
+});
+
+test("resolveAsyncBranch: a structured 42501 code with stale non-empty data is error-blocked, not ready", () => {
+  assert.equal(
+    resolveAsyncBranch({
+      online: true,
+      isLoading: false,
+      error: { code: "42501", message: "access denied" },
+      isEmpty: false,
+      hasFetchedOnce: true,
+    }),
+    "error-blocked",
+  );
+});
+
+test("resolveAsyncBranch: a structured 500 with stale non-empty data stays ready (transient, not a denial)", () => {
+  assert.equal(
+    resolveAsyncBranch({
+      online: true,
+      isLoading: false,
+      error: { status: 500, message: "Internal Server Error" },
+      isEmpty: false,
+      hasFetchedOnce: true,
+    }),
+    "ready",
+  );
+});
+
+test("isPermanentQueryError: a structured 403 is permanent even with no recognized message text", () => {
+  assert.equal(isPermanentQueryError({ status: 403, message: "Forbidden" }), true);
+});
+
+test("isPermanentQueryError: a structured 42501 code is permanent even with no recognized message text", () => {
+  assert.equal(isPermanentQueryError({ code: "42501", message: "access denied" }), true);
+});
+
+test("isPermanentQueryError: a structured 500 is not permanent (worth retrying)", () => {
+  assert.equal(isPermanentQueryError({ status: 500, message: "Internal Server Error" }), false);
 });
