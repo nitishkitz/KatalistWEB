@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test, mock } from "node:test";
 import { createElement as h, useState } from "react";
 import { act } from "react";
-import { render, cleanup, fireEvent, waitFor } from "@testing-library/react";
+import { render, cleanup, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlockerProvider";
 import { useInteractionBlocker } from "@/components/katalist/use-interaction-blocker";
@@ -183,73 +183,13 @@ test("E-03: a nonempty draft registers the D03 interaction blocker, and clears o
   qc.clear();
 });
 
-test("E-03: a failed send restores the draft into the input when still on the same Thing", async () => {
-  postMutateImpl = (_vars, opts) => queueMicrotask(() => opts.onError(new Error("network down")));
-  const qc = newClient();
-  const { getByPlaceholderText, getByText } = renderHarness(qc);
-
-  const input = getByPlaceholderText("Write a comment…");
-  await act(async () => {
-    fireEvent.change(input, { target: { value: "will fail" } });
-  });
-  await act(async () => {
-    fireEvent.click(getByText("Post"));
-  });
-
-  await waitFor(() => {
-    assert.equal(getByPlaceholderText("Write a comment…").value, "will fail");
-  });
-
-  cleanup();
-  qc.clear();
-});
-
-test("E-03: a send that fails AFTER switching to a different Thing does not leak the failed text into that Thing's live input", async () => {
-  let resolveError;
-  postMutateImpl = (_vars, opts) => {
-    resolveError = () => opts.onError(new Error("network down"));
-  };
-  const qc = newClient();
-  const { getByPlaceholderText, getByText, getByTestId } = renderHarness(qc);
-
-  const inputA = getByPlaceholderText("Write a comment…");
-  await act(async () => {
-    fireEvent.change(inputA, { target: { value: "A's message" } });
-  });
-  await act(async () => {
-    fireEvent.click(getByText("Post"));
-  });
-  // submitComment() already cleared the live input optimistically.
-  assert.equal(getByPlaceholderText("Write a comment…").value, "");
-
-  // Switch to Thing B WHILE A's send is still pending.
-  await act(async () => {
-    fireEvent.click(getByTestId("switch"));
-  });
-  const inputB = getByPlaceholderText("Write a comment…");
-  assert.equal(inputB.value, "", "B's own draft, unrelated to A's in-flight send");
-
-  // Now A's send fails.
-  await act(async () => {
-    resolveError();
-  });
-
-  assert.equal(
-    getByPlaceholderText("Write a comment…").value,
-    "",
-    "B's live input must not be corrupted by A's failed send resolving while B is displayed",
-  );
-
-  // Switching back to A must recover A's restored draft.
-  await act(async () => {
-    fireEvent.click(getByTestId("switch"));
-  });
-  assert.equal(
-    getByPlaceholderText("Write a comment…").value,
-    "A's message",
-    "A's draft was restored in the background store and is recovered on return",
-  );
-
-  cleanup();
-  qc.clear();
-});
+// R-01 (independent review): the failed-send draft-restore tests that
+// used to live here were removed -- they exercised a fully mocked
+// `useThingComments`/`post.mutate` that manually invoked `opts.onError`,
+// which does not exercise real React Query mutation-observer lifecycle
+// at all (per-call `.mutate(vars, {onError})` callbacks do not reliably
+// fire once the observing component has unmounted, which a synchronous
+// manual invocation can never expose). That behavior is now owned by
+// use-thing-comments.ts's own hook-level mutation callbacks and is
+// covered with a REAL useMutation/useThingComments in
+// scripts/thing-detail-comment-draft-failure.test.mjs.

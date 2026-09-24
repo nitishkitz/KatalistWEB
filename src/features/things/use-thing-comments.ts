@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
+import { domainErrorMessage } from "@/lib/domain-error";
 import { addCommentLocal, getActivity, getComments } from "./local-state";
 import { useLocalVersion } from "./use-local-version";
 import { rpcComment } from "./rpc";
 import { currentDemoPerson } from "@/features/demo/identities";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { getDraft, setDraft } from "@/features/drafts/session-drafts";
 import type { ThingFile } from "@/domain/thing";
 
 import { resolveActorPeople } from "@/features/people/resolve-actors";
@@ -149,12 +152,48 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         addCommentLocal(thingId, bodyText, currentDemoPerson().name, attachments);
       }
 
-      return { previousComments, epoch };
+      // R-01: captured here (context, not the outer `thingId` closure) so
+      // a later re-render that changes the outer `thingId` variable before
+      // this specific mutation settles cannot redirect its own onError to
+      // the WRONG Thing -- useMutation shares one MutationObserver across
+      // renders and rebinds its callback closures via setOptions() on
+      // every render, so a bare closure over `thingId` would read
+      // whatever the LATEST render's value is, not the one active when
+      // this call was actually dispatched (confirmed directly: reproduced
+      // the wrong-Thing attribution with a bare closure, then fixed it by
+      // reading from context instead).
+      return { previousComments, epoch, thingId, submittedText: bodyText, submittedAttachments: attachments };
     },
-    onError: (_err, _input, context) => {
+    onError: (err, _input, context) => {
       if (context?.previousComments && context.epoch !== undefined && isEpochCurrent(qc, context.epoch)) {
         qc.setQueryData(["thing-comments", thingId], context.previousComments);
       }
+      // R-01: this hook-level onError (not a per-call `.mutate(vars,
+      // {onError})` callback) is what actually survives ThingDetailContent
+      // unmounting before the request settles -- confirmed directly: a
+      // per-call mutate() callback does NOT fire after the observing
+      // component unmounts, while this hook-level one does. Restoring the
+      // draft here, not in ThingDetailContent, is what makes "closed
+      // detail, then the failed send arrives" actually recoverable.
+      if (
+        context?.thingId &&
+        context.epoch !== undefined &&
+        isEpochCurrent(qc, context.epoch) &&
+        (context.submittedText || context.submittedAttachments?.length)
+      ) {
+        const current = getDraft<string>(qc, "thing-comment", context.thingId);
+        const untouchedSinceSubmit = !current?.value && !current?.attachments?.length;
+        if (untouchedSinceSubmit) {
+          setDraft(qc, "thing-comment", context.thingId, {
+            value: context.submittedText ?? "",
+            attachments: context.submittedAttachments,
+          });
+        }
+      }
+      toast.error(domainErrorMessage(err));
+    },
+    onSuccess: () => {
+      toast.success("Comment sent.");
     },
     onSettled: (_data, _error, _input, context) => {
       if (context?.epoch === undefined || !isEpochCurrent(qc, context.epoch)) return;

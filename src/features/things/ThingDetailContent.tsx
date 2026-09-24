@@ -580,13 +580,21 @@ export function ThingDetailContent({
 
   if (!thing) return null;
 
-  // E-03: shared by both variant branches' comment forms below (they're
-  // two renderings of the same comment/commentAttachments state, not two
-  // independent drafts). Captures the Thing this send was actually for --
-  // a late failure restores THAT Thing's draft, and only additionally
-  // updates the live input if the user is still looking at it, so a
-  // switch to a different Thing while the send is in flight can't have
-  // its failure silently overwrite the newer Thing's own draft.
+  // E-03/R-01: shared by both variant branches' comment forms below
+  // (they're two renderings of the same comment/commentAttachments
+  // state, not two independent drafts). The actual restore-on-failure
+  // and toast are now owned by use-thing-comments.ts's own hook-level
+  // mutation callbacks (R-01) -- a per-call `.mutate(vars, {onError})`
+  // callback like this used to own that logic directly, but does not
+  // reliably fire once this component has unmounted (confirmed
+  // directly against a real useMutation), which is exactly the case a
+  // failed send closing over a since-closed detail needs to survive.
+  // This per-call callback's only remaining job is purely cosmetic: if
+  // the user is STILL looking at the SAME Thing when the failure
+  // arrives, mirror whatever the hook-level callback already restored
+  // into the draft store back into the live input -- there is nothing
+  // to mirror into if unmounted, which is fine, since there is no
+  // visible input to update in that case anyway.
   const submitComment = () => {
     const text = comment.trim();
     if ((!text && commentAttachments.length === 0) || thread.post.isPending) return;
@@ -597,34 +605,11 @@ export function ThingDetailContent({
     thread.post.mutate(
       { body: text, attachments: atts.length > 0 ? atts : undefined },
       {
-        onError: (err) => {
-          // Only restore into the draft store if nothing has touched this
-          // Thing's draft since it was submitted (still exactly the empty
-          // state submitComment() left it in) -- if the user has already
-          // navigated back to this Thing and typed something NEW while
-          // the failed send was still in flight, that newer text must win,
-          // not be silently overwritten by the now-failed old text.
+        onError: () => {
+          if (thingIdRef.current !== submittedThingId) return;
           const current = getDraft<string>(qc, "thing-comment", submittedThingId);
-          const untouchedSinceSubmit = !current?.value && !current?.attachments?.length;
-          if (untouchedSinceSubmit) {
-            setDraft(qc, "thing-comment", submittedThingId, { value: text, attachments: atts });
-            if (thingIdRef.current === submittedThingId) {
-              setComment(text);
-              setCommentAttachments(atts);
-            }
-          }
-          toast.error(domainErrorMessage(err));
-        },
-        onSuccess: () => {
-          // Not clearing the draft here: submitComment() already emptied
-          // comment/commentAttachments synchronously above, and the
-          // write-through effect already cleared submittedThingId's
-          // stored draft as a result (assuming thing.id hasn't changed in
-          // the meantime, which it hasn't at that exact point). Clearing
-          // again here, unconditionally, would risk deleting a NEWER
-          // draft the user has since typed into this same Thing after
-          // switching away and back while this send was still pending.
-          toast.success("Comment sent.");
+          setComment(current?.value ?? "");
+          setCommentAttachments((current?.attachments as ThingFile[] | undefined) ?? []);
         },
       },
     );
