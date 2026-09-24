@@ -13,10 +13,15 @@ async function rpc<T>(name: keyof Database["public"]["Functions"], args: object)
   return data as T;
 }
 
-type RpcCaller = (
-  fn: string,
-  args?: object,
-) => Promise<{ data: unknown; error: { message: string } | null }>;
+type UngeneratedRpcResult = Promise<{ data: unknown; error: { message: string } | null }> & {
+  // The real supabase.rpc() return value is a PostgrestFilterBuilder,
+  // which supports .abortSignal() (chainable, returns the same thenable)
+  // -- RpcCaller otherwise erases that to a plain Promise, which would
+  // hide a real, callable method (see T01's read-request.ts usage).
+  abortSignal(signal: AbortSignal): UngeneratedRpcResult;
+};
+
+type RpcCaller = (fn: string, args?: object) => UngeneratedRpcResult;
 
 /**
  * Calls a Postgres RPC by name that has not been added to the generated

@@ -10,6 +10,15 @@
  * reason" (route-away, a newer query superseding it) -- those need
  * different UI (recovery/retry vs nothing, per AsyncState's own contract)
  * and must not be presented as the same "the read failed" fact.
+ *
+ * Gotcha for callers: pass an `async` function to `run`, even when its
+ * body is a single Supabase call with no `await` of its own -- a
+ * PostgrestFilterBuilder is thenable but not a real `Promise`, so a plain
+ * (non-async) arrow returning `supabase.from(...).abortSignal(signal)`
+ * makes TypeScript infer `T` as the builder itself instead of its
+ * resolved `{data, error}` shape. Wrapping in `async` forces the correct
+ * inference (confirmed directly against every call site in this
+ * codebase).
  */
 
 /** Matches AsyncState's own SLOW/STALLED tiers (query-policy.ts) -- the

@@ -28,6 +28,7 @@ import {
   type CatchUpMomentKind,
   type RawCatchUpMoment,
 } from "./catchup-logic";
+import { withReadDeadline } from "@/lib/read-request";
 
 export type CatchUpMoment = {
   momentKey: string;
@@ -47,73 +48,80 @@ type RpcRow = {
   reason: string;
 };
 
-async function fetchCatchupMoments(profileId: string | null): Promise<CatchUpMoment[]> {
-  const { data, error } = await callUngeneratedRpc("list_catchup_moments");
-  if (error) throw error;
-  const rows = (data ?? []) as RpcRow[];
-  if (!rows.length) return [];
+async function fetchCatchupMoments(profileId: string | null, querySignal?: AbortSignal): Promise<CatchUpMoment[]> {
+  // T01: bounds the RPC plus its dependent reads (actor, Things) as one
+  // logical read operation under a single deadline, wired to React
+  // Query's own cancellation signal.
+  return withReadDeadline(querySignal, async (signal) => {
+    const { data, error } = await callUngeneratedRpc("list_catchup_moments").abortSignal(signal);
+    if (error) throw error;
+    const rows = (data ?? []) as RpcRow[];
+    if (!rows.length) return [];
 
-  // R-08: this used to make its own supabase.auth.getUser() call and read
-  // only its `data`, discarding `error` -- a failed identity lookup
-  // produced `auth.user === null`, indistinguishable from "genuinely
-  // authenticated but has no actor row", silently mapping every moment
-  // with `myActorId = null` and reporting a successful load. The caller
-  // (useCatchup) already has the authenticated profile id from
-  // useSession() -- the same identity source used elsewhere in this
-  // codebase (e.g. use-morning-brief.ts) -- for the enabled query to even
-  // run at all, so it's reused directly here instead of a second,
-  // independently-fallible auth round trip.
-  let myActorId: string | null = null;
-  if (profileId) {
-    const { data: actor, error: actorError } = await supabase
-      .from("actors")
-      .select("id")
-      .eq("profile_id", profileId)
-      .maybeSingle();
-    // F-05: required for correctly viewer-scoping the resolved Things below
-    // (map-thing-rows.ts uses it for capability/pace fields) -- a failure
-    // here must not silently fall through to myActorId = null (which
-    // would look identical to "I have no actor row", a real and different
-    // state) and let the caller believe the resulting moments are
-    // complete/correct.
-    if (actorError) throw actorError;
-    myActorId = actor?.id ?? null;
-  }
+    // R-08: this used to make its own supabase.auth.getUser() call and read
+    // only its `data`, discarding `error` -- a failed identity lookup
+    // produced `auth.user === null`, indistinguishable from "genuinely
+    // authenticated but has no actor row", silently mapping every moment
+    // with `myActorId = null` and reporting a successful load. The caller
+    // (useCatchup) already has the authenticated profile id from
+    // useSession() -- the same identity source used elsewhere in this
+    // codebase (e.g. use-morning-brief.ts) -- for the enabled query to even
+    // run at all, so it's reused directly here instead of a second,
+    // independently-fallible auth round trip.
+    let myActorId: string | null = null;
+    if (profileId) {
+      const { data: actor, error: actorError } = await supabase
+        .from("actors")
+        .select("id")
+        .eq("profile_id", profileId)
+        .abortSignal(signal)
+        .maybeSingle();
+      // F-05: required for correctly viewer-scoping the resolved Things below
+      // (map-thing-rows.ts uses it for capability/pace fields) -- a failure
+      // here must not silently fall through to myActorId = null (which
+      // would look identical to "I have no actor row", a real and different
+      // state) and let the caller believe the resulting moments are
+      // complete/correct.
+      if (actorError) throw actorError;
+      myActorId = actor?.id ?? null;
+    }
 
-  const thingIds = [...new Set(rows.map((r) => r.thing_id))];
-  const { data: thingRows, error: thingsError } = await supabase
-    .from("things")
-    .select(THING_COLUMNS)
-    .in("id", thingIds)
-    .is("cancelled_at", null);
-  // F-05: this is the required data the whole moments list is built from --
-  // a failure here used to silently become an empty thingRows (via `?? []`),
-  // which made a genuine lookup failure indistinguishable from "none of
-  // these Things are visible/active", i.e. a false successful-empty result
-  // that could suppress a real Morning Brief moment or Catch Up review.
-  if (thingsError) throw thingsError;
-  const things = await mapDbThingRows((thingRows ?? []) as DbThingRow[], myActorId);
-  const thingById = new Map(things.map((t) => [t.id, t]));
+    const thingIds = [...new Set(rows.map((r) => r.thing_id))];
+    const { data: thingRows, error: thingsError } = await supabase
+      .from("things")
+      .select(THING_COLUMNS)
+      .in("id", thingIds)
+      .is("cancelled_at", null)
+      .abortSignal(signal);
+    // F-05: this is the required data the whole moments list is built from --
+    // a failure here used to silently become an empty thingRows (via `?? []`),
+    // which made a genuine lookup failure indistinguishable from "none of
+    // these Things are visible/active", i.e. a false successful-empty result
+    // that could suppress a real Morning Brief moment or Catch Up review.
+    if (thingsError) throw thingsError;
+    const things = await mapDbThingRows((thingRows ?? []) as DbThingRow[], myActorId);
+    const thingById = new Map(things.map((t) => [t.id, t]));
 
-  const actorIds = [...new Set(rows.map((r) => r.actor_id).filter(Boolean))] as string[];
-  const people = actorIds.length ? await resolveActorPeople(actorIds) : new Map<string, Person>();
+    const actorIds = [...new Set(rows.map((r) => r.actor_id).filter(Boolean))] as string[];
+    const people = actorIds.length ? await resolveActorPeople(actorIds) : new Map<string, Person>();
 
-  const doorman = isDoormanEnabled();
-  const moments: CatchUpMoment[] = [];
-  for (const r of rows) {
-    if (r.kind === "ghost" && !doorman) continue;
-    const thing = thingById.get(r.thing_id);
-    if (!thing) continue; // Not resolvable/visible — skip rather than show an empty card.
-    moments.push({
-      momentKey: r.moment_key,
-      kind: r.kind as CatchUpMomentKind,
-      thing,
-      occurredAt: r.occurred_at,
-      actor: r.actor_id ? (people.get(r.actor_id) ?? null) : null,
-      reason: r.reason,
-    });
-  }
-  return moments;
+    const doorman = isDoormanEnabled();
+    const moments: CatchUpMoment[] = [];
+    for (const r of rows) {
+      if (r.kind === "ghost" && !doorman) continue;
+      const thing = thingById.get(r.thing_id);
+      if (!thing) continue; // Not resolvable/visible — skip rather than show an empty card.
+      moments.push({
+        momentKey: r.moment_key,
+        kind: r.kind as CatchUpMomentKind,
+        thing,
+        occurredAt: r.occurred_at,
+        actor: r.actor_id ? (people.get(r.actor_id) ?? null) : null,
+        reason: r.reason,
+      });
+    }
+    return moments;
+  });
 }
 
 /** Derive Catch Up moments from demo local-state, mirroring the live RPC. */
@@ -217,7 +225,7 @@ export function useCatchup(): UseCatchup {
 
   const query = useQuery({
     queryKey: keys.catchup(user?.id, context),
-    queryFn: () => fetchCatchupMoments(user?.id ?? null),
+    queryFn: ({ signal }) => fetchCatchupMoments(user?.id ?? null, signal),
     enabled: liveAuth,
     staleTime: 15_000,
   });

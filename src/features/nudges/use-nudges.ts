@@ -12,6 +12,7 @@ import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
 import type { NudgeReason } from "@/features/things/rpc";
+import { withReadDeadline } from "@/lib/read-request";
 
 function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string, dbReason?: NudgeReason): NudgeRow {
   return {
@@ -52,8 +53,10 @@ export function useNudges() {
   const nudgeable = useQuery({
     queryKey: keys.nudges(user?.id, context),
     enabled: liveAuth,
-    queryFn: async () => {
-      const { data, error } = await supabase.rpc("list_nudgeable_things");
+    queryFn: async ({ signal }) => {
+      const { data, error } = await withReadDeadline(signal, async (combined) =>
+        supabase.rpc("list_nudgeable_things").abortSignal(combined),
+      );
       if (error) throw error;
       return data ?? [];
     },
@@ -62,12 +65,15 @@ export function useNudges() {
   const history = useQuery({
     queryKey: keys.nudgeHistory(user?.id, context),
     enabled: liveAuth,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("nudges")
-        .select("id, thing_id, created_at, reason, to_actor_id")
-        .order("created_at", { ascending: false })
-        .limit(40);
+    queryFn: async ({ signal }) => {
+      const { data, error } = await withReadDeadline(signal, async (combined) =>
+        supabase
+          .from("nudges")
+          .select("id, thing_id, created_at, reason, to_actor_id")
+          .order("created_at", { ascending: false })
+          .limit(40)
+          .abortSignal(combined),
+      );
       if (error) throw error;
       return data ?? [];
     },

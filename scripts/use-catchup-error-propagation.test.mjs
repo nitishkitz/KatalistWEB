@@ -61,9 +61,15 @@ mock.module("@/features/things/local-state", {
 });
 mock.module("@/integrations/supabase/rpcs", {
   namedExports: {
-    callUngeneratedRpc: async (name) => {
-      if (name === "list_catchup_moments") return { data: rpcRows, error: null };
-      return { data: null, error: null };
+    callUngeneratedRpc: (name) => {
+      const node = {
+        abortSignal: () => node,
+        then: (resolve) => {
+          const result = name === "list_catchup_moments" ? { data: rpcRows, error: null } : { data: null, error: null };
+          return Promise.resolve(result).then(resolve);
+        },
+      };
+      return node;
     },
   },
 });
@@ -83,6 +89,7 @@ mock.module("@/integrations/supabase/client", {
           eq: () => node,
           in: () => node,
           is: () => node,
+          abortSignal: () => node,
           maybeSingle: async () => actorResult,
           then: (resolve) => {
             if (table === "things") return Promise.resolve(thingsResult).then(resolve);
