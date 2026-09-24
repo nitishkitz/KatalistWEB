@@ -202,10 +202,19 @@ export function useConversation(listId: string | undefined) {
   const preview = isPreviewSession(session);
   const qc = useQueryClient();
 
-  const query = useQuery({
+  const query = useQuery<Conversation | null, Error>({
     queryKey: ["hub-conversation", listId, user?.id],
     enabled: Boolean(listId) && Boolean(user) && !preview,
     staleTime: 10_000,
+    // T05: seed from the sidebar's already-fetched lightweight record (the
+    // exact same Conversation shape) so the header can show the real
+    // title/member count the instant a conversation is selected, instead of
+    // a fabricated "Conversation" / "0 members" while this detail query is
+    // still in flight.
+    placeholderData: () => {
+      if (!listId) return undefined;
+      return qc.getQueryData<Conversation[]>(["hub-conversations", user?.id])?.find((c) => c.id === listId);
+    },
     queryFn: async ({ signal }): Promise<Conversation | null> => {
       const { l, memberRows, identities } = await withReadDeadline(signal, async (combined) => {
         const { data: l, error } = await supabase
@@ -252,5 +261,11 @@ export function useConversation(listId: string | undefined) {
     },
   });
 
-  return { conversation: query.data ?? null, isLoading: query.isLoading };
+  return {
+    conversation: query.data ?? null,
+    // Genuinely nothing to show yet -- distinct from "the authoritative
+    // fetch is still running but we already have a seeded record from the
+    // sidebar to display in the meantime".
+    isLoading: !query.data && query.isLoading,
+  };
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { isPreviewMode } from "@/lib/session-mode";
 
 const READ_STORAGE_PREFIX = "katalist_thing_read_";
 const LEGACY_UNSCOPED_PREFIX = "katalist_thing_read_";
@@ -49,15 +50,20 @@ export function markThingAsRead(
     localStorage.removeItem(`${LEGACY_UNSCOPED_PREFIX}${thingId}`);
     window.dispatchEvent(new CustomEvent(READ_EVENT_NAME, { detail: { thingId, profileId, timestamp: now } }));
 
-    // Also mark notifications for this thing as read in Supabase if any exist
-    void supabase
-      .from("notifications")
-      .update({ read_at: new Date(now).toISOString() })
-      .eq("thing_id", thingId)
-      .is("read_at", null)
-      .then(() => {
-        // ignore errors
-      });
+    // Also mark notifications for this thing as read in Supabase if any
+    // exist -- but never for a preview/demo session. Preview data is local
+    // fixtures; a preview "read" must not issue a real write against a live
+    // account's notifications row.
+    if (!isPreviewMode()) {
+      void supabase
+        .from("notifications")
+        .update({ read_at: new Date(now).toISOString() })
+        .eq("thing_id", thingId)
+        .is("read_at", null)
+        .then(() => {
+          // ignore errors
+        });
+    }
   } catch {
     // ignore local storage errors
   }
@@ -68,12 +74,22 @@ export function useThingReadState() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = () => {
+    const bump = () => {
       setVersion((v) => v + 1);
     };
-    window.addEventListener(READ_EVENT_NAME, handler);
+    // The CustomEvent above only ever fires in the tab that called
+    // markThingAsRead -- the browser's native "storage" event is what fires
+    // in every *other* tab sharing this origin when localStorage actually
+    // changes (never in the writing tab itself). Both are needed together
+    // for a mark-as-read in one tab to update unread badges in another.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key && e.key.startsWith(READ_STORAGE_PREFIX)) bump();
+    };
+    window.addEventListener(READ_EVENT_NAME, bump);
+    window.addEventListener("storage", onStorage);
     return () => {
-      window.removeEventListener(READ_EVENT_NAME, handler);
+      window.removeEventListener(READ_EVENT_NAME, bump);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 

@@ -59,9 +59,21 @@ export function useConversationReadState() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const handler = () => setVersion((v) => v + 1);
-    window.addEventListener(READ_EVENT_NAME, handler);
-    return () => window.removeEventListener(READ_EVENT_NAME, handler);
+    const bump = () => setVersion((v) => v + 1);
+    // The CustomEvent above only fires in the tab that called
+    // markConversationAsRead -- the native "storage" event is what fires in
+    // every *other* tab sharing this origin when localStorage actually
+    // changes (never in the writing tab). Both together are what makes a
+    // read in one tab update unread badges in another.
+    const onStorage = (e: StorageEvent) => {
+      if (e.key && e.key.startsWith(READ_STORAGE_PREFIX)) bump();
+    };
+    window.addEventListener(READ_EVENT_NAME, bump);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(READ_EVENT_NAME, bump);
+      window.removeEventListener("storage", onStorage);
+    };
   }, []);
 
   return version;
@@ -104,7 +116,13 @@ export function useConversationUnreadCount(conversation: Conversation, myId: str
  *  strict subset of the unread count above. Same gating (only queries while
  *  the conversation is flagged unread at all) to avoid a query per
  *  conversation on every render. */
-export function useConversationMentionCount(conversation: Conversation, myId: string | undefined): number {
+/** `"unknown"` once the exact-count lookup has genuinely failed (retries
+ *  exhausted) — distinct from both "0 real mentions" and "still loading",
+ *  so a failed lookup can never render as a fabricated confirmed zero. */
+export function useConversationMentionCount(
+  conversation: Conversation,
+  myId: string | undefined,
+): number | "unknown" {
   useConversationReadState();
   const lastReadAt = getConversationLastReadAt(conversation.id, myId);
   const unread = isConversationUnread(conversation, myId, lastReadAt);
@@ -113,7 +131,7 @@ export function useConversationMentionCount(conversation: Conversation, myId: st
     enabled: unread && Boolean(myId),
     staleTime: 10_000,
     queryFn: async () => {
-      const { count } = await supabase
+      const { count, error } = await supabase
         .from("list_messages")
         .select("id", { count: "exact", head: true })
         .eq("list_id", conversation.id)
@@ -121,9 +139,14 @@ export function useConversationMentionCount(conversation: Conversation, myId: st
         .gt("created_at", new Date(lastReadAt).toISOString())
         .neq("author_profile_id", myId ?? "")
         .contains("mentioned_profile_ids", [myId]);
+      if (error) throw error;
       return count ?? 0;
     },
   });
   if (!unread || !myId) return 0;
-  return query.data ?? 0; // unlike unread count, no optimistic guess — a mention is specific enough to wait for
+  // Loading still waits for the real number (a mention is specific enough
+  // to wait for), but a query that has actually failed must not collapse
+  // to the same "0" as a genuinely empty result.
+  if (query.isError) return "unknown";
+  return query.data ?? 0;
 }

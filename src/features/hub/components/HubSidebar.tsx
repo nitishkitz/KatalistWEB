@@ -87,7 +87,14 @@ function ConversationRow({
             <span className={cn("truncate text-[13px]", unread > 0 ? "font-bold text-[#000533]" : "font-semibold text-[#000533]")}>
               {c.title}
             </span>
-            {mentions > 0 ? (
+            {mentions === "unknown" ? (
+              <span
+                title="Mention count unavailable — retrying"
+                className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-[#fdb412] px-1 text-[9px] font-bold text-white"
+              >
+                <AtSign className="h-2.5 w-2.5" />?
+              </span>
+            ) : mentions > 0 ? (
               <span
                 title={`${mentions} mention${mentions === 1 ? "" : "s"}`}
                 className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-[#fdb412] px-1 text-[9px] font-bold text-white"

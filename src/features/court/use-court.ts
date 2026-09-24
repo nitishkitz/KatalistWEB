@@ -57,14 +57,24 @@ export function useCourt() {
       });
       return { things, myActorId: me, live: false as const };
     }
+    // T05: unreadCommentCount already arrives from mapDbThingRows ->
+    // calculateCommentCounts, which already compares each comment's own
+    // timestamp against getThingLastReadAt as of the last fetch -- this
+    // pass only optimistically zeroes it further when the read happened
+    // AT OR AFTER that fetch (so we know it truly covers every comment the
+    // server counted). The old version zeroed it whenever lastRead > 0 at
+    // all, with no timing check, which discarded genuinely new unread
+    // comments that arrived in a later fetch after a Thing had ever been
+    // read even once.
     const visibleThings = excludeSnoozedThings(
       excludePersonallyShreddedThings(query.data?.things ?? [], shred),
       snooze,
     );
     const myLiveActorId = query.data?.myActorId ?? null;
+    const fetchedAt = query.dataUpdatedAt;
     const liveThings = visibleThings.map((t) => {
       const lastRead = getThingLastReadAt(t.id, myLiveActorId);
-      if (lastRead > 0 && (t.unreadCommentCount ?? 0) > 0) {
+      if (lastRead > 0 && lastRead >= fetchedAt && (t.unreadCommentCount ?? 0) > 0) {
         return {
           ...t,
           unreadCommentCount: 0,
@@ -81,7 +91,7 @@ export function useCourt() {
     // module-level read-state changes; the memo doesn't reference
     // readVersion directly, so the linter can't see it's a real dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preview, query.data, context, shred, snooze, readVersion]);
+  }, [preview, query.data, query.dataUpdatedAt, context, shred, snooze, readVersion]);
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");
   const theirs = parts.theirs;

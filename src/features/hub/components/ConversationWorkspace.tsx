@@ -43,7 +43,7 @@ export function ConversationWorkspace({
   const qc = useQueryClient();
   const { user } = useSession();
   const online = usePresence();
-  const { conversation } = useConversation(listId);
+  const { conversation, isLoading: conversationLoading } = useConversation(listId);
   const { lists } = useLists();
   const chat = useListMessages(listId);
   const systemHistory = useListSystemHistory(listId, tab === "call");
@@ -308,14 +308,23 @@ export function ConversationWorkspace({
             ) : null}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold text-[#000533]">{title}</p>
-            <p className="truncate text-[12px] text-[#6a769c]">
-              {isDm
-                ? isOnline
-                  ? "Online"
-                  : "Offline"
-                : `${conversation?.memberCount ?? 0} members`}
-            </p>
+            {conversationLoading ? (
+              <>
+                <span className="block h-4 w-32 animate-pulse rounded bg-[#eef0f6]" />
+                <span className="mt-1 block h-3 w-20 animate-pulse rounded bg-[#eef0f6]" />
+              </>
+            ) : (
+              <>
+                <p className="truncate text-[15px] font-semibold text-[#000533]">{title}</p>
+                <p className="truncate text-[12px] text-[#6a769c]">
+                  {isDm
+                    ? isOnline
+                      ? "Online"
+                      : "Offline"
+                    : `${conversation?.memberCount ?? 0} members`}
+                </p>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1.5">
