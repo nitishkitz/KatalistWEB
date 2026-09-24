@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { DEMO_PERSONAS, useSession } from "@/hooks/useSession";
+import { DEMO_PERSONAS, getStoredDemoSession, useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { authedFetch } from "@/lib/authed-fetch";
 
@@ -12,11 +12,24 @@ export type ProfileIdentity = {
   avatar_url: string | null;
 };
 
+function demoIdentities(): ProfileIdentity[] {
+  return DEMO_PERSONAS.map((persona) => ({
+    id: `p-${persona.key}`,
+    email: persona.email ?? null,
+    display_name: persona.name,
+    avatar_url: persona.avatarUrl ?? null,
+  }));
+}
+
 /** Resolve only participants already discovered through an authorized List or
  * Hub member read. The view contains display name/avatar, never email/phone.
  * Chunk IDs so even a large group does not build an oversized URL. */
 export async function fetchProfileIdentitiesByIds(ids: string[], signal?: AbortSignal): Promise<ProfileIdentity[]> {
   const unique = [...new Set(ids.filter(Boolean))];
+  if (getStoredDemoSession()) {
+    const requested = new Set(unique);
+    return demoIdentities().filter((persona) => requested.has(persona.id));
+  }
   const result: ProfileIdentity[] = [];
   for (let offset = 0; offset < unique.length; offset += 100) {
     const request = supabase.from("public_identities")
@@ -35,6 +48,10 @@ export async function fetchProfileIdentitiesByIds(ids: string[], signal?: AbortS
 }
 
 export async function fetchProfileIdentities(): Promise<ProfileIdentity[]> {
+  // Preview identities are entirely local. Querying real endpoints here was
+  // empirically observed to issue four unnecessary 401/real-directory reads
+  // on every preview Court load, despite the mounted query being disabled.
+  if (getStoredDemoSession()) return demoIdentities();
   const map = new Map<string, ProfileIdentity>();
 
   // 1. Try server directory endpoint (resolves all real profiles and actors via service role)
@@ -122,16 +139,9 @@ export async function fetchProfileIdentities(): Promise<ProfileIdentity[]> {
   }
 
   // 5. Always include demo personas as fallback identities
-  for (const p of DEMO_PERSONAS) {
-    const pKey = `p-${p.key}`;
-    if (!map.has(pKey) && !map.has(p.key)) {
-      map.set(pKey, {
-        id: pKey,
-        email: p.email ?? null,
-        display_name: p.name,
-        avatar_url: p.avatarUrl ?? null,
-      });
-    }
+  for (const persona of demoIdentities()) {
+    const originalKey = persona.id.slice(2);
+    if (!map.has(persona.id) && !map.has(originalKey)) map.set(persona.id, persona);
   }
 
   return Array.from(map.values());

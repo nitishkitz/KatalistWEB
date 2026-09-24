@@ -8,12 +8,12 @@ import { matchAvatarByName } from "./directory";
 import type { Person } from "@/domain/thing";
 
 export function useAssignablePeople() {
-  const { session } = useSession();
+  const { session, user } = useSession();
   const preview = isPreviewSession(session);
 
   const query = useQuery({
     queryKey: ["assignable-people"],
-    enabled: !preview,
+    enabled: Boolean(user) && !preview,
     staleTime: 30_000,
     queryFn: async (): Promise<Person[]> => {
       const map = new Map<string, Person>();
@@ -98,4 +98,3 @@ export function useAssignablePeople() {
 
   return preview ? directoryPeople() : (query.data && query.data.length > 0 ? query.data : directoryPeople());
 }
-

@@ -15,7 +15,7 @@ mock.module("@/integrations/supabase/client", {
     },
   } },
 });
-mock.module("@/hooks/useSession", { namedExports: { DEMO_PERSONAS: [], useSession: () => ({}) } });
+mock.module("@/hooks/useSession", { namedExports: { DEMO_PERSONAS: [], useSession: () => ({}), getStoredDemoSession: () => null } });
 mock.module("@/lib/session-mode", { namedExports: { isPreviewSession: () => false } });
 
 const { fetchProfileIdentitiesByIds } = await import("@/features/people/directory");
