@@ -77,6 +77,8 @@ import { type ThingFile } from "@/features/things/PDFViewer";
 import { markThingAsRead } from "@/features/things/read-state";
 import { processFileForUpload } from "@/lib/file-utils";
 import { ThingViewOnlyBanner } from "./components/ThingViewOnlyBanner";
+import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
+import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 
 export type ThingDetailContentProps = {
   initialThing: Thing | null;
@@ -396,13 +398,29 @@ export function ThingDetailContent({
     return list;
   }, [people, thing?.assignee]);
   const { buckets, preview: bucketsPreview } = useBuckets();
-  const [comment, setComment] = useState("");
+  // E-03: comment/commentAttachments are a per-Thing draft, not component
+  // state that happens to be cleared on Thing change. Initialized from
+  // whatever draft this Thing already has (covers the common case where a
+  // parent keys ThingDetailContent by thing.id, so this only runs once per
+  // mount) and re-hydrated by the effect below on every actual thing.id
+  // change (covers CourtDetailModal, the one render site that does NOT key
+  // by thing.id, so this same component instance can be handed a different
+  // Thing without unmounting).
+  const [comment, setComment] = useState(() => getDraft<string>(qc, "thing-comment", thing?.id ?? "")?.value ?? "");
   const [due, setDue] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
-  const [commentAttachments, setCommentAttachments] = useState<ThingFile[]>([]);
+  const [commentAttachments, setCommentAttachments] = useState<ThingFile[]>(
+    () => (getDraft<string>(qc, "thing-comment", thing?.id ?? "")?.attachments as ThingFile[] | undefined) ?? [],
+  );
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const commentFileInputRef = useRef<HTMLInputElement | null>(null);
   const thingFileInputRef = useRef<HTMLInputElement | null>(null);
+  // E-03: latest thing.id on every render, readable from an async
+  // continuation that captured an OLDER thing.id in its own closure --
+  // lets a continuation tell whether it's still looking at the Thing it
+  // started with.
+  const thingIdRef = useRef(thing?.id);
+  thingIdRef.current = thing?.id;
 
   useEffect(() => {
     if (thing?.id) {
@@ -410,20 +428,42 @@ export function ThingDetailContent({
     }
   }, [thing?.id]);
 
+  // E-03: register a blocker while there's unsent text/files so nothing
+  // (Morning Brief's auto-open, etc.) can silently interrupt mid-draft.
+  useBlockWhile(Boolean(comment.trim()) || commentAttachments.length > 0, "thing-comment-draft");
+
   const handleCommentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // E-03: captured before any await -- if the selected Thing changes
+    // while these files are still processing, the result belongs to the
+    // Thing the user was looking at when they picked the files, not
+    // whatever happens to be selected once processing finishes.
+    const targetThingId = thing?.id;
     try {
       const files = e.target.files;
-      if (!files || files.length === 0) return;
+      if (!files || files.length === 0 || !targetThingId) return;
       const newFiles: ThingFile[] = [];
       for (let i = 0; i < files.length; i++) {
         try {
           const processed = await processFileForUpload(files[i]);
           newFiles.push(processed);
         } catch (err) {
-          toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
+          if (thingIdRef.current === targetThingId) {
+            toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
+          }
         }
       }
-      setCommentAttachments((prev) => [...prev, ...newFiles]);
+      if (newFiles.length === 0) return;
+      if (thingIdRef.current === targetThingId) {
+        setCommentAttachments((prev) => [...prev, ...newFiles]);
+      } else {
+        // Still-mounted but now showing a different Thing -- the files
+        // belong to targetThingId's own draft, not the one on screen.
+        const existing = getDraft<string>(qc, "thing-comment", targetThingId);
+        setDraft(qc, "thing-comment", targetThingId, {
+          value: existing?.value ?? "",
+          attachments: [...((existing?.attachments as ThingFile[] | undefined) ?? []), ...newFiles],
+        });
+      }
     } finally {
       if (commentFileInputRef.current) commentFileInputRef.current.value = "";
     }
@@ -460,10 +500,32 @@ export function ThingDetailContent({
     }
   };
 
+  // E-03: re-hydrate the draft whenever the DISPLAYED Thing actually
+  // changes -- not just on mount (the initializers above only run once).
+  // This is what makes CourtDetailModal (the render site with no
+  // key={thing.id}, so this same instance can be handed a different
+  // Thing without unmounting) restore the NEW Thing's own draft instead
+  // of leaking the previous Thing's still-live comment/attachments state.
   useEffect(() => {
     setMoreOpen(false);
-    setCommentAttachments([]);
-  }, [thing?.id]);
+    const draft = getDraft<string>(qc, "thing-comment", thing?.id ?? "");
+    setComment(draft?.value ?? "");
+    setCommentAttachments((draft?.attachments as ThingFile[] | undefined) ?? []);
+  }, [thing?.id, qc]);
+
+  // E-03: write-through -- every edit is persisted immediately so it
+  // survives unmount/remount (closing and reopening the same Thing) and,
+  // for CourtDetailModal specifically, a same-instance switch to another
+  // Thing and back. Writing the same value back right after the
+  // hydration effect above is harmless (idempotent, not a render loop).
+  useEffect(() => {
+    if (!thing?.id) return;
+    if (!comment && commentAttachments.length === 0) {
+      clearDraft(qc, "thing-comment", thing.id);
+      return;
+    }
+    setDraft(qc, "thing-comment", thing.id, { value: comment, attachments: commentAttachments });
+  }, [qc, thing?.id, comment, commentAttachments]);
 
   const invalidate = async (epoch: number) => {
     if (!isEpochCurrent(qc, epoch)) return;
@@ -517,6 +579,56 @@ export function ThingDetailContent({
   const assigneeAvatar = useAvatarUrl(thing?.assignee.name, null, thing?.assignee.avatarUrl);
 
   if (!thing) return null;
+
+  // E-03: shared by both variant branches' comment forms below (they're
+  // two renderings of the same comment/commentAttachments state, not two
+  // independent drafts). Captures the Thing this send was actually for --
+  // a late failure restores THAT Thing's draft, and only additionally
+  // updates the live input if the user is still looking at it, so a
+  // switch to a different Thing while the send is in flight can't have
+  // its failure silently overwrite the newer Thing's own draft.
+  const submitComment = () => {
+    const text = comment.trim();
+    if ((!text && commentAttachments.length === 0) || thread.post.isPending) return;
+    const atts = [...commentAttachments];
+    const submittedThingId = thing.id;
+    setComment("");
+    setCommentAttachments([]);
+    thread.post.mutate(
+      { body: text, attachments: atts.length > 0 ? atts : undefined },
+      {
+        onError: (err) => {
+          // Only restore into the draft store if nothing has touched this
+          // Thing's draft since it was submitted (still exactly the empty
+          // state submitComment() left it in) -- if the user has already
+          // navigated back to this Thing and typed something NEW while
+          // the failed send was still in flight, that newer text must win,
+          // not be silently overwritten by the now-failed old text.
+          const current = getDraft<string>(qc, "thing-comment", submittedThingId);
+          const untouchedSinceSubmit = !current?.value && !current?.attachments?.length;
+          if (untouchedSinceSubmit) {
+            setDraft(qc, "thing-comment", submittedThingId, { value: text, attachments: atts });
+            if (thingIdRef.current === submittedThingId) {
+              setComment(text);
+              setCommentAttachments(atts);
+            }
+          }
+          toast.error(domainErrorMessage(err));
+        },
+        onSuccess: () => {
+          // Not clearing the draft here: submitComment() already emptied
+          // comment/commentAttachments synchronously above, and the
+          // write-through effect already cleared submittedThingId's
+          // stored draft as a result (assuming thing.id hasn't changed in
+          // the meantime, which it hasn't at that exact point). Clearing
+          // again here, unconditionally, would risk deleting a NEWER
+          // draft the user has since typed into this same Thing after
+          // switching away and back while this send was still pending.
+          toast.success("Comment sent.");
+        },
+      },
+    );
+  };
 
   const terminal = caps?.terminal ?? false;
   const canAssignOutside = Boolean(caps?.isOwner && !terminal);
@@ -991,24 +1103,7 @@ export function ThingDetailContent({
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
-                    const text = comment.trim();
-                    if ((!text && commentAttachments.length === 0) || thread.post.isPending) return;
-                    const atts = [...commentAttachments];
-                    setComment("");
-                    setCommentAttachments([]);
-                    thread.post.mutate(
-                      { body: text, attachments: atts.length > 0 ? atts : undefined },
-                      {
-                        onError: (err) => {
-                          setComment(text);
-                          setCommentAttachments(atts);
-                          toast.error(domainErrorMessage(err));
-                        },
-                        onSuccess: () => {
-                          toast.success("Comment sent.");
-                        },
-                      },
-                    );
+                    submitComment();
                   }}
                   className="flex items-center gap-2 rounded-[9px] border border-[#e9ecf4] bg-[#fdfdfe] px-3 py-2 mt-4"
                 >
@@ -1573,24 +1668,7 @@ export function ThingDetailContent({
                 className="flex flex-col gap-2"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  const text = comment.trim();
-                  if ((!text && commentAttachments.length === 0) || thread.post.isPending) return;
-                  const atts = [...commentAttachments];
-                  setComment("");
-                  setCommentAttachments([]);
-                  thread.post.mutate(
-                    { body: text, attachments: atts.length > 0 ? atts : undefined },
-                    {
-                      onError: (err) => {
-                        setComment(text);
-                        setCommentAttachments(atts);
-                        toast.error(domainErrorMessage(err));
-                      },
-                      onSuccess: () => {
-                        toast.success("Comment sent.");
-                      },
-                    },
-                  );
+                  submitComment();
                 }}
               >
                 {commentAttachments.length > 0 && (
