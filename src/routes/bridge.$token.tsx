@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Logo } from "@/components/katalist/Logo";
 import { toast } from "sonner";
 import { domainErrorMessage } from "@/lib/domain-error";
+import { visibleStatusActions } from "@/features/bridge/visible-status-actions";
 
 export const Route = createFileRoute("/bridge/$token")({
   component: BridgePage,
@@ -24,6 +25,7 @@ function importanceLabel(value: BridgeThing["owner_importance"] | undefined) {
   if (value === "later") return "LATER";
   return "NEXT";
 }
+
 
 function BridgePage() {
   const { token } = Route.useParams();
@@ -177,17 +179,21 @@ function BridgePage() {
           ) : null}
           {caught && !terminal ? (
             <div className="flex gap-2">
-              {(["not_started", "under_progress", "sorted"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void act(s)}
-                  className="flex-1 rounded-lg border border-border py-2 text-[12px] disabled:opacity-50"
-                >
-                  {s.replace("_", " ")}
-                </button>
-              ))}
+              {/* H03: work status is forward-only on the server (assert_forward_status
+               *  rejects a request to go back to "not_started" once work has moved past
+               *  it) -- once under_progress, hide "not_started" instead of offering a
+               *  button that would always fail with a generic error. */}
+              {visibleStatusActions(thing.work_status).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void act(s)}
+                    className="flex-1 rounded-lg border border-border py-2 text-[12px] disabled:opacity-50"
+                  >
+                    {s.replace("_", " ")}
+                  </button>
+                ))}
             </div>
           ) : null}
           <form

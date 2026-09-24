@@ -221,8 +221,13 @@ test("Bridge SQL returns owner_importance; guest UI is Catch-first and read-only
   assert.equal(ui.includes("Personal Pace"), true);
   assert.equal(ui.includes("set_owner_importance"), false);
   assert.equal(ui.includes("set_personal_pace"), false);
-  const statusButtons = ui.indexOf('(["not_started", "under_progress", "sorted"]');
-  const catchGate = ui.indexOf("caught && !terminal");
+  // H03: the ["not_started","under_progress","sorted"] literal itself now lives in
+  // the extracted, directly-testable visibleStatusActions() helper (see
+  // scripts/bridge-visible-status-actions.test.mjs) -- what this assertion
+  // actually cares about is that the call site rendering those buttons still
+  // sits after the catch-gate condition in the JSX, not the literal's own position.
+  const statusButtons = ui.indexOf("visibleStatusActions(thing.work_status).map(");
+  const catchGate = ui.lastIndexOf("caught && !terminal");
   assert.ok(catchGate > 0 && statusButtons > catchGate);
 });
 
