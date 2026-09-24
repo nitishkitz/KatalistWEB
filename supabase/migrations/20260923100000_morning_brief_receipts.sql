@@ -113,10 +113,21 @@ BEGIN
 
   v_local_date := (now() AT TIME ZONE v_effective_tz)::date;
 
-  INSERT INTO public.morning_brief_presentations (profile_id, context, local_date, timezone)
+  -- F-01 fix: RETURNS TABLE above declares implicit PL/pgSQL variables
+  -- named `local_date` and `timezone` that collide with this table's own
+  -- `local_date`/`timezone` columns. A bare `local_date` reference --
+  -- including inside an ON CONFLICT (...) target list, not only in a
+  -- WHERE/SELECT -- is ambiguous between the two and fails at execution
+  -- time with "column reference \"local_date\" is ambiguous" (reproduced
+  -- against a real Postgres-compatible engine; migration parsing alone
+  -- does not exercise function bodies). Fixed by targeting the unique
+  -- constraint by name (sidesteps the column-name-based conflict target
+  -- entirely) and qualifying every table-column reference with the `m`
+  -- alias below.
+  INSERT INTO public.morning_brief_presentations AS m (profile_id, context, local_date, timezone)
   VALUES (v_me, p_context, v_local_date, v_effective_tz)
-  ON CONFLICT (profile_id, context, local_date) DO NOTHING
-  RETURNING * INTO v_inserted;
+  ON CONFLICT ON CONSTRAINT morning_brief_presentations_profile_id_context_local_date_key DO NOTHING
+  RETURNING m.* INTO v_inserted;
 
   IF v_inserted.id IS NOT NULL THEN
     RETURN QUERY SELECT true, v_inserted.local_date, v_inserted.timezone, v_inserted.presented_at;
@@ -125,9 +136,9 @@ BEGIN
 
   -- Someone (this caller, an earlier call this same day, or a concurrent
   -- racing call) already holds today's slot -- report it, don't claim again.
-  SELECT * INTO v_existing
-  FROM public.morning_brief_presentations
-  WHERE profile_id = v_me AND context = p_context AND local_date = v_local_date;
+  SELECT m.* INTO v_existing
+  FROM public.morning_brief_presentations m
+  WHERE m.profile_id = v_me AND m.context = p_context AND m.local_date = v_local_date;
 
   RETURN QUERY SELECT false, v_existing.local_date, v_existing.timezone, v_existing.presented_at;
 END;
