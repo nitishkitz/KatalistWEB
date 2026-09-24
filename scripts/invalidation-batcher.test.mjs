@@ -172,3 +172,13 @@ test("dispose() discards any pending batch and makes further enqueue() calls no-
   clock.advance(1000);
   assert.deepEqual(invalidated, [], "enqueue() after dispose() must be a no-op, not silently start scheduling again");
 });
+
+test("a broad target subsumes narrower targets regardless of enqueue order", () => {
+  const invalidated = [];
+  const batcher = createInvalidationBatcher({ invalidate: (target) => invalidated.push(target) });
+  batcher.enqueue([["list", "one"], ["list", "two"], ["court"]]);
+  batcher.enqueue([["list"]]);
+  batcher.flush();
+  assert.deepEqual(invalidated, [["court"], ["list"]]);
+  batcher.dispose();
+});

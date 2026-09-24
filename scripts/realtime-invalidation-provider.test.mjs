@@ -50,6 +50,7 @@ function makeFakeChannel(name) {
   handlersByChannel.set(name, handlers);
   const channel = {
     name,
+    handlers,
     on: (_type, filter, cb) => {
       handlers.push({ filter, cb });
       return channel;
@@ -228,6 +229,26 @@ test("Strict Mode: mounting does not leak or duplicate channels for one real tra
   unmount();
   qc.clear();
   cleanup();
+});
+
+test("T07: a Strict Mode cleanup rejects late callbacks from its discarded channel", async () => {
+  resetHarness();
+  const qc = newTestClient();
+  let invalidations = 0;
+  const original = qc.invalidateQueries.bind(qc);
+  qc.invalidateQueries = (...args) => { invalidations += 1; return original(...args); };
+  let unmount;
+  await act(async () => { ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, { strict: true })))); });
+  await act(async () => { setTestSession(liveSession("profile-A")); });
+  await settle();
+  assert.ok(channelsCreated.length >= 2);
+  const discarded = channelsRemoved[0];
+  assert.ok(discarded);
+  discarded.simulateStatus("SUBSCRIBED");
+  for (const handler of discarded.handlers) handler.cb({ eventType: "UPDATE", new: { id: "thing-1" } });
+  await settleBatcher();
+  assert.equal(invalidations, 0, "a discarded same-epoch channel must be inert");
+  unmount(); qc.clear(); cleanup();
 });
 
 test("an event delivered to a stale (already-retired) channel handler does not invalidate", async () => {
@@ -589,4 +610,70 @@ test("C-06: a mounted List-detail observer actually refetches (not just the raw 
   unmount();
   qc.clear();
   cleanup();
+});
+
+test("T07: provider forwards payload IDs so an unrelated cached Thing detail stays quiet", async () => {
+  resetHarness();
+  const qc = newTestClientWithPersistentCache();
+  let unmount;
+  await act(async () => { ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {})))); });
+  await act(async () => { setTestSession(liveSession("profile-A")); });
+  await settle();
+  qc.setQueryData(["thing", "thing-1"], { id: "thing-1" });
+  qc.setQueryData(["thing", "thing-2"], { id: "thing-2" });
+  const handler = handlersByChannel.get(channelsCreated[0].name).find((entry) => entry.filter.table === "things");
+  await act(async () => { handler.cb({ eventType: "UPDATE", old: { id: "thing-1" }, new: { id: "thing-1" } }); });
+  await settleBatcher();
+  assert.equal(qc.getQueryState(["thing", "thing-1"])?.isInvalidated, true);
+  assert.equal(qc.getQueryState(["thing", "thing-2"])?.isInvalidated, false);
+  unmount(); qc.clear(); cleanup();
+});
+
+test("T07: browser focus refreshes an already-fresh mounted observer and disposes with its identity", async () => {
+  resetHarness();
+  const qc = newTestClientWithPersistentCache();
+  let calls = 0;
+  function FreshObserver() {
+    useQuery({ queryKey: ["list", "list-1"], queryFn: async () => ++calls,
+      staleTime: Infinity, refetchOnWindowFocus: false });
+    return null;
+  }
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}), h(FreshObserver))));
+  });
+  await act(async () => { setTestSession(liveSession("profile-A")); });
+  await settle();
+  const beforeFocus = calls;
+  assert.ok(beforeFocus > 0);
+  await act(async () => { window.dispatchEvent(new window.Event("focus")); });
+  await settle();
+  assert.ok(calls > beforeFocus, "the provider must revalidate even a fresh observer");
+  const afterFocus = calls;
+  unmount();
+  await act(async () => { window.dispatchEvent(new window.Event("focus")); });
+  await settle();
+  assert.equal(calls, afterFocus, "the retired owner must not retain its focus listener");
+  qc.clear(); cleanup();
+});
+
+test("T07: focus and resubscription in one burst share one catch-up pass", async () => {
+  resetHarness();
+  const qc = newTestClient();
+  let invalidations = 0;
+  const original = qc.invalidateQueries.bind(qc);
+  qc.invalidateQueries = (...args) => { invalidations += 1; return original(...args); };
+  let unmount;
+  await act(async () => { ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {})))); });
+  await act(async () => { setTestSession(liveSession("profile-A")); });
+  await settle();
+  await act(async () => {
+    window.dispatchEvent(new window.Event("focus"));
+    channelsCreated[0].simulateStatus("SUBSCRIBED");
+  });
+  const afterFocus = invalidations;
+  assert.ok(afterFocus > 0);
+  await settleBatcher();
+  assert.equal(invalidations, afterFocus, "resubscription should not schedule a second full pass after focus");
+  unmount(); qc.clear(); cleanup();
 });

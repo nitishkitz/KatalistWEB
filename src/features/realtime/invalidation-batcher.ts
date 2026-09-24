@@ -68,7 +68,12 @@ export function createInvalidationBatcher(options: InvalidationBatcherOptions): 
     // batch, not lost and not merged into the one currently draining.
     const batch = pending;
     pending = new Map();
-    for (const target of batch.values()) {
+    const targets = [...batch.values()];
+    for (const target of targets) {
+      // A broad family refresh subsumes narrower entries in this flush.
+      // Keep this at flush time: event order can put either target first.
+      if (targets.some((other) => other.length < target.length &&
+        other.every((value, index) => value === target[index]))) continue;
       options.invalidate(target);
     }
   }

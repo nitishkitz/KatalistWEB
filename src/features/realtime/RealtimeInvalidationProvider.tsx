@@ -19,6 +19,7 @@ const WATCHED_TABLES: RealtimeTable[] = [
   "list_meetings",
   "profile_object_state",
 ];
+const CATCHUP_COALESCE_MS = 150;
 
 /**
  * P7: the single application-level owner of database-change
@@ -66,6 +67,7 @@ export function RealtimeInvalidationProvider() {
     // but a callback already queued in the microtask/event loop at
     // teardown time is exactly what an epoch check protects against).
     const epoch = getIdentityEpoch(qc).epoch;
+    let active = true;
 
     const batcher = createInvalidationBatcher({
       invalidate: (target) => {
@@ -77,12 +79,32 @@ export function RealtimeInvalidationProvider() {
         void qc.invalidateQueries({ queryKey: target });
       },
     });
+    let lastCatchupAt = 0;
+    const catchUp = (flushPending: boolean) => {
+      if (!active || !isEpochCurrent(qc, epoch) || subscriptionStatusRef.current === "never-subscribed") return;
+      const now = Date.now();
+      if (now - lastCatchupAt < CATCHUP_COALESCE_MS) return;
+      lastCatchupAt = now;
+      for (const table of WATCHED_TABLES) batcher.enqueue(targetsForEvent({ table }));
+      // Focus/online may arrive while ordinary events are pending. Merge them
+      // with the authority refresh and drain once, including fresh observers
+      // that React Query's stale-only focus handling would not refetch.
+      if (flushPending) batcher.flush();
+    };
+    const onFocus = () => catchUp(true);
+    const onOnline = () => catchUp(true);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") catchUp(true);
+    };
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibility);
 
     const channel = supabase.channel("katalist-movement");
     for (const table of WATCHED_TABLES) {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
-        if (!isEpochCurrent(qc, epoch)) return;
-        batcher.enqueue(targetsForEvent({ table }));
+        if (!active || !isEpochCurrent(qc, epoch)) return;
+        batcher.enqueue(targetsForEvent({ table, eventType: payload.eventType, old: payload.old, new: payload.new }));
         // P8/C-06 membership-revocation fast path: best-effort, NOT the
         // primary mechanism (the batched invalidate above, using the
         // expanded list_members target list, is what actually guarantees
@@ -128,36 +150,22 @@ export function RealtimeInvalidationProvider() {
         }
       });
     }
-    // P9: distinguishes an initial subscription from a later reconnect.
-    // Realtime does not replay a backlog of missed events for the time
-    // spent disconnected, so a genuine reconnect (SUBSCRIBED again,
-    // having already been subscribed once before) revalidates
-    // everything this owner watches, rather than assuming nothing
-    // relevant changed while offline. Routed through the SAME batcher
-    // as ordinary events -- still epoch-guarded, and naturally
-    // coalesced with whatever else is already pending. Repeated
-    // SUBSCRIBED notifications firing in quick succession (Supabase can
-    // call this more than once around one real reconnect) don't cause
-    // repeated catch-up passes: each call re-enqueues the same
-    // already-deduplicated target set, and the batcher's own debounce
-    // still flushes it only once. This intentionally does not add any
-    // separate handling for the browser's own online/focus events --
-    // TanStack Query's existing refetchOnReconnect/refetchOnWindowFocus
-    // defaults already own that, and adding a second, redundant
-    // invalidation pass on top of them is exactly what the plan warns
-    // against.
+    // Realtime does not replay missed events. Reconnect and browser resume
+    // share one epoch-scoped catch-up gate, so a burst of online/focus/
+    // SUBSCRIBED notifications does not cause separate full refreshes.
     channel.subscribe((status) => {
-      if (status !== "SUBSCRIBED") return;
+      if (!active || status !== "SUBSCRIBED") return;
       const isReconnect = subscriptionStatusRef.current !== "never-subscribed";
       subscriptionStatusRef.current = isReconnect ? "reconnected" : "initial";
-      if (isReconnect && isEpochCurrent(qc, epoch)) {
-        for (const table of WATCHED_TABLES) {
-          batcher.enqueue(targetsForEvent({ table }));
-        }
-      }
+      if (isReconnect) catchUp(false);
     });
 
     return () => {
+      active = false;
+      subscriptionStatusRef.current = "never-subscribed";
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibility);
       batcher.dispose();
       void supabase.removeChannel(channel);
     };

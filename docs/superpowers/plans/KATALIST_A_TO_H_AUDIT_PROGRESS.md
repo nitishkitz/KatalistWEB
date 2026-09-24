@@ -451,3 +451,33 @@ parallelization and actor cache were retained.
 - Browser verification of detail/overview transitions, unavailable-count
   banners, Hub pagination/search, and explicit PDF preview remains part of
   the later validation pass requested by the user.
+
+### T07 — Payload-aware realtime and catch-up
+
+**Status:** IN PROGRESS — local code and deterministic/DOM tests exist, but
+real delivery, reconnect timing, and staging `REPLICA IDENTITY` are unverified.
+
+**Implemented locally:** the root owner now forwards `eventType` plus old/new
+row fields into a pure routing map. Reliable Thing/List/Bucket IDs narrow
+detail invalidation while summary/collection keys stay broad where their
+membership can change. A Thing moved between Lists invalidates both parents;
+a primary-key-only DELETE retains the broad membership/authority fallback.
+The batcher removes narrow entries already subsumed by a broad prefix in the
+same flush. Browser focus, visibility restoration, online, and Realtime
+resubscription share an epoch-scoped catch-up gate; focus/online merge pending
+events and refresh even mounted queries with `staleTime: Infinity` rather than
+relying on stale-only framework defaults. Effect cleanup removes listeners,
+discards pending work, and makes callbacks from discarded Strict Mode channels
+inert. The existing one-root-owner and 150ms/500ms batching boundaries remain.
+
+**Local evidence:** pure routing tests cover old/new parent moves, known-ID
+narrowing and missing-ID fallback. Provider DOM tests prove payload delivery
+leaves an unrelated Thing detail quiet, fresh mounted observers refetch on
+focus, identity teardown removes listeners, and same-epoch Strict Mode stale
+callbacks do nothing. The pre-existing 20-event batcher and reconnect tests
+continue to pass. No browser/staging Realtime delivery claim is made.
+
+**Still required before T07 closure:** staging event payload inspection for
+INSERT/UPDATE/DELETE (especially membership DELETE), live reconnect and
+focus timing, and route-level request-volume measurements. These remain part
+of the later code-first release validation pass.
