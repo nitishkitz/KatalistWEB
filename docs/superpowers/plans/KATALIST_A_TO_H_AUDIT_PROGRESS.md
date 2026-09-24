@@ -475,6 +475,22 @@ concurrently; the isolated rerun passed all 15, so this is not counted as a
 product regression.
 
 **Still required before T06 closure:**
+- **2026-09-25 production-only read-only check:** the user supplied
+  `https://katalist-web.vercel.app/` and signed into an existing account in
+  the browser. Court, the specified existing List detail, Lists index,
+  Buckets index and Team landing all rendered without console errors. The
+  production site's compiled asset contains the same Supabase project ID as
+  this checkout's `.env.local`. A read-only PostgREST OpenAPI inspection
+  (service-role schema visibility; no row reads or writes) found **none of
+  the six T06 RPC paths** on the deployed project. Separately,
+  `git ls-remote --heads origin katalist-plan/batch-a-baseline` returned no
+  remote branch: this checkout's T06/T07 commits are not the deployed app.
+  These observations are a **production baseline**, not a pass of the new
+  implementation. The user prohibited creating new production data or
+  objects, so no migration or write test was attempted. T06 cannot be called
+  production-verified until the additive RPC migrations and client are
+  explicitly authorized for deployment, or a separate isolated target is
+  supplied.
 - Route-level cold/warm request counters and measured duration boundaries for
   Court, Lists, Bucket and Hub in a safe browser/staging environment. The
   adapter fixtures above do not prove full-route volume or live speed.
@@ -533,3 +549,10 @@ delivery claim is made because this migration is not deployed.
 INSERT/UPDATE/DELETE (especially membership DELETE), live reconnect and
 focus timing, and route-level request-volume measurements. These remain part
 of the later code-first release validation pass.
+
+**Production-only constraint:** the authenticated production pages above
+provide read-only baseline evidence only. The T07 branch is not deployed,
+its publication-coverage migration has not run, and the user forbade new
+production records. With no live change event to observe and no permission
+to publish missing tables, actual delivery/reconnect behaviour remains
+unverified; local simulation is not a substitute.
