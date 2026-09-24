@@ -93,6 +93,11 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   // tell it's no longer the owner and skip touching shared ref/state
   // (while still disposing whatever room/media IT itself acquired).
   const joinGenerationRef = useRef(0);
+  // R-05: reaction auto-dismiss timers are hook-level (sendReaction is
+  // callable across a whole hook lifetime, not scoped to one join()), so
+  // they must be tracked and cleared independently of any one room's
+  // generation -- otherwise a call left mid-reaction leaks its timer.
+  const reactionTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
   const [joined, setJoined] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -122,6 +127,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     joinGenerationRef.current += 1; // supersede any join() still in flight
     roomRef.current?.leave();
     roomRef.current = null;
+    reactionTimersRef.current.forEach(clearTimeout);
+    reactionTimersRef.current.clear();
     setJoined(false);
     setConnecting(false);
     setLocalStream(null);
@@ -150,23 +157,40 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setConnecting(true);
     setLifecycle("joining");
     setLastError(null);
+    // R-05: CallRoom's own `closed` guard (see call-room.ts) covers most of
+    // the window, but a queued broadcast event can still reach these
+    // callbacks after a newer join/leave has superseded this room at the
+    // hook level (e.g. this room raced a rejoin before its own unsubscribe
+    // landed) -- isActiveRoom is the hook's own ownership check, applied to
+    // every one of this room's callbacks and async continuations.
+    const isActiveRoom = () => joinGenerationRef.current === myGeneration;
     const room = new CallRoom({
       listId,
       selfId,
       selfName,
       onState: (s) => {
+        if (!isActiveRoom()) return;
         setParticipants(s.participants);
         setRaisedHandQueue(s.raisedHandQueue);
       },
       onReaction: (r) => {
+        if (!isActiveRoom()) return;
         const item = { id: crypto.randomUUID(), from: r.from, emoji: r.emoji };
         setReactions((prev) => [...prev, item]);
-        setTimeout(() => setReactions((prev) => prev.filter((x) => x.id !== item.id)), 4000);
+        const timer = setTimeout(() => {
+          reactionTimersRef.current.delete(timer);
+          setReactions((prev) => prev.filter((x) => x.id !== item.id));
+        }, 4000);
+        reactionTimersRef.current.add(timer);
       },
       onDraw: (op) => {
+        if (!isActiveRoom()) return;
         setDrawOps((prev) => applyDrawOp(prev, op));
       },
-      onDocPage: (page) => setDocPageState(page),
+      onDocPage: (page) => {
+        if (!isActiveRoom()) return;
+        setDocPageState(page);
+      },
     });
     roomRef.current = room;
     try {
@@ -285,7 +309,11 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     // Optimistic local echo.
     const item = { id: crypto.randomUUID(), from: "You", emoji };
     setReactions((prev) => [...prev, item]);
-    setTimeout(() => setReactions((prev) => prev.filter((x) => x.id !== item.id)), 4000);
+    const timer = setTimeout(() => {
+      reactionTimersRef.current.delete(timer);
+      setReactions((prev) => prev.filter((x) => x.id !== item.id));
+    }, 4000);
+    reactionTimersRef.current.add(timer);
   }, []);
 
   const sendDraw = useCallback((op: DrawOp) => {
@@ -305,9 +333,17 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
 
   // Clean up media/peers if the component unmounts mid-call.
   useEffect(() => {
+    const reactionTimers = reactionTimersRef.current;
     return () => {
+      // R-05: retire this hook instance's generation BEFORE leaving --
+      // without it, a join() still in flight at unmount time would see its
+      // own generation still current when its catch/finally later runs,
+      // and emit a stale toast/setState after unmount.
+      joinGenerationRef.current += 1;
       roomRef.current?.leave();
       roomRef.current = null;
+      reactionTimers.forEach(clearTimeout);
+      reactionTimers.clear();
     };
   }, []);
 

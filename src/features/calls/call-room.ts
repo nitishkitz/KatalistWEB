@@ -254,11 +254,22 @@ export class CallRoom {
     channel
       .on("broadcast", { event: "sdp" }, ({ payload }) => void this.onSdp(payload as SdpMsg))
       .on("broadcast", { event: "ice" }, ({ payload }) => void this.onIce(payload as IceMsg))
-      .on("broadcast", { event: "reaction" }, ({ payload }) =>
-        this.onReaction?.(payload as { from: string; emoji: string }),
-      )
-      .on("broadcast", { event: "draw" }, ({ payload }) => this.onDraw?.(payload as DrawOp))
-      .on("broadcast", { event: "doc-page" }, ({ payload }) => this.onDocPage?.((payload as { page: number }).page))
+      // R-05: removeChannel() in leave() is not synchronous -- an event
+      // already queued by Realtime before unsubscribe completes can still
+      // reach these handlers after `this.closed` is set. Guard each one
+      // rather than relying solely on the hook's own generation check.
+      .on("broadcast", { event: "reaction" }, ({ payload }) => {
+        if (this.closed) return;
+        this.onReaction?.(payload as { from: string; emoji: string });
+      })
+      .on("broadcast", { event: "draw" }, ({ payload }) => {
+        if (this.closed) return;
+        this.onDraw?.(payload as DrawOp);
+      })
+      .on("broadcast", { event: "doc-page" }, ({ payload }) => {
+        if (this.closed) return;
+        this.onDocPage?.((payload as { page: number }).page);
+      })
       .on("presence", { event: "sync" }, () => this.syncPeers())
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
