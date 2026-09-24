@@ -677,3 +677,48 @@ test("T07: focus and resubscription in one burst share one catch-up pass", async
   assert.equal(invalidations, afterFocus, "resubscription should not schedule a second full pass after focus");
   unmount(); qc.clear(); cleanup();
 });
+
+test("T07: reconnect drains an already-pending event batch immediately", async () => {
+  resetHarness();
+  const qc = newTestClient();
+  const keys = [];
+  const original = qc.invalidateQueries.bind(qc);
+  qc.invalidateQueries = (options) => { keys.push(options.queryKey[0]); return original(options); };
+  let unmount;
+  await act(async () => { ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {})))); });
+  await act(async () => { setTestSession(liveSession("profile-A")); });
+  await settle();
+  const channel = channelsCreated[0];
+  channel.handlers.find((entry) => entry.filter.table === "things")
+    .cb({ eventType: "UPDATE", new: { id: "thing-1" } });
+  assert.equal(keys.length, 0, "ordinary event remains pending inside the debounce window");
+  channel.simulateStatus("SUBSCRIBED");
+  assert.ok(keys.includes("court"), "reconnect flushes the pending event and the authority catch-up together");
+  unmount(); qc.clear(); cleanup();
+});
+
+test("T07: a primary-key-only membership DELETE refetches a mounted fresh List despite missing list_id", async () => {
+  resetHarness();
+  const qc = newTestClientWithPersistentCache();
+  let calls = 0;
+  function ListObserver() {
+    useQuery({ queryKey: ["list", "list-1"], queryFn: async () => ++calls,
+      staleTime: Infinity, refetchOnWindowFocus: false });
+    return null;
+  }
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}), h(ListObserver))));
+  });
+  await act(async () => { setTestSession(liveSession("profile-A")); });
+  await settle();
+  const beforeDelete = calls;
+  assert.ok(beforeDelete > 0);
+  const handler = handlersByChannel.get(channelsCreated[0].name).find((entry) => entry.filter.table === "list_members");
+  await act(async () => {
+    handler.cb({ eventType: "DELETE", old: { id: "membership-1" } });
+  });
+  await settleBatcher();
+  assert.ok(calls > beforeDelete, "broad authority fallback must reach an active observer even with only the membership primary key");
+  unmount(); qc.clear(); cleanup();
+});

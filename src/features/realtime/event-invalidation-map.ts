@@ -10,12 +10,16 @@
 
 export type RealtimeTable =
   | "things"
+  | "thing_attachments"
   | "thing_comments"
   | "thing_activity"
   | "nudges"
   | "notifications"
   | "list_messages"
+  | "lists"
+  | "buckets"
   | "bucket_items"
+  | "bucket_notes"
   | "list_members"
   | "list_meetings"
   | "profile_object_state";
@@ -60,12 +64,16 @@ const STATIC_TARGETS: Record<Exclude<RealtimeTable, "profile_object_state">, str
     "accessible-things",
     "doorman",
   ],
+  thing_attachments: ["thing", "court", "list-things", "bucket-items", "accessible-things"],
   thing_comments: ["thing-comments", "thing", "court"],
   thing_activity: ["thing-activity", "thing", "trophy", "lists"],
   nudges: ["nudges", "nudge-history", "catchup", "thing", "notifications"],
   notifications: ["notifications", "notifications-unread", "catchup"],
   list_messages: ["list-messages", "list-message-attachments", "list-system-history", "list-message-search", "list-pinned-messages", "list", "lists", "hub-conversations", "hub-conversation"],
+  lists: ["list", "lists", "hub-conversations", "hub-conversation", "buckets", "bucket", "bucket-items"],
+  buckets: ["bucket", "buckets"],
   bucket_items: ["bucket", "buckets", "bucket-items"],
+  bucket_notes: ["bucket-notes"],
   // C-06: a membership change (in particular a revocation) can make a List
   // inaccessible -- every mounted surface that shows List-scoped content
   // must re-derive from a real refetch (which discovers "no longer
@@ -108,6 +116,9 @@ export function targetsForEvent(event: RealtimeEvent): InvalidationTarget[] {
       // A move changes both parents; never scope to only the new List.
       scope(["list", "list-things"], payloadIds("list_id"));
       break;
+    case "thing_attachments":
+      scope(["thing"], payloadIds("thing_id"));
+      break;
     case "thing_comments":
       scope(["thing-comments", "thing"], payloadIds("thing_id"));
       break;
@@ -121,8 +132,17 @@ export function targetsForEvent(event: RealtimeEvent): InvalidationTarget[] {
       scope(["list-messages", "list-message-attachments", "list-system-history", "list-message-search",
         "list-pinned-messages", "list", "hub-conversation"], payloadIds("list_id"));
       break;
+    case "lists":
+      scope(["list", "hub-conversation"], payloadIds("id"));
+      break;
+    case "buckets":
+      scope(["bucket", "bucket-items"], payloadIds("id"));
+      break;
     case "bucket_items":
       scope(["bucket", "bucket-items"], payloadIds("bucket_id"));
+      break;
+    case "bucket_notes":
+      scope(["bucket-notes"], payloadIds("bucket_id"));
       break;
     case "list_members":
       scope(["list", "list-messages", "list-message-attachments", "list-system-history",

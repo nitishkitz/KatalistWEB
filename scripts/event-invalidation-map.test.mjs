@@ -23,8 +23,8 @@ test("profile_object_state routes to the personal-surfaces sentinel, not a stati
 
 test("every RealtimeTable has a routing entry (no silently-unhandled table)", () => {
   const tables = [
-    "things", "thing_comments", "thing_activity", "nudges", "notifications",
-    "list_messages", "bucket_items", "list_members", "list_meetings", "profile_object_state",
+    "things", "thing_attachments", "thing_comments", "thing_activity", "nudges", "notifications",
+    "list_messages", "lists", "buckets", "bucket_items", "bucket_notes", "list_members", "list_meetings", "profile_object_state",
   ];
   for (const table of tables) {
     const targets = targetsForEvent({ table });
@@ -88,6 +88,8 @@ test("known List, Bucket, comment and activity IDs keep unrelated detail quiet",
     ["bucket_items", { bucket_id: "bucket-1" }, ["bucket", "bucket-1"]],
     ["thing_comments", { thing_id: "thing-1" }, ["thing-comments", "thing-1"]],
     ["thing_activity", { thing_id: "thing-1" }, ["thing-activity", "thing-1"]],
+    ["thing_attachments", { thing_id: "thing-1" }, ["thing", "thing-1"]],
+    ["bucket_notes", { bucket_id: "bucket-1" }, ["bucket-notes", "bucket-1"]],
   ]) {
     const targets = targetsForEvent({ table, new: row });
     assert.ok(targets.some((target) => targetKey(target) === targetKey(expected)), `${table} must target its detail`);

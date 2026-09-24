@@ -9,12 +9,16 @@ import { createInvalidationBatcher } from "@/features/realtime/invalidation-batc
 
 const WATCHED_TABLES: RealtimeTable[] = [
   "things",
+  "thing_attachments",
   "thing_comments",
   "thing_activity",
   "nudges",
   "notifications",
   "list_messages",
+  "lists",
+  "buckets",
   "bucket_items",
+  "bucket_notes",
   "list_members",
   "list_meetings",
   "profile_object_state",
@@ -82,14 +86,18 @@ export function RealtimeInvalidationProvider() {
     let lastCatchupAt = 0;
     const catchUp = (flushPending: boolean) => {
       if (!active || !isEpochCurrent(qc, epoch) || subscriptionStatusRef.current === "never-subscribed") return;
+      const hadPending = batcher.hasPending();
       const now = Date.now();
-      if (now - lastCatchupAt < CATCHUP_COALESCE_MS) return;
+      if (now - lastCatchupAt < CATCHUP_COALESCE_MS) {
+        if (flushPending && hadPending) batcher.flush();
+        return;
+      }
       lastCatchupAt = now;
       for (const table of WATCHED_TABLES) batcher.enqueue(targetsForEvent({ table }));
       // Focus/online may arrive while ordinary events are pending. Merge them
       // with the authority refresh and drain once, including fresh observers
       // that React Query's stale-only focus handling would not refetch.
-      if (flushPending) batcher.flush();
+      if (flushPending || hadPending) batcher.flush();
     };
     const onFocus = () => catchUp(true);
     const onOnline = () => catchUp(true);

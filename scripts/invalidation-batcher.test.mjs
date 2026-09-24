@@ -136,9 +136,11 @@ test("flush() drains immediately and cancels pending timers, even before the deb
   });
 
   batcher.enqueue([["court"]]);
+  assert.equal(batcher.hasPending(), true);
   batcher.flush();
 
   assert.deepEqual(invalidated, ["court"]);
+  assert.equal(batcher.hasPending(), false);
   assert.equal(clock.pendingCount(), 0, "flush() must cancel the now-unnecessary scheduled timers");
 });
 

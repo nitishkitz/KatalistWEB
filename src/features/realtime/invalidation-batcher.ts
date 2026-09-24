@@ -29,6 +29,8 @@ export type InvalidationBatcherOptions = {
 export type InvalidationBatcher = {
   /** Adds targets to the current pending batch (deduplicated) and (re)schedules a flush. */
   enqueue: (targets: InvalidationTarget[]) => void;
+  /** Whether events are queued but not yet invalidated. */
+  hasPending: () => boolean;
   /** Drains and invalidates whatever's currently pending, immediately, cancelling any scheduled timers. Safe to call with nothing pending. */
   flush: () => void;
   /** Cancels all pending timers and discards any not-yet-flushed batch. Call on teardown (identity retirement, unmount) -- after dispose(), enqueue() is a no-op. */
@@ -105,6 +107,7 @@ export function createInvalidationBatcher(options: InvalidationBatcherOptions): 
       }
       if (pending.size > 0) scheduleFlush();
     },
+    hasPending: () => pending.size > 0,
     flush,
     dispose() {
       disposed = true;
