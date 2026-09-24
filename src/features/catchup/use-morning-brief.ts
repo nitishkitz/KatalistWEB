@@ -72,6 +72,29 @@ export function useMorningBrief(): UseMorningBrief {
   const attemptedKeyRef = useRef<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // F-03: attemptClaim's own closure only sees the values current at the
+  // moment it was CALLED -- if context/tab-visibility/blocker/moments
+  // change while its claim RPC is still in flight, the continuation must
+  // not open stale UI (e.g. a claim made for Work, now shown as Home's
+  // brief because context switched mid-await). These refs are updated on
+  // every render (not just via an effect) so the continuation can read
+  // the LATEST truth after its await, not what was true when it started.
+  const contextRef = useRef(context);
+  contextRef.current = context;
+  const isTabHiddenRef = useRef(isTabHidden);
+  isTabHiddenRef.current = isTabHidden;
+  const hasBlockingInteractionRef = useRef(hasBlockingInteraction);
+  hasBlockingInteractionRef.current = hasBlockingInteraction;
+  const catchupCountRef = useRef(catchup.count);
+  catchupCountRef.current = catchup.count;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   useEffect(() => {
     if (typeof document === "undefined") return;
     const onVisibility = () => setIsTabHidden(document.visibilityState === "hidden");
@@ -114,7 +137,23 @@ export function useMorningBrief(): UseMorningBrief {
         ? await claimMorningBriefPreview(identityId, context, dateKey, timeZone)
         : await claimMorningBriefLive(context, timeZone);
       if (!isEpochCurrent(qc, epoch)) return; // identity switched while the claim was in flight
-      if (result.claimed) {
+      if (!mountedRef.current) return; // unmounted while the claim was in flight
+      // F-03: the claim itself succeeded (or was already claimed) for the
+      // SCOPE captured above (identity/context/date) -- but showing it now
+      // requires that scope to still be the live one. A context switch
+      // mid-await means this claim's context no longer matches what's
+      // displayed; a blocker/hidden-tab appearing meanwhile means the
+      // moment to interrupt is no longer right; moments emptying meanwhile
+      // means there's nothing left to show. In every one of these cases
+      // the receipt itself is still recorded/valid -- only the automatic
+      // OPEN is skipped, so manual review remains available and the day's
+      // slot is not reattempted (attemptedKeyRef already marks it done).
+      const stillEligibleToShow =
+        contextRef.current === context &&
+        !hasBlockingInteractionRef.current &&
+        !isTabHiddenRef.current &&
+        catchupCountRef.current > 0;
+      if (result.claimed && stillEligibleToShow) {
         setOpen(true);
       }
       setAlreadyPresentedToday(true);

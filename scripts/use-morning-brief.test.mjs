@@ -33,10 +33,11 @@ let catchupCount = 1;
 let catchupLoading = false;
 let profileTimezone = "America/New_York";
 let flagEnabled = false;
+let testContext = "work";
 
 mock.module("@/hooks/useSession", { namedExports: { useSession: () => testSession } });
 mock.module("@/lib/session-mode", { namedExports: { isPreviewSession: () => testPreview } });
-mock.module("@/features/context/use-app-context", { namedExports: { useAppContext: () => ({ context: "work" }) } });
+mock.module("@/features/context/use-app-context", { namedExports: { useAppContext: () => ({ context: testContext }) } });
 mock.module("@/features/me/use-profile", {
   namedExports: { useProfile: () => ({ data: { timezone: profileTimezone }, isLoading: false }) },
 });
@@ -59,10 +60,17 @@ mock.module("@/features/catchup/morning-brief-flag", {
 let claimCalls = [];
 let claimResult = { claimed: true, localDate: "2026-06-15", timezone: "America/New_York", presentedAt: "x" };
 let dismissCalls = [];
+// F-03: a controllable gate so a test can hold the claim's own promise
+// open, change something (context, a blocker, tab visibility, moments)
+// while it's still pending, THEN let it resolve -- proving the
+// continuation rechecks fresh state instead of trusting what was true
+// when it was first called.
+let claimGate = null;
 mock.module("@/features/catchup/morning-brief-receipts", {
   namedExports: {
     claimMorningBriefLive: async (context, tz) => {
       claimCalls.push({ context, tz });
+      if (claimGate) await claimGate;
       return claimResult;
     },
     claimMorningBriefPreview: async (actorId, context, dateKey, tz) => {
@@ -104,9 +112,11 @@ function resetShared() {
   catchupLoading = false;
   profileTimezone = "America/New_York";
   flagEnabled = false;
+  testContext = "work";
   claimCalls = [];
   dismissCalls = [];
   claimResult = { claimed: true, localDate: "2026-06-15", timezone: "America/New_York", presentedAt: "x" };
+  claimGate = null;
 }
 
 test("with the flag disabled (the default), never auto-opens even when otherwise eligible", async () => {
@@ -344,6 +354,109 @@ test("preview/demo identity uses the preview receipt adapter, not the live one",
 
   assert.equal(claimCalls.length, 1);
   assert.equal(claimCalls[0].actorId, "demo-actor-1", "preview identity comes from currentDemoActorId(), not user?.id");
+
+  cleanup();
+  qc.clear();
+});
+
+test("F-03: a context switch while the claim is still in flight must not open the brief for the wrong context", async () => {
+  resetShared();
+  flagEnabled = true;
+  let gateResolve;
+  claimGate = new Promise((r) => (gateResolve = r));
+  const qc = newClient();
+  let latest = null;
+  let rerender;
+
+  await act(async () => {
+    const result = render(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+    rerender = result.rerender;
+  });
+  // The claim is now pending (blocked on claimGate) for context "work".
+  assert.equal(claimCalls.length, 1);
+  assert.equal(claimCalls[0].context, "work");
+
+  // Switch context to "home" WHILE that claim is still in flight. Also
+  // drop catchup's own moment count to 0 so the NEW context's own
+  // attemptClaim (a real, separate, legitimate attempt) never itself
+  // calls claim -- isolating this test to exactly the race this fix
+  // targets: does the STALE "work" claim's own continuation, once it
+  // finally resolves, incorrectly open the brief for the context that's
+  // no longer displayed.
+  testContext = "home";
+  catchupCount = 0;
+  await act(async () => {
+    rerender(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+  });
+  assert.equal(claimCalls.length, 1, "the context switch's own attempt must not itself call claim (no actionable moments)");
+
+  await act(async () => {
+    gateResolve();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(latest.open, false, "must not auto-open using a claim that was for the context no longer displayed");
+  assert.equal(latest.alreadyPresentedToday, true, "the claim itself still succeeded and is recorded");
+
+  cleanup();
+  qc.clear();
+});
+
+test("F-03: a blocking interaction appearing while the claim is in flight must suppress the open, not just delay it", async () => {
+  resetShared();
+  flagEnabled = true;
+  let gateResolve;
+  claimGate = new Promise((r) => (gateResolve = r));
+  const qc = newClient();
+  let latest = null;
+  let rerender;
+
+  await act(async () => {
+    const result = render(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+    rerender = result.rerender;
+  });
+  assert.equal(claimCalls.length, 1);
+
+  // A call/dialog/composer starts blocking WHILE the claim is still in flight.
+  await act(async () => {
+    rerender(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(
+          InteractionBlockerProvider,
+          null,
+          h(Blocker, { blocked: true }),
+          h(Probe, { onValue: (v) => (latest = v) }),
+        ),
+      ),
+    );
+  });
+  await act(async () => {
+    gateResolve();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(latest.open, false, "a blocker that appeared mid-claim must suppress the auto-open");
+  assert.equal(latest.alreadyPresentedToday, true, "the claim itself still succeeded and is recorded");
 
   cleanup();
   qc.clear();
