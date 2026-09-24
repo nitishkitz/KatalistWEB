@@ -5,6 +5,8 @@ import { createElement as h, useEffect } from "react";
 import { act } from "react";
 import { render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlockerProvider";
+import { useInteractionBlocker } from "@/components/katalist/use-interaction-blocker";
 
 /**
  * R-03/R-06/R-07 (independent review of G-06): the previous
@@ -79,14 +81,15 @@ function newClient() {
 function Probe({ onValue }) {
   const notesApi = useBucketNotes("bucket-1");
   const editor = useBucketNoteEditor("bucket-1", notesApi);
+  const { isBlocked } = useInteractionBlocker();
   useEffect(() => {
-    onValue(editor);
+    onValue({ ...editor, isBlocked });
   });
   return null;
 }
 
 function renderProbe(qc, onValue) {
-  return render(h(QueryClientProvider, { client: qc }, h(Probe, { onValue })));
+  return render(h(QueryClientProvider, { client: qc }, h(InteractionBlockerProvider, null, h(Probe, { onValue }))));
 }
 
 test("R-03: a save that resolves after further edits to the same note keeps the editor open with the newer text", async () => {
@@ -460,6 +463,33 @@ test("T02: a delete that resolves AFTER an identity switch does not close the su
     true,
     "the stale delete's success must not close the editor once a successor identity owns this instance -- session alone is unchanged, only identity is",
   );
+
+  cleanup();
+  qc.clear();
+});
+
+test("T03: a dirty (unsaved) note edit registers the interaction blocker, and clears once it isn't dirty anymore", async () => {
+  const qc = newClient();
+  let latest = null;
+  await act(async () => {
+    renderProbe(qc, (v) => (latest = v));
+  });
+  assert.equal(latest.isBlocked, false, "not blocked before opening the editor");
+
+  await act(async () => {
+    latest.openNoteEditor({ id: "note-1", title: "original title", body: "original body" });
+  });
+  assert.equal(latest.isBlocked, false, "opening an existing note with no edits yet is not dirty");
+
+  await act(async () => {
+    latest.setNoteTitle("an unsaved edit");
+  });
+  assert.equal(latest.isBlocked, true, "a dirty note edit must block Morning Brief's auto-open");
+
+  await act(async () => {
+    latest.setNoteTitle("original title"); // back to matching noteOriginal -- no longer dirty
+  });
+  assert.equal(latest.isBlocked, false, "reverting to the saved value releases the blocker");
 
   cleanup();
   qc.clear();

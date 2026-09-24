@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import type { useBucketNotes } from "./use-bucket-notes";
 
 /**
@@ -89,6 +90,12 @@ export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeo
   }, [qc, noteOpen, editingNoteId, noteTitle, noteBody, bucketId]);
 
   const noteIsDirty = noteTitle !== noteOriginal.title || noteBody !== noteOriginal.body;
+
+  // T03: a dirty (unsaved) note edit is just as much an in-progress
+  // composer action as ThingDetailContent's own comment draft or Magic
+  // Box's capture text -- register the same interaction blocker so
+  // nothing (Morning Brief's auto-open, etc.) can silently interrupt it.
+  useBlockWhile(noteOpen && noteIsDirty, "bucket-note-draft");
 
   /** Routes every non-Save close (Cancel, Escape, backdrop) through one
    *  place so a genuinely dirty edit -- including clearing a saved

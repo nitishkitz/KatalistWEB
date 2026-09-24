@@ -16,6 +16,7 @@ import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import type { ThingFile, Person } from "@/domain/thing";
 import { processFileForUpload } from "@/lib/file-utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 
 export function MagicBox({
   listId,
@@ -51,6 +52,11 @@ export function MagicBox({
   // those -- set on a partial failure, cleared on a fresh edit or a fully
   // successful toss.
   const [retryAssigneeIds, setRetryAssigneeIds] = useState<string[] | null>(null);
+  // T03: how many selected files are still being processed -- not yet in
+  // attachedFiles, but just as much an in-progress composer action as
+  // typed text or an already-attached file (same reasoning as
+  // ThingDetailContent's own processingCommentFiles).
+  const [processingFiles, setProcessingFiles] = useState(0);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -69,10 +75,17 @@ export function MagicBox({
   const { lists } = useLists();
   const { buckets } = useBuckets();
 
+  // T03: register a blocker while there's unsent Magic Box text/files (or
+  // a file still processing) so nothing (Morning Brief's auto-open, etc.)
+  // can silently interrupt a mid-capture the way ThingDetailContent's own
+  // comment composer already guards against.
+  useBlockWhile(Boolean(value.trim()) || attachedFiles.length > 0 || processingFiles > 0, "magic-box-draft");
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       const files = e.target.files;
       if (!files || files.length === 0) return;
+      setProcessingFiles((n) => n + 1);
       const newFiles: ThingFile[] = [];
       for (let i = 0; i < files.length; i++) {
         try {
@@ -100,6 +113,7 @@ export function MagicBox({
       }
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
+      setProcessingFiles((n) => Math.max(0, n - 1));
     }
   };
 

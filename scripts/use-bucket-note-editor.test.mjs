@@ -6,6 +6,7 @@ import { act } from "react";
 import { render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useBucketNoteEditor } from "@/features/buckets/use-bucket-note-editor";
+import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlockerProvider";
 
 /**
  * G-06 (audit): the Bucket note editor's Save had no pending guard (a
@@ -72,7 +73,9 @@ function Probe({ notesApi, onValue }) {
 }
 
 function renderProbe(qc, notesApi, onValue) {
-  return render(h(QueryClientProvider, { client: qc }, h(Probe, { notesApi, onValue })));
+  return render(
+    h(QueryClientProvider, { client: qc }, h(InteractionBlockerProvider, null, h(Probe, { notesApi, onValue }))),
+  );
 }
 
 test("G-06: a double-click on Save while the first create is still pending fires only one create", async () => {
