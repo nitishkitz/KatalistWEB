@@ -62,3 +62,101 @@ All four are fixed below in one pass.
 baseline), clean build. Staging verification for the migration, RLS, and Realtime revocation
 delivery remains open, as it has throughout this audit -- it requires an isolated staging
 environment, not further local unit tests.
+
+## KATALIST_A_TO_H_FINAL_COMPLETION_PLAN.md execution
+
+Plan prepared at `34e69bd` on `katalist-plan/batch-a-baseline`, authorizing local execution of
+T00-T15 without repeated approval pauses. Baseline reconciled: HEAD matched the plan's own baseline
+exactly, no drift to reconcile.
+
+### T00 — Baseline, build safety, and executable browser harness
+
+**Status:** LOCAL PASS. **Owns:** A-01, A-03, V-02.
+
+**Baseline established** (branch `katalist-plan/batch-a-baseline`, HEAD `34e69bd`, Node v22.19.0,
+clean working tree except this plan doc): 526/526 tests, 0 typecheck errors, 0 lint errors/80
+warnings, clean `build:app`. `.agents/` and `output/` untracked work preserved untouched.
+
+**Warning triage** (all 80, by rule):
+- `@typescript-eslint/no-unused-vars` (69) — left as-is; each is a small, page-local unused
+  binding (destructured-but-unused state setters, unused imports) with no correctness content.
+  Not fixed in T00 since fixing them means either deleting the dead code or wiring it to a real
+  control, which belongs to whichever page task owns that file (T08-T14) — fixing it here without
+  that context risks silently deleting a control a later task was about to wire up.
+- `react-refresh/only-export-components` (8) — inspected each. Two were real, cheaply-fixed cases
+  and are now fixed: `AppContextProvider.tsx` (moved `useAppContext`/`AppCtx`/the context object
+  into `use-app-context.ts`, which was previously only a re-export shim -- now the real definition,
+  matching the existing `use-interaction-blocker.ts` precedent) and `CourtLaneStack.tsx` (moved the
+  `courtLaneContent` data constant into a new `court-lane-content.ts`, updating its two other
+  consumers, `CourtCompactLane.tsx` and `ThingNavigator.tsx`). The remaining 6 are shadcn/ui
+  generated primitives (`badge.tsx`, `button.tsx`, `form.tsx`, `navigation-menu.tsx`, `sidebar.tsx`,
+  `toggle.tsx`) co-locating a `*Variants` cva export with their component -- a universal, accepted
+  pattern across the shadcn/ui ecosystem; refactoring vendored-style primitives for a dev-only HMR
+  nit is not worth the blast radius. Documented here as the "narrow reasoning," not fixed.
+- `react-hooks/exhaustive-deps` (1) — `AppContextProvider.tsx`'s profile-scoped local-cache seed
+  effect deliberately depends on `user?.id` (the only part of `user` it reads), not the whole
+  `user` object, to avoid re-reading localStorage on every unrelated `User` field change (e.g. a
+  token refresh). Documented with an inline comment and a scoped `eslint-disable-next-line`.
+- "Unused eslint-disable directive" (2) — `public/firebase-messaging-sw.js`'s `no-undef` disable and
+  `src/lib/auth/use-current-user.ts`'s `react-hooks/rules-of-hooks` disable were both dead (the
+  underlying rule no longer fires there, likely a prior ESLint/config upgrade). Removed both.
+- Net: **80 -> 75** warnings, all removals verified with 0 new warnings introduced and the full
+  suite/typecheck/build still green after each change.
+
+**Test classification** (the six named files, by whether each `test()` asserts on real rendered/
+executed behavior or on `readFileSync`'d source text matched with `assert.match`/regex):
+- `scripts/katalist-state.test.mjs` (6/6 real behavior) and `scripts/katalist-regression.test.mjs`
+  (4/4 real behavior) -- no action needed, already exercise real functions/state.
+- `scripts/katalist-foundation.test.mjs` (10 of 12 source-text, 2 real behavior) -- the source-text
+  ones mostly assert specific RPC/grant/column names appear in specific migration/RPC/component
+  files (e.g. "uses `assign_outside_katalist`, never `add_list_member`"). These are legitimate,
+  narrow wiring-contract checks (a fact about which identifier is called, not a runtime behavior
+  claim) and are retained as deliberate architecture assertions per the plan's own instruction.
+- `scripts/court-dual-mode-workspace.test.mjs` (6/6 source-text), `scripts/court-stack-components.
+  test.mjs` (16/16 source-text), and `scripts/inline-thing-detail-workspace.test.mjs` (6/6
+  source-text) -- **all** assertions in these three files are `readFileSync` + regex/`.includes()`
+  against component source, despite test names that read as runtime behavior claims (e.g. "overview
+  is composed as three equal layered stacks", "Lists open Thing detail in an inline workspace").
+  These do not currently prove any of that renders correctly -- only that certain strings/JSX
+  shapes are present in the source text. Flagged for conversion to real React Testing Library
+  render assertions in **T09** (Court dual-mode layout) and **T11** (Bucket inline
+  `InlineThingDetailWorkspace` integration), the tasks that actually touch this behavior next, per
+  the plan's own "convert when the owning package changes the behavior" instruction. Not rewritten
+  in T00 itself.
+
+**Browser harness** (`playwright.config.ts`, `.github/workflows/quality.yml`,
+`tests/e2e/preview/README.md` new, `tests/e2e/global-setup.ts` new):
+- Preview projects now use an isolated, configurable `KATALIST_E2E_PORT` (default 4173, distinct
+  from the developer's own `npm run dev` on 8080) with `reuseExistingServer: false` -- always starts
+  its own fresh server against the current checkout rather than silently reusing (and testing)
+  whatever a developer already has running. Does not attempt to free/kill a colliding port.
+- Added `metadata: { testedCommit }` (from `GITHUB_SHA`/`VERCEL_GIT_COMMIT_SHA`) so the HTML
+  report/artifacts record which commit was under test.
+- Confirmed directly that the preview specs need no real Supabase project -- only
+  syntactically-valid `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY` so the client constructs
+  without throwing. Added a new `e2e-preview` CI job (installs Chromium, runs with fixture
+  credentials pointing at an unreachable host, uploads the HTML report as an artifact on every run).
+  A blanket same-origin request-blocking fixture was attempted for additional isolation and
+  reverted: it also blocked Vite's own dev-server inspector/HMR requests, breaking the "no console
+  errors" assertion -- documented in `smoke.spec.ts`'s own comment and the new README as a dead end,
+  not attempted again without narrower per-host scoping.
+- Found and fixed a real flake: a freshly-started (cold) local dev server under this suite's default
+  parallel worker count raced first-navigation SSR compilation and failed roughly 2 of 3 runs across
+  all five viewport projects together. Added `tests/e2e/global-setup.ts` (sequential warm-up fetch
+  of every route the specs use) and set `workers: 1` for local (non-staging) runs -- confirmed 3
+  consecutive full 15-test runs (5 viewports x 3 specs) passed cleanly after both changes together;
+  global-setup alone was insufficient. Staging runs (a real, already-warm deployment) are unaffected
+  by either change.
+- `build:app` was already migration-free (`vite build` only); `build` (which also runs
+  `db:migrate`) is intentionally kept separate and is not what CI/hosting should invoke.
+- Documented the two migration systems accurately in `README.md`'s new "Database migrations"
+  section: `migrations/` (root, `scripts/migrate.mjs`, the separate Neon/PGLite `pg` stack) versus
+  `supabase/migrations/` (this app's actual Postgres schema -- Things/Lists/Buckets/Court/Morning
+  Brief/etc.), and that nothing in this repo's `npm` scripts deploys the latter; that requires the
+  Supabase CLI or an equivalent operator step against the actually-configured project.
+
+**Verification:** 526/526 tests, 0 typecheck errors, 0 lint errors/75 warnings (down from 80),
+clean `build:app`, 15/15 local Playwright preview specs passing reliably across 3 consecutive runs.
+
+**Remaining dependency:** RELEASE-01 (hosted CI run of the new `e2e-preview` job at a real commit;
+confirming the deployment host actually invokes `build:app`, not `build`).

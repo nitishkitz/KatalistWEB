@@ -41,7 +41,8 @@ import {
   stepStackIndex,
 } from "./court-stack-model";
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
-import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
+import { KatalistIcon } from "./KatalistIcon";
+import { courtLaneContent } from "./court-lane-content";
 import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -66,61 +67,6 @@ export type CourtLaneStackProps = {
   onViewAll?: (lane: CourtLaneId) => void;
 };
 
-export const courtLaneContent: Record<
-  CourtLaneId,
-  {
-    label: string;
-    descriptor: string;
-    icon: KatalistIconName;
-    tone: string;
-    headerTone: string;
-    bgTone: string;
-    borderTone: string;
-    /** Exact Figma accent (headers, counts). */
-    accent: string;
-    /** Exact Figma colored icon-box background. */
-    iconBoxBg: string;
-    /** Exact Figma lane gradient background. */
-    gradient: string;
-  }
-> = {
-  now: {
-    label: "NOW",
-    descriptor: "Things to handle now",
-    icon: "now-smash",
-    tone: "text-status-now",
-    headerTone: "bg-transparent",
-    bgTone: "bg-[#fff8f7]",
-    borderTone: "border-[#fdecec]",
-    accent: "#fe1016",
-    iconBoxBg: "#fd4946",
-    gradient: "linear-gradient(180deg,#fef1f4 0%,#fffbfd 100%)",
-  },
-  next: {
-    label: "NEXT",
-    descriptor: "Up next on your plate",
-    icon: "next-rally",
-    tone: "text-status-next",
-    headerTone: "bg-transparent",
-    bgTone: "bg-[#f4f8ff]",
-    borderTone: "border-[#e3f0fd]",
-    accent: "#0b62f8",
-    iconBoxBg: "#005dfe",
-    gradient: "linear-gradient(180deg,#e7f2fe 0%,rgba(238,246,254,0.35) 100%)",
-  },
-  later: {
-    label: "LATER",
-    descriptor: "For later consideration",
-    icon: "later-lob",
-    tone: "text-status-later",
-    headerTone: "bg-transparent",
-    bgTone: "bg-[#f9f7ff]",
-    borderTone: "border-[#efeafe]",
-    accent: "#641dfb",
-    iconBoxBg: "#7c33fd",
-    gradient: "linear-gradient(180deg,#efebfe 0%,rgba(244,243,255,0.35) 100%)",
-  },
-};
 
 // ─── Rotating deck / peel stack animation system ─────────────────────────────
 // Active card: 0°, scale 1.0, elevated shadow 12

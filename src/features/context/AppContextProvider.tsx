@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { ContextKind } from "@/domain/thing";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
@@ -6,6 +6,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { useQueryClient } from "@tanstack/react-query";
 import { currentDemoActorId } from "@/features/demo/identities";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { AppContext } from "./use-app-context";
 
 const STORAGE_KEY = "katalist.active_context";
 
@@ -29,13 +30,6 @@ function demoContextKey(): string {
 function liveContextKey(profileId: string): string {
   return `${STORAGE_KEY}.live.${profileId}`;
 }
-
-type AppCtx = {
-  context: ContextKind;
-  setContext: (next: ContextKind) => Promise<void>;
-};
-
-const Ctx = createContext<AppCtx | null>(null);
 
 export function AppContextProvider({ children }: { children: ReactNode }) {
   const { user, session } = useSession();
@@ -67,6 +61,11 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     if (preview || typeof window === "undefined" || !user) return;
     const stored = window.localStorage.getItem(liveContextKey(user.id));
     if (stored === "home" || stored === "work") setContextState(stored);
+    // Depends on user?.id (the only part of `user` this reads), deliberately
+    // narrower than the whole `user` object -- re-running this on every
+    // other User field change (e.g. a token refresh) would needlessly
+    // re-read localStorage without the id itself having changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview, user?.id]);
 
   useEffect(() => {
@@ -131,11 +130,5 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     [user, session, qc, context],
   );
 
-  return <Ctx.Provider value={{ context, setContext }}>{children}</Ctx.Provider>;
-}
-
-export function useAppContext() {
-  const value = useContext(Ctx);
-  if (!value) throw new Error("useAppContext must be used within AppContextProvider");
-  return value;
+  return <AppContext.Provider value={{ context, setContext }}>{children}</AppContext.Provider>;
 }

@@ -5,9 +5,15 @@ import { test, expect } from "@playwright/test";
  * spec here is deliberately read-only / no-side-effect -- no sign-in, no
  * Thing/List/Bucket creation, no writes of any kind -- so it is safe to run
  * against whatever real Supabase project .env.local points at without a
- * disposable test database. Authenticated, data-mutating flows (Capture ->
- * Catch -> Sort, two-account checks, etc.) belong in tests/e2e/staging/,
- * gated on an explicit test account per playwright.config.ts.
+ * disposable test database (see tests/e2e/preview/README.md). CI itself
+ * runs with no real backend at all, using unreachable fixture credentials.
+ *
+ * A blanket same-origin request-blocking fixture was tried here and
+ * reverted: it also blocked Vite's own dev-server inspector/HMR requests,
+ * which made the "no console errors" assertion below fail on
+ * `net::ERR_BLOCKED_BY_CLIENT` -- a regression, not a safety improvement.
+ * Write-safety for these specs comes from their own read-only contract,
+ * not network-level blocking.
  */
 
 test.describe("entry routes render without a signed-in session", () => {

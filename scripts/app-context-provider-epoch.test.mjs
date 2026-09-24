@@ -61,7 +61,8 @@ mock.module("@/integrations/supabase/client", {
   },
 });
 
-const { AppContextProvider, useAppContext } = await import("@/features/context/AppContextProvider");
+const { AppContextProvider } = await import("@/features/context/AppContextProvider");
+const { useAppContext } = await import("@/features/context/use-app-context");
 
 function newTestClient() {
   return new QueryClient({ defaultOptions: { queries: { gcTime: 0, staleTime: 0, retry: false } } });

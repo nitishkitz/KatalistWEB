@@ -2,7 +2,7 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import type { Thing } from "@/domain/thing";
 import { matchProfile, useProfileDirectory } from "@/features/people/directory";
 import { cn } from "@/lib/utils";
-import { courtLaneContent } from "./CourtLaneStack";
+import { courtLaneContent } from "./court-lane-content";
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { KatalistIcon } from "./KatalistIcon";
 
