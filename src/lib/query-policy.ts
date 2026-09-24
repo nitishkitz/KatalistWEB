@@ -1,4 +1,5 @@
 import { extractErrorMessage } from "@/lib/domain-error";
+import { isReadTimeoutError } from "@/lib/read-request";
 
 /**
  * R-09: `classifyAsyncError()` used to look only at the lowercased message
@@ -34,6 +35,12 @@ function extractErrorCode(error: unknown): string | undefined {
 
 /** A failure that retrying is unlikely to fix — the caller must act (sign in) or nothing will change (permission, not found, bad input). */
 export function isPermanentQueryError(error: unknown): boolean {
+  // T01: a deadline abort should surface to the user at its own 15s
+  // boundary (AsyncState's retry/route-away UI), not silently consume
+  // another full 15s in a hidden automatic retry first -- an immediately
+  // re-issued read has no particular reason to come back faster than the
+  // one that just timed out.
+  if (isReadTimeoutError(error)) return true;
   const status = extractErrorStatus(error);
   const code = extractErrorCode(error);
   if (status === 401 || status === 403 || status === 404 || code === "42501" || code === "PGRST116") return true;
@@ -64,10 +71,19 @@ export function retryReadOnce(failureCount: number, error: unknown): boolean {
 export const SLOW_QUERY_MS = 3_000;
 export const STALLED_QUERY_MS = 15_000;
 
-export type AsyncErrorKind = "unauthenticated" | "forbidden" | "not-found" | "failed";
+export type AsyncErrorKind = "unauthenticated" | "forbidden" | "not-found" | "timeout" | "failed";
 
 /** Classifies a caught query error for AsyncState's distinct empty/error states. */
 export function classifyAsyncError(error: unknown): AsyncErrorKind {
+  // T01: a deadline abort (read-request.ts's withReadDeadline) is neither a
+  // confirmed access loss nor an ordinary transient failure -- it needs its
+  // own recovery messaging (AsyncState's "taking longer than usual"/retry),
+  // distinct from a normal navigation/query cancellation (which throws a
+  // plain AbortError this classifier never even sees as `error`, since
+  // React Query treats a query's own cancellation as "no result", not a
+  // failure) and from a genuine 5xx/network failure.
+  if (isReadTimeoutError(error)) return "timeout";
+
   const status = extractErrorStatus(error);
   const code = extractErrorCode(error);
   if (status === 401) return "unauthenticated";

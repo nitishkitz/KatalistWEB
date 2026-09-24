@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { resolveAsyncBranch, classifyAsyncError, isPermanentQueryError } from "@/lib/query-policy";
+import { withReadDeadline } from "@/lib/read-request";
 
 const TRANSIENT_ERROR = new Error("network request failed");
 const FORBIDDEN_ERROR = new Error("permission denied (row-level security policy)");
@@ -263,4 +264,47 @@ test("isPermanentQueryError: a structured 42501 code is permanent even with no r
 
 test("isPermanentQueryError: a structured 500 is not permanent (worth retrying)", () => {
   assert.equal(isPermanentQueryError({ status: 500, message: "Internal Server Error" }), false);
+});
+
+// T01: a read-request.ts deadline abort is neither a confirmed access loss
+// nor an ordinary transient failure -- resolveAsyncBranch must still block
+// (like any other error) when there's nothing to fall back on, but the
+// classification consumers see must be "timeout", not "failed", so
+// AsyncState can show its own distinct recovery messaging.
+
+test("resolveAsyncBranch: a read timeout with no data yet is error-blocked, classified as 'timeout'", async () => {
+  await assert.rejects(
+    () =>
+      withReadDeadline(
+        undefined,
+        (signal) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("x")))),
+        10,
+      ),
+    (err) => {
+      assert.equal(classifyAsyncError(err), "timeout");
+      assert.equal(
+        resolveAsyncBranch({ online: true, isLoading: false, error: err, isEmpty: true, hasFetchedOnce: false }),
+        "error-blocked",
+      );
+      return true;
+    },
+  );
+});
+
+test("resolveAsyncBranch: a read timeout with stale non-empty data already loaded stays ready (same as any other transient failure)", async () => {
+  await assert.rejects(
+    () =>
+      withReadDeadline(
+        undefined,
+        (signal) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("x")))),
+        10,
+      ),
+    (err) => {
+      assert.equal(
+        resolveAsyncBranch({ online: true, isLoading: false, error: err, isEmpty: false, hasFetchedOnce: true }),
+        "ready",
+      );
+      return true;
+    },
+  );
 });

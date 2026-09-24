@@ -33,6 +33,7 @@ const chainableThings = () => {
     select: () => node,
     eq: () => node,
     is: () => node,
+    abortSignal: () => node,
     then: (resolve) => resolve({ data: [{ id: "t1" }], error: null }),
   };
   return node;

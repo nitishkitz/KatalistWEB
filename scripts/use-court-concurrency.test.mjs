@@ -57,6 +57,7 @@ test("fetchCourt runs the actor lookup and the Things query concurrently, withou
       select: () => node,
       eq: () => node,
       is: () => node,
+      abortSignal: () => node,
       then: (resolve) => {
         track("things-query", () => delay({ data: [{ id: "t1" }], error: null })).then(resolve);
       },

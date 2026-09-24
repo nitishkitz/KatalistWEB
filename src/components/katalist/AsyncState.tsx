@@ -141,6 +141,16 @@ export function AsyncState<T>({
     if (kind === "not-found") {
       return <EmptyState title="Not found" description="This may have been moved or removed." action={retryButton} />;
     }
+    if (kind === "timeout") {
+      // T01: read-request.ts's withReadDeadline aborted this read at its
+      // own 15s deadline -- same recovery messaging as the elapsed-based
+      // "stalled" tier below, since this is the same fact (a read that
+      // never came back in a reasonable time), just discovered via an
+      // actual abort instead of a still-loading timer.
+      return (
+        <EmptyState title="Taking longer than usual" description="This is taking a while." action={retryButton} />
+      );
+    }
     return (
       <EmptyState
         title="Something didn't load"

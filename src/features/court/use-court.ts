@@ -26,7 +26,7 @@ export function useCourt() {
 
   const query = useQuery({
     queryKey: keys.court(user?.id, context),
-    queryFn: () => fetchCourt(context, user!.id, qc),
+    queryFn: ({ signal }) => fetchCourt(context, user!.id, qc, signal),
     staleTime: 15_000,
     enabled: liveAuth,
   });
