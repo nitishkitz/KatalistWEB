@@ -435,11 +435,25 @@ export function ThingDetailContent({
   }, []);
   const [processingCommentFiles, setProcessingCommentFiles] = useState(0);
 
+  // T05: only counts as "viewed" when the Comments tab is actually
+  // selected, and only once that tab's own read has settled successfully
+  // -- opening a Thing at all (even on the Activity tab, even before
+  // comments load) used to mark EVERYTHING read as of wall-clock now,
+  // which could suppress the unread badge for a comment the viewer never
+  // actually saw. Anchored to the latest LOADED comment's own timestamp,
+  // not "now" -- a comment that arrives after this boundary (even a
+  // moment later, while still on this same render) must still show as
+  // unread on the next check.
   useEffect(() => {
-    if (thing?.id) {
-      markThingAsRead(thing.id, myActorId);
-    }
-  }, [thing?.id, myActorId]);
+    if (!thing?.id || !myActorId) return;
+    if (tab !== "comments") return;
+    if (thread.commentsIsLoading || thread.commentsError) return;
+    const latestComment = thread.comments[thread.comments.length - 1];
+    if (!latestComment) return; // nothing loaded to anchor a read boundary to
+    const latestAt = new Date(latestComment.at).getTime();
+    if (Number.isNaN(latestAt)) return;
+    markThingAsRead(thing.id, myActorId, latestAt);
+  }, [thing?.id, myActorId, tab, thread.commentsIsLoading, thread.commentsError, thread.comments]);
 
   // E-03: register a blocker while there's unsent text/files so nothing
   // (Morning Brief's auto-open, etc.) can silently interrupt mid-draft.

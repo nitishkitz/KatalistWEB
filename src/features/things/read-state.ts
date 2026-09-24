@@ -30,10 +30,20 @@ export function getThingLastReadAt(thingId: string, profileId?: string | null): 
   }
 }
 
-export function markThingAsRead(thingId: string | null | undefined, profileId?: string | null) {
+export function markThingAsRead(
+  thingId: string | null | undefined,
+  profileId?: string | null,
+  /** T05: the latest actually-loaded comment's own timestamp (ms), when
+   *  the caller has one -- anchoring to wall-clock `now()` unconditionally
+   *  risks marking a comment "read" that merely arrived while the Thing
+   *  was open, not one the viewer actually saw. Callers that don't have a
+   *  specific boundary (e.g. a non-comment "mark read" trigger) fall back
+   *  to `now`. */
+  atTimestampMs?: number
+) {
   if (!thingId || !profileId || typeof window === "undefined") return;
   try {
-    const now = Date.now();
+    const now = atTimestampMs ?? Date.now();
     localStorage.setItem(scopedKey(thingId, profileId), String(now));
     // Best-effort cleanup of the pre-scoping unscoped key -- never read, only removed.
     localStorage.removeItem(`${LEGACY_UNSCOPED_PREFIX}${thingId}`);

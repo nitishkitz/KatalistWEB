@@ -16,8 +16,6 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { TopNav } from "@/components/layout/TopNav";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { PDFViewer, type ThingFile } from "@/features/things/PDFViewer";
-import { markThingAsRead } from "@/features/things/read-state";
-import { useCourt } from "./use-court";
 import { CourtCompactLane } from "./CourtCompactLane";
 import { focusColumns, type CourtFocusSelection, type FocusViewTabId } from "./court-stack-model";
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
@@ -57,10 +55,6 @@ export function CourtFocusView({
 }: CourtFocusViewProps) {
   const [activeLane, setActiveLane] = useState<FocusViewTabId>(selection.lane);
   const [searchQuery, setSearchQuery] = useState("");
-  // T05: markThingAsRead's storage key must be scoped by identity -- see
-  // read-state.ts's own doc comment and the identical pattern in
-  // CourtDetailModal.tsx.
-  const { myActorId } = useCourt();
 
   const selectedThing = useMemo(() => {
     const activeList = activeLane === "theirs" ? (theirs ?? []) : (lanes[activeLane] ?? []);
@@ -127,11 +121,10 @@ export function CourtFocusView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedThing?.id]);
 
-  useEffect(() => {
-    if (selectedThing?.id) {
-      markThingAsRead(selectedThing.id, myActorId);
-    }
-  }, [selectedThing?.id, myActorId]);
+  // T05: mark-as-read is now owned by ThingDetailContent itself (rendered
+  // below for selectedThing), which only marks read once its own Comments
+  // tab is actually selected and has successfully loaded -- see the
+  // identical reasoning in CourtDetailModal.tsx.
 
   useLayoutEffect(() => {
     if (!heroRect || !selectedCardRef.current || !heroFlightRef.current) {
