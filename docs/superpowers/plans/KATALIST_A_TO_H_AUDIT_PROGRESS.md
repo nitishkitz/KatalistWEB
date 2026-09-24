@@ -160,3 +160,60 @@ clean `build:app`, 15/15 local Playwright preview specs passing reliably across 
 
 **Remaining dependency:** RELEASE-01 (hosted CI run of the new `e2e-preview` job at a real commit;
 confirming the deployment host actually invokes `build:app`, not `build`).
+
+### T01 — Query truth, cancellation, and mounted access-loss handling
+
+**Status:** LOCAL PASS -- partial, remaining item below. **Owns:** B-01, B-02, B-03, B-04 and remaining
+consumer clauses of C-06.
+
+**Commits:** `da9c7c6`, `dfe6012`, `397c55a`, `ceeb936`, `fe104fd`.
+
+**Done:**
+- `src/lib/read-request.ts`: shared `withReadDeadline()` combining React Query's own per-query
+  cancellation signal with an explicit 15s deadline (matching `AsyncState`'s existing
+  `STALLED_QUERY_MS`), distinguishing "this request hit its own deadline" (`ReadTimeoutError`) from
+  "cancelled for an unrelated reason" (route-away, a superseded query). Fully unit-tested (7 tests).
+- `classifyAsyncError()`/`isPermanentQueryError()` (`query-policy.ts`) recognize the new "timeout"
+  kind: not a confirmed access loss, not auto-retried. `AsyncState.tsx` renders the existing
+  "taking longer than usual" + retry UI for it.
+- Threaded end-to-end (queryFn signal -> `withReadDeadline` -> `.abortSignal()`) into every major
+  read query function found in the codebase: `fetch-court.ts` (Things read, verified with a real
+  mocked-transport call proving the abort signal actually fires), `use-lists.ts` (`fetchLists`,
+  `fetchListDetail`), `fetch-buckets.ts`, `fetch-bucket-items.ts`, the inline `useBucket()` detail
+  query, `use-nudges.ts` (both queries), `use-catchup.ts`'s `fetchCatchupMoments`, `use-
+  conversations.ts` (`fetchConversations` and the single-conversation detail query), `use-hub-
+  files.ts`'s `fetchFiles`, `use-list-messages.ts`'s `fetchMessages`, `use-list-things.ts`'s inline
+  Things read, `use-list-meetings.ts`'s `fetchMeetings`, `use-upcoming-meetings-reminder.ts`'s
+  `fetchUpcomingMeetings`. Extended `callUngeneratedRpc()`'s return type (`rpcs.ts`) to expose the
+  real, already-callable `.abortSignal()` its underlying builder supports, which its type had
+  erased. Updated ~10 existing test files' mocked query builders with `.abortSignal()` stubs so
+  their existing assertions kept working against the new call shape.
+- The actor lookup (`getActorId`/`actor-query.ts`) is a separate, shared, deduplicated 30s-cached
+  lookup used by many features; threading per-caller cancellation through that shared cache was
+  judged a larger, separate change and intentionally not attempted in this pass.
+
+**Verification:** 537/537 tests (526 T00 baseline + 11 new), 0 typecheck errors, 0 lint errors/75
+warnings (unchanged from T00), clean build, maintained across all five commits.
+
+**Remaining (explicit, not started):**
+1. **The access-loss consumer matrix.** `AsyncState` (the shared offline/error/empty/loading
+   component with the confirmed-access-loss contract) is currently wired into only 4 of the ~12
+   surfaces the plan names: Nudges (hook + route), Lists index, Buckets index. Court, List detail,
+   Bucket detail, Hub conversations/messages/files, and meetings all still render their own bespoke
+   loading/error/empty logic and do not yet hide protected content on a confirmed 403 the way
+   Nudges/Lists/Buckets-index do. Re-plumbing each onto the shared contract is live-UI rework with
+   real regression risk per surface, not a mechanical repeat of this pass's wiring -- deliberately
+   deferred as its own body of work rather than rushed.
+2. **RLS-empty-vs-parent-authority distinction.** Not started: using an authoritative parent/
+   membership read to distinguish a genuinely empty authorized collection from a no-longer-
+   accessible parent, per the plan's own B-03/C-06 clause.
+3. A related, pre-existing (not introduced by this pass) finding noticed while wiring `use-
+   conversations.ts`: `fetchConversations`'s `Promise.all` for `list_members`/`list_messages`
+   destructures only `{data}`, never checking `error` -- an auxiliary-read failure there currently
+   fails open as an empty result rather than a confirmed error, which is exactly the C-04 concern
+   T01 names. Not fixed in this pass (out of the mechanical-wiring scope); flagged for whichever
+   pass does item 1 above, since fixing it means deciding the correct AsyncState-driven presentation
+   for that failure, not just adding an `if (error) throw`.
+
+Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T01 is not marked complete. The two
+items above are named, concrete remaining dependencies, not a vague "mostly done."
