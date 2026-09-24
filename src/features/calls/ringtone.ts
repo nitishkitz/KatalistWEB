@@ -49,6 +49,7 @@ export function unlockAudio(): void {
 export function createRingtone(): Ringtone {
   let timer: ReturnType<typeof setInterval> | null = null;
   let running = false;
+  let vibrating = false;
 
   const ring = () => {
     const ctx = getCtx();
@@ -85,8 +86,10 @@ export function createRingtone(): Ringtone {
         timer = setInterval(() => {
           if (running) ring();
         }, 2500);
-        if (typeof navigator !== "undefined" && navigator.vibrate) {
-          navigator.vibrate([400, 200, 400, 200, 400]);
+        // Chrome rejects vibration before a page has received a user gesture.
+        // An incoming ring can arrive before that first interaction.
+        if (typeof navigator !== "undefined" && navigator.vibrate && navigator.userActivation?.hasBeenActive) {
+          vibrating = navigator.vibrate([400, 200, 400, 200, 400]);
         }
       } catch {
         // Sound is best-effort.
@@ -100,7 +103,8 @@ export function createRingtone(): Ringtone {
       }
       // Keep the shared AudioContext alive (do not close) so it stays unlocked
       // for the next ring.
-      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(0);
+      if (vibrating && typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(0);
+      vibrating = false;
     },
   };
 }

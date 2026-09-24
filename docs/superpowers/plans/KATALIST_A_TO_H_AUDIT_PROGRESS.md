@@ -437,6 +437,43 @@ mocked transport request-volume/adapter-duration fixtures, **not** actual
 network or route latency claims. The pre-existing Court/Thing mapper
 parallelization and actor cache were retained.
 
+**2026-09-25 local browser follow-up:** a dedicated local demo server on
+port 4174 exposed five unintended Supabase reads on a preview Court reload,
+including 401s from the directory/assignable paths. A failing unit test and
+the browser request log reproduced the defect. `fetchProfileIdentities()`
+and its scoped variant now resolve demo identities entirely locally, and
+`useAssignablePeople()` waits for a real authenticated user. A repeated
+preview Court reload recorded **0 Supabase requests**. The reproducible
+read-only script `scripts/measure-preview-routes.mjs` recorded one sample per
+cold/warm navigation at 1440×900, Chromium, against that development server:
+Court 1674/958ms, Lists 1186/706ms, Buckets 1290/841ms, Team 1289/663ms;
+all were HTTP 200 with 0 Supabase REST requests and 0 REST failures. These
+are **demo/development-server** figures, not representative live latency or
+authorization proof. The staging read-only RPC/count spec is prepared at
+`tests/e2e/staging/t06-rpc-readonly.spec.ts` but has not run: staging URL,
+publishable key and disposable-account environment are not configured here.
+A separately built `VITE_KATALIST_DEMO_MODE=true` **production-mode local**
+preview recorded one cold/warm navigation each: Court 3454/2250ms, Lists
+3008/3030ms, Buckets 2029/2028ms, Team 2035/2035ms, all HTTP 200 and 0
+Supabase REST requests. These single-sample local values are *not* a reliable
+performance comparison or live-data scaling result. In that build, opening
+the first demo NOW card displayed its selected-Thing detail (Files, Comments,
+Activity), and the overview had no mounted PDF canvas. The local preview
+contains no attached file, so actual PDF preview and signing still require a
+seeded staging fixture.
+
+A five-viewport read-only browser smoke initially surfaced an unrelated
+incoming-call vibration defect: `createRingtone().stop()` called the
+gesture-gated vibration API on the anonymous page's initial mount, before any
+ring or user interaction. The fix only starts vibration after user activation
+and only stops vibration that actually started. Both cases have a regression
+test that failed against the prior implementation. The complete local suite
+now passes: 630/630 unit tests, 15/15 browser smokes, clean typecheck/build,
+and lint at 0 errors/75 existing warnings. One intermediate browser run
+timed out on the first cold `/auth` compilation while the full unit suite ran
+concurrently; the isolated rerun passed all 15, so this is not counted as a
+product regression.
+
 **Still required before T06 closure:**
 - Route-level cold/warm request counters and measured duration boundaries for
   Court, Lists, Bucket and Hub in a safe browser/staging environment. The
@@ -445,6 +482,11 @@ parallelization and actor cache were retained.
   RLS (especially `thing_attachments` policies); do not turn on the new
   client against an environment that lacks the RPCs without accepting the
   explicit limited/error states. No migration was run in this local pass.
+- The checked-in Supabase migrations reference `thing_attachments` but do not
+  define that table here; the generated client types contain it. Verify the
+  actual staging schema and migration history before deploying the T06
+  aggregate or T07 publication migration. Source-only fixtures cannot prove
+  that a fresh database can apply this chain.
 - Other screens still call the broad cached
   `getProfileIdentities()` directory helper; audit their cold-route volume
   separately before claiming app-wide directory efficiency.
@@ -475,7 +517,17 @@ narrowing and missing-ID fallback. Provider DOM tests prove payload delivery
 leaves an unrelated Thing detail quiet, fresh mounted observers refetch on
 focus, identity teardown removes listeners, and same-epoch Strict Mode stale
 callbacks do nothing. The pre-existing 20-event batcher and reconnect tests
-continue to pass. No browser/staging Realtime delivery claim is made.
+continue to pass. A further mounted-observer test proves a primary-key-only
+membership DELETE still refetches a fresh List. Source inspection found that
+the original `supabase_realtime` publication only contained seven tables,
+omitting several subscribed tables including `list_members` and
+`bucket_items`. The additive
+`20260925100000_realtime_publication_coverage.sql` migration adds the missing
+RLS-protected tables (without forcing `REPLICA IDENTITY FULL`); a PGlite test
+executes it twice and verifies idempotent coverage. The client also now
+watches Lists, Buckets, Bucket notes and Thing attachments so the T06
+summaries/details can respond to those events. No browser/staging Realtime
+delivery claim is made because this migration is not deployed.
 
 **Still required before T07 closure:** staging event payload inspection for
 INSERT/UPDATE/DELETE (especially membership DELETE), live reconnect and
