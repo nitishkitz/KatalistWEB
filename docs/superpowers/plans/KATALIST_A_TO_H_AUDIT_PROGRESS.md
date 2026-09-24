@@ -217,3 +217,52 @@ warnings (unchanged from T00), clean build, maintained across all five commits.
 
 Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T01 is not marked complete. The two
 items above are named, concrete remaining dependencies, not a vague "mostly done."
+
+### T02 — Draft revisions, entity transitions, and file-resource ownership
+
+**Status:** LOCAL PASS -- partial, remaining items below. **Owns:** remaining E-03/G-06 clauses and H-04.
+
+**Commits:** `6530018`, `3644052`, `52d9928`.
+
+**Done:**
+- `session-drafts.ts`: added `getDraftRevision()`, a monotonically increasing edit count per
+  (composer kind, entity), separate from the draft's own content/presence, bumped by every
+  `setDraft()`/`clearDraft()` call (idempotently -- clearing an already-empty slot doesn't count as
+  a second edit) and never reset, even across an identity retirement. Closes a real gap in
+  `use-thing-comments.ts`'s restore-on-failure logic: the old check ("is the draft empty right now")
+  could not distinguish "never touched since submit" from "typed something new, then deliberately
+  cleared it back to empty" -- both look identical by content alone, but only the former is safe to
+  overwrite with a stale failed-submit restore. `PostCommentInput` now carries an optional
+  `draftRevision`, captured by `ThingDetailContent`'s `submitComment()` right after its own explicit,
+  synchronous `clearDraft()` call.
+- `ThingDetailContent.tsx`: the due-date edit input (`due` state) and selected-file-in-viewer id
+  (`selectedFileId`) had no per-Thing reset at all, unlike the comment/attachments composer state a
+  few lines above them -- switching Thing on the same component instance (e.g. via
+  `CourtDetailModal`, which doesn't key by `thing.id`) left Thing A's unsaved due-date edit visible
+  in Thing B's own "Edit Due Date" input. Reset both in the same effect that already
+  resets `moreOpen`/rehydrates the comment draft on `thing.id` change.
+- `use-bucket-note-editor.ts`: `saveNote()`/`deleteNote()` had no identity-epoch guard at all (only
+  session/edit-revision, both same-identity concerns) -- a save/delete resolving after an account
+  switch on the same component instance could still close the successor identity's editor and show
+  this identity's own toast on their screen. Captured `getIdentityEpoch(qc).epoch` at dispatch time
+  and check `isEpochCurrent()` first in every continuation.
+
+**Verification:** 548/548 tests (537 T01 baseline + 11 new across three commits), 0 typecheck
+errors, 0 lint errors/75 warnings (unchanged since T00), clean build, maintained across all three
+commits. Each fix's regression test confirmed to fail against the pre-fix file.
+
+**Remaining (explicit, not started):**
+1. Explicit ownership of object URLs and FileReader work (`src/lib/file-utils.ts`,
+   `attachments.ts`) -- retained draft and viewer holding independent references, revoke-on-
+   last-owner-unmount, `processFileForUpload` cancellation settling once, no second abandoned URL
+   from a late FileReader event after a fallback already ran.
+2. Durable upload-before-persist: before a real comment/message persists, attachment bytes should
+   go through the authorized storage path with a durable descriptor -- a local blob URL is
+   preview-only and must never become a shared message attachment.
+3. The same due-date/selected-file kind of audit for `MagicBox.tsx`, `ListChatPanel.tsx`, and
+   `ListCallPanel.tsx` (named in the plan's own file list) has not been done -- only
+   `ThingDetailContent.tsx` was audited and fixed in this pass.
+4. Replacing third-party Office/Google viewer URLs for private files with an authorized fallback
+   (plan's own explicit item) -- not investigated in this pass.
+
+Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T02 is not marked complete.
