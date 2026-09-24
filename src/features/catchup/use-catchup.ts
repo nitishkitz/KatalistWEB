@@ -47,19 +47,28 @@ type RpcRow = {
   reason: string;
 };
 
-async function fetchCatchupMoments(): Promise<CatchUpMoment[]> {
+async function fetchCatchupMoments(profileId: string | null): Promise<CatchUpMoment[]> {
   const { data, error } = await callUngeneratedRpc("list_catchup_moments");
   if (error) throw error;
   const rows = (data ?? []) as RpcRow[];
   if (!rows.length) return [];
 
-  const { data: auth } = await supabase.auth.getUser();
+  // R-08: this used to make its own supabase.auth.getUser() call and read
+  // only its `data`, discarding `error` -- a failed identity lookup
+  // produced `auth.user === null`, indistinguishable from "genuinely
+  // authenticated but has no actor row", silently mapping every moment
+  // with `myActorId = null` and reporting a successful load. The caller
+  // (useCatchup) already has the authenticated profile id from
+  // useSession() -- the same identity source used elsewhere in this
+  // codebase (e.g. use-morning-brief.ts) -- for the enabled query to even
+  // run at all, so it's reused directly here instead of a second,
+  // independently-fallible auth round trip.
   let myActorId: string | null = null;
-  if (auth.user) {
+  if (profileId) {
     const { data: actor, error: actorError } = await supabase
       .from("actors")
       .select("id")
-      .eq("profile_id", auth.user.id)
+      .eq("profile_id", profileId)
       .maybeSingle();
     // F-05: required for correctly viewer-scoping the resolved Things below
     // (map-thing-rows.ts uses it for capability/pace fields) -- a failure
@@ -208,7 +217,7 @@ export function useCatchup(): UseCatchup {
 
   const query = useQuery({
     queryKey: keys.catchup(user?.id, context),
-    queryFn: fetchCatchupMoments,
+    queryFn: () => fetchCatchupMoments(user?.id ?? null),
     enabled: liveAuth,
     staleTime: 15_000,
   });
