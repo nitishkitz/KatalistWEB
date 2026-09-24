@@ -77,7 +77,7 @@ import { type ThingFile } from "@/features/things/PDFViewer";
 import { markThingAsRead } from "@/features/things/read-state";
 import { processFileForUpload } from "@/lib/file-utils";
 import { ThingViewOnlyBanner } from "./components/ThingViewOnlyBanner";
-import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
+import { getDraft, setDraft, clearDraft, getDraftRevision } from "@/features/drafts/session-drafts";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 
 export type ThingDetailContentProps = {
@@ -646,8 +646,24 @@ export function ThingDetailContent({
     const submittedThingId = thing.id;
     setComment("");
     setCommentAttachments([]);
+    // T02: clear the draft store synchronously, HERE, rather than relying
+    // on the write-through effect below to eventually do it once this
+    // render commits -- capturing the revision right after this explicit
+    // clear is what lets onError's later comparison mean "has anything
+    // touched this draft since THIS submission's own clear", not "since
+    // whatever the draft looked like a moment before submitting" (which
+    // would count this very clear as if it were a later, independent
+    // edit). clearDraft() is a no-op revision-wise if the effect already
+    // beat it to the same clear -- see session-drafts.ts's own doc.
+    clearDraft(qc, "thing-comment", submittedThingId);
+    const submittedRevision = getDraftRevision(qc, "thing-comment", submittedThingId);
     thread.post.mutate(
-      { thingId: submittedThingId, body: text, attachments: atts.length > 0 ? atts : undefined },
+      {
+        thingId: submittedThingId,
+        body: text,
+        attachments: atts.length > 0 ? atts : undefined,
+        draftRevision: submittedRevision,
+      },
       {
         onError: () => {
           if (thingIdRef.current !== submittedThingId) return;

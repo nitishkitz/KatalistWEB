@@ -40,6 +40,21 @@ export type Draft<T> = {
 type StoredDraft<T> = Draft<T> & { epoch: number };
 
 const draftsByClient = new WeakMap<QueryClient, Map<string, StoredDraft<unknown>>>();
+// T02: a monotonically increasing edit count per (composer kind, entity),
+// separate from the draft's own content/presence -- bumped by EVERY
+// setDraft()/clearDraft() call, never reset or deleted alongside the
+// draft entry itself. A caller that captures this at submit time and
+// compares it after an await can tell "the user hasn't touched this
+// composer since I submitted" from "the user typed something new, then
+// deliberately cleared it back to empty" -- the latter is also an empty
+// draft, but is NOT "unchanged", and a stale failed-submit restore must
+// not overwrite that deliberate decision. Never reset even across a
+// clearDraft(), and deliberately NOT scoped/reset by identity epoch --
+// it only ever answers "did anything happen to this key since I looked",
+// which is meaningful even across an epoch change (the answer is still
+// "yes, something happened": the disposer clearing every draft on
+// retirement is itself a change).
+const revisionByClient = new WeakMap<QueryClient, Map<string, number>>();
 const disposerRegisteredFor = new WeakSet<QueryClient>();
 
 function draftKey(composerKind: DraftComposerKind, entityId: string): string {
@@ -55,11 +70,37 @@ function storeFor(qc: QueryClient): Map<string, StoredDraft<unknown>> {
   return store;
 }
 
+function revisionsFor(qc: QueryClient): Map<string, number> {
+  let store = revisionByClient.get(qc);
+  if (!store) {
+    store = new Map();
+    revisionByClient.set(qc, store);
+  }
+  return store;
+}
+
+function bumpRevision(qc: QueryClient, key: string): void {
+  const revisions = revisionsFor(qc);
+  revisions.set(key, (revisions.get(key) ?? 0) + 1);
+}
+
+/** Current edit revision for this (composer kind, entity) pair -- 0 if it
+ *  has never been written to or cleared. Capture this BEFORE submitting so
+ *  a later restore-on-failure can tell whether the user has touched this
+ *  composer since, regardless of what the draft's content looks like now. */
+export function getDraftRevision(qc: QueryClient, composerKind: DraftComposerKind, entityId: string): number {
+  return revisionsFor(qc).get(draftKey(composerKind, entityId)) ?? 0;
+}
+
 function ensureDisposerRegistered(qc: QueryClient) {
   if (disposerRegisteredFor.has(qc)) return;
   disposerRegisteredFor.add(qc);
   registerIdentityDisposer(qc, () => {
     draftsByClient.get(qc)?.clear();
+    // Every draft this identity owned is being cleared -- from a would-be
+    // restorer's perspective that's exactly as much "something happened
+    // to this key" as the user editing it themselves.
+    for (const key of revisionsFor(qc).keys()) bumpRevision(qc, key);
   });
 }
 
@@ -92,7 +133,9 @@ export function setDraft<T>(
 ): void {
   if (!isEpochCurrent(qc, capturedEpoch)) return;
   ensureDisposerRegistered(qc);
-  storeFor(qc).set(draftKey(composerKind, entityId), { ...draft, epoch: capturedEpoch });
+  const key = draftKey(composerKind, entityId);
+  storeFor(qc).set(key, { ...draft, epoch: capturedEpoch });
+  bumpRevision(qc, key);
 }
 
 /** Explicit discard/successful-send/confirmed-revoked-access clear for
@@ -100,5 +143,13 @@ export function setDraft<T>(
  *  inside the draft's `attachments` must revoke them BEFORE calling this
  *  -- this only drops the store's own reference. */
 export function clearDraft(qc: QueryClient, composerKind: DraftComposerKind, entityId: string): void {
-  storeFor(qc).delete(draftKey(composerKind, entityId));
+  const key = draftKey(composerKind, entityId);
+  // Only counts as an edit if there was actually something to clear --
+  // an idempotent clear of an already-empty/already-cleared slot (e.g. the
+  // write-through effect settling a clear a caller already made explicitly
+  // and synchronously) must not look like a second, independent edit to a
+  // revision comparison made in between.
+  const existed = storeFor(qc).has(key);
+  storeFor(qc).delete(key);
+  if (existed) bumpRevision(qc, key);
 }

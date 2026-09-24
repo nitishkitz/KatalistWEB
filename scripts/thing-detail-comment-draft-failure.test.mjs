@@ -391,3 +391,50 @@ test("R-01: a successful send clears the draft, and shows no restored text on re
   cleanup();
   qc.clear();
 });
+
+test("T02: typing a NEW message after a failed send, then deliberately clearing it, must not be overwritten by the old failed send's restore", async () => {
+  // Independent finding while auditing T02 (draft revision ownership):
+  // the previous restore-on-failure check was "is the draft empty right
+  // now", which cannot distinguish "the user never touched this draft
+  // since I submitted" from "the user typed something new, then
+  // deliberately cleared it back to empty" -- both look identical by
+  // content alone. The latter is a real decision that must not be undone
+  // by a stale failed-submit restore arriving afterward.
+  let rejectFn;
+  rpcCommentImpl = () => new Promise((_resolve, reject) => { rejectFn = reject; });
+  const qc = newClient();
+  const { getByPlaceholderText, getByText } = render(h(Harness, { qc, thingId: "thing-a" }));
+
+  const input = getByPlaceholderText("Write a comment…");
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "will fail" } });
+  });
+  await act(async () => {
+    fireEvent.click(getByText("Post"));
+  });
+  assert.equal(input.value, "", "submit clears the live input optimistically");
+
+  // While that send is still pending, the user types something NEW, then
+  // deliberately clears it back to empty -- a real decision, not "nothing
+  // happened since submit".
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "a completely different draft" } });
+  });
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "" } });
+  });
+
+  await act(async () => {
+    rejectFn(new Error("network down"));
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(
+    input.value,
+    "",
+    "the user's own deliberate clear must survive -- the stale failed send must not resurrect 'will fail' over it",
+  );
+
+  cleanup();
+  qc.clear();
+});

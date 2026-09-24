@@ -9,7 +9,7 @@ import { useLocalVersion } from "./use-local-version";
 import { rpcComment } from "./rpc";
 import { currentDemoPerson } from "@/features/demo/identities";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
-import { getDraft, setDraft } from "@/features/drafts/session-drafts";
+import { getDraft, setDraft, getDraftRevision } from "@/features/drafts/session-drafts";
 import type { ThingFile } from "@/domain/thing";
 
 import { resolveActorPeople } from "@/features/people/resolve-actors";
@@ -37,7 +37,16 @@ export type ThingActivity = { id: string; event: string; at: string };
 // mutation's own input, captured by the caller at dispatch time (the same
 // moment it already captures its own `submittedThingId`), not re-derived
 // from whatever the latest render happens to show.
-export type PostCommentInput = { thingId: string; body: string; attachments?: ThingFile[] };
+// T02: draftRevision is the caller's own session-drafts.ts revision
+// reading for this Thing's draft, captured at the moment it cleared the
+// live input for submission (see ThingDetailContent's submitComment) --
+// NOT re-read fresh in onError, which would just compare the post-submit
+// revision against itself. Lets onError tell "nothing has touched this
+// draft since I submitted" apart from "the draft is empty right now" --
+// the latter is also true when the user typed something new and then
+// deliberately cleared it back to empty, which must NOT be treated as
+// "unchanged" and overwritten by a stale failed-submit restore.
+export type PostCommentInput = { thingId: string; body: string; attachments?: ThingFile[]; draftRevision?: number };
 
 function parseCommentBody(rawBody: string): { body: string; attachments?: ThingFile[] } {
   const match = rawBody.match(/\n?<!--attachments:(.*?)-->/s);
@@ -130,7 +139,7 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       await rpcComment(targetThingId, bodyText, attachments);
     },
     onMutate: async (input: PostCommentInput) => {
-      const { thingId: targetThingId, body: bodyText, attachments } = input;
+      const { thingId: targetThingId, body: bodyText, attachments, draftRevision } = input;
       // Captured here (effectively at mutate()-dispatch time -- onMutate
       // runs before mutationFn, with nothing awaited yet) and threaded
       // through context so onError/onSettled use this SAME captured
@@ -176,7 +185,14 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       // this call was actually dispatched (confirmed directly: reproduced
       // the wrong-Thing attribution with a bare closure, then fixed it by
       // reading from context instead).
-      return { previousComments, epoch, thingId: targetThingId, submittedText: bodyText, submittedAttachments: attachments };
+      return {
+        previousComments,
+        epoch,
+        thingId: targetThingId,
+        submittedText: bodyText,
+        submittedAttachments: attachments,
+        draftRevision,
+      };
     },
     onError: (err, _input, context) => {
       // Follow-up review of R-01: this used to write the rollback back
@@ -200,8 +216,21 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         isEpochCurrent(qc, context.epoch) &&
         (context.submittedText || context.submittedAttachments?.length)
       ) {
-        const current = getDraft<string>(qc, "thing-comment", context.thingId);
-        const untouchedSinceSubmit = !current?.value && !current?.attachments?.length;
+        // T02: compares the draft's CURRENT revision against the one
+        // captured at submit time, not "is the draft empty right now" --
+        // emptiness alone can't tell "never touched since submit" apart
+        // from "typed something new, then deliberately cleared it back to
+        // empty". Only the former is safe to overwrite with this stale
+        // failed-submit restore; the latter is a real decision this must
+        // not undo. Falls back to the old emptiness check only if no
+        // revision was captured (an older/other caller of this mutation).
+        const untouchedSinceSubmit =
+          context.draftRevision !== undefined
+            ? getDraftRevision(qc, "thing-comment", context.thingId) === context.draftRevision
+            : (() => {
+                const current = getDraft<string>(qc, "thing-comment", context.thingId);
+                return !current?.value && !current?.attachments?.length;
+              })();
         if (untouchedSinceSubmit) {
           setDraft(qc, "thing-comment", context.thingId, {
             value: context.submittedText ?? "",
