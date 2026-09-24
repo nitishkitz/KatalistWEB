@@ -131,6 +131,7 @@ export function nextMorningThreshold(now: Date, timeZone: string): Date {
 
 export type MorningBriefBlocker =
   | "pending-auth"
+  | "profile-loading"
   | "loading"
   | "moments-error"
   | "no-moments"
@@ -159,10 +160,20 @@ export function isEligibleToAutoOpen(input: {
   hasMomentsError: boolean;
   isTabHidden: boolean;
   authPending: boolean;
+  /** R-04: true while the profile's stored timezone is still being
+   *  fetched for the first time (signed in, but no cached profile yet).
+   *  `timeZone` falls back to the BROWSER'S zone whenever the profile's
+   *  own zone is unknown, which is indistinguishable from "genuinely
+   *  unset" while the fetch is merely still in flight -- evaluating the
+   *  07:00 threshold against that guessed zone before the real profile
+   *  zone is known can auto-open (or silently skip) using the wrong
+   *  zone's morning. Must be checked before the threshold below. */
+  profileLoading: boolean;
   momentsLoading: boolean;
   hasBlockingInteraction: boolean;
 }): { eligible: true } | { eligible: false; reason: MorningBriefBlocker } {
   if (input.authPending) return { eligible: false, reason: "pending-auth" };
+  if (input.profileLoading) return { eligible: false, reason: "profile-loading" };
   if (input.momentsLoading) return { eligible: false, reason: "loading" };
   if (input.hasMomentsError) return { eligible: false, reason: "moments-error" };
   if (input.isTabHidden) return { eligible: false, reason: "hidden-tab" };

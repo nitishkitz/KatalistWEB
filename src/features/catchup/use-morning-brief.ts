@@ -10,6 +10,7 @@ import { useInteractionBlocker } from "@/components/katalist/use-interaction-blo
 import { morningBriefAutoOpenEnabled } from "./morning-brief-flag";
 import {
   isEligibleToAutoOpen,
+  isPastMorningThreshold,
   localDateKey,
   nextMorningThreshold,
   resolveEffectiveTimezone,
@@ -89,6 +90,12 @@ export function useMorningBrief(): UseMorningBrief {
   catchupCountRef.current = catchup.count;
   const catchupErrorRef = useRef(catchup.error);
   catchupErrorRef.current = catchup.error;
+  // R-04: the effective timezone/profile-readiness current when the claim
+  // was CALLED can be stale by the time it resolves -- a profile timezone
+  // edit, or the fetch itself only settling mid-await, must not let a
+  // now-outdated "past threshold" verdict decide whether to open.
+  const timeZoneRef = useRef<string>("UTC");
+  const profileLoadingRef = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -109,8 +116,19 @@ export function useMorningBrief(): UseMorningBrief {
   }, []);
 
   const identityId = preview ? currentDemoActorId() : user?.id;
+  // R-04: `profileQuery.data` is `undefined` both while the profile is
+  // still loading AND once it has settled with no `timezone` column set --
+  // those are NOT the same fact. Using the browser-zone fallback before
+  // the fetch has settled can evaluate the 07:00 threshold against the
+  // wrong zone entirely. `profileLoading` gates eligibility on this below;
+  // the fallback itself is only reached once the query has actually
+  // settled (success or error), matching "wait for it to settle before
+  // trusting a fallback" rather than eagerly guessing.
+  const profileLoading = !preview && Boolean(identityId) && profileQuery.isLoading;
   const profileTimezone = preview ? null : profileQuery.data?.timezone ?? null;
   const timeZone = resolveEffectiveTimezone(profileTimezone);
+  timeZoneRef.current = timeZone;
+  profileLoadingRef.current = profileLoading;
 
   const attemptClaim = useCallback(async () => {
     if (!morningBriefAutoOpenEnabled()) return;
@@ -128,6 +146,7 @@ export function useMorningBrief(): UseMorningBrief {
       hasMomentsError: catchup.error != null,
       isTabHidden,
       authPending: !preview && !session,
+      profileLoading,
       momentsLoading: catchup.isLoading,
       hasBlockingInteraction,
     });
@@ -141,32 +160,47 @@ export function useMorningBrief(): UseMorningBrief {
         : await claimMorningBriefLive(context, timeZone);
       if (!isEpochCurrent(qc, epoch)) return; // identity switched while the claim was in flight
       if (!mountedRef.current) return; // unmounted while the claim was in flight
-      // F-03: the claim itself succeeded (or was already claimed) for the
-      // SCOPE captured above (identity/context/date) -- but showing it now
-      // requires that scope to still be the live one. A context switch
+      // F-03/R-04: the claim itself succeeded (or was already claimed) for
+      // the SCOPE captured above (identity/context/date) -- but showing it
+      // now requires that scope to still be the live one. A context switch
       // mid-await means this claim's context no longer matches what's
       // displayed; a blocker/hidden-tab appearing meanwhile means the
       // moment to interrupt is no longer right; moments emptying meanwhile
-      // means there's nothing left to show. In every one of these cases
-      // the receipt itself is still recorded/valid -- only the automatic
-      // OPEN is skipped, so manual review remains available and the day's
-      // slot is not reattempted (attemptedKeyRef already marks it done).
+      // means there's nothing left to show. A profile timezone resolving
+      // (or changing) meanwhile, or the real clock crossing back before
+      // the threshold in the NOW-current zone, means "past threshold" is
+      // no longer actually true for this viewer -- re-verified against the
+      // LATEST timezone/profile-readiness/clock, not what was true when
+      // this call started. In every one of these cases the receipt itself
+      // is still recorded/valid -- only the automatic OPEN is skipped, so
+      // manual review remains available and the day's slot is not
+      // reattempted (attemptedKeyRef already marks it done).
       const stillEligibleToShow =
         contextRef.current === context &&
         !hasBlockingInteractionRef.current &&
         !isTabHiddenRef.current &&
         catchupErrorRef.current == null &&
-        catchupCountRef.current > 0;
+        catchupCountRef.current > 0 &&
+        !profileLoadingRef.current &&
+        isPastMorningThreshold(new Date(), timeZoneRef.current);
       if (result.claimed && stillEligibleToShow) {
         setOpen(true);
       }
       setAlreadyPresentedToday(true);
     } catch (err) {
-      // Service unavailable (most likely: the migration isn't deployed
-      // yet) -- skip automatic opening for this attempt, keep manual
-      // access, and do not retry (attemptedKeyRef already marks this
-      // identity/context/day as attempted, so a later re-render/timer
-      // fire this same day won't try again and loop).
+      // R-04: the server is authoritative for the 07:00 threshold too
+      // (see claim_morning_brief's own check) and rejects a genuinely
+      // premature claim with this specific message rather than inserting
+      // a row. That is a "not yet, try again later today" outcome, not a
+      // permanent failure -- unlike every other error here (most likely:
+      // the migration isn't deployed yet), it must NOT consume today's
+      // one attempt, or the legitimate later claim could never succeed
+      // today. The already-scheduled next-threshold timer (below) will
+      // retry; nothing here needs to reschedule directly.
+      if (err instanceof Error && err.message.toLowerCase().includes("before morning threshold")) {
+        attemptedKeyRef.current = null;
+        return;
+      }
       console.error("Morning Brief claim failed", err);
     }
   }, [
@@ -180,6 +214,7 @@ export function useMorningBrief(): UseMorningBrief {
     hasBlockingInteraction,
     preview,
     session,
+    profileLoading,
     qc,
   ]);
 

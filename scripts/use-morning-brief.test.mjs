@@ -33,6 +33,7 @@ let catchupCount = 1;
 let catchupLoading = false;
 let catchupError = null;
 let profileTimezone = "America/New_York";
+let profileLoading = false;
 let flagEnabled = false;
 let testContext = "work";
 
@@ -40,7 +41,7 @@ mock.module("@/hooks/useSession", { namedExports: { useSession: () => testSessio
 mock.module("@/lib/session-mode", { namedExports: { isPreviewSession: () => testPreview } });
 mock.module("@/features/context/use-app-context", { namedExports: { useAppContext: () => ({ context: testContext }) } });
 mock.module("@/features/me/use-profile", {
-  namedExports: { useProfile: () => ({ data: { timezone: profileTimezone }, isLoading: false }) },
+  namedExports: { useProfile: () => ({ data: { timezone: profileTimezone }, isLoading: profileLoading }) },
 });
 mock.module("@/features/demo/identities", { namedExports: { currentDemoActorId: () => "demo-actor-1" } });
 mock.module("@/features/catchup/use-catchup", {
@@ -68,11 +69,17 @@ let dismissCalls = [];
 // continuation rechecks fresh state instead of trusting what was true
 // when it was first called.
 let claimGate = null;
+let claimRejection = null;
 mock.module("@/features/catchup/morning-brief-receipts", {
   namedExports: {
     claimMorningBriefLive: async (context, tz) => {
       claimCalls.push({ context, tz });
       if (claimGate) await claimGate;
+      if (claimRejection) {
+        const err = claimRejection;
+        claimRejection = null; // only the next call rejects, matching a one-off premature attempt
+        throw err;
+      }
       return claimResult;
     },
     claimMorningBriefPreview: async (actorId, context, dateKey, tz) => {
@@ -114,12 +121,14 @@ function resetShared() {
   catchupLoading = false;
   catchupError = null;
   profileTimezone = "America/New_York";
+  profileLoading = false;
   flagEnabled = false;
   testContext = "work";
   claimCalls = [];
   dismissCalls = [];
   claimResult = { claimed: true, localDate: "2026-06-15", timezone: "America/New_York", presentedAt: "x" };
   claimGate = null;
+  claimRejection = null;
 }
 
 test("with the flag disabled (the default), never auto-opens even when otherwise eligible", async () => {
@@ -535,6 +544,107 @@ test("F-05: a moments fetch error appearing while a claim is already in flight s
 
   assert.equal(latest.open, false, "a moments error appearing mid-claim must suppress the open");
   assert.equal(latest.alreadyPresentedToday, true, "the claim itself still succeeded and is recorded");
+
+  cleanup();
+  qc.clear();
+});
+
+test("R-04: while the profile timezone is still loading, never attempts a claim -- even though the browser-zone guess looks eligible", async () => {
+  resetShared();
+  flagEnabled = true;
+  profileLoading = true;
+  const qc = newClient();
+  let latest = null;
+  let rerender;
+
+  await act(async () => {
+    const result = render(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+    rerender = result.rerender;
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(claimCalls.length, 0, "must not attempt a claim before the real profile timezone is known");
+  assert.equal(latest.open, false);
+
+  // The profile finishes loading -- eligibility must be re-evaluated and
+  // the (now legitimate) claim attempted, without a reload/remount.
+  profileLoading = false;
+  await act(async () => {
+    rerender(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(claimCalls.length, 1, "a claim is attempted once the profile has settled");
+  assert.equal(latest.open, true);
+
+  cleanup();
+  qc.clear();
+});
+
+test("R-04: a claim rejected as premature by the server does not consume today's attempt -- a later attempt still succeeds", async () => {
+  resetShared();
+  flagEnabled = true;
+  claimRejection = new Error("before morning threshold");
+  const qc = newClient();
+  let latest = null;
+  let rerender;
+
+  await act(async () => {
+    const result = render(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+    rerender = result.rerender;
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(claimCalls.length, 1, "the premature attempt was made and rejected");
+  assert.equal(latest.open, false);
+  assert.equal(latest.alreadyPresentedToday, false, "a rejected premature claim was never actually presented");
+
+  // Force a second, later attempt (e.g. the scheduled next-threshold timer,
+  // or any other eligibility-affecting re-render) -- bumping catchup's own
+  // count changes attemptClaim's own dependencies, standing in for that
+  // later trigger. If the day's attempt had been wrongly consumed by the
+  // rejected first try, this would never call claim again.
+  catchupCount = 2;
+  await act(async () => {
+    rerender(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(claimCalls.length, 2, "the legitimate later attempt must still be allowed to claim");
+  assert.equal(latest.open, true);
+  assert.equal(latest.alreadyPresentedToday, true);
 
   cleanup();
   qc.clear();

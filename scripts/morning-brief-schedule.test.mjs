@@ -91,14 +91,20 @@ test("isEligibleToAutoOpen: blockers take precedence over the threshold/moments 
     now: new Date("2026-06-15T18:00:00Z"), // 14:00 local, past threshold
     timeZone: NY,
     hasActionableMoments: true,
+    hasMomentsError: false,
     isTabHidden: false,
     authPending: false,
+    profileLoading: false,
     momentsLoading: false,
     hasBlockingInteraction: false,
   };
 
   assert.deepEqual(isEligibleToAutoOpen(base), { eligible: true });
   assert.deepEqual(isEligibleToAutoOpen({ ...base, authPending: true }), { eligible: false, reason: "pending-auth" });
+  assert.deepEqual(
+    isEligibleToAutoOpen({ ...base, profileLoading: true }),
+    { eligible: false, reason: "profile-loading" },
+  );
   assert.deepEqual(isEligibleToAutoOpen({ ...base, momentsLoading: true }), { eligible: false, reason: "loading" });
   assert.deepEqual(isEligibleToAutoOpen({ ...base, isTabHidden: true }), { eligible: false, reason: "hidden-tab" });
   assert.deepEqual(
@@ -142,4 +148,25 @@ test("isEligibleToAutoOpen: no moments does not report as a false 'before-thresh
   });
   assert.equal(noMoments.eligible, false);
   assert.equal(noMoments.reason, "no-moments");
+});
+
+// R-04: `timeZone` falls back to the browser's own zone whenever the
+// profile's stored zone is unknown -- indistinguishable from "genuinely
+// unset" while the profile fetch is merely still in flight. Evaluating
+// the 07:00 threshold before the real profile zone is known can auto-open
+// (or wrongly skip) using the wrong zone's morning -- profileLoading must
+// block BEFORE the threshold check even considers `now`/`timeZone`.
+test("isEligibleToAutoOpen: profile still loading blocks even when the (unreliable) browser-zone guess looks past threshold", () => {
+  const result = isEligibleToAutoOpen({
+    now: new Date("2026-06-15T18:00:00Z"), // 14:00 in NY -- looks well past threshold
+    timeZone: NY,
+    hasActionableMoments: true,
+    hasMomentsError: false,
+    isTabHidden: false,
+    authPending: false,
+    profileLoading: true,
+    momentsLoading: false,
+    hasBlockingInteraction: false,
+  });
+  assert.deepEqual(result, { eligible: false, reason: "profile-loading" });
 });
