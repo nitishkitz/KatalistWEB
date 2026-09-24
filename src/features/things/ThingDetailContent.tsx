@@ -555,6 +555,19 @@ export function ThingDetailContent({
     const draft = getDraft<string>(qc, "thing-comment", thing?.id ?? "");
     setComment(draft?.value ?? "");
     setCommentAttachments((draft?.attachments as ThingFile[] | undefined) ?? []);
+    // T02: null -> Thing A -> Thing B -> null transitions. Neither the
+    // due-date edit input nor the selected-file-in-viewer selection had
+    // any per-Thing draft store or reset -- switching Thing (this same
+    // component instance, e.g. via CourtDetailModal) left Thing A's typed
+    // (unsaved) due-date value visible in Thing B's own "Edit Due Date"
+    // input, and Thing A's selected attachment id carried over into Thing
+    // B's own Files list (where it may not even exist, or may coincide
+    // with an unrelated file's id). Neither is a durable draft worth
+    // persisting across navigation (unlike the comment composer above) --
+    // it's simple editable/selection state that must just not leak
+    // between Things.
+    setDue("");
+    setSelectedFileId(null);
   }, [thing?.id, qc]);
 
   // E-03: write-through -- every edit is persisted immediately so it

@@ -323,3 +323,51 @@ test("follow-up review of R-02: a file whose processing finishes AFTER an accoun
   cleanup();
   qc.clear();
 });
+
+// T02: null -> Thing A -> Thing B -> null transitions. The due-date edit
+// input (and, by the same fix, the selected-file-in-viewer id) had no
+// per-Thing reset at all -- switching Thing on this same component
+// instance (e.g. via CourtDetailModal) left Thing A's typed, UNSAVED
+// due-date value visible in Thing B's own "Edit Due Date" input. The
+// "More actions"/Edit Due Date section lives in the DEFAULT variant (not
+// "court", which is where the file-input tests above render), so this
+// uses its own default-variant harness.
+function DefaultHarness({ qc, thingId }) {
+  return h(
+    QueryClientProvider,
+    { client: qc },
+    h(InteractionBlockerProvider, null, h(ThingDetailContent, { initialThing: makeThing(thingId, `Thing ${thingId}`) })),
+  );
+}
+
+test("T02: an unsaved due-date edit for Thing A does not leak into Thing B's own Edit Due Date input", async () => {
+  const qc = newClient();
+  const { container, rerender } = render(h(DefaultHarness, { qc, thingId: "thing-a" }));
+
+  const moreButton = container.querySelector('[aria-label="Show more Thing actions"]');
+  assert.ok(moreButton, "the More actions button must be present for an owner on a non-terminal Thing");
+  await act(async () => {
+    fireEvent.click(moreButton);
+  });
+
+  const dueInput = container.querySelector('input[type="datetime-local"]');
+  assert.ok(dueInput, "the Edit Due Date input must be visible once More actions is open");
+  await act(async () => {
+    fireEvent.change(dueInput, { target: { value: "2026-12-31T10:00" } });
+  });
+  assert.equal(dueInput.value, "2026-12-31T10:00");
+
+  await act(async () => {
+    rerender(h(DefaultHarness, { qc, thingId: "thing-b" }));
+  });
+
+  const moreButtonB = container.querySelector('[aria-label="Show more Thing actions"]');
+  await act(async () => {
+    fireEvent.click(moreButtonB);
+  });
+  const dueInputB = container.querySelector('input[type="datetime-local"]');
+  assert.equal(dueInputB.value, "", "Thing A's unsaved due-date edit must not appear in Thing B's own input");
+
+  cleanup();
+  qc.clear();
+});
