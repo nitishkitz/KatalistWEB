@@ -31,22 +31,45 @@ export async function fetchRealAttachments(thingIds: string[]): Promise<Map<stri
     .in("thing_id", thingIds)
     .order("created_at", { ascending: true });
 
-  if (error || !rows?.length) return result;
+  if (error) throw error;
+  if (!rows?.length) return result;
 
-  const signed = await Promise.all(
-    (rows as AttachmentRow[]).map(async (row) => {
-      const { data } = await supabase.storage.from(BUCKET).createSignedUrl(row.storage_key, SIGNED_URL_TTL_SECONDS);
+  const typedRows = rows as AttachmentRow[];
+  const uniquePaths = [...new Set(typedRows.map((row) => row.storage_key))];
+  const signingByPath = new Map<string, { url?: string; error?: string }>();
+  // Supabase Storage signs many paths per call. Bound each request so a
+  // large detail view does not create one enormous request or one request
+  // per file; keep the response correlated by path, not array position.
+  for (let offset = 0; offset < uniquePaths.length; offset += 100) {
+    const paths = uniquePaths.slice(offset, offset + 100);
+    const { data, error: signingError } = await supabase.storage
+      .from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
+    if (signingError) throw signingError;
+    for (const entry of data ?? []) {
+      const item = entry as { path: string; signedUrl?: string; error?: string | { message?: string } };
+      const reason = item.error
+        ? typeof item.error === "string" ? item.error : item.error.message
+        : undefined;
+      signingByPath.set(item.path, {
+        url: item.signedUrl || undefined,
+        error: reason || (!item.signedUrl ? "Preview unavailable for this file." : undefined),
+      });
+    }
+  }
+
+  const signed = typedRows.map((row) => {
+      const signing = signingByPath.get(row.storage_key);
       const file: ThingFile = {
         id: row.id,
         name: row.file_name,
         type: detectFileType(row.file_name, row.mime_type ?? undefined),
-        url: data?.signedUrl,
+        url: signing?.url,
+        urlError: signing?.error ?? (!signing ? "Preview unavailable for this file." : undefined),
         sizeLabel: row.byte_size ? formatFileSize(row.byte_size) : undefined,
         mimeType: row.mime_type ?? undefined,
       };
       return { thingId: row.thing_id, file };
-    }),
-  );
+    });
 
   for (const { thingId, file } of signed) {
     const existing = result.get(thingId);

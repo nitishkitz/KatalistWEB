@@ -2,7 +2,6 @@ import { forwardRef, type MouseEvent, type MutableRefObject } from "react";
 import { Play } from "lucide-react";
 
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
-import { PdfCanvas } from "@/features/things/PdfCanvas";
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
 import { useAvatarUrl } from "@/features/people/directory";
@@ -267,7 +266,9 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               const isDocx = firstFile.type === "docx";
               const isImg = firstFile.type === "image" || firstFile.type === "png" || firstFile.type === "jpg";
               const isVid = firstFile.type === "video";
-              const isMedia = Boolean((isImg || isVid || isPdf) && firstFile.url);
+              // Overview cards must not open a PDF worker or download full
+              // document bytes. The explicit file viewer owns that work.
+              const isMedia = Boolean((isImg || isVid) && firstFile.url);
 
               return (
                 <div
@@ -297,10 +298,6 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                           <Play className="h-4 w-4 fill-current ml-0.5" />
                         </div>
                       </div>
-                    </div>
-                  ) : isPdf && firstFile.url ? (
-                    <div className="h-full w-full overflow-hidden bg-white">
-                      <PdfCanvas url={firstFile.url} page={1} className="w-full" />
                     </div>
                   ) : isPdf || isDocx ? (
                     <div className="flex-1 min-h-0 overflow-hidden text-left">

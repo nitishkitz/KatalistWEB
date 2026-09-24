@@ -48,6 +48,8 @@ export type ThingFile = {
   name: string;
   type: ThingFileType;
   url?: string;
+  /** Signing failed or the storage object is unavailable; never invent a URL. */
+  urlError?: string;
   sizeLabel?: string;
   mimeType?: string;
   isNew?: boolean;
