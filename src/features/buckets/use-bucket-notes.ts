@@ -81,5 +81,17 @@ export function useBucketNotes(bucketId: string) {
     onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
   });
 
-  return { notes: query.data ?? [], isLoading: query.isLoading, create, update, remove };
+  return {
+    notes: query.data ?? [],
+    isLoading: query.isLoading,
+    // G-06: previously not exposed at all -- a rejected read fell through
+    // to notes: [] with no way for a consumer to tell "genuinely no
+    // notes" apart from "the read failed". `refetch` lets a consumer
+    // offer a real Retry instead of only showing an empty state.
+    error: query.error,
+    refetch: query.refetch,
+    create,
+    update,
+    remove,
+  };
 }

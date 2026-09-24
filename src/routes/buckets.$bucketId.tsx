@@ -22,6 +22,7 @@ import {
   type BucketItem,
 } from "@/features/buckets/use-bucket-items";
 import { bucketItemsSurface } from "@/features/buckets/bucket-items-surface";
+import { useBucketNoteEditor } from "@/features/buckets/use-bucket-note-editor";
 import { CourtDetailModal } from "@/features/court/CourtDetailModal";
 import { ListDetailSkeleton, Shimmer } from "@/components/katalist/ScreenSkeletons";
 import { useThing } from "@/features/things/use-thing";
@@ -183,10 +184,21 @@ function BucketDetailPage() {
 
   // Notes (Apple-Notes style, opened in a dialog)
   const notesApi = useBucketNotes(bucketId);
-  const [noteOpen, setNoteOpen] = useState(false);
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteBody, setNoteBody] = useState("");
+  const noteEditor = useBucketNoteEditor(bucketId, notesApi);
+  const {
+    noteOpen,
+    editingNoteId,
+    noteTitle,
+    setNoteTitle,
+    noteBody,
+    setNoteBody,
+    openNoteEditor,
+    requestCloseNoteEditor,
+    saveNote,
+    deleteNote,
+    isSaving: noteSaving,
+    isDeleting: noteDeleting,
+  } = noteEditor;
 
   const liveThing = useThing(selectedId);
   const thingItemsAll = items.filter((i): i is Extract<BucketItem, { kind: "thing" }> => i.kind === "thing");
@@ -303,29 +315,6 @@ function BucketDetailPage() {
   const sortedThingItems = [...thingItems].sort(
     (a, b) => new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime(),
   );
-
-  const openNoteEditor = (note?: { id: string; title: string; body: string }) => {
-    setEditingNoteId(note?.id ?? null);
-    setNoteTitle(note?.title ?? "");
-    setNoteBody(note?.body ?? "");
-    setNoteOpen(true);
-  };
-
-  const saveNote = () => {
-    const title = noteTitle.trim();
-    const body = noteBody.trim();
-    if (!title && !body) {
-      setNoteOpen(false);
-      return;
-    }
-    const done = () => setNoteOpen(false);
-    const fail = (err: unknown) => toast.error(domainErrorMessage(err));
-    if (editingNoteId) {
-      void notesApi.update.mutateAsync({ id: editingNoteId, title, body }).then(done, fail);
-    } else {
-      void notesApi.create.mutateAsync({ title, body }).then(done, fail);
-    }
-  };
 
   // "New Thing" adds a reference to an existing Thing/List (Buckets never own or
   // create Things — they are private reference groupings).
@@ -781,6 +770,21 @@ function BucketDetailPage() {
                 </div>
                 {notesApi.isLoading ? (
                   <p className="text-sm text-muted-foreground">Loading notes…</p>
+                ) : notesApi.error ? (
+                  // G-06: a rejected read used to fall through to
+                  // notes: [] and render identically to "no notes yet" --
+                  // indistinguishable from a genuinely empty Bucket.
+                  <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-destructive/40 text-center">
+                    <p className="text-[13px] font-semibold text-destructive">Couldn’t load notes</p>
+                    <p className="mt-1 text-[11.5px] text-[#6a769c]">{domainErrorMessage(notesApi.error)}</p>
+                    <button
+                      type="button"
+                      onClick={() => void notesApi.refetch()}
+                      className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 ) : notesApi.notes.length === 0 ? (
                   <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-[#e3e5ef] text-center">
                     <FileText className="h-8 w-8 text-[#c5cae0]" />
@@ -843,7 +847,7 @@ function BucketDetailPage() {
       />
 
       {/* Note editor dialog */}
-      <Dialog open={noteOpen} onOpenChange={setNoteOpen}>
+      <Dialog open={noteOpen} onOpenChange={(open) => { if (!open) requestCloseNoteEditor(); }}>
         <DialogContent className="rounded-2xl bg-white p-5 shadow-xl sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-[15px] font-bold">
@@ -871,17 +875,9 @@ function BucketDetailPage() {
               {editingNoteId ? (
                 <button
                   type="button"
-                  className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-destructive hover:bg-destructive/10"
-                  onClick={() => {
-                    const id = editingNoteId;
-                    void notesApi.remove.mutateAsync(id).then(
-                      () => {
-                        toast.success("Note deleted.");
-                        setNoteOpen(false);
-                      },
-                      (err) => toast.error(domainErrorMessage(err)),
-                    );
-                  }}
+                  disabled={noteDeleting}
+                  className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={deleteNote}
                 >
                   Delete
                 </button>
@@ -891,13 +887,14 @@ function BucketDetailPage() {
               <button
                 type="button"
                 className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-muted"
-                onClick={() => setNoteOpen(false)}
+                onClick={requestCloseNoteEditor}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className="rounded-lg bg-primary px-4 py-1.5 text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
+                disabled={noteSaving}
+                className="rounded-lg bg-primary px-4 py-1.5 text-[13px] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
                 onClick={saveNote}
               >
                 Save
