@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
+import { withReadDeadline } from "@/lib/read-request";
 
 const WITHIN_HOURS = 24;
 /** Surface the reminder once a meeting is within this many minutes of
@@ -19,8 +20,10 @@ export type UpcomingMeeting = {
   endsAt: string;
 };
 
-async function fetchUpcomingMeetings(): Promise<UpcomingMeeting[]> {
-  const { data, error } = await supabase.rpc("get_my_upcoming_meetings", { p_within_hours: WITHIN_HOURS });
+async function fetchUpcomingMeetings(querySignal?: AbortSignal): Promise<UpcomingMeeting[]> {
+  const { data, error } = await withReadDeadline(querySignal, async (signal) =>
+    supabase.rpc("get_my_upcoming_meetings", { p_within_hours: WITHIN_HOURS }).abortSignal(signal),
+  );
   if (error) throw error;
   return (data ?? []).map((r) => ({
     id: r.id,
@@ -53,7 +56,7 @@ export function useUpcomingMeetingReminder() {
 
   const query = useQuery({
     queryKey: ["upcoming-meetings"],
-    queryFn: fetchUpcomingMeetings,
+    queryFn: ({ signal }) => fetchUpcomingMeetings(signal),
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
     refetchInterval: 30_000,

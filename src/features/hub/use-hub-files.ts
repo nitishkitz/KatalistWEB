@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { getProfileIdentities } from "@/features/people/directory";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { withReadDeadline } from "@/lib/read-request";
 
 const FILES_BUCKET = "hub-files";
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -66,10 +67,17 @@ async function resolveFiles(qc: QueryClient, rows: HubFileRow[]): Promise<HubFil
   return files;
 }
 
-async function fetchFiles(qc: QueryClient, listId: string, parentId: string | null): Promise<HubFile[]> {
-  let q = supabase.from("hub_files").select(FILE_COLUMNS).eq("list_id", listId).is("deleted_at", null);
-  q = parentId === null ? q.is("parent_id", null) : q.eq("parent_id", parentId);
-  const { data, error } = await q;
+async function fetchFiles(
+  qc: QueryClient,
+  listId: string,
+  parentId: string | null,
+  querySignal?: AbortSignal,
+): Promise<HubFile[]> {
+  const { data, error } = await withReadDeadline(querySignal, async (signal) => {
+    let q = supabase.from("hub_files").select(FILE_COLUMNS).eq("list_id", listId).is("deleted_at", null);
+    q = parentId === null ? q.is("parent_id", null) : q.eq("parent_id", parentId);
+    return q.abortSignal(signal);
+  });
   if (error) throw error;
   return resolveFiles(qc, (data ?? []) as HubFileRow[]);
 }
@@ -106,7 +114,7 @@ export function useHubFiles(listId: string, parentId: string | null) {
     queryKey: ["hub-files", listId, parentId],
     enabled: Boolean(listId) && Boolean(user),
     staleTime: 10_000,
-    queryFn: () => fetchFiles(qc, listId, parentId),
+    queryFn: ({ signal }) => fetchFiles(qc, listId, parentId, signal),
   });
 
   const invalidate = (epoch: number) => {

@@ -11,6 +11,7 @@ import {
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { withReadDeadline } from "@/lib/read-request";
 
 export type ListMeeting = {
   id: string;
@@ -21,13 +22,16 @@ export type ListMeeting = {
   createdBy: string;
 };
 
-async function fetchMeetings(listId: string): Promise<ListMeeting[]> {
-  const { data, error } = await supabase
-    .from("list_meetings")
-    .select("id, list_id, title, starts_at, ends_at, created_by")
-    .eq("list_id", listId)
-    .is("cancelled_at", null)
-    .order("starts_at", { ascending: true });
+async function fetchMeetings(listId: string, querySignal?: AbortSignal): Promise<ListMeeting[]> {
+  const { data, error } = await withReadDeadline(querySignal, async (signal) =>
+    supabase
+      .from("list_meetings")
+      .select("id, list_id, title, starts_at, ends_at, created_by")
+      .eq("list_id", listId)
+      .is("cancelled_at", null)
+      .order("starts_at", { ascending: true })
+      .abortSignal(signal),
+  );
   if (error) throw error;
   return (data ?? []).map((r) => ({
     id: r.id,
@@ -51,7 +55,7 @@ export function useListMeetings(listId: string) {
 
   const query = useQuery({
     queryKey: keys.listMeetings(listId),
-    queryFn: () => fetchMeetings(listId),
+    queryFn: ({ signal }) => fetchMeetings(listId, signal),
     enabled: Boolean(listId) && !preview && !hidden,
     staleTime: 15_000,
   });

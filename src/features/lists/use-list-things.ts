@@ -13,6 +13,7 @@ import {
   isPersonallyShreddedList,
   usePersonalShred,
 } from "@/features/things/personal-shred";
+import { withReadDeadline } from "@/lib/read-request";
 
 export function useListThings(listId: string | undefined) {
   const { session } = useSession();
@@ -26,13 +27,16 @@ export function useListThings(listId: string | undefined) {
     queryKey: ["list-things", listId],
     enabled: Boolean(listId) && !preview && !hidden,
     staleTime: 10_000,
-    queryFn: async (): Promise<Thing[]> => {
-      const { data, error } = await supabase
-        .from("things")
-        .select(
-          "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at",
-        )
-        .eq("list_id", listId!);
+    queryFn: async ({ signal }): Promise<Thing[]> => {
+      const { data, error } = await withReadDeadline(signal, async (combined) =>
+        supabase
+          .from("things")
+          .select(
+            "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at",
+          )
+          .eq("list_id", listId!)
+          .abortSignal(combined),
+      );
       if (error) throw error;
       const ids = new Set<string>();
       for (const r of data ?? []) {

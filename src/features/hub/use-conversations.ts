@@ -4,6 +4,7 @@ import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { getProfileIdentities, matchAvatarByName } from "@/features/people/directory";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { withReadDeadline } from "@/lib/read-request";
 
 export type ConversationParticipant = {
   id: string;
@@ -44,35 +45,46 @@ function initialsOf(name: string): string {
   );
 }
 
-async function fetchConversations(qc: QueryClient, myId: string): Promise<Conversation[]> {
-  // RLS scopes SELECT to lists the caller owns or is a member of.
-  const { data: listRows, error } = await supabase
-    .from("lists")
-    .select("id,name,kind,owner_profile_id,updated_at")
-    .in("kind", ["dm", "group"])
-    .is("archived_at", null);
-  if (error) throw error;
-  const lists = (listRows ?? []) as Array<{
-    id: string;
-    name: string;
-    kind: "dm" | "group";
-    owner_profile_id: string;
-    updated_at: string;
-  }>;
+async function fetchConversations(qc: QueryClient, myId: string, querySignal?: AbortSignal): Promise<Conversation[]> {
+  // T01: the initial lists read plus its three dependent reads below are
+  // one logical read operation -- bounded together under a single
+  // deadline (read-request.ts), wired to React Query's own cancellation
+  // signal so a superseded/refetched call or unmount stops whichever
+  // request is actually in flight.
+  const { lists, memberRows, msgRows, identities } = await withReadDeadline(querySignal, async (signal) => {
+    // RLS scopes SELECT to lists the caller owns or is a member of.
+    const { data: listRows, error } = await supabase
+      .from("lists")
+      .select("id,name,kind,owner_profile_id,updated_at")
+      .in("kind", ["dm", "group"])
+      .is("archived_at", null)
+      .abortSignal(signal);
+    if (error) throw error;
+    const lists = (listRows ?? []) as Array<{
+      id: string;
+      name: string;
+      kind: "dm" | "group";
+      owner_profile_id: string;
+      updated_at: string;
+    }>;
+    if (lists.length === 0) return { lists, memberRows: [], msgRows: [], identities: [] };
+
+    const ids = lists.map((l) => l.id);
+
+    const [{ data: memberRows }, { data: msgRows }, identities] = await Promise.all([
+      supabase.from("list_members").select("list_id, profile_id").in("list_id", ids).abortSignal(signal),
+      supabase
+        .from("list_messages")
+        .select("list_id, body, kind, created_at, author_profile_id, attachment")
+        .in("list_id", ids)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .abortSignal(signal),
+      getProfileIdentities(qc),
+    ]);
+    return { lists, memberRows: memberRows ?? [], msgRows: msgRows ?? [], identities };
+  });
   if (lists.length === 0) return [];
-
-  const ids = lists.map((l) => l.id);
-
-  const [{ data: memberRows }, { data: msgRows }, identities] = await Promise.all([
-    supabase.from("list_members").select("list_id, profile_id").in("list_id", ids),
-    supabase
-      .from("list_messages")
-      .select("list_id, body, kind, created_at, author_profile_id, attachment")
-      .in("list_id", ids)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false }),
-    getProfileIdentities(qc),
-  ]);
 
   const identityById = new Map(identities.map((p) => [p.id, p]));
   const resolve = (id: string): ConversationParticipant => {
@@ -169,7 +181,7 @@ export function useConversations() {
     queryKey: ["hub-conversations", user?.id],
     enabled: Boolean(user) && !preview,
     staleTime: 10_000,
-    queryFn: () => fetchConversations(qc, user!.id),
+    queryFn: ({ signal }) => fetchConversations(qc, user!.id, signal),
   });
 
   // The rail is kept fresh by RealtimeInvalidationProvider, which routes every
@@ -194,19 +206,24 @@ export function useConversation(listId: string | undefined) {
     queryKey: ["hub-conversation", listId, user?.id],
     enabled: Boolean(listId) && Boolean(user) && !preview,
     staleTime: 10_000,
-    queryFn: async (): Promise<Conversation | null> => {
-      const { data: l, error } = await supabase
-        .from("lists")
-        .select("id,name,kind,owner_profile_id,updated_at")
-        .eq("id", listId!)
-        .maybeSingle();
-      if (error) throw error;
-      if (!l) return null;
+    queryFn: async ({ signal }): Promise<Conversation | null> => {
+      const { l, memberRows, identities } = await withReadDeadline(signal, async (combined) => {
+        const { data: l, error } = await supabase
+          .from("lists")
+          .select("id,name,kind,owner_profile_id,updated_at")
+          .eq("id", listId!)
+          .abortSignal(combined)
+          .maybeSingle();
+        if (error) throw error;
+        if (!l) return { l: null, memberRows: [], identities: [] };
 
-      const [{ data: memberRows }, identities] = await Promise.all([
-        supabase.from("list_members").select("profile_id").eq("list_id", listId!),
-        getProfileIdentities(qc),
-      ]);
+        const [{ data: memberRows }, identities] = await Promise.all([
+          supabase.from("list_members").select("profile_id").eq("list_id", listId!).abortSignal(combined),
+          getProfileIdentities(qc),
+        ]);
+        return { l, memberRows: memberRows ?? [], identities };
+      });
+      if (!l) return null;
       const identityById = new Map(identities.map((p) => [p.id, p]));
       const resolve = (id: string): ConversationParticipant => {
         const p = identityById.get(id);

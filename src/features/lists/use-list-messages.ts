@@ -9,6 +9,7 @@ import { useLocalVersion } from "@/features/things/use-local-version";
 import { getProfileIdentities, matchProfile } from "@/features/people/directory";
 import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { withReadDeadline } from "@/lib/read-request";
 
 const CHAT_BUCKET = "list-chat";
 const SIGNED_URL_TTL_SECONDS = 3600;
@@ -37,13 +38,16 @@ export type ListChatMessage = {
 
 type RawAttachment = { key?: string; name?: string; mime?: string | null; size?: number | null };
 
-async function fetchMessages(qc: QueryClient, listId: string): Promise<ListChatMessage[]> {
-  const { data, error } = await supabase
-    .from("list_messages")
-    .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
-    .eq("list_id", listId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: true });
+async function fetchMessages(qc: QueryClient, listId: string, querySignal?: AbortSignal): Promise<ListChatMessage[]> {
+  const { data, error } = await withReadDeadline(querySignal, async (signal) =>
+    supabase
+      .from("list_messages")
+      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
+      .eq("list_id", listId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true })
+      .abortSignal(signal),
+  );
   if (error) throw error;
   const identities = await getProfileIdentities(qc);
   const rows = (data ?? []) as Array<{
@@ -99,7 +103,7 @@ export function useListMessages(listId: string) {
 
   const query = useQuery({
     queryKey: ["list-messages", listId],
-    queryFn: () => fetchMessages(qc, listId),
+    queryFn: ({ signal }) => fetchMessages(qc, listId, signal),
     enabled: Boolean(listId) && !preview && !hidden,
     staleTime: 10_000,
   });
