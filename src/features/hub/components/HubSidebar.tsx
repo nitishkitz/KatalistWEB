@@ -90,7 +90,7 @@ function ConversationRow({
             </span>
             {mentions === "unknown" ? (
               <span
-                title="Mention count unavailable — retrying"
+                title="Mention count unavailable"
                 className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-[#fdb412] px-1 text-[9px] font-bold text-white"
               >
                 <AtSign className="h-2.5 w-2.5" />?
@@ -112,7 +112,7 @@ function ConversationRow({
             {c.lastMessage || (c.kind === "group" ? `${c.memberCount} members` : "Say hello")}
           </span>
           {unread === "unknown" ? (
-            <span title="Unread count unavailable — retrying" className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">?</span>
+            <span title="Unread count unavailable" className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">?</span>
           ) : unread > 0 ? (
             <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#fc404d] px-1 text-[10px] font-semibold text-white">
               {unread > 99 ? "99+" : unread}
@@ -138,6 +138,8 @@ export function HubSidebar() {
   const [query, setQuery] = useState("");
   const [groupOpen, setGroupOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const countsUnavailable = conversations.some((conversation) =>
+    conversation.unreadCount === "unknown" || conversation.mentionCount === "unknown");
 
   const q = query.trim().toLowerCase();
 
@@ -261,6 +263,12 @@ export function HubSidebar() {
         {view === "conversations" && (
           <>
             <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Conversations</p>
+            {countsUnavailable && (
+              <p role="status" className="mx-2 mb-2 rounded-lg bg-amber-50 px-2 py-2 text-[11px] text-amber-800">
+                Some unread counts are unavailable.
+                <button type="button" className="ml-1 font-semibold underline" onClick={refetchConversations}>Retry counts</button>
+              </p>
+            )}
             {conversationsLoading ? (
               <ConversationListSkeleton />
             ) : conversationsError && conversations.length === 0 ? (

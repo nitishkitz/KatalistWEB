@@ -12,8 +12,23 @@ test("incomplete Things payload keeps the broad authority fallback", () => {
   ]);
 });
 
-test("thing_comments -> thing-comments, thing, court", () => {
-  assert.deepEqual(targetsForEvent({ table: "thing_comments" }).map((t) => t[0]), ["thing-comments", "thing", "court"]);
+test("comment and attachment events refresh every Thing overview showing their counts", () => {
+  for (const table of ["thing_comments", "thing_attachments"]) {
+    const families = targetsForEvent({ table, new: { thing_id: "thing-1" } }).map((target) => target[0]);
+    for (const family of ["court", "list-things", "bucket-items", "catchup"]) {
+      assert.ok(families.includes(family), `${table} must refresh ${family} overview counts`);
+    }
+  }
+});
+
+test("renaming a List refreshes Thing projections that embed its name", () => {
+  const targets = targetsForEvent({ table: "lists", eventType: "UPDATE", new: { id: "list-1", name: "Renamed" } });
+  const families = targets.map((target) => target[0]);
+  for (const family of ["court", "thing", "list-things", "catchup", "accessible-things", "upcoming-meetings"]) {
+    assert.ok(families.includes(family), `lists must refresh ${family} embedded names`);
+  }
+  assert.ok(targets.some((target) => targetKey(target) === targetKey(["list-things", "list-1"])));
+  assert.ok(!targets.some((target) => targetKey(target) === targetKey(["list-things"])));
 });
 
 test("profile_object_state routes to the personal-surfaces sentinel, not a static list", () => {
@@ -56,6 +71,16 @@ test("list_members -> every List-scoped surface that could show now-inaccessible
   ]) {
     assert.ok(flat.includes(expected), `list_members must invalidate "${expected}"`);
   }
+});
+
+test("membership changes refresh Thing surfaces whose RLS access came from the List", () => {
+  const targets = targetsForEvent({ table: "list_members", eventType: "DELETE", old: { list_id: "list-1" } });
+  const families = targets.map((target) => target[0]);
+  for (const family of ["thing", "thing-comments", "thing-activity", "court", "list-things", "bucket-items", "accessible-things", "catchup"]) {
+    assert.ok(families.includes(family), `list_members must refresh ${family} access`);
+  }
+  assert.ok(targets.some((target) => targetKey(target) === targetKey(["thing"])));
+  assert.ok(targets.some((target) => targetKey(target) === targetKey(["list-things", "list-1"])));
 });
 
 test("list_messages -> also invalidates hub-conversation (the Hub detail view of the same List), not only the sidebar index", () => {

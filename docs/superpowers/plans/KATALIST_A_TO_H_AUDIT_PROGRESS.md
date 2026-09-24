@@ -475,6 +475,12 @@ concurrently; the isolated rerun passed all 15, so this is not counted as a
 product regression.
 
 **Still required before T06 closure:**
+- **2026-09-25 follow-up:** Hub's unread/mention aggregate failure already
+  produced explicit `unknown` badges, but their tooltips incorrectly claimed
+  the app was "retrying" without a scheduled retry. The loaded-conversation
+  rail now shows a "Retry counts" action that refetches the aggregate and
+  uses truthful unavailable labels. This is local UI behaviour only; it does
+  not verify the undeployed RPC in production.
 - **2026-09-25 production-only read-only check:** the user supplied
   `https://katalist-web.vercel.app/` and signed into an existing account in
   the browser. Court, the specified existing List detail, Lists index,
@@ -549,6 +555,22 @@ delivery claim is made because this migration is not deployed.
 INSERT/UPDATE/DELETE (especially membership DELETE), live reconnect and
 focus timing, and route-level request-volume measurements. These remain part
 of the later code-first release validation pass.
+
+**2026-09-25 routing follow-up:** a source/consumer audit found three missed
+refresh paths, each reproduced by a failing routing test before correction:
+comment/attachment events did not refresh all List/Bucket/Catch Up Thing
+overview counts; List renames did not refresh Thing projections embedding the
+List name or upcoming meeting labels; and List membership changes did not
+refetch Thing surfaces even though checked-in `can_view_thing` RLS can grant
+access through List membership. The corrected map preserves a scoped
+`["list-things", listId]` target when the List ID is known, but keeps broad
+Thing/other collection targets where the event payload cannot identify
+affected Thing IDs. These tests prove routing, not live delivery or deployed
+RLS; the production-only constraint below remains unchanged.
+Local verification after this follow-up: 632/632 unit tests, 15/15 isolated
+read-only browser smokes, clean typecheck/build, and lint at 0 errors/75
+pre-existing warnings. The browser smokes cover anonymous entry routes, not
+authenticated T06/T07 delivery or production migration behaviour.
 
 **Production-only constraint:** the authenticated production pages above
 provide read-only baseline evidence only. The T07 branch is not deployed,
