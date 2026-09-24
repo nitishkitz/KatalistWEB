@@ -676,6 +676,7 @@ export function ThingDetailContent({
         body: text,
         attachments: atts.length > 0 ? atts : undefined,
         draftRevision: submittedRevision,
+        epoch: getIdentityEpoch(qc).epoch,
       },
       {
         onError: () => {
@@ -1046,7 +1047,7 @@ export function ThingDetailContent({
                       tab === "comments" ? "bg-[#f0eafe] text-[#975ee2]" : "bg-[#eef0f6] text-[#2b2e55]",
                     )}
                   >
-                    {comments.length}
+                    {comments.length}{thread.commentsHasMore ? "+" : ""}
                   </span>
                 </button>
                 {(thing.unreadCommentCount ?? 0) > 0 && (
@@ -1071,6 +1072,12 @@ export function ThingDetailContent({
 
             {tab === "comments" ? (
               <div className="pt-3 space-y-3">
+                {thread.commentsHasMore || thread.commentsOlderError ? (
+                  <button type="button" disabled={thread.commentsLoadingOlder} onClick={() => void thread.loadOlderComments()} className="w-full rounded-lg border border-border px-3 py-2 text-xs text-primary disabled:opacity-50">
+                    {thread.commentsLoadingOlder ? "Loading older comments…" : thread.commentsOlderError ? "Couldn't load older comments. Retry" : "Load older comments"}
+                  </button>
+                ) : null}
+                {thread.commentsError && comments.length === 0 ? <p role="alert" className="text-xs text-destructive">Couldn't load comments. Retry by reopening this Thing.</p> : null}
                 {comments.length === 0 ? (
                   <p className="text-[12px] text-muted-foreground py-3 italic text-center">
                     No comments yet.
@@ -1197,7 +1204,13 @@ export function ThingDetailContent({
               </div>
             ) : (
               <ul className="space-y-2 pt-3">
-                {events.slice(0, 4).map((event) => (
+                {thread.activityHasMore || thread.activityOlderError ? (
+                  <li><button type="button" disabled={thread.activityLoadingOlder} onClick={() => void thread.loadOlderActivity()} className="w-full rounded-lg border border-border px-3 py-2 text-xs text-primary disabled:opacity-50">
+                    {thread.activityLoadingOlder ? "Loading older activity…" : thread.activityOlderError ? "Couldn't load older activity. Retry" : "Load older activity"}
+                  </button></li>
+                ) : null}
+                {thread.activityError && events.length === 0 ? <li role="alert" className="text-xs text-destructive">Couldn't load activity. Retry by reopening this Thing.</li> : null}
+                {events.map((event) => (
                   <li key={event.id} className="text-[11.5px] text-muted-foreground">
                     <span className="font-medium text-foreground">
                       {event.event.replaceAll("_", " ")}
@@ -1506,7 +1519,7 @@ export function ThingDetailContent({
             >
               {id}
               {id === "comments" && comments.length > 0 ? (
-                <span className="ml-1 text-[10px] text-primary">{comments.length}</span>
+                <span className="ml-1 text-[10px] text-primary">{comments.length}{thread.commentsHasMore ? "+" : ""}</span>
               ) : null}
             </button>
           ))}
@@ -1706,6 +1719,12 @@ export function ThingDetailContent({
         <section className="pt-4">
           {tab === "comments" ? (
             <div className="space-y-2">
+              {thread.commentsHasMore || thread.commentsOlderError ? (
+                <button type="button" disabled={thread.commentsLoadingOlder} onClick={() => void thread.loadOlderComments()} className="w-full rounded-md border border-border px-2 py-1 text-xs text-primary disabled:opacity-50">
+                  {thread.commentsLoadingOlder ? "Loading older comments…" : thread.commentsOlderError ? "Couldn't load older comments. Retry" : "Load older comments"}
+                </button>
+              ) : null}
+              {thread.commentsError && comments.length === 0 ? <p role="alert" className="text-xs text-destructive">Couldn't load comments. Retry by reopening this Thing.</p> : null}
               {comments.length === 0 ? (
                 <p className="text-[12px] text-muted-foreground">No comments yet.</p>
               ) : (
@@ -1781,6 +1800,12 @@ export function ThingDetailContent({
             </div>
           ) : (
             <ul className="space-y-2">
+              {thread.activityHasMore || thread.activityOlderError ? (
+                <li><button type="button" disabled={thread.activityLoadingOlder} onClick={() => void thread.loadOlderActivity()} className="w-full rounded-md border border-border px-2 py-1 text-xs text-primary disabled:opacity-50">
+                  {thread.activityLoadingOlder ? "Loading older activity…" : thread.activityOlderError ? "Couldn't load older activity. Retry" : "Load older activity"}
+                </button></li>
+              ) : null}
+              {thread.activityError && events.length === 0 ? <li role="alert" className="text-xs text-destructive">Couldn't load activity. Retry by reopening this Thing.</li> : null}
               {events.length === 0 ? (
                 <p className="text-[12px] text-muted-foreground">Movement will appear here.</p>
               ) : (

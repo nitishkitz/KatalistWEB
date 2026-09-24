@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useSession } from "@/hooks/useSession";
 import { usePresence } from "@/features/people/presence";
 import { supabase } from "@/integrations/supabase/client";
-import { useListMessages } from "@/features/lists/use-list-messages";
+import { useListMessages, useListMessageSearch, useListSystemHistory, type ListChatMessage } from "@/features/lists/use-list-messages";
 import { ListChatPanel, type ListChatPanelHandle } from "@/features/lists/ListChatPanel";
 import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
@@ -46,6 +46,7 @@ export function ConversationWorkspace({
   const { conversation } = useConversation(listId);
   const { lists } = useLists();
   const chat = useListMessages(listId);
+  const systemHistory = useListSystemHistory(listId, tab === "call");
 
   // Opening a conversation here — via the sidebar, a direct link, or
   // anywhere else — should clear its unread state, same as opening it
@@ -77,7 +78,7 @@ export function ConversationWorkspace({
     (user?.user_metadata?.display_name as string | undefined) || user?.email?.split("@")[0] || "You";
   const call = useListCall(listId, selfId, selfName);
 
-  const callHistory = useMemo(() => chat.messages.filter((m) => m.kind === "system"), [chat.messages]);
+  const callHistory = systemHistory.messages;
   const chatAttachments = useMemo(
     () =>
       chat.messages
@@ -117,7 +118,8 @@ export function ConversationWorkspace({
   const [filesSearching, setFilesSearching] = useState(false);
   const [imagePreview, setImagePreview] = useState<{ name: string; url: string } | null>(null);
   const chatPanelRef = useRef<ListChatPanelHandle | null>(null);
-  const [pendingScrollToMessageId, setPendingScrollToMessageId] = useState<string | null>(null);
+  const [pendingSearchMessage, setPendingSearchMessage] = useState<ListChatMessage | null>(null);
+  const messageSearch = useListMessageSearch(listId, debouncedQuery);
 
   useEffect(() => {
     const id = setTimeout(() => setDebouncedQuery(searchQuery.trim()), 250);
@@ -125,6 +127,11 @@ export function ConversationWorkspace({
   }, [searchQuery]);
 
   useEffect(() => {
+    if (chat.accessLost) {
+      setFileResults([]);
+      setPendingSearchMessage(null);
+      return;
+    }
     if (!debouncedQuery || debouncedQuery.length < 2) {
       setFileResults([]);
       return;
@@ -141,22 +148,21 @@ export function ConversationWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [listId, debouncedQuery, qc]);
+  }, [listId, debouncedQuery, qc, chat.accessLost]);
 
   useEffect(() => {
-    if (tab === "chat" && pendingScrollToMessageId) {
-      chatPanelRef.current?.scrollToMessage(pendingScrollToMessageId);
-      setPendingScrollToMessageId(null);
+    if (tab === "chat" && pendingSearchMessage) {
+      chatPanelRef.current?.showMessageResult(pendingSearchMessage);
+      setPendingSearchMessage(null);
     }
-  }, [tab, pendingScrollToMessageId]);
+  }, [tab, pendingSearchMessage]);
 
   const messageResults = useMemo(() => {
     const q = debouncedQuery.toLowerCase();
-    if (!q || q.length < 2) return [];
-    return chat.messages
-      .filter((m) => m.kind !== "system" && (m.body.toLowerCase().includes(q) || m.author.toLowerCase().includes(q)))
-      .slice(-20);
-  }, [chat.messages, debouncedQuery]);
+    if (!q || q.length < 2 || chat.accessLost) return [];
+    return (messageSearch.data ?? []).filter((m) => m.kind !== "system");
+  }, [messageSearch.data, debouncedQuery, chat.accessLost]);
+  const visibleFileResults = chat.accessLost ? [] : fileResults;
 
   const closeSearch = () => {
     setSearchOpen(false);
@@ -373,6 +379,7 @@ export function ConversationWorkspace({
             <input
               autoFocus
               value={searchQuery}
+              maxLength={80}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Escape" && closeSearch()}
               placeholder="Search messages and files in this conversation…"
@@ -394,7 +401,11 @@ export function ConversationWorkspace({
                 <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
                   Messages {messageResults.length > 0 ? `(${messageResults.length})` : ""}
                 </p>
-                {messageResults.length === 0 ? (
+                {messageSearch.isFetching ? (
+                  <p className="text-[11.5px] text-[#8487a7]">Searching all messages…</p>
+                ) : messageSearch.error ? (
+                  <p role="alert" className="text-[11.5px] text-red-600">Message search failed. Edit your search to retry.</p>
+                ) : messageResults.length === 0 ? (
                   <p className="text-[11.5px] text-[#8487a7]">No matching messages.</p>
                 ) : (
                   <div className="space-y-1">
@@ -404,7 +415,7 @@ export function ConversationWorkspace({
                         type="button"
                         onClick={() => {
                           onTabChange("chat");
-                          setPendingScrollToMessageId(m.id);
+                          setPendingSearchMessage(m);
                           closeSearch();
                         }}
                         className="flex w-full items-start gap-2 rounded-[9px] px-2 py-1.5 text-left hover:bg-[#faf9fe]"
@@ -415,20 +426,21 @@ export function ConversationWorkspace({
                         </span>
                       </button>
                     ))}
+                    {messageSearch.hasMore ? <button type="button" disabled={messageSearch.isLoadingMore} onClick={() => void messageSearch.loadMore()} className="w-full rounded-lg border border-[#ebecf7] px-3 py-1 text-xs text-[#6638ec] disabled:opacity-50">{messageSearch.isLoadingMore ? "Loading more…" : "Load more message results"}</button> : null}
                   </div>
                 )}
               </div>
               <div>
                 <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
-                  Files {fileResults.length > 0 ? `(${fileResults.length})` : ""}
+                  Files {visibleFileResults.length > 0 ? `(${visibleFileResults.length})` : ""}
                 </p>
                 {filesSearching ? (
                   <p className="text-[11.5px] text-[#8487a7]">Searching…</p>
-                ) : fileResults.length === 0 ? (
+                ) : visibleFileResults.length === 0 ? (
                   <p className="text-[11.5px] text-[#8487a7]">No matching files.</p>
                 ) : (
                   <div className="space-y-1">
-                    {fileResults.map((f) => (
+                    {visibleFileResults.map((f) => (
                       <button
                         key={f.id}
                         type="button"
@@ -452,7 +464,7 @@ export function ConversationWorkspace({
         {tab === "chat" ? (
           <ListChatPanel ref={chatPanelRef} listId={listId} placeholderName={title} />
         ) : tab === "files" ? (
-          <HubFilesPanel listId={listId} conversationTitle={title} chatAttachments={chatAttachments} />
+          <HubFilesPanel listId={listId} conversationTitle={title} chatAttachments={chatAttachments} chatAccessLost={chat.accessLost} />
         ) : (
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             <div className="flex flex-col items-center justify-center gap-4 p-6 text-center">
@@ -493,8 +505,6 @@ export function ConversationWorkspace({
                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Call history</p>
                 <div className="space-y-2">
                   {callHistory
-                    .slice()
-                    .reverse()
                     .map((m) => (
                       <div key={m.id} className="flex items-center gap-3 rounded-[10px] border border-[#eef0f6] px-3 py-2.5">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0e9fb] text-[#6638ec]">
@@ -515,6 +525,7 @@ export function ConversationWorkspace({
                         </div>
                       </div>
                     ))}
+                  {systemHistory.hasMore ? <button type="button" disabled={systemHistory.isLoadingMore} onClick={() => void systemHistory.loadMore()} className="w-full rounded-lg border border-[#eef0f6] px-3 py-2 text-xs text-[#6638ec] disabled:opacity-50">{systemHistory.isLoadingMore ? "Loading older calls…" : "Load older call history"}</button> : null}
                 </div>
               </div>
             )}

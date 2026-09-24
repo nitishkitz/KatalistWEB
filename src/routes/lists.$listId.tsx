@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -69,7 +69,11 @@ import { format, isToday, isTomorrow } from "date-fns";
 import { useListThings } from "@/features/lists/use-list-things";
 import { useList } from "@/features/lists/use-lists";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { useListMessages, type ChatAttachment } from "@/features/lists/use-list-messages";
+import { useListMessages, useListMessageSearch, type ChatAttachment } from "@/features/lists/use-list-messages";
+import { useSessionDraft } from "@/features/drafts/use-session-draft";
+import { getChatScroll, saveChatScroll } from "@/features/lists/chat-scroll-state";
+import { getDraft, getDraftRevision, setDraft } from "@/features/drafts/session-drafts";
+import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { formatFileSize } from "@/lib/file-utils";
 import { domainErrorMessage, extractErrorMessage } from "@/lib/domain-error";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
@@ -148,6 +152,10 @@ function ListDetailPage() {
   useLocalVersion();
   const { list, isLoading, error, refetch: refetchList } = useList(listId);
   const chat = useListMessages(listId);
+  const chatDraft = useSessionDraft("list-chat", listId, "");
+  const msg = chatDraft.value;
+  const stagedChatAttachment = chatDraft.attachments?.[0] as ChatAttachment | undefined;
+  const setMsg = chatDraft.write;
   const { things: listThings, myActorId } = useListThings(listId);
   const { user, session } = useSession();
   const preview = isPreviewSession(session);
@@ -314,9 +322,63 @@ function ListDetailPage() {
   // Chat tab state
   const [chatSearch, setChatSearch] = useState("");
   const [chatSearchOpen, setChatSearchOpen] = useState(false);
-  const [msg, setMsg] = useState("");
+  const [debouncedChatSearch, setDebouncedChatSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedChatSearch(chatSearch.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [chatSearch]);
+  const chatSearchQuery = useListMessageSearch(listId, debouncedChatSearch);
   const [uploadingFile, setUploadingFile] = useState(false);
+  useBlockWhile((tab === "chat" && (Boolean(msg.trim()) || Boolean(stagedChatAttachment))) || uploadingFile, "list-chat-draft");
   const chatFileInputRef = useRef<HTMLInputElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const olderChatAnchorRef = useRef<{ height: number; top: number } | null>(null);
+  const chatEdgeRef = useRef<string | null>(null);
+  const chatNearBottomRef = useRef(true);
+  const chatRestoredRef = useRef(false);
+  const chatRenderedListRef = useRef(listId);
+  const [newChatMessages, setNewChatMessages] = useState(false);
+  useEffect(() => {
+    if (tab !== "chat") {
+      chatRestoredRef.current = false;
+      chatEdgeRef.current = null;
+    }
+  }, [tab]);
+  useLayoutEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    if (chatRenderedListRef.current !== listId) {
+      chatRenderedListRef.current = listId;
+      chatRestoredRef.current = false;
+      chatEdgeRef.current = null;
+      olderChatAnchorRef.current = null;
+      chatNearBottomRef.current = true;
+      setNewChatMessages(false);
+    }
+    const anchor = olderChatAnchorRef.current;
+    if (anchor) {
+      el.scrollTop = anchor.top + el.scrollHeight - anchor.height;
+      olderChatAnchorRef.current = null;
+      return;
+    }
+    if (!chatRestoredRef.current && !chat.isLoading) {
+      const saved = getChatScroll(qc, listId);
+      el.scrollTop = saved && saved.fromBottom > 80 ? saved.top : el.scrollHeight;
+      chatNearBottomRef.current = !saved || saved.fromBottom <= 80;
+      chatRestoredRef.current = true;
+    }
+    const lastId = chat.messages.at(-1)?.id ?? null;
+    const previous = chatEdgeRef.current;
+    chatEdgeRef.current = lastId;
+    if (previous === null || previous === lastId || debouncedChatSearch.length >= 2) return;
+    if (chatNearBottomRef.current) el.scrollTop = el.scrollHeight;
+    else setNewChatMessages(true);
+  }, [chat.messages, chat.isLoading, qc, listId, debouncedChatSearch, tab]);
+  const loadOlderChat = async () => {
+    const el = chatScrollRef.current;
+    if (el) olderChatAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
+    try { await chat.loadOlder(); } catch { olderChatAnchorRef.current = null; }
+  };
 
   // Members tab state
   const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | "owner" | "collaborator" | "view_only">("all");
@@ -454,21 +516,21 @@ function ListDetailPage() {
     return { total, waiting, inProgress, completed, collaboratorsCount };
   }, [listThings, listCollaborators]);
 
-  // Chat search & filter (system call-history entries are always shown)
+  // Search is server-side across the authorized history, including pages not
+  // loaded in the timeline yet.
   const filteredChatMessages = useMemo(() => {
-    if (!chatSearch.trim()) return chat.messages;
-    const query = chatSearch.toLowerCase();
-    return chat.messages.filter(
-      (m) =>
-        m.kind === "system" ||
-        m.body.toLowerCase().includes(query) ||
-        m.author.toLowerCase().includes(query),
-    );
-  }, [chat.messages, chatSearch]);
+    if (chat.accessLost) return [];
+    if (debouncedChatSearch.length < 2) return chat.messages;
+    return chatSearchQuery.data ?? [];
+  }, [chat.accessLost, chat.messages, debouncedChatSearch, chatSearchQuery.data]);
 
   // Upload a chat attachment (any file type) and post it as a message.
   const handleChatFile = async (file: File | null | undefined) => {
     if (!file) return;
+    if (stagedChatAttachment) {
+      toast.error("Send or remove the current attachment first.");
+      return;
+    }
     const MAX_BYTES = 50 * 1024 * 1024; // 50 MB
     if (file.size > MAX_BYTES) {
       toast.error("That file is larger than 50 MB.");
@@ -477,8 +539,12 @@ function ListDetailPage() {
     setUploadingFile(true);
     try {
       const attachment = await chat.uploadAttachment(file);
-      await chat.send.mutateAsync({ body: msg.trim(), attachment });
-      setMsg("");
+      const current = getDraft<string>(qc, "list-chat", listId);
+      if (current?.attachments?.length) {
+        toast.error("Send or remove the current attachment first.");
+        return;
+      }
+      setDraft(qc, "list-chat", listId, { value: current?.value ?? "", attachments: [attachment], metadata: current?.metadata });
     } catch (err) {
       toast.error(domainErrorMessage(err));
     } finally {
@@ -1030,6 +1096,7 @@ function ListDetailPage() {
                     <input
                       autoFocus
                       value={chatSearch}
+                      maxLength={80}
                       onChange={(e) => setChatSearch(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === "Escape") {
@@ -1041,11 +1108,25 @@ function ListDetailPage() {
                       className="h-[38px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
                     />
                   </div>
+                  {debouncedChatSearch.length >= 2 ? <p className="mt-1 text-[11px] text-[#8487a7]">{chatSearchQuery.isFetching ? "Searching all messages…" : chatSearchQuery.error ? "Search failed. Edit the query to retry." : "Search covers the full conversation history."}</p> : null}
                 </div>
               )}
 
-              <div className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-                {filteredChatMessages.length === 0 ? (
+              <div ref={chatScrollRef} onScroll={(event) => {
+                const el = event.currentTarget;
+                const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+                chatNearBottomRef.current = fromBottom < 80;
+                saveChatScroll(qc, listId, el.scrollTop, fromBottom);
+                if (chatNearBottomRef.current) setNewChatMessages(false);
+              }} className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                {!debouncedChatSearch && (chat.hasMore || chat.olderError) ? (
+                  <button type="button" disabled={chat.isLoadingOlder} onClick={() => void loadOlderChat()} className="w-full rounded-lg border border-[#ebecf7] px-3 py-2 text-xs font-medium text-[#6638ec] disabled:opacity-50">
+                    {chat.isLoadingOlder ? "Loading older messages…" : chat.olderError ? "Couldn't load older messages. Retry" : "Load older messages"}
+                  </button>
+                ) : null}
+                {debouncedChatSearch.length >= 2 && chatSearchQuery.hasMore ? <button type="button" disabled={chatSearchQuery.isLoadingMore} onClick={() => void chatSearchQuery.loadMore()} className="w-full rounded-lg border border-[#ebecf7] px-3 py-2 text-xs text-[#6638ec] disabled:opacity-50">{chatSearchQuery.isLoadingMore ? "Loading more results…" : "Load more search results"}</button> : null}
+                {chat.error && chat.messages.length === 0 ? <p role="alert" className="text-xs text-red-600">Couldn't load messages. Reopen this List to retry.</p> : null}
+                {chat.error && filteredChatMessages.length === 0 ? null : filteredChatMessages.length === 0 ? (
                   <div className="py-12 text-center">
                     <MessageSquare className="mx-auto mb-1.5 h-7 w-7 text-[#c5cae0]" />
                     <p className="text-[12.5px] font-medium text-[#000533]">No messages yet</p>
@@ -1066,6 +1147,7 @@ function ListDetailPage() {
                             {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
                           </span>
                         </span>
+                        {m.delivery === "failed" ? <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="text-[11px] text-red-600 underline">Retry entry</button> : null}
                       </div>
                     ) : (
                       <div key={m.id} className="flex items-start gap-3">
@@ -1084,6 +1166,14 @@ function ListDetailPage() {
                           </div>
                           {m.body ? <p className="mt-0.5 text-[12px] text-[#1a2345]">{m.body}</p> : null}
                           {m.attachment ? <ChatAttachmentView attachment={m.attachment} /> : null}
+                          {m.delivery === "pending" ? <p className="text-[11px] text-[#8487a7]">Sending…</p> : null}
+                          {m.delivery === "failed" ? (
+                            <div className="mt-1 flex gap-2 text-[11px] text-red-600">
+                              <span>Couldn't send.</span>
+                              <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="font-semibold underline">Retry</button>
+                              <button type="button" onClick={() => chat.removeFailed(m.id)} className="underline">Remove</button>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     ),
@@ -1091,20 +1181,29 @@ function ListDetailPage() {
                 )}
               </div>
 
+              {newChatMessages ? <button type="button" onClick={() => {
+                const el = chatScrollRef.current;
+                if (el) el.scrollTop = el.scrollHeight;
+                chatNearBottomRef.current = true;
+                setNewChatMessages(false);
+              }} className="mt-1 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground">New messages</button> : null}
+
               {viewOnly ? (
                 <p className="mt-3 rounded-[8px] bg-[#f6f8fd] p-2.5 text-center text-[11.5px] text-[#6a769c]">
                   View-only members can observe the conversation and comment on Things.
                 </p>
               ) : (
+                <>
+                {stagedChatAttachment ? <div className="mt-2 flex items-center gap-2 rounded-lg border border-[#ebecf7] px-3 py-2 text-xs text-[#3d3f74]"><Paperclip className="h-3.5 w-3.5" /><span className="min-w-0 flex-1 truncate">{stagedChatAttachment.name} ready to send</span><button type="button" onClick={() => chatDraft.write(msg, [])} className="text-[#8487a7] hover:text-red-600">Remove</button></div> : null}
                 <form
                   className="mt-4 flex items-center gap-2 rounded-[8px] border border-[#e5e7f6] bg-white px-3 py-2"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!msg.trim()) return;
-                    void chat.send.mutateAsync(msg.trim()).then(
-                      () => setMsg(""),
-                      (err) => toast.error(domainErrorMessage(err)),
-                    );
+                    const submittedBody = msg.trim();
+                    if ((!submittedBody && !stagedChatAttachment) || chat.send.isPending) return;
+                    chatDraft.clear();
+                    const draftRevision = getDraftRevision(qc, "list-chat", listId);
+                    void chat.send.mutateAsync({ body: submittedBody, attachment: stagedChatAttachment, draftRevision }).catch((err) => toast.error(domainErrorMessage(err)));
                   }}
                 >
                   <input
@@ -1116,7 +1215,7 @@ function ListDetailPage() {
                   <button
                     type="button"
                     onClick={() => chatFileInputRef.current?.click()}
-                    disabled={uploadingFile}
+                    disabled={uploadingFile || Boolean(stagedChatAttachment)}
                     className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-40"
                     aria-label="Attach file"
                     title="Attach a file"
@@ -1145,12 +1244,13 @@ function ListDetailPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={!msg.trim()}
+                    disabled={(!msg.trim() && !stagedChatAttachment) || chat.send.isPending || uploadingFile}
                     className="inline-flex h-[34px] items-center rounded-[6px] bg-[#975ee2] px-4 text-[13px] font-medium text-white hover:brightness-95 transition disabled:opacity-40 cursor-pointer"
                   >
                     Send
                   </button>
                 </form>
+                </>
               )}
             </div>
 

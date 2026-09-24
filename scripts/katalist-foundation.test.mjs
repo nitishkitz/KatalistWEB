@@ -347,8 +347,8 @@ test("Live List Detail / Things / Chat are wired to the same personal Shred lens
 
   const chat = readFileSync(new URL("../src/features/lists/use-list-messages.ts", import.meta.url), "utf8");
   assert.match(chat, /isPersonallyShreddedList/);
-  assert.match(chat, /if \(hidden\) throw/);
-  assert.match(chat, /hidden\s*\n\s*\? \[\]/);
+  assert.match(chat, /if \(hidden \|\| accessLost\) throw/);
+  assert.match(chat, /hidden \|\| accessLost \? \[\]/);
 });
 
 test("Atomic assign_outside_katalist SQL composes existing primitives on the same Thing", () => {

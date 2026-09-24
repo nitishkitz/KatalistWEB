@@ -18,6 +18,13 @@ export const keys = {
   catchup: (profileId: string | undefined, context: string) =>
     ["catchup", profileId, context] as const,
   listMeetings: (listId: string) => ["list-meetings", listId] as const,
+  listMessagesPages: (listId: string) => ["list-messages", listId, "pages"] as const,
+  listMessageSearch: (listId: string, search: string) => ["list-message-search", listId, search] as const,
+  listMessageAttachments: (listId: string) => ["list-message-attachments", listId] as const,
+  listSystemHistory: (listId: string) => ["list-system-history", listId] as const,
+  listPinnedMessages: (listId: string) => ["list-pinned-messages", listId] as const,
+  thingCommentsPages: (thingId: string | null) => ["thing-comments", thingId, "pages"] as const,
+  thingActivityPages: (thingId: string | null) => ["thing-activity", thingId, "pages"] as const,
   profile: (profileId: string | undefined) => ["profile", profileId] as const,
   trophy: (profileId: string | undefined) => ["trophy", profileId] as const,
   notifications: (profileId: string | undefined) =>

@@ -119,6 +119,10 @@ export function RealtimeInvalidationProvider() {
           const listId = payload.old.list_id;
           void qc.invalidateQueries({ queryKey: ["list", listId] });
           void qc.invalidateQueries({ queryKey: ["list-messages", listId] });
+          void qc.invalidateQueries({ queryKey: ["list-message-attachments", listId] });
+          void qc.invalidateQueries({ queryKey: ["list-system-history", listId] });
+          void qc.invalidateQueries({ queryKey: ["list-message-search", listId] });
+          void qc.invalidateQueries({ queryKey: ["list-pinned-messages", listId] });
           void qc.invalidateQueries({ queryKey: ["hub-conversation", listId] });
           void qc.invalidateQueries({ queryKey: ["hub-files", listId] });
         }

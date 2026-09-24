@@ -1,9 +1,11 @@
 import "./dom-test-setup.mjs";
 import assert from "node:assert/strict";
 import { test, mock } from "node:test";
-import { createElement as h } from "react";
+import { createElement as h, createRef } from "react";
 import { act } from "react";
 import { render, cleanup } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlockerProvider";
 
 /**
  * G04: ListChatPanel used to unconditionally jump to the bottom on every
@@ -22,17 +24,24 @@ import { render, cleanup } from "@testing-library/react";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let chatMessages = [];
+let chatAccessLost = false;
 mock.module("@/features/lists/use-list-messages", {
   namedExports: {
     useListMessages: () => ({
-      messages: chatMessages,
+      messages: chatAccessLost ? [] : chatMessages,
       pinnedMessages: [],
       send: { mutateAsync: async () => {}, isPending: false },
       sendSystem: { mutateAsync: async () => {} },
       pin: { mutateAsync: async () => {} },
       uploadAttachment: async () => ({ key: "k", name: "n", mime: null, size: 1 }),
       isLoading: false,
+      hasMore: false,
+      olderError: false,
+      accessLost: chatAccessLost,
+      error: chatAccessLost ? { status: 403, message: "permission denied" } : null,
     }),
+    useListMessageSearch: () => ({ data: [], isFetching: false, error: null, hasMore: false }),
+    useListPinnedMessages: () => ({ messages: [], hasMore: false }),
   },
 });
 mock.module("@/features/hub/use-conversations", {
@@ -53,6 +62,10 @@ mock.module("@/hooks/useSession", {
 mock.module("sonner", { namedExports: { toast: { success: () => {}, error: () => {} } } });
 
 const { ListChatPanel } = await import("@/features/lists/ListChatPanel");
+const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false, gcTime: 0 } } });
+function panel(listId, ref) {
+  return h(QueryClientProvider, { client: qc }, h(InteractionBlockerProvider, null, h(ListChatPanel, { listId, ref })));
+}
 
 function setScrollMetrics(container, { scrollTop, scrollHeight, clientHeight }) {
   const el = container.querySelector(".overflow-y-auto");
@@ -66,14 +79,14 @@ test("near the bottom already: a new message auto-scrolls and shows no New messa
   chatMessages = [{ id: "m1", body: "hi", author: "A", authorId: "a", avatarUrl: null, at: "x", kind: "message", attachment: null, pinnedAt: null, mentionedProfileIds: [] }];
   let container;
   await act(async () => {
-    const result = render(h(ListChatPanel, { listId: "list-1" }));
+    const result = render(panel("list-1"));
     container = result.container;
   });
   const el = setScrollMetrics(container, { scrollTop: 920, scrollHeight: 1000, clientHeight: 100 }); // near bottom
 
   chatMessages = [...chatMessages, { id: "m2", body: "hey", author: "B", authorId: "b", avatarUrl: null, at: "y", kind: "message", attachment: null, pinnedAt: null, mentionedProfileIds: [] }];
   await act(async () => {
-    render(h(ListChatPanel, { listId: "list-1" }), { container });
+    render(panel("list-1"), { container });
   });
 
   assert.equal(el.scrollTop, el.scrollHeight, "auto-scrolled to bottom");
@@ -86,7 +99,7 @@ test("scrolled up reading history: a new message does NOT auto-scroll, and shows
   chatMessages = [{ id: "m1", body: "hi", author: "A", authorId: "a", avatarUrl: null, at: "x", kind: "message", attachment: null, pinnedAt: null, mentionedProfileIds: [] }];
   let container;
   await act(async () => {
-    const result = render(h(ListChatPanel, { listId: "list-2" }));
+    const result = render(panel("list-2"));
     container = result.container;
   });
   const el = setScrollMetrics(container, { scrollTop: 0, scrollHeight: 1000, clientHeight: 100 }); // scrolled to the very top
@@ -97,7 +110,7 @@ test("scrolled up reading history: a new message does NOT auto-scroll, and shows
 
   chatMessages = [...chatMessages, { id: "m2", body: "hey", author: "B", authorId: "b", avatarUrl: null, at: "y", kind: "message", attachment: null, pinnedAt: null, mentionedProfileIds: [] }];
   await act(async () => {
-    render(h(ListChatPanel, { listId: "list-2" }), { container });
+    render(panel("list-2"), { container });
   });
 
   assert.equal(el.scrollTop, 0, "scroll position must not jump -- the user is still reading history");
@@ -110,7 +123,7 @@ test("clicking New messages scrolls to bottom and dismisses the control", async 
   chatMessages = [{ id: "m1", body: "hi", author: "A", authorId: "a", avatarUrl: null, at: "x", kind: "message", attachment: null, pinnedAt: null, mentionedProfileIds: [] }];
   let container;
   await act(async () => {
-    const result = render(h(ListChatPanel, { listId: "list-3" }));
+    const result = render(panel("list-3"));
     container = result.container;
   });
   const el = setScrollMetrics(container, { scrollTop: 0, scrollHeight: 1000, clientHeight: 100 });
@@ -120,7 +133,7 @@ test("clicking New messages scrolls to bottom and dismisses the control", async 
 
   chatMessages = [...chatMessages, { id: "m2", body: "hey", author: "B", authorId: "b", avatarUrl: null, at: "y", kind: "message", attachment: null, pinnedAt: null, mentionedProfileIds: [] }];
   await act(async () => {
-    render(h(ListChatPanel, { listId: "list-3" }), { container });
+    render(panel("list-3"), { container });
   });
   assert.ok(container.textContent.includes("New messages"));
 
@@ -134,4 +147,23 @@ test("clicking New messages scrolls to bottom and dismisses the control", async 
   assert.equal(container.textContent.includes("New messages"), false, "and dismisses itself");
 
   cleanup();
+});
+
+test("confirmed access loss hides a previously focused full-history result", async () => {
+  chatAccessLost = false;
+  chatMessages = [];
+  const ref = createRef();
+  const view = render(panel("list-access", ref));
+  await act(async () => ref.current.showMessageResult({
+    id: "old", body: "private search result", author: "A", authorId: "a", avatarUrl: null,
+    at: "2026-09-24T12:00:00Z", kind: "message", attachment: null, pinnedAt: null,
+    mentionedProfileIds: [],
+  }));
+  assert.ok(view.container.textContent.includes("private search result"));
+  chatAccessLost = true;
+  await act(async () => view.rerender(panel("list-access", ref)));
+  assert.equal(view.container.textContent.includes("private search result"), false);
+  assert.ok(view.container.textContent.includes("Couldn't load messages"));
+  cleanup();
+  chatAccessLost = false;
 });

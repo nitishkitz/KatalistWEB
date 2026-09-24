@@ -1,6 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -11,8 +10,9 @@ import { currentDemoPerson } from "@/features/demo/identities";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { getDraft, setDraft, getDraftRevision } from "@/features/drafts/session-drafts";
 import type { ThingFile } from "@/domain/thing";
-
-import { resolveActorPeople } from "@/features/people/resolve-actors";
+import { flattenHistory, type HistoryCursor, type HistoryPage } from "@/lib/history-pages";
+import { classifyAsyncError } from "@/lib/query-policy";
+import { fetchThingActivityPage, fetchThingCommentsPage } from "./fetch-thing-history";
 
 export type ThingComment = {
   id: string;
@@ -46,19 +46,7 @@ export type ThingActivity = { id: string; event: string; at: string };
 // the latter is also true when the user typed something new and then
 // deliberately cleared it back to empty, which must NOT be treated as
 // "unchanged" and overwritten by a stale failed-submit restore.
-export type PostCommentInput = { thingId: string; body: string; attachments?: ThingFile[]; draftRevision?: number };
-
-function parseCommentBody(rawBody: string): { body: string; attachments?: ThingFile[] } {
-  const match = rawBody.match(/\n?<!--attachments:(.*?)-->/s);
-  if (!match) return { body: rawBody };
-  try {
-    const attachments = JSON.parse(match[1]);
-    const cleanBody = rawBody.replace(match[0], "").trim();
-    return { body: cleanBody, attachments: Array.isArray(attachments) ? attachments : undefined };
-  } catch {
-    return { body: rawBody };
-  }
-}
+export type PostCommentInput = { thingId: string; body: string; attachments?: ThingFile[]; draftRevision?: number; epoch?: number };
 
 /**
  * `loadActivity` defers the (usually unopened) Activity tab's own fetch
@@ -75,52 +63,27 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
   const qc = useQueryClient();
   useLocalVersion();
 
-  const commentsQuery = useQuery({
-    queryKey: ["thing-comments", thingId],
+  const commentsQuery = useInfiniteQuery<HistoryPage<ThingComment>, Error, InfiniteData<HistoryPage<ThingComment>, HistoryCursor | null>, (string | null)[], HistoryCursor | null>({
+    queryKey: ["thing-comments", thingId, "pages"],
     enabled: Boolean(thingId) && !preview,
-    queryFn: async (): Promise<ThingComment[]> => {
-      const { data, error } = await supabase
-        .from("thing_comments")
-        .select("id, body, created_at, author_actor_id")
-        .eq("thing_id", thingId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      const rows = data ?? [];
-      const actorIds = [...new Set(rows.map((c) => c.author_actor_id).filter(Boolean))];
-      const people = await resolveActorPeople(actorIds);
-      const currentUserName =
-        (session?.user?.user_metadata?.display_name as string | undefined) ||
-        (session?.user?.user_metadata?.name as string | undefined);
-
-      return rows.map((c) => {
-        const person = c.author_actor_id ? people.get(c.author_actor_id) : null;
-        const parsed = parseCommentBody(c.body);
-        return {
-          id: c.id,
-          body: parsed.body,
-          author: person?.name || currentUserName || "Member",
-          avatarUrl: person?.avatarUrl ?? null,
-          at: c.created_at,
-          authorActorId: c.author_actor_id,
-          attachments: parsed.attachments,
-        };
-      });
-    },
+    initialPageParam: null as HistoryCursor | null,
+    getNextPageParam: (page) => page.nextCursor,
+    queryFn: ({ pageParam, signal }) => fetchThingCommentsPage(
+      thingId!, pageParam, signal,
+      (session?.user?.user_metadata?.display_name as string | undefined) ||
+      (session?.user?.user_metadata?.name as string | undefined) || "Member",
+    ),
   });
 
-  const activityQuery = useQuery({
-    queryKey: ["thing-activity", thingId],
+  const activityQuery = useInfiniteQuery<HistoryPage<ThingActivity>, Error, InfiniteData<HistoryPage<ThingActivity>, HistoryCursor | null>, (string | null)[], HistoryCursor | null>({
+    queryKey: ["thing-activity", thingId, "pages"],
     enabled: Boolean(thingId) && !preview && loadActivity,
-    queryFn: async (): Promise<ThingActivity[]> => {
-      const { data, error } = await supabase
-        .from("thing_activity")
-        .select("id, event, created_at")
-        .eq("thing_id", thingId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((e) => ({ id: e.id, event: e.event, at: e.created_at }));
-    },
+    initialPageParam: null as HistoryCursor | null,
+    getNextPageParam: (page) => page.nextCursor,
+    queryFn: ({ pageParam, signal }) => fetchThingActivityPage(thingId!, pageParam, signal),
   });
+  const commentsAccessLost = commentsQuery.error != null && ["unauthenticated", "forbidden", "not-found"].includes(classifyAsyncError(commentsQuery.error));
+  const activityAccessLost = activityQuery.error != null && ["unauthenticated", "forbidden", "not-found"].includes(classifyAsyncError(activityQuery.error));
 
   const post = useMutation({
     mutationFn: async (input: PostCommentInput) => {
@@ -132,6 +95,7 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       // user actually submitted it for.
       const { thingId: targetThingId, body: bodyText, attachments } = input;
       if (!targetThingId) throw new Error("No Thing selected.");
+      if (input.epoch !== undefined && !isEpochCurrent(qc, input.epoch)) throw new Error("This comment session has ended.");
       if (preview) {
         addCommentLocal(targetThingId, bodyText, currentDemoPerson().name, attachments);
         return;
@@ -145,18 +109,19 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       // through context so onError/onSettled use this SAME captured
       // value, not a freshly-read "current" epoch that would just
       // compare against itself.
-      const epoch = getIdentityEpoch(qc).epoch;
-      await qc.cancelQueries({ queryKey: ["thing-comments", targetThingId] });
+      const epoch = input.epoch ?? getIdentityEpoch(qc).epoch;
+      const pageKey = ["thing-comments", targetThingId, "pages"];
+      await qc.cancelQueries({ queryKey: pageKey });
       if (!isEpochCurrent(qc, epoch)) return { epoch, thingId: targetThingId };
-      const previousComments = qc.getQueryData<ThingComment[]>(["thing-comments", targetThingId]);
 
       const currentUserName =
         (session?.user?.user_metadata?.display_name as string | undefined) ||
         (session?.user?.user_metadata?.name as string | undefined) ||
         "Me";
 
+      const optimisticId = crypto.randomUUID();
       const optimisticComment: ThingComment = {
-        id: `optimistic-${Date.now()}`,
+        id: optimisticId,
         body: bodyText,
         author: currentUserName,
         avatarUrl: (session?.user?.user_metadata?.avatar_url as string | undefined) ?? null,
@@ -167,10 +132,10 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       };
 
       if (!preview) {
-        qc.setQueryData<ThingComment[]>(["thing-comments", targetThingId], (old = []) => [
-          optimisticComment,
-          ...old,
-        ]);
+        qc.setQueryData<InfiniteData<HistoryPage<ThingComment>, HistoryCursor | null>>(pageKey, (old) => {
+          if (!old?.pages.length) return { pages: [{ rows: [optimisticComment], nextCursor: null }], pageParams: [null] };
+          return { ...old, pages: [{ ...old.pages[0], rows: [optimisticComment, ...old.pages[0].rows] }, ...old.pages.slice(1)] };
+        });
       } else if (targetThingId) {
         addCommentLocal(targetThingId, bodyText, currentDemoPerson().name, attachments);
       }
@@ -186,7 +151,7 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       // the wrong-Thing attribution with a bare closure, then fixed it by
       // reading from context instead).
       return {
-        previousComments,
+        optimisticId,
         epoch,
         thingId: targetThingId,
         submittedText: bodyText,
@@ -200,8 +165,11 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       // context.thingId (the Thing this mutation was actually submitted
       // for) -- a switch to a different Thing before this settled could
       // roll A's optimistic comment back into B's cache.
-      if (context?.previousComments && context.epoch !== undefined && isEpochCurrent(qc, context.epoch)) {
-        qc.setQueryData(["thing-comments", context.thingId], context.previousComments);
+      if (context?.optimisticId && context.epoch !== undefined && isEpochCurrent(qc, context.epoch)) {
+        qc.setQueryData<InfiniteData<HistoryPage<ThingComment>, HistoryCursor | null>>(
+          ["thing-comments", context.thingId, "pages"],
+          (old) => old && { ...old, pages: old.pages.map((page) => ({ ...page, rows: page.rows.filter((row) => row.id !== context.optimisticId) })) },
+        );
       }
       // R-01: this hook-level onError (not a per-call `.mutate(vars,
       // {onError})` callback) is what actually survives ThingDetailContent
@@ -238,10 +206,10 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
           });
         }
       }
-      toast.error(domainErrorMessage(err));
+      if (context?.epoch !== undefined && isEpochCurrent(qc, context.epoch)) toast.error(domainErrorMessage(err));
     },
-    onSuccess: () => {
-      toast.success("Comment sent.");
+    onSuccess: (_data, _input, context) => {
+      if (context?.epoch !== undefined && isEpochCurrent(qc, context.epoch)) toast.success("Comment sent.");
     },
     onSettled: (_data, _error, _input, context) => {
       // Same follow-up as onError above: invalidate the Thing this
@@ -267,13 +235,33 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         sending: undefined,
       })),
       activity: getActivity(thingId).map((e) => ({ id: e.id, event: e.event, at: e.at })),
+      commentsHasMore: false,
+      commentsLoadingOlder: false,
+      commentsOlderError: false,
+      loadOlderComments: async () => {},
+      activityHasMore: false,
+      activityLoadingOlder: false,
+      activityOlderError: false,
+      loadOlderActivity: async () => {},
+      commentsError: null,
+      activityError: null,
       post,
     };
   }
 
   return {
-    comments: commentsQuery.data ?? [],
-    activity: activityQuery.data ?? [],
+    comments: commentsAccessLost ? [] : flattenHistory(commentsQuery.data?.pages).reverse(),
+    activity: activityAccessLost ? [] : flattenHistory(activityQuery.data?.pages).reverse(),
+    commentsHasMore: commentsQuery.hasNextPage,
+    commentsLoadingOlder: commentsQuery.isFetchingNextPage,
+    commentsOlderError: commentsQuery.isFetchNextPageError,
+    loadOlderComments: () => commentsQuery.fetchNextPage(),
+    activityHasMore: activityQuery.hasNextPage,
+    activityLoadingOlder: activityQuery.isFetchingNextPage,
+    activityOlderError: activityQuery.isFetchNextPageError,
+    loadOlderActivity: () => activityQuery.fetchNextPage(),
+    commentsError: commentsQuery.error,
+    activityError: activityQuery.error,
     post,
   };
 }

@@ -1,4 +1,5 @@
-import { forwardRef, useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Mic,
@@ -36,6 +37,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { detectFileType } from "@/lib/file-utils";
 import { PdfCanvas } from "@/features/things/PdfCanvas";
 import { useListMessages } from "@/features/lists/use-list-messages";
+import { useSessionDraft } from "@/features/drafts/use-session-draft";
+import { getChatScroll, saveChatScroll } from "@/features/lists/chat-scroll-state";
+import { getDraftRevision } from "@/features/drafts/session-drafts";
+import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { AnnotateCanvas, type AnnotateCanvasHandle } from "./AnnotateCanvas";
 import type { ListCallControls } from "./use-list-call";
 
@@ -161,9 +166,18 @@ export function ListCallPanel({
 }) {
   const [minimized, setMinimized] = useState(false);
   const [dock, setDock] = useState<"none" | "chat" | "participants">("participants");
-  const [draft, setDraft] = useState("");
+  const qc = useQueryClient();
+  const chatDraft = useSessionDraft("list-chat", listId, "");
+  const draft = chatDraft.value;
+  const setDraft = chatDraft.write;
   const chat = useListMessages(listId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const nearBottomRef = useRef(true);
+  const olderAnchorRef = useRef<{ top: number; height: number } | null>(null);
+  const previousLastIdRef = useRef<string | null>(null);
+  const restoredChatScrollRef = useRef(false);
+  const renderedChatListRef = useRef(listId);
+  const [newChatMessages, setNewChatMessages] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const presenterVideoRef = useRef<HTMLVideoElement | null>(null);
   const annotateRef = useRef<AnnotateCanvasHandle | null>(null);
@@ -175,10 +189,51 @@ export function ListCallPanel({
   const [docNumPages, setDocNumPages] = useState(1);
   const docFileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const stagedChatAttachment = chatDraft.attachments?.[0] as { key: string; name: string; mime: string | null; size: number | null } | undefined;
+  useBlockWhile(dock === "chat" && (Boolean(draft.trim()) || Boolean(stagedChatAttachment)), "list-chat-draft");
+
+  useLayoutEffect(() => {
+    if (dock !== "chat" || !scrollRef.current) return;
+    const el = scrollRef.current;
+    if (renderedChatListRef.current !== listId) {
+      renderedChatListRef.current = listId;
+      restoredChatScrollRef.current = false;
+      previousLastIdRef.current = null;
+      olderAnchorRef.current = null;
+      nearBottomRef.current = true;
+      setNewChatMessages(false);
+    }
+    if (olderAnchorRef.current) {
+      el.scrollTop = olderAnchorRef.current.top + el.scrollHeight - olderAnchorRef.current.height;
+      olderAnchorRef.current = null;
+      return;
+    }
+    if (!restoredChatScrollRef.current && !chat.isLoading) {
+      const saved = getChatScroll(qc, listId);
+      el.scrollTop = saved && saved.fromBottom > 80 ? saved.top : el.scrollHeight;
+      nearBottomRef.current = !saved || saved.fromBottom <= 80;
+      restoredChatScrollRef.current = true;
+    }
+    const lastId = chat.messages.at(-1)?.id ?? null;
+    const changed = previousLastIdRef.current !== lastId;
+    previousLastIdRef.current = lastId;
+    if (!changed) return;
+    if (nearBottomRef.current) el.scrollTop = el.scrollHeight;
+    else setNewChatMessages(true);
+  }, [dock, chat.messages, chat.isLoading, qc, listId]);
 
   useEffect(() => {
-    if (dock === "chat" && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [dock, chat.messages.length]);
+    if (dock !== "chat") {
+      restoredChatScrollRef.current = false;
+      previousLastIdRef.current = null;
+    }
+  }, [dock]);
+
+  const loadOlderChat = async () => {
+    const el = scrollRef.current;
+    if (el) olderAnchorRef.current = { top: el.scrollTop, height: el.scrollHeight };
+    try { await chat.loadOlder(); } catch { olderAnchorRef.current = null; }
+  };
 
   // Call-duration timer (starts once connected).
   useEffect(() => {
@@ -686,15 +741,23 @@ export function ListCallPanel({
             <div className="border-b border-[#eef0f6] px-3 py-2 text-[12px] font-semibold text-foreground">
               Chat
             </div>
-            <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto px-3 py-2" style={{ maxHeight: 220 }}>
+            <div ref={scrollRef} onScroll={(e) => {
+              const el = e.currentTarget;
+              const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+              nearBottomRef.current = fromBottom < 80;
+              saveChatScroll(qc, listId, el.scrollTop, fromBottom);
+              if (nearBottomRef.current) setNewChatMessages(false);
+            }} className="flex-1 space-y-2 overflow-y-auto px-3 py-2" style={{ maxHeight: 220 }}>
+              {chat.hasMore || chat.olderError ? <button type="button" disabled={chat.isLoadingOlder} onClick={() => void loadOlderChat()} className="w-full rounded-md border border-border px-2 py-1 text-xs text-primary disabled:opacity-50">{chat.isLoadingOlder ? "Loading older…" : chat.olderError ? "Couldn't load older. Retry" : "Load older messages"}</button> : null}
               {chat.messages.length === 0 ? (
-                <p className="text-[11px] text-muted-foreground">No messages yet.</p>
+                <p role={chat.error ? "alert" : undefined} className={chat.error ? "text-[11px] text-destructive" : "text-[11px] text-muted-foreground"}>{chat.error ? "Couldn't load messages. Reopen the conversation to retry." : "No messages yet."}</p>
               ) : (
                 chat.messages.map((m) =>
                   m.kind === "system" ? (
                     <div key={m.id} className="flex items-center justify-center gap-1 py-0.5 text-center text-[10.5px] text-[#6a769c]">
                       <Phone className="h-2.5 w-2.5 text-[#12a15f]" />
                       <span className="font-medium text-[#000533]">{m.author}</span> {m.body}
+                      {m.delivery === "failed" ? <button type="button" onClick={() => void chat.retry(m.id).catch(() => {})} className="text-red-600 underline">Retry</button> : null}
                     </div>
                   ) : (
                     <div key={m.id} className="flex items-start gap-2">
@@ -714,20 +777,31 @@ export function ListCallPanel({
                             </a>
                           )
                         ) : null}
+                        {m.delivery === "pending" ? <p className="text-[10px] text-muted-foreground">Sending…</p> : null}
+                        {m.delivery === "failed" ? <div className="flex gap-2 text-[10px] text-destructive"><span>Couldn't send.</span><button type="button" onClick={() => void chat.retry(m.id).catch(() => {})} className="underline">Retry</button><button type="button" onClick={() => chat.removeFailed(m.id)} className="underline">Remove</button></div> : null}
                       </div>
                     </div>
                   ),
                 )
               )}
             </div>
+            {newChatMessages ? <button type="button" onClick={() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; nearBottomRef.current = true; setNewChatMessages(false); }} className="mx-2 my-1 rounded-md bg-primary px-2 py-1 text-[10px] text-primary-foreground">New messages</button> : null}
+            {stagedChatAttachment ? (
+              <div className="mx-2 flex items-center gap-2 rounded-md border border-[#eef0f6] px-2 py-1 text-[10px]">
+                <FileText className="h-3 w-3 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{stagedChatAttachment.name} ready to send</span>
+                <button type="button" onClick={() => chatDraft.write(draft, [])} className="text-destructive underline">Remove</button>
+              </div>
+            ) : null}
             <form
               className="flex items-center gap-1.5 border-t border-[#eef0f6] p-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 const text = draft.trim();
-                if (!text) return;
-                chat.send.mutate(text);
-                setDraft("");
+                if ((!text && !stagedChatAttachment) || chat.send.isPending) return;
+                chatDraft.clear();
+                const draftRevision = getDraftRevision(qc, "list-chat", listId);
+                void chat.send.mutateAsync({ body: text, attachment: stagedChatAttachment ?? null, draftRevision }).catch(() => {});
               }}
             >
               <input

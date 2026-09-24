@@ -18,6 +18,7 @@ import { CallRingProvider } from "@/features/calls/CallRingProvider";
 import { PushRegistrar } from "@/features/push/PushRegistrar";
 import { MotionPreferenceApplier } from "@/components/layout/MotionPreferenceApplier";
 import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlockerProvider";
+import { ActiveChatOperationBlocker } from "@/features/lists/ActiveChatOperationBlocker";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 
@@ -163,6 +164,7 @@ function RootComponent() {
                 here now so those later batches have a real provider to
                 register against instead of inventing their own. */}
             <InteractionBlockerProvider>
+              <ActiveChatOperationBlocker />
               <Outlet />
               <CallRingProvider />
               <PushRegistrar />

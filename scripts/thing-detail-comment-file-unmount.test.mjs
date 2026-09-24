@@ -75,7 +75,11 @@ mock.module("@/integrations/supabase/client", {
         const node = {
           select: () => node,
           eq: () => node,
-          order: async () => ({ data: [], error: null }),
+          is: () => node,
+          order: () => node,
+          limit: () => node,
+          or: () => node,
+          abortSignal: async () => ({ data: [], error: null }),
         };
         return node;
       },

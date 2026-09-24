@@ -73,7 +73,11 @@ mock.module("@/integrations/supabase/client", {
         const node = {
           select: () => node,
           eq: () => node,
-          order: async () => ({ data: [], error: null }),
+          is: () => node,
+          order: () => node,
+          limit: () => node,
+          or: () => node,
+          abortSignal: async () => ({ data: [], error: null }),
         };
         return node;
       },
@@ -304,8 +308,10 @@ test("follow-up review of R-01: a failed send's rollback/invalidation targets th
 
   const thingAOriginal = [{ id: "a-existing", body: "A's real comment", author: "Someone", at: "2026-01-01T00:00:00Z" }];
   const thingBOriginal = [{ id: "b-existing", body: "B's real comment", author: "Someone", at: "2026-01-01T00:00:00Z" }];
-  qc.setQueryData(["thing-comments", "thing-a"], thingAOriginal);
-  qc.setQueryData(["thing-comments", "thing-b"], thingBOriginal);
+  const aPages = { pages: [{ rows: thingAOriginal, nextCursor: null }], pageParams: [null] };
+  const bPages = { pages: [{ rows: thingBOriginal, nextCursor: null }], pageParams: [null] };
+  qc.setQueryData(["thing-comments", "thing-a", "pages"], aPages);
+  qc.setQueryData(["thing-comments", "thing-b", "pages"], bPages);
 
   const invalidateCalls = [];
   const originalInvalidate = qc.invalidateQueries.bind(qc);
@@ -327,8 +333,8 @@ test("follow-up review of R-01: a failed send's rollback/invalidation targets th
 
     // Confirm the optimistic write actually landed on A's cache (proving
     // the setup is exercising the real code path, not a no-op).
-    const thingAWhilePending = qc.getQueryData(["thing-comments", "thing-a"]);
-    assert.equal(thingAWhilePending.length, 2, "A's cache now has the optimistic comment prepended");
+    const thingAWhilePending = qc.getQueryData(["thing-comments", "thing-a", "pages"]);
+    assert.equal(thingAWhilePending.pages[0].rows.length, 2, "A's first page now has the optimistic comment prepended");
 
     await act(async () => {
       rerender(h(Harness, { qc, thingId: "thing-b" }));
@@ -340,13 +346,13 @@ test("follow-up review of R-01: a failed send's rollback/invalidation targets th
     });
 
     assert.deepEqual(
-      qc.getQueryData(["thing-comments", "thing-b"]),
-      thingBOriginal,
+      qc.getQueryData(["thing-comments", "thing-b", "pages"]),
+      bPages,
       "B's cache must be completely untouched by A's failed send settling while B is displayed",
     );
     assert.deepEqual(
-      qc.getQueryData(["thing-comments", "thing-a"]),
-      thingAOriginal,
+      qc.getQueryData(["thing-comments", "thing-a", "pages"]),
+      aPages,
       "A's own cache must be rolled back to its real (pre-optimistic) content, not left with the failed optimistic comment",
     );
 
@@ -359,6 +365,7 @@ test("follow-up review of R-01: a failed send's rollback/invalidation targets th
       "onSettled must invalidate the Thing the mutation was actually submitted for (A), never the Thing merely displayed when it settles (B)",
     );
   } finally {
+    if (rejectFn) rejectFn(new Error("test cleanup"));
     // try/finally (unlike this file's other tests) because an assertion
     // failure here must not leave a mounted, uncleaned-up component behind
     // for the NEXT test to trip over (confirmed directly: without this, a

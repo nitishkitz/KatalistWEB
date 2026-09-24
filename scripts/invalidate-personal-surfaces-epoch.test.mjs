@@ -37,7 +37,7 @@ test("invalidatePersonalSurfaces is a no-op when the captured epoch is stale", a
 
   await invalidatePersonalSurfaces(qc, staleEpoch);
 
-  assert.equal(invalidateCallCount, 0, "a stale-epoch call must not perform any of its 14 invalidations");
+  assert.equal(invalidateCallCount, 0, "a stale-epoch call must not perform any invalidations");
 });
 
 test("invalidatePersonalSurfaces performs all its invalidations when the epoch is still current", async () => {
@@ -47,7 +47,7 @@ test("invalidatePersonalSurfaces performs all its invalidations when the epoch i
 
   await invalidatePersonalSurfaces(qc, epoch);
 
-  assert.equal(invalidateCallCount, 14, "expected all 14 invalidateQueries calls to run for a current epoch");
+  assert.equal(invalidateCallCount, 18, "expected all 18 invalidations, including the four paged chat history families");
 });
 
 test("invalidateSnoozeSurfaces is a no-op when the captured epoch is stale", async () => {

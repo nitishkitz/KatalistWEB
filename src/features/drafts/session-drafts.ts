@@ -35,6 +35,8 @@ export type Draft<T> = {
    *  URLs inside these are the composer's own responsibility to revoke --
    *  this store only holds the descriptors, not the underlying blobs. */
   attachments?: unknown[];
+  /** Composer-specific selection metadata; kept with the same revision as text. */
+  metadata?: unknown;
 };
 
 type StoredDraft<T> = Draft<T> & { epoch: number };
@@ -55,6 +57,7 @@ const draftsByClient = new WeakMap<QueryClient, Map<string, StoredDraft<unknown>
 // "yes, something happened": the disposer clearing every draft on
 // retirement is itself a change).
 const revisionByClient = new WeakMap<QueryClient, Map<string, number>>();
+const listenersByClient = new WeakMap<QueryClient, Map<string, Set<() => void>>>();
 const disposerRegisteredFor = new WeakSet<QueryClient>();
 
 function draftKey(composerKind: DraftComposerKind, entityId: string): string {
@@ -82,6 +85,27 @@ function revisionsFor(qc: QueryClient): Map<string, number> {
 function bumpRevision(qc: QueryClient, key: string): void {
   const revisions = revisionsFor(qc);
   revisions.set(key, (revisions.get(key) ?? 0) + 1);
+  for (const listener of listenersByClient.get(qc)?.get(key) ?? []) listener();
+}
+
+/** Lets every mounted composer for the same entity observe one draft slot. */
+export function subscribeDraft(qc: QueryClient, composerKind: DraftComposerKind, entityId: string, listener: () => void): () => void {
+  let byKey = listenersByClient.get(qc);
+  if (!byKey) {
+    byKey = new Map();
+    listenersByClient.set(qc, byKey);
+  }
+  const key = draftKey(composerKind, entityId);
+  let listeners = byKey.get(key);
+  if (!listeners) {
+    listeners = new Set();
+    byKey.set(key, listeners);
+  }
+  listeners.add(listener);
+  return () => {
+    listeners?.delete(listener);
+    if (listeners?.size === 0) byKey?.delete(key);
+  };
 }
 
 /** Current edit revision for this (composer kind, entity) pair -- 0 if it

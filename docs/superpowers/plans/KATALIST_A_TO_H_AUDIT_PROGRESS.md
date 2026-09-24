@@ -304,3 +304,15 @@ file.
    (hidden responsive variants must not each attempt the daily claim) -- not investigated.
 
 Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T03 is not marked complete.
+
+### T04 — Bounded history and shared chat
+
+**Status:** CODE IMPLEMENTED / LOCAL PASS; browser and deployed-database validation pending.
+
+**Changed code:** `src/lib/history-pages.ts`, `src/features/things/{fetch-thing-history,use-thing-comments,ThingDetailContent}.ts*`, `src/features/lists/{fetch-list-message-pages,use-list-messages,ListChatPanel,chat-operations,chat-feed-model,chat-mentions,chat-scroll-state,ActiveChatOperationBlocker}.ts*`, `src/features/drafts/{session-drafts,use-session-draft}.ts*`, the List route, call panel, Hub workspace/files, realtime invalidation, query keys, root blocker, notification endpoint, and additive `supabase/migrations/20260924120000_bounded_chat_and_notification_claims.sql`.
+
+**Implemented:** latest 50-row `(created_at,id)` keyset pages for List messages and Thing comments/activity, with independent paged attachment/system/pinned histories and server-side full-history message search; Load older/error/retry, prepend anchor, scroll restoration, and new-message cues across shared chat surfaces. Chat text, staged attachment descriptors, and selected mentions now share an identity-scoped per-List draft. Sends claim an operation synchronously, use a client UUID for insert/retry/recovery, retain pending/failed rows, reconcile realtime echoes by UUID, and reject stale identity continuations. Server notifications derive text/mentions/recipients from the authorized persisted row and use an atomic one-claim-per-message SQL record before the provider call. This intentionally gives **at-most-once push attempts**, not guaranteed push delivery after a provider failure.
+
+**Evidence:** 564/564 full tests, typecheck clean, lint 0 errors/75 existing warnings, migration exercised in PGlite, and `build:app` clean. New focused tests cover 1,001 same-timestamp rows, invalid cursor syntax, concurrent same-draft sends, lost-response recovery, retry UUID reuse, identity retirement, realtime echo dedupe, shared two-composer draft/attachment state, focused-search suppression on confirmed access loss, and atomic SQL notification claims. Existing tests updated only where their old flat-cache/source-shape assumptions no longer represented behavior.
+
+**Still open:** no actual browser pass for scroll geometry, cross-surface navigation, or staging Supabase/RLS; the additive Supabase migration is **not deployed**. The List route still contains its separate chat markup until T11 replaces it with `ListChatPanel`; it consumes the same draft/send/pagination contract in the interim. T02's file-resource and durable-comment-attachment items and T05's read/unread semantics remain separate open packages. T06 owns the remaining unbounded overview aggregate and Hub summary reads. Do not treat this local code pass as release clearance.

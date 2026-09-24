@@ -32,7 +32,7 @@ import { detectFileType } from "@/lib/file-utils";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 import { useHubFiles, getHubFileUrl, type HubFile } from "@/features/hub/use-hub-files";
-import type { ChatAttachment } from "@/features/lists/use-list-messages";
+import { useListAttachmentHistory, type ChatAttachment } from "@/features/lists/use-list-messages";
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
@@ -65,14 +65,23 @@ export function HubFilesPanel({
   listId,
   conversationTitle,
   chatAttachments = [],
+  chatAccessLost = false,
 }: {
   listId: string;
   conversationTitle: string;
   chatAttachments?: ChatFileEntry[];
+  chatAccessLost?: boolean;
 }) {
   const [path, setPath] = useState<{ id: string; name: string }[]>([]);
   const parentId = path.length ? path[path.length - 1].id : null;
   const { files, isLoading, createFolder, upload, rename, remove, pin } = useHubFiles(listId, parentId);
+  const chatFileHistory = useListAttachmentHistory(listId);
+  const allChatAttachments = chatAccessLost ? [] : Array.from(new Map([
+    ...chatAttachments,
+    ...chatFileHistory.messages.filter((message) => message.attachment).map((message) => ({
+      id: message.id, attachment: message.attachment!, author: message.author, at: message.at,
+    })),
+  ].map((entry) => [entry.id, entry] as const)).values()).sort((a, b) => b.at.localeCompare(a.at) || b.id.localeCompare(a.id));
   const [view, setView] = useState<"list" | "grid">("list");
   const [query, setQuery] = useState("");
   const [newFolder, setNewFolder] = useState(false);
@@ -291,14 +300,12 @@ export function HubFilesPanel({
             </div>
           </div>
         )}
-        {path.length === 0 && chatAttachments.length > 0 && (
+        {path.length === 0 && (allChatAttachments.length > 0 || chatFileHistory.error) && (
           <div className="mb-4">
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Shared in chat</p>
+            {chatFileHistory.error ? <p role="alert" className="mb-2 text-xs text-red-600">Couldn't load chat files.</p> : null}
             <div className="space-y-2">
-              {chatAttachments
-                .slice()
-                .reverse()
-                .map((entry) => {
+              {allChatAttachments.map((entry) => {
                   const a = entry.attachment;
                   const isImage = (a.mime ?? "").startsWith("image/");
                   return (
@@ -328,6 +335,7 @@ export function HubFilesPanel({
                     </a>
                   );
                 })}
+              {chatFileHistory.hasMore ? <button type="button" disabled={chatFileHistory.isLoadingMore} onClick={() => void chatFileHistory.loadMore()} className="w-full rounded-lg border border-[#ebecf7] px-3 py-2 text-xs text-[#6638ec] disabled:opacity-50">{chatFileHistory.isLoadingMore ? "Loading older files…" : "Load older shared files"}</button> : null}
             </div>
           </div>
         )}
