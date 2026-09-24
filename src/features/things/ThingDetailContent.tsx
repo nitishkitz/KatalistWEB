@@ -421,6 +421,19 @@ export function ThingDetailContent({
   // started with.
   const thingIdRef = useRef(thing?.id);
   thingIdRef.current = thing?.id;
+  // R-02: thingIdRef is only ever updated by a render, so after the
+  // component UNMOUNTS entirely (not just switches to a different Thing)
+  // it keeps pointing at whatever Thing was last displayed -- indistinguishable
+  // from "still mounted, still on the same Thing" by thingIdRef alone. An
+  // explicit mounted flag is what actually distinguishes the two.
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+  const [processingCommentFiles, setProcessingCommentFiles] = useState(0);
 
   useEffect(() => {
     if (thing?.id) {
@@ -430,7 +443,13 @@ export function ThingDetailContent({
 
   // E-03: register a blocker while there's unsent text/files so nothing
   // (Morning Brief's auto-open, etc.) can silently interrupt mid-draft.
-  useBlockWhile(Boolean(comment.trim()) || commentAttachments.length > 0, "thing-comment-draft");
+  // R-02: also block while a selected file is still being processed --
+  // it isn't in commentAttachments yet, but it's just as much an
+  // in-progress composer action.
+  useBlockWhile(
+    Boolean(comment.trim()) || commentAttachments.length > 0 || processingCommentFiles > 0,
+    "thing-comment-draft",
+  );
 
   const handleCommentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     // E-03: captured before any await -- if the selected Thing changes
@@ -441,23 +460,32 @@ export function ThingDetailContent({
     try {
       const files = e.target.files;
       if (!files || files.length === 0 || !targetThingId) return;
+      setProcessingCommentFiles((n) => n + 1);
       const newFiles: ThingFile[] = [];
       for (let i = 0; i < files.length; i++) {
         try {
           const processed = await processFileForUpload(files[i]);
           newFiles.push(processed);
         } catch (err) {
-          if (thingIdRef.current === targetThingId) {
+          if (isMountedRef.current && thingIdRef.current === targetThingId) {
             toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
           }
         }
       }
       if (newFiles.length === 0) return;
-      if (thingIdRef.current === targetThingId) {
+      // R-02: still mounted AND still showing the Thing these files were
+      // picked for -- update live state directly; the write-through effect
+      // below persists it to the draft on the next render, same as before.
+      if (isMountedRef.current && thingIdRef.current === targetThingId) {
         setCommentAttachments((prev) => [...prev, ...newFiles]);
       } else {
-        // Still-mounted but now showing a different Thing -- the files
-        // belong to targetThingId's own draft, not the one on screen.
+        // Unmounted entirely, OR still mounted but now showing a different
+        // Thing -- either way there is no live state to update, so persist
+        // directly into targetThingId's own draft. session-drafts.ts stamps
+        // the epoch current AT WRITE TIME and getDraft() re-checks it, so
+        // this is safe even if the identity has since changed -- the write
+        // simply becomes unreadable rather than corrupting another
+        // identity's draft.
         const existing = getDraft<string>(qc, "thing-comment", targetThingId);
         setDraft(qc, "thing-comment", targetThingId, {
           value: existing?.value ?? "",
@@ -466,6 +494,7 @@ export function ThingDetailContent({
       }
     } finally {
       if (commentFileInputRef.current) commentFileInputRef.current.value = "";
+      setProcessingCommentFiles((n) => Math.max(0, n - 1));
     }
   };
 
