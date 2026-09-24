@@ -319,10 +319,9 @@ Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T03 is not marked 
 
 ### T05 — Read state, counts, and Team/Hub behavior
 
-**Status:** LOCAL PASS -- partial, remaining items below. **Owns:** C-08, G-10, G-11; coordinates
-auxiliary count failures with C-04.
+**Status:** LOCAL PASS. **Owns:** C-08, G-10, G-11; coordinates auxiliary count failures with C-04.
 
-**Commits:** `59ef17d`, `63053e4`.
+**Commits:** `59ef17d`, `63053e4`, `c5d27b1`.
 
 **Done:**
 - `read-state.ts` (Thing comment "last read" state) had no identity scoping at all -- a real,
@@ -343,16 +342,32 @@ auxiliary count failures with C-04.
   `use-thing-comments.ts` exposes `commentsIsLoading` so the gating effect can wait for the load to
   settle. (`63053e4`)
 
-**Verification:** 572/572 tests (570 baseline + 2 new), 0 typecheck errors, 0 lint errors/75
-warnings (unchanged), clean build. Both new regression tests confirmed to fail against the pre-fix
-files (via `git stash`) and pass post-fix.
+- `use-court.ts` zeroed a Thing's already-correct `unreadCommentCount` whenever the viewer had
+  EVER read it before, with no check on *when* relative to the comments the server counted --
+  discarding genuinely new unread comments that arrived after a prior read. Now only zeroes it
+  when the read happened at-or-after the currently-displayed fetch (`query.dataUpdatedAt`).
+  `markThingAsRead()` also wrote to the live `notifications` table unconditionally, including from
+  a preview/demo session; guarded with `isPreviewMode()`. Both read-state stores (Thing comments,
+  Hub conversations) only ever dispatched a same-tab `CustomEvent` -- added a native `"storage"`
+  event listener alongside it so a mark-as-read in one tab now updates another tab's unread badges.
+  `useConversationMentionCount()` collapsed a genuinely failed (retries exhausted) lookup to the
+  same `0` as a confirmed empty result -- now returns a distinguishable `"unknown"`, surfaced in
+  `HubSidebar` as a `"?"` badge instead of silently hiding it. `useListThings()` (the real,
+  non-preview List route) hand-rolled its own mapping and never computed comment counts at all --
+  now reuses `mapDbThingRows`, the same mapping Court uses. `team.index.tsx` (Hub landing) was a
+  single hard-coded panel that told a brand-new account with zero conversations/lists to "pick" one
+  from an empty sidebar -- now distinguishes a genuinely empty account from a
+  populated-but-unselected one, with a loading state in between. `useConversation()` (Hub
+  workspace header) had no seeding from the sidebar's already-fetched record -- the header showed a
+  fabricated "Conversation" / "0 members" while its own detail query was in flight; now seeds via
+  `placeholderData` from the sidebar cache, with `ConversationWorkspace` showing a skeleton only
+  when genuinely nothing is available yet. Audited and found already correct, no changes needed:
+  one primary call entry, Chat/Files/Call tabs, named search, contextual Pin labels, dock close
+  preserving the draft, and Contacts/NewGroup dialogs' pending/failure/input-preservation behavior.
+  (`c5d27b1`)
 
-**Remaining (explicit, not started):**
-1. Hub landing (no-conversations vs. populated-with-no-selection), header using the selected
-   conversation record while detail loads, contextual Pin labels, dock close preserving draft, and
-   contacts/group-creation pending-state audits -- none investigated in this pass.
-2. Exact-count-failure propagation (unknown/error with retry, never a fabricated zero) for Thing
-   comment counts specifically was not audited (Hub's own `useConversationUnreadCount`/
-   `useConversationMentionCount` already look correct per their own existing code).
+**Verification:** 584/584 tests (572 baseline + 12 new across 8 files), 0 typecheck errors, 0 lint
+errors/75 warnings (unchanged), clean build. Every new regression test confirmed to fail against
+its pre-fix source (via `git stash`) and pass post-fix.
 
 Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T05 is not marked complete.
