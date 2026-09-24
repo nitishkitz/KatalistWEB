@@ -1,7 +1,8 @@
 import { createContext, useContext } from "react";
 import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { DEMO_PERSONAS } from "@/hooks/useSession";
+import { DEMO_PERSONAS, useSession } from "@/hooks/useSession";
+import { isPreviewSession } from "@/lib/session-mode";
 import { authedFetch } from "@/lib/authed-fetch";
 
 export type ProfileIdentity = {
@@ -173,9 +174,17 @@ const PROFILE_DIRECTORY_KEY = ["profile-directory"] as const;
 const PROFILE_DIRECTORY_STALE_TIME_MS = 15_000;
 
 export function useProfileDirectoryQuery() {
+  // H04: this is mounted once, globally, in __root.tsx (ProfileDirectoryProvider)
+  // regardless of route -- it used to fire unconditionally, including on
+  // /auth, /welcome and /onboarding before anyone has signed in, guaranteeing
+  // three failed (401) requests on every anonymous page view. Gate it the
+  // same way every other session-scoped query in this codebase already does.
+  const { user, session } = useSession();
+  const preview = isPreviewSession(session);
   return useQuery({
     queryKey: PROFILE_DIRECTORY_KEY,
     queryFn: fetchProfileIdentities,
+    enabled: Boolean(user) && !preview,
     staleTime: PROFILE_DIRECTORY_STALE_TIME_MS,
   });
 }

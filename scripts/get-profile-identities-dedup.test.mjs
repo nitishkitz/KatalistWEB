@@ -17,7 +17,15 @@ import { QueryClient } from "@tanstack/react-query";
 
 let fetchCallCount = 0;
 
-mock.module("@/hooks/useSession", { namedExports: { DEMO_PERSONAS: [] } });
+// H04: directory.ts's useProfileDirectoryQuery() now gates on useSession()
+// (see its own comment for why -- it used to fire unconditionally,
+// including for signed-out visitors). getProfileIdentities() itself
+// (exercised below) never calls useSession, but the module-level import
+// still needs these bindings to link -- and session-mode.ts (imported for
+// the same gating) also needs getStoredDemoSession from this same module.
+mock.module("@/hooks/useSession", {
+  namedExports: { DEMO_PERSONAS: [], useSession: () => ({ user: null, session: null }), getStoredDemoSession: () => null },
+});
 mock.module("@/integrations/supabase/client", {
   namedExports: {
     supabase: {

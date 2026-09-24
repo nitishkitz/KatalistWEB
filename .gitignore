@@ -13,3 +13,6 @@ dist
 .node_modules.lock
 .DS_Store
 attachments
+test-results
+playwright-report
+blob-report

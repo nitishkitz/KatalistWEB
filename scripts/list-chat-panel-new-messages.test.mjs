@@ -41,7 +41,14 @@ mock.module("@/features/hub/use-conversations", {
   },
 });
 mock.module("@/hooks/useSession", {
-  namedExports: { useSession: () => ({ user: { id: "me" } }), DEMO_PERSONAS: [] },
+  // H04: session-mode.ts (now transitively imported via directory.ts's
+  // useProfileDirectoryQuery gating) also needs getStoredDemoSession from
+  // this same module to link.
+  namedExports: {
+    useSession: () => ({ user: { id: "me" } }),
+    DEMO_PERSONAS: [],
+    getStoredDemoSession: () => null,
+  },
 });
 mock.module("sonner", { namedExports: { toast: { success: () => {}, error: () => {} } } });
 
