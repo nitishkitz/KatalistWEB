@@ -41,6 +41,7 @@ function makeQueryNode() {
       filters.is[col] = val;
       return node;
     },
+    abortSignal: () => node,
     maybeSingle: () => {
       baseQueryCount += 1;
 

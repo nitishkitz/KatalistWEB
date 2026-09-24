@@ -19,25 +19,36 @@ import { fetchListDetail } from "./fetch-list-detail";
 import { getListDetailSeed } from "./list-detail-seed";
 import type { ListRow } from "./fixtures";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { withReadDeadline } from "@/lib/read-request";
 
-async function fetchLists(qc: QueryClient, profileId: string, context: "work" | "home"): Promise<ListRow[]> {
+async function fetchLists(
+  qc: QueryClient,
+  profileId: string,
+  context: "work" | "home",
+  querySignal?: AbortSignal,
+): Promise<ListRow[]> {
   const columns = "id,name,context,owner_profile_id,updated_at,description,cover_storage_path";
-  // Only task lists here — conversation-kind rows (dm/group) belong to the Team hub.
-  // The `kind` column ships with the Team hub migration; until it is applied we
-  // fall back to an unfiltered query so the Lists surface keeps working.
-  let { data: lists, error } = await supabase
-    .from("lists")
-    .select(columns)
-    .eq("context", context)
-    .eq("kind", "list")
-    .is("archived_at", null);
-  if (error && /kind/i.test(error.message ?? "")) {
-    ({ data: lists, error } = await supabase
+  // T01: both the primary query and its possible fallback (below) are one
+  // logical read operation -- bounded together under a single deadline
+  // (read-request.ts), not one 15s window each, and wired to React
+  // Query's own cancellation signal so a superseded/refetched call or
+  // unmount stops whichever request is actually in flight.
+  const { data: lists, error } = await withReadDeadline(querySignal, async (signal) => {
+    // Only task lists here — conversation-kind rows (dm/group) belong to the Team hub.
+    // The `kind` column ships with the Team hub migration; until it is applied we
+    // fall back to an unfiltered query so the Lists surface keeps working.
+    const first = await supabase
       .from("lists")
       .select(columns)
       .eq("context", context)
-      .is("archived_at", null));
-  }
+      .eq("kind", "list")
+      .is("archived_at", null)
+      .abortSignal(signal);
+    if (first.error && /kind/i.test(first.error.message ?? "")) {
+      return supabase.from("lists").select(columns).eq("context", context).is("archived_at", null).abortSignal(signal);
+    }
+    return first;
+  });
   if (error) throw error;
   return mapDbListRows(qc, profileId, (lists ?? []) as DbListRow[]);
 }
@@ -52,7 +63,7 @@ export function useLists() {
 
   const query = useQuery({
     queryKey: keys.lists(user?.id, context),
-    queryFn: () => fetchLists(qc, user!.id, context),
+    queryFn: ({ signal }) => fetchLists(qc, user!.id, context, signal),
     enabled: Boolean(user) && !preview,
     staleTime: 15_000,
   });
@@ -115,7 +126,7 @@ export function useList(listId: string | undefined) {
     // flash) and the shared-element hero transition has its target present.
     initialData: () => preview ? undefined : getListDetailSeed(qc, user?.id, context, listId),
     initialDataUpdatedAt: 0,
-    queryFn: () => fetchListDetail(qc, user!.id, listId!),
+    queryFn: ({ signal }) => fetchListDetail(qc, user!.id, listId!, signal),
   });
 
   if (preview) {
