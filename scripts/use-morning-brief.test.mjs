@@ -649,3 +649,52 @@ test("R-04: a claim rejected as premature by the server does not consume today's
   cleanup();
   qc.clear();
 });
+
+test("follow-up review of R-04: a claim delayed across a date change must not open a stale day's brief, even though the clock still reads past threshold", async () => {
+  // Independent re-review finding: the post-await recheck re-verified the
+  // CURRENT clock/zone is past 07:00, but never compared that against the
+  // LOCAL DATE the receipt was actually claimed for (result.localDate). A
+  // sufficiently delayed claim can resolve on a day AFTER the one it
+  // claimed, with the new day's own 07:00 already passed too -- opening
+  // would show yesterday's already-claimed brief under today's date.
+  resetShared();
+  flagEnabled = true;
+  let gateResolve;
+  claimGate = new Promise((r) => (gateResolve = r));
+  // Claimed for "today" (2026-06-15, the fixed fake clock's own date in
+  // America/New_York) -- matches what the client itself would have sent.
+  claimResult = { claimed: true, localDate: "2026-06-15", timezone: "America/New_York", presentedAt: "x" };
+  const qc = newClient();
+  let latest = null;
+
+  await act(async () => {
+    render(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+  });
+  assert.equal(claimCalls.length, 1, "the claim for today's date is dispatched and pending");
+
+  // Advance the (Date-only) fake clock by exactly 24h: still well past
+  // 07:00 in America/New_York the next day, but a DIFFERENT calendar date
+  // than the one the pending claim above was made for.
+  mock.timers.tick(24 * 60 * 60 * 1000);
+
+  await act(async () => {
+    gateResolve();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(
+    latest.open,
+    false,
+    "a claim resolving on a date after the one it actually claimed must not auto-open -- it would show a stale day's brief",
+  );
+  assert.equal(latest.alreadyPresentedToday, true, "the claim itself still succeeded and is recorded");
+
+  cleanup();
+  qc.clear();
+});

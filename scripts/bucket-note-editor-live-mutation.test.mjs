@@ -67,6 +67,7 @@ mock.module("@/integrations/supabase/client", {
 
 const { useBucketNoteEditor } = await import("@/features/buckets/use-bucket-note-editor");
 const { useBucketNotes } = await import("@/features/buckets/use-bucket-notes");
+const { getDraft } = await import("@/features/drafts/session-drafts");
 
 function newClient() {
   return new QueryClient({
@@ -308,6 +309,69 @@ test("R-07: closing a never-touched new note still needs no confirmation", async
     latest.requestCloseNoteEditor();
   });
   assert.equal(latest.noteOpen, false);
+
+  cleanup();
+  qc.clear();
+});
+
+test("follow-up review of R-03: creating a note while continuing to type migrates the live draft off the 'new note' slot -- a second new note does not resurrect it", async () => {
+  // Independent re-review finding: adopting the server-created id (the
+  // R-03 "newer edits during save" branch) left the live draft parked
+  // under the OLD "new:<bucketId>" key -- the write-through effect only
+  // ever WRITES the new key, it never clears the old one. Starting a
+  // SECOND new note afterward would read that stale "new:<bucketId>" key
+  // and resurrect the first note's abandoned text into a fresh session.
+  let resolveCreate;
+  createImpl = () => new Promise((r) => (resolveCreate = () => r({ data: { id: "server-id-1" }, error: null })));
+  const qc = newClient();
+  let latest = null;
+  await act(async () => {
+    renderProbe(qc, (v) => (latest = v));
+  });
+
+  await act(async () => {
+    latest.openNoteEditor(); // new note slot
+  });
+  await act(async () => {
+    latest.setNoteTitle("first note, version A");
+  });
+  await act(async () => {
+    latest.saveNote(); // starts the create, gated on resolveCreate
+  });
+
+  // Keep typing while the create is still in flight.
+  await act(async () => {
+    latest.setNoteTitle("first note, version B");
+  });
+
+  await act(async () => {
+    resolveCreate();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(latest.noteOpen, true, "newer edits during save keep the editor open (R-03)");
+  assert.equal(latest.editingNoteId, "server-id-1", "adopted the server-assigned id");
+  assert.equal(latest.noteTitle, "first note, version B");
+
+  // Confirm the draft actually migrated: the OLD "new note" slot must be
+  // empty now, not still holding "version B".
+  const staleSlotDraft = getDraft(qc, "bucket-note", `new:bucket-1`);
+  assert.ok(!staleSlotDraft?.value?.title, "the old 'new:<bucketId>' slot must be cleared, not left holding the migrated draft");
+
+  // Close the now-created note -- "version B" itself was never saved, so
+  // this is a genuine confirmed discard, unrelated to what this test is
+  // actually checking (the stale-slot migration, already asserted above).
+  confirmResult = true;
+  await act(async () => {
+    latest.requestCloseNoteEditor();
+  });
+  assert.equal(latest.noteOpen, false);
+
+  await act(async () => {
+    latest.openNoteEditor(); // a second, genuinely new note
+  });
+
+  assert.equal(latest.noteTitle, "", "a second new note must start blank, not resurrect the first note's abandoned draft");
 
   cleanup();
   qc.clear();

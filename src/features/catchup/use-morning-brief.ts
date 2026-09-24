@@ -175,6 +175,17 @@ export function useMorningBrief(): UseMorningBrief {
       // is still recorded/valid -- only the automatic OPEN is skipped, so
       // manual review remains available and the day's slot is not
       // reattempted (attemptedKeyRef already marks it done).
+      // Follow-up review of R-04: isPastMorningThreshold alone re-verifies
+      // the CURRENT clock/zone is past 07:00, but says nothing about
+      // whether that's still the SAME local date the receipt was actually
+      // claimed for. A sufficiently delayed claim, or a timezone change
+      // mid-await, can leave "past 07:00" true in the new zone/day while
+      // `result.localDate` (the date the receipt just claimed) is already
+      // yesterday's -- opening would show a stale day's brief under
+      // today's date. Comparing the receipt's own returned date against
+      // freshly-recomputed "today" closes that gap directly, without
+      // needing to separately reason about every path that could produce
+      // the mismatch.
       const stillEligibleToShow =
         contextRef.current === context &&
         !hasBlockingInteractionRef.current &&
@@ -182,7 +193,8 @@ export function useMorningBrief(): UseMorningBrief {
         catchupErrorRef.current == null &&
         catchupCountRef.current > 0 &&
         !profileLoadingRef.current &&
-        isPastMorningThreshold(new Date(), timeZoneRef.current);
+        isPastMorningThreshold(new Date(), timeZoneRef.current) &&
+        result.localDate === localDateKey(new Date(), timeZoneRef.current);
       if (result.claimed && stillEligibleToShow) {
         setOpen(true);
       }

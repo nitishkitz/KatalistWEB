@@ -457,6 +457,16 @@ export function ThingDetailContent({
     // Thing the user was looking at when they picked the files, not
     // whatever happens to be selected once processing finishes.
     const targetThingId = thing?.id;
+    // Follow-up review of R-02: also captured before any await --
+    // setDraft() stamps a write with WHATEVER epoch is current AT WRITE
+    // TIME by default, not "unreadable after a switch" as an earlier
+    // version of this comment incorrectly claimed. Without passing the
+    // epoch captured HERE explicitly, a late write (after an account
+    // switch during processing) would be stamped as belonging to the NEW
+    // identity, making an old identity's file readable under a new
+    // account. Passing it explicitly makes setDraft() silently no-op
+    // instead once the epoch has gone stale, per its own contract.
+    const targetEpoch = getIdentityEpoch(qc).epoch;
     try {
       const files = e.target.files;
       if (!files || files.length === 0 || !targetThingId) return;
@@ -481,16 +491,21 @@ export function ThingDetailContent({
       } else {
         // Unmounted entirely, OR still mounted but now showing a different
         // Thing -- either way there is no live state to update, so persist
-        // directly into targetThingId's own draft. session-drafts.ts stamps
-        // the epoch current AT WRITE TIME and getDraft() re-checks it, so
-        // this is safe even if the identity has since changed -- the write
-        // simply becomes unreadable rather than corrupting another
-        // identity's draft.
+        // directly into targetThingId's own draft, under the CAPTURED
+        // epoch -- if the identity has since changed, setDraft() silently
+        // drops this write instead of misattributing an old identity's
+        // file to whatever identity is current now.
         const existing = getDraft<string>(qc, "thing-comment", targetThingId);
-        setDraft(qc, "thing-comment", targetThingId, {
-          value: existing?.value ?? "",
-          attachments: [...((existing?.attachments as ThingFile[] | undefined) ?? []), ...newFiles],
-        });
+        setDraft(
+          qc,
+          "thing-comment",
+          targetThingId,
+          {
+            value: existing?.value ?? "",
+            attachments: [...((existing?.attachments as ThingFile[] | undefined) ?? []), ...newFiles],
+          },
+          targetEpoch,
+        );
       }
     } finally {
       if (commentFileInputRef.current) commentFileInputRef.current.value = "";
@@ -632,7 +647,7 @@ export function ThingDetailContent({
     setComment("");
     setCommentAttachments([]);
     thread.post.mutate(
-      { body: text, attachments: atts.length > 0 ? atts : undefined },
+      { thingId: submittedThingId, body: text, attachments: atts.length > 0 ? atts : undefined },
       {
         onError: () => {
           if (thingIdRef.current !== submittedThingId) return;

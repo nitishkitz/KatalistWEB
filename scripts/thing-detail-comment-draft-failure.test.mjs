@@ -274,6 +274,102 @@ test("R-01: a send that fails AFTER switching to a different Thing does not leak
   qc.clear();
 });
 
+test("follow-up review of R-01: a failed send's rollback/invalidation targets the Thing it was submitted for, not whatever Thing is displayed when it settles", async () => {
+  // Independent re-review finding: onError's rollback (`qc.setQueryData`)
+  // and onSettled's invalidation both used the hook's outer `thingId`
+  // closure -- which useMutation rebinds via setOptions() on every render,
+  // same hazard R-01 already fixed for onError's draft-restore body -- so
+  // a send that settles AFTER switching to a different Thing could roll
+  // Thing A's own optimistic-comment rollback into Thing B's cache, and
+  // invalidate/refetch B's query instead of A's.
+  let rejectFn;
+  rpcCommentImpl = () => new Promise((_resolve, reject) => { rejectFn = reject; });
+  // staleTime: Infinity (unlike the shared newClient() helper) so seeding
+  // both Things' caches BEFORE ever rendering sticks -- otherwise each
+  // Thing's own real (mocked, empty) initial fetch would overwrite the
+  // seeded data the instant it mounts, racing this test's own setup.
+  // Queries deliberately do NOT use gcTime: 0 here (unlike newClient()) --
+  // thing-b's seeded cache entry has no observer until the mid-test
+  // switch, and gcTime: 0 would evict an unobserved entry near-instantly
+  // (confirmed directly: it was garbage-collected during this test's own
+  // earlier `await act()`/setTimeout ticks, before ever being read), well
+  // before this test ever mounts a component that observes it. qc.clear()
+  // at the end still releases everything regardless of gcTime.
+  const qc = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 60_000, staleTime: Infinity },
+      mutations: { retry: false, gcTime: 0 },
+    },
+  });
+
+  const thingAOriginal = [{ id: "a-existing", body: "A's real comment", author: "Someone", at: "2026-01-01T00:00:00Z" }];
+  const thingBOriginal = [{ id: "b-existing", body: "B's real comment", author: "Someone", at: "2026-01-01T00:00:00Z" }];
+  qc.setQueryData(["thing-comments", "thing-a"], thingAOriginal);
+  qc.setQueryData(["thing-comments", "thing-b"], thingBOriginal);
+
+  const invalidateCalls = [];
+  const originalInvalidate = qc.invalidateQueries.bind(qc);
+  qc.invalidateQueries = (opts) => {
+    invalidateCalls.push(opts?.queryKey);
+    return originalInvalidate(opts);
+  };
+
+  try {
+    const { getByRole, getByText, rerender } = render(h(Harness, { qc, thingId: "thing-a" }));
+
+    const inputA = getByRole("textbox");
+    await act(async () => {
+      fireEvent.change(inputA, { target: { value: "will fail after switching to B" } });
+    });
+    await act(async () => {
+      fireEvent.click(getByText("Post"));
+    });
+
+    // Confirm the optimistic write actually landed on A's cache (proving
+    // the setup is exercising the real code path, not a no-op).
+    const thingAWhilePending = qc.getQueryData(["thing-comments", "thing-a"]);
+    assert.equal(thingAWhilePending.length, 2, "A's cache now has the optimistic comment prepended");
+
+    await act(async () => {
+      rerender(h(Harness, { qc, thingId: "thing-b" }));
+    });
+
+    await act(async () => {
+      rejectFn(new Error("network down"));
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    assert.deepEqual(
+      qc.getQueryData(["thing-comments", "thing-b"]),
+      thingBOriginal,
+      "B's cache must be completely untouched by A's failed send settling while B is displayed",
+    );
+    assert.deepEqual(
+      qc.getQueryData(["thing-comments", "thing-a"]),
+      thingAOriginal,
+      "A's own cache must be rolled back to its real (pre-optimistic) content, not left with the failed optimistic comment",
+    );
+
+    const commentInvalidations = invalidateCalls.filter(
+      (key) => Array.isArray(key) && key[0] === "thing-comments",
+    );
+    assert.deepEqual(
+      commentInvalidations,
+      [["thing-comments", "thing-a"]],
+      "onSettled must invalidate the Thing the mutation was actually submitted for (A), never the Thing merely displayed when it settles (B)",
+    );
+  } finally {
+    // try/finally (unlike this file's other tests) because an assertion
+    // failure here must not leave a mounted, uncleaned-up component behind
+    // for the NEXT test to trip over (confirmed directly: without this, a
+    // failure above left a stray "Thing B" instance mounted, which broke
+    // the next test's own getByPlaceholderText query with "found multiple
+    // elements").
+    cleanup();
+    qc.clear();
+  }
+});
+
 test("R-01: a successful send clears the draft, and shows no restored text on reopen", async () => {
   rpcCommentImpl = async () => {};
   const qc = newClient();

@@ -135,7 +135,23 @@ export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeo
         // first-time create must also adopt the server-assigned id so
         // the next Save updates this note instead of creating another.
         setNoteOriginal({ title, body });
-        if (createdId && !editingNoteId) setEditingNoteId(createdId);
+        if (createdId && !editingNoteId) {
+          // Follow-up review of R-03: adopting the id alone left the
+          // live draft parked under the OLD "new:<bucketId>" slot (savedKey,
+          // since editingNoteId is null in this branch) until the
+          // write-through effect next ran -- and even then, that effect
+          // only ever WRITES the new key, it never clears the old one.
+          // Starting a second new note before that happened (or ever,
+          // since the old key is otherwise never revisited) would
+          // resurrect this note's abandoned draft under the "new note"
+          // slot. Migrate the live draft to the new key and clear the
+          // old one immediately, synchronously, rather than waiting on
+          // the effect to (partially) catch up next render.
+          const liveDraft = getDraft<{ title: string }>(qc, "bucket-note", savedKey);
+          if (liveDraft) setDraft(qc, "bucket-note", createdId, liveDraft);
+          clearDraft(qc, "bucket-note", savedKey);
+          setEditingNoteId(createdId);
+        }
         return;
       }
       clearDraft(qc, "bucket-note", savedKey);

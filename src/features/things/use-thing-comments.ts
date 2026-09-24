@@ -26,7 +26,18 @@ export type ThingComment = {
 };
 export type ThingActivity = { id: string; event: string; at: string };
 
-export type PostCommentInput = string | { body: string; attachments?: ThingFile[] };
+// R-01 follow-up: previously `string | { body, attachments }`, with the
+// TARGET Thing read from the hook's own outer `thingId` closure inside
+// mutationFn/onError/onSettled -- but useMutation rebinds those closures
+// via setOptions() on every render (same hazard R-01 already fixed for
+// onError's own body), so a render that switches to a different Thing
+// between dispatch and settlement could roll back or invalidate the
+// caches of, or even (mutationFn) actually SEND the comment to, the wrong
+// Thing. The target Thing is now a required, explicit part of the
+// mutation's own input, captured by the caller at dispatch time (the same
+// moment it already captures its own `submittedThingId`), not re-derived
+// from whatever the latest render happens to show.
+export type PostCommentInput = { thingId: string; body: string; attachments?: ThingFile[] };
 
 function parseCommentBody(rawBody: string): { body: string; attachments?: ThingFile[] } {
   const match = rawBody.match(/\n?<!--attachments:(.*?)-->/s);
@@ -104,33 +115,36 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
 
   const post = useMutation({
     mutationFn: async (input: PostCommentInput) => {
-      if (!thingId) throw new Error("No Thing selected.");
-      const bodyText = typeof input === "string" ? input : input.body;
-      const attachments = typeof input === "object" ? input.attachments : undefined;
+      // Uses the EXPLICIT input.thingId, not the outer `thingId` closure --
+      // mutationFn is rebound via setOptions() on every render just like
+      // onError/onSettled below, so a render that switches Thing between
+      // this call's dispatch and its (async) execution must not redirect
+      // it into sending the comment to a different Thing than the one the
+      // user actually submitted it for.
+      const { thingId: targetThingId, body: bodyText, attachments } = input;
+      if (!targetThingId) throw new Error("No Thing selected.");
       if (preview) {
-        addCommentLocal(thingId, bodyText, currentDemoPerson().name, attachments);
+        addCommentLocal(targetThingId, bodyText, currentDemoPerson().name, attachments);
         return;
       }
-      await rpcComment(thingId, bodyText, attachments);
+      await rpcComment(targetThingId, bodyText, attachments);
     },
     onMutate: async (input: PostCommentInput) => {
+      const { thingId: targetThingId, body: bodyText, attachments } = input;
       // Captured here (effectively at mutate()-dispatch time -- onMutate
       // runs before mutationFn, with nothing awaited yet) and threaded
       // through context so onError/onSettled use this SAME captured
       // value, not a freshly-read "current" epoch that would just
       // compare against itself.
       const epoch = getIdentityEpoch(qc).epoch;
-      await qc.cancelQueries({ queryKey: ["thing-comments", thingId] });
-      if (!isEpochCurrent(qc, epoch)) return { epoch };
-      const previousComments = qc.getQueryData<ThingComment[]>(["thing-comments", thingId]);
+      await qc.cancelQueries({ queryKey: ["thing-comments", targetThingId] });
+      if (!isEpochCurrent(qc, epoch)) return { epoch, thingId: targetThingId };
+      const previousComments = qc.getQueryData<ThingComment[]>(["thing-comments", targetThingId]);
 
       const currentUserName =
         (session?.user?.user_metadata?.display_name as string | undefined) ||
         (session?.user?.user_metadata?.name as string | undefined) ||
         "Me";
-
-      const bodyText = typeof input === "string" ? input : input.body;
-      const attachments = typeof input === "object" ? input.attachments : undefined;
 
       const optimisticComment: ThingComment = {
         id: `optimistic-${Date.now()}`,
@@ -144,12 +158,12 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       };
 
       if (!preview) {
-        qc.setQueryData<ThingComment[]>(["thing-comments", thingId], (old = []) => [
+        qc.setQueryData<ThingComment[]>(["thing-comments", targetThingId], (old = []) => [
           optimisticComment,
           ...old,
         ]);
-      } else if (thingId) {
-        addCommentLocal(thingId, bodyText, currentDemoPerson().name, attachments);
+      } else if (targetThingId) {
+        addCommentLocal(targetThingId, bodyText, currentDemoPerson().name, attachments);
       }
 
       // R-01: captured here (context, not the outer `thingId` closure) so
@@ -162,11 +176,16 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       // this call was actually dispatched (confirmed directly: reproduced
       // the wrong-Thing attribution with a bare closure, then fixed it by
       // reading from context instead).
-      return { previousComments, epoch, thingId, submittedText: bodyText, submittedAttachments: attachments };
+      return { previousComments, epoch, thingId: targetThingId, submittedText: bodyText, submittedAttachments: attachments };
     },
     onError: (err, _input, context) => {
+      // Follow-up review of R-01: this used to write the rollback back
+      // into the outer `thingId` closure's query key instead of
+      // context.thingId (the Thing this mutation was actually submitted
+      // for) -- a switch to a different Thing before this settled could
+      // roll A's optimistic comment back into B's cache.
       if (context?.previousComments && context.epoch !== undefined && isEpochCurrent(qc, context.epoch)) {
-        qc.setQueryData(["thing-comments", thingId], context.previousComments);
+        qc.setQueryData(["thing-comments", context.thingId], context.previousComments);
       }
       // R-01: this hook-level onError (not a per-call `.mutate(vars,
       // {onError})` callback) is what actually survives ThingDetailContent
@@ -196,9 +215,12 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       toast.success("Comment sent.");
     },
     onSettled: (_data, _error, _input, context) => {
+      // Same follow-up as onError above: invalidate the Thing this
+      // mutation actually settled FOR (context.thingId), not whatever the
+      // outer `thingId` closure currently reads.
       if (context?.epoch === undefined || !isEpochCurrent(qc, context.epoch)) return;
-      void qc.invalidateQueries({ queryKey: ["thing-comments", thingId] });
-      void qc.invalidateQueries({ queryKey: ["thing-activity", thingId] });
+      void qc.invalidateQueries({ queryKey: ["thing-comments", context.thingId] });
+      void qc.invalidateQueries({ queryKey: ["thing-activity", context.thingId] });
       void qc.invalidateQueries({ queryKey: ["court"] });
     },
   });

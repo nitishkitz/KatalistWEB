@@ -108,6 +108,7 @@ mock.module("@/features/things/personal-shred", { namedExports: { invalidatePers
 
 const { ThingDetailContent } = await import("@/features/things/ThingDetailContent");
 const { getDraft } = await import("@/features/drafts/session-drafts");
+const { advanceIdentityEpoch } = await import("@/features/realtime/identity-cache-policy");
 
 function makeThing(id, title) {
   const me = { id: "actor-me", name: "Me", initials: "ME" };
@@ -278,6 +279,46 @@ test("R-02: pending file processing registers the interaction blocker", async ()
     await new Promise((r) => setTimeout(r, 10));
   });
   assert.equal(blockerValue, true, "the attachment itself is now unsent, so the blocker stays engaged");
+
+  cleanup();
+  qc.clear();
+});
+
+// Follow-up review of R-02: the direct-draft-write branch (unmounted, or
+// switched to a different Thing) wrote via setDraft() WITHOUT passing the
+// epoch captured before processing began -- setDraft() defaults to
+// stamping a write with whatever epoch is CURRENT at write time, not
+// "unreadable after a switch" as an earlier version of the surrounding
+// comment incorrectly claimed. An account switch during processing could
+// make an old identity's file readable under the NEW identity's draft for
+// a Thing id that happens to collide across identities.
+test("follow-up review of R-02: a file whose processing finishes AFTER an account switch is dropped, not written into the new identity's draft", async () => {
+  let resolveProcess;
+  processFileImpl = () => new Promise((r) => (resolveProcess = () => r({ id: "file-1", name: "photo.png", type: "other" })));
+  const qc = newClient();
+  const { container, unmount } = render(h(Harness, { qc, thingId: "thing-a" }));
+
+  const input = getCommentFileInput(container);
+  await act(async () => {
+    fireEvent.change(input, { target: { files: [makeFile("photo.png")] } });
+  });
+
+  // Unmount (so the write takes the direct-draft-write branch, same as
+  // the unmount test above) AND advance the identity epoch mid-processing
+  // -- simulating an account switch while this file was still uploading.
+  unmount();
+  advanceIdentityEpoch(qc, { kind: "live", profileId: "a-different-profile" });
+
+  await act(async () => {
+    resolveProcess();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  const draft = getDraft(qc, "thing-comment", "thing-a");
+  assert.ok(
+    !draft?.attachments?.length,
+    "a file that finishes processing after the identity has switched must not be persisted under the new identity",
+  );
 
   cleanup();
   qc.clear();
