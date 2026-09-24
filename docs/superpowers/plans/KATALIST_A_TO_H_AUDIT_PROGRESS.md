@@ -520,12 +520,25 @@ product regression.
   isolated PGlite fixtures and management-role smoke calls are not a
   substitute for a real authenticated browser session.
 - Production does contain `thing_attachments`, and the T06 aggregate applied
-  successfully there. However, migration history remains divergent: 12
-  production-only versions are absent from this checkout, while 25 earlier
-  local versions are still unapplied. The 230-commit application branch calls
-  other undeployed RPCs, so deploying it after only the seven approved T06/T07
-  migrations would risk breaking unrelated screens. Reconcile/review the
-  wider chain before app deployment; do not use an unreviewed `db push`.
+  successfully there. **2026-09-25 reconciliation:** the 12 production-only
+  versions (UAT profile/rate limits, Firebase push outbox, Magic Box
+  attachment saga/AI rate limits, public-identities security-invoker,
+  catch-inherits-owner-importance, bucket reference idempotency, and list
+  collaboration/team mentions/bucket pins) were pulled verbatim, read-only,
+  from `supabase_migrations.schema_migrations` and committed as local files
+  at their original timestamps (`d4afb34`) — `supabase migration list` now
+  shows **0** local/remote mismatches for every version up to
+  `20260825125932`. No production object was touched to do this. A collision
+  check found no conflicting object redefinitions between those 12 and the
+  still-pending 25. Full method and evidence:
+  `docs/superpowers/plans/2026-09-25-t06-t07-migration-reconciliation.md`.
+  **Still open:** the 25 local-only versions (2026-09-03 through 2026-09-24
+  feature work) remain genuinely unapplied to production, and the 230-commit
+  application branch calls other undeployed RPCs, so deploying it after only
+  the seven approved T06/T07 migrations would still risk breaking unrelated
+  screens. Each of those 25 needs the same itemized review/authorization T06's
+  six and T07's one already received before application; do not use an
+  unreviewed `db push`.
 - Other screens still call the broad cached
   `getProfileIdentities()` directory helper; audit their cold-route volume
   separately before claiming app-wide directory efficiency.
