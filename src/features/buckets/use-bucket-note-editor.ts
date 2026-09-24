@@ -10,37 +10,61 @@ import type { useBucketNotes } from "./use-bucket-notes";
  * ownership, extracted out of the Bucket-detail route so it's directly
  * testable without a router context.
  *
- * Fixes three real defects the previous inline version had:
+ * Fixes real defects the previous inline version had:
  *  - Save had no pending guard at all -- a fast double-click/double-Enter
- *    fired two create/update mutations for the same note.
- *  - Cancel/Escape/backdrop discarded unsaved text with no confirmation.
+ *    fired two create/update mutations for the same note. Guarded with a
+ *    ref flipped synchronously before the mutation starts (React's
+ *    isPending only updates on the next render, which a second
+ *    synchronous call can beat).
+ *  - Cancel/Escape/backdrop discarded unsaved text with no confirmation,
+ *    based on dirtiness alone -- clearing a saved note's text back to
+ *    blank is still a discard of the original content and must confirm.
+ *  - A blank Save (all fields cleared) on an existing note is a
+ *    validation error, not a silent discard; only a never-touched new
+ *    note may close without a prompt.
  *  - Cancel doesn't wait for a pending save. If the user cancelled a
  *    pending save and opened a DIFFERENT note before it resolved, the old
  *    save's own success callback would close/clear whatever note the
  *    user had since opened -- guarded here with a generation counter,
  *    bumped on every open/confirmed-close, checked before an async
  *    save/delete's continuation is allowed to touch shared state.
+ *  - A save that resolves AFTER the user has typed further edits to the
+ *    SAME note must not close the editor or discard those newer edits --
+ *    guarded with a separate edit-revision counter, bumped on every
+ *    keystroke and captured alongside the session at Save time.
  */
 export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeof useBucketNotes>) {
   const qc = useQueryClient();
   const [noteOpen, setNoteOpen] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteBody, setNoteBody] = useState("");
+  const [noteTitle, setNoteTitleState] = useState("");
+  const [noteBody, setNoteBodyState] = useState("");
   const [noteOriginal, setNoteOriginal] = useState<{ title: string; body: string }>({ title: "", body: "" });
   const noteSessionRef = useRef(0);
+  const noteEditRevisionRef = useRef(0);
+  const noteIsSavingRef = useRef(false);
+
+  const setNoteTitle = (value: string) => {
+    noteEditRevisionRef.current += 1;
+    setNoteTitleState(value);
+  };
+  const setNoteBody = (value: string) => {
+    noteEditRevisionRef.current += 1;
+    setNoteBodyState(value);
+  };
 
   const noteDraftKey = (id: string | null) => id ?? `new:${bucketId}`;
 
   const openNoteEditor = (note?: { id: string; title: string; body: string }) => {
     noteSessionRef.current += 1;
+    noteEditRevisionRef.current = 0;
     const key = noteDraftKey(note?.id ?? null);
     const draft = getDraft<{ title: string }>(qc, "bucket-note", key);
     const original = { title: note?.title ?? "", body: note?.body ?? "" };
     setEditingNoteId(note?.id ?? null);
     setNoteOriginal(original);
-    setNoteTitle(draft?.value?.title ?? original.title);
-    setNoteBody((draft?.attachments?.[0] as string | undefined) ?? original.body);
+    setNoteTitleState(draft?.value?.title ?? original.title);
+    setNoteBodyState((draft?.attachments?.[0] as string | undefined) ?? original.body);
     setNoteOpen(true);
   };
 
@@ -66,9 +90,10 @@ export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeo
   const noteIsDirty = noteTitle !== noteOriginal.title || noteBody !== noteOriginal.body;
 
   /** Routes every non-Save close (Cancel, Escape, backdrop) through one
-   *  place so a genuinely dirty edit is never silently discarded. */
+   *  place so a genuinely dirty edit -- including clearing a saved
+   *  note's text back to blank -- is never silently discarded. */
   const requestCloseNoteEditor = () => {
-    if (noteIsDirty && (noteTitle.trim() || noteBody.trim())) {
+    if (noteIsDirty) {
       if (!window.confirm("Discard this note? Your unsaved changes will be lost.")) return;
     }
     noteSessionRef.current += 1;
@@ -77,30 +102,56 @@ export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeo
   };
 
   const saveNote = () => {
-    // A synchronous pending guard -- without it, a fast double click/
-    // double-Enter fires two create/update mutations for the same note.
-    if (notesApi.create.isPending || notesApi.update.isPending) return;
+    // A ref flipped synchronously before the mutation starts -- isPending
+    // only updates on the next render, which a second synchronous call
+    // (fast double click/double-Enter) can beat.
+    if (noteIsSavingRef.current) return;
     const title = noteTitle.trim();
     const body = noteBody.trim();
     if (!title && !body) {
+      if (editingNoteId) {
+        // Clearing a saved note's fields is a validation error, not a
+        // silent discard -- keep the editor open so the user can either
+        // restore text or explicitly Cancel.
+        toast.error("Add a title or body before saving, or cancel to discard.");
+        return;
+      }
       requestCloseNoteEditor();
       return;
     }
     const savedKey = noteDraftKey(editingNoteId);
     const savedGeneration = noteSessionRef.current;
-    const done = () => {
+    const savedRevision = noteEditRevisionRef.current;
+    noteIsSavingRef.current = true;
+    const done = (createdId?: string) => {
       // Only close/clear if nothing has superseded this edit session
       // since (Cancel doesn't wait for a pending save, so the user may
       // already be editing a DIFFERENT note by the time this resolves).
       if (noteSessionRef.current !== savedGeneration) return;
+      if (noteEditRevisionRef.current !== savedRevision) {
+        // The user kept typing while this save was in flight -- the
+        // acknowledged value is now the new baseline, but the newer,
+        // unsaved draft must survive; do not close or clear it. A
+        // first-time create must also adopt the server-assigned id so
+        // the next Save updates this note instead of creating another.
+        setNoteOriginal({ title, body });
+        if (createdId && !editingNoteId) setEditingNoteId(createdId);
+        return;
+      }
       clearDraft(qc, "bucket-note", savedKey);
       setNoteOpen(false);
     };
-    const fail = (err: unknown) => toast.error(domainErrorMessage(err));
+    const fail = (err: unknown) => {
+      if (noteSessionRef.current !== savedGeneration) return;
+      toast.error(domainErrorMessage(err));
+    };
+    const settle = () => {
+      noteIsSavingRef.current = false;
+    };
     if (editingNoteId) {
-      void notesApi.update.mutateAsync({ id: editingNoteId, title, body }).then(done, fail);
+      void notesApi.update.mutateAsync({ id: editingNoteId, title, body }).then(() => done(), fail).finally(settle);
     } else {
-      void notesApi.create.mutateAsync({ title, body }).then(done, fail);
+      void notesApi.create.mutateAsync({ title, body }).then(done, fail).finally(settle);
     }
   };
 
