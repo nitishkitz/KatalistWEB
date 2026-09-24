@@ -375,8 +375,10 @@ Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T05 is not marked 
 ### T06 — Summary/detail separation and efficient auxiliary data
 
 **Status:** IN PROGRESS — code and isolated SQL fixtures are implemented for the main
-Court/List/Bucket/Hub paths, but T06 is **not** closed. The additive migrations below
-are not deployed; no staging or live RLS/performance measurement has run.
+Court/List/Bucket/Hub paths. The six additive T06 migrations were applied to
+the linked production database on 2026-09-25 with user authorization, but the
+new client is not deployed and live authenticated RLS/performance checks remain.
+T06 is **not** closed.
 
 **Implemented locally:**
 - `THING_OVERVIEW_COLUMNS` excludes `notes`. Court, List, Bucket, Bucket detail,
@@ -481,34 +483,49 @@ product regression.
   rail now shows a "Retry counts" action that refetches the aggregate and
   uses truthful unavailable labels. This is local UI behaviour only; it does
   not verify the undeployed RPC in production.
-- **2026-09-25 production-only read-only check:** the user supplied
+- **2026-09-25 pre-deployment production baseline:** the user supplied
   `https://katalist-web.vercel.app/` and signed into an existing account in
   the browser. Court, the specified existing List detail, Lists index,
   Buckets index and Team landing all rendered without console errors. The
   production site's compiled asset contains the same Supabase project ID as
   this checkout's `.env.local`. A read-only PostgREST OpenAPI inspection
   (service-role schema visibility; no row reads or writes) found **none of
-  the six T06 RPC paths** on the deployed project. Separately,
+  the six T06 RPC paths at that time**. This baseline was superseded by the
+  authorized migration application recorded below. Separately,
   `git ls-remote --heads origin katalist-plan/batch-a-baseline` returned no
   remote branch: this checkout's T06/T07 commits are not the deployed app.
   These observations are a **production baseline**, not a pass of the new
   implementation. The user prohibited creating new production data or
-  objects, so no migration or write test was attempted. T06 cannot be called
-  production-verified until the additive RPC migrations and client are
-  explicitly authorized for deployment, or a separate isolated target is
-  supplied.
+  objects at that time, so no migration or write test was attempted. The user
+  later explicitly authorized the six T06 functions, T07 publication, and
+  app deployment; the database portion is now applied, but the app deployment
+  remains gated by the broader schema chain below.
+- **2026-09-25 authorized production database rollout:** the linked Supabase
+  CLI was verified to target `dyxqlgnbwtbxxdfoiqva` (the checkout's configured
+  project), not the different project exposed by the app connector. Production
+  already had all required base tables/columns, `context_kind`, and enabled
+  RLS on the watched tables. The two indexed tables were small (estimated 19
+  attachments and 417 activity rows). Applied only the six T06 SQL files in
+  timestamp order and recorded their exact versions in migration history;
+  no customer records were changed. Catalog verification found all six RPCs
+  `SECURITY INVOKER`, executable by `authenticated`, not `anon`. Read-only
+  execution of every RPC succeeded (dummy UUIDs for bounded aggregates,
+  page size 1 for Hub, UTC for Trophy). These management-role smoke calls do
+  **not** prove authenticated RLS or browser performance.
 - Route-level cold/warm request counters and measured duration boundaries for
   Court, Lists, Bucket and Hub in a safe browser/staging environment. The
   adapter fixtures above do not prove full-route volume or live speed.
-- Verify these additive migrations on the actual staging schema and deployed
-  RLS (especially `thing_attachments` policies); do not turn on the new
-  client against an environment that lacks the RPCs without accepting the
-  explicit limited/error states. No migration was run in this local pass.
-- The checked-in Supabase migrations reference `thing_attachments` but do not
-  define that table here; the generated client types contain it. Verify the
-  actual staging schema and migration history before deploying the T06
-  aggregate or T07 publication migration. Source-only fixtures cannot prove
-  that a fresh database can apply this chain.
+- Verify authenticated production RLS (especially `thing_attachments`
+  policies) and route behavior with a testable account. Catalog grants,
+  isolated PGlite fixtures and management-role smoke calls are not a
+  substitute for a real authenticated browser session.
+- Production does contain `thing_attachments`, and the T06 aggregate applied
+  successfully there. However, migration history remains divergent: 12
+  production-only versions are absent from this checkout, while 25 earlier
+  local versions are still unapplied. The 230-commit application branch calls
+  other undeployed RPCs, so deploying it after only the seven approved T06/T07
+  migrations would risk breaking unrelated screens. Reconcile/review the
+  wider chain before app deployment; do not use an unreviewed `db push`.
 - Other screens still call the broad cached
   `getProfileIdentities()` directory helper; audit their cold-route volume
   separately before claiming app-wide directory efficiency.
@@ -518,8 +535,10 @@ product regression.
 
 ### T07 — Payload-aware realtime and catch-up
 
-**Status:** IN PROGRESS — local code and deterministic/DOM tests exist, but
-real delivery, reconnect timing, and staging `REPLICA IDENTITY` are unverified.
+**Status:** IN PROGRESS — local code and deterministic/DOM tests exist. The
+publication-coverage migration was applied to production on 2026-09-25, but
+the new client is not deployed and real event delivery/reconnect timing remain
+unverified.
 
 **Implemented locally:** the root owner now forwards `eventType` plus old/new
 row fields into a pure routing map. Reliable Thing/List/Bucket IDs narrow
@@ -546,10 +565,14 @@ omitting several subscribed tables including `list_members` and
 `bucket_items`. The additive
 `20260925100000_realtime_publication_coverage.sql` migration adds the missing
 RLS-protected tables (without forcing `REPLICA IDENTITY FULL`); a PGlite test
-executes it twice and verifies idempotent coverage. The client also now
+executes it twice and verifies idempotent coverage. Production catalog checks
+after its authorized application show all 14 watched tables published; the
+`list_members` table still has default replica identity, so a DELETE may carry
+only its primary key and the broad fallback remains necessary. The client also now
 watches Lists, Buckets, Bucket notes and Thing attachments so the T06
 summaries/details can respond to those events. No browser/staging Realtime
-delivery claim is made because this migration is not deployed.
+delivery claim is made: publication coverage is live, but the new client is
+not deployed and no change event was generated for an end-to-end check.
 
 **Still required before T07 closure:** staging event payload inspection for
 INSERT/UPDATE/DELETE (especially membership DELETE), live reconnect and
@@ -572,9 +595,8 @@ read-only browser smokes, clean typecheck/build, and lint at 0 errors/75
 pre-existing warnings. The browser smokes cover anonymous entry routes, not
 authenticated T06/T07 delivery or production migration behaviour.
 
-**Production-only constraint:** the authenticated production pages above
-provide read-only baseline evidence only. The T07 branch is not deployed,
-its publication-coverage migration has not run, and the user forbade new
-production records. With no live change event to observe and no permission
-to publish missing tables, actual delivery/reconnect behaviour remains
-unverified; local simulation is not a substitute.
+**Production-only constraint:** the T07 app branch is not deployed, although
+the publication migration is now live. The authorized rollout excluded
+creating/modifying customer records, so no live change event was generated.
+Actual delivery/reconnect behaviour remains unverified; local simulation and
+catalog publication coverage are not substitutes.
