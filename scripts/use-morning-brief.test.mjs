@@ -31,6 +31,7 @@ let testSession = { user: { id: "profile-1" }, session: { user: { id: "profile-1
 let testPreview = false;
 let catchupCount = 1;
 let catchupLoading = false;
+let catchupError = null;
 let profileTimezone = "America/New_York";
 let flagEnabled = false;
 let testContext = "work";
@@ -48,6 +49,7 @@ mock.module("@/features/catchup/use-catchup", {
       moments: [],
       count: catchupCount,
       isLoading: catchupLoading,
+      error: catchupError,
       surfaceMoment: () => {},
       refresh: () => {},
     }),
@@ -110,6 +112,7 @@ function resetShared() {
   testPreview = false;
   catchupCount = 1;
   catchupLoading = false;
+  catchupError = null;
   profileTimezone = "America/New_York";
   flagEnabled = false;
   testContext = "work";
@@ -456,6 +459,81 @@ test("F-03: a blocking interaction appearing while the claim is in flight must s
   });
 
   assert.equal(latest.open, false, "a blocker that appeared mid-claim must suppress the auto-open");
+  assert.equal(latest.alreadyPresentedToday, true, "the claim itself still succeeded and is recorded");
+
+  cleanup();
+  qc.clear();
+});
+
+test("F-05: a moments fetch error never attempts a claim -- an uncertain result is not confirmed empty", async () => {
+  resetShared();
+  flagEnabled = true;
+  catchupCount = 0;
+  catchupError = new Error("network down");
+  const qc = newClient();
+  let latest = null;
+
+  await act(async () => {
+    render(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(claimCalls.length, 0, "an uncertain (errored) moments result must never be treated as confirmed-empty for auto-open");
+  assert.equal(latest.open, false);
+  assert.equal(latest.alreadyPresentedToday, false, "no claim was even attempted, so nothing was presented");
+
+  cleanup();
+  qc.clear();
+});
+
+test("F-05: a moments fetch error appearing while a claim is already in flight suppresses the open, without discarding the claim", async () => {
+  resetShared();
+  flagEnabled = true;
+  let gateResolve;
+  claimGate = new Promise((r) => (gateResolve = r));
+  const qc = newClient();
+  let latest = null;
+  let rerender;
+
+  await act(async () => {
+    const result = render(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+    rerender = result.rerender;
+  });
+  assert.equal(claimCalls.length, 1);
+
+  // A background refresh of the moments query fails WHILE the claim is
+  // still in flight (react-query would keep the last-good data visible,
+  // but this hook must still treat the situation as uncertain, not open).
+  catchupError = new Error("refetch failed");
+  await act(async () => {
+    rerender(
+      h(
+        QueryClientProvider,
+        { client: qc },
+        h(InteractionBlockerProvider, null, h(Probe, { onValue: (v) => (latest = v) })),
+      ),
+    );
+  });
+  await act(async () => {
+    gateResolve();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(latest.open, false, "a moments error appearing mid-claim must suppress the open");
   assert.equal(latest.alreadyPresentedToday, true, "the claim itself still succeeded and is recorded");
 
   cleanup();

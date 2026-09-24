@@ -132,6 +132,7 @@ export function nextMorningThreshold(now: Date, timeZone: string): Date {
 export type MorningBriefBlocker =
   | "pending-auth"
   | "loading"
+  | "moments-error"
   | "no-moments"
   | "hidden-tab"
   | "before-threshold"
@@ -151,6 +152,11 @@ export function isEligibleToAutoOpen(input: {
   now: Date;
   timeZone: string;
   hasActionableMoments: boolean;
+  /** True when the moments fetch itself failed -- distinct from a
+   *  successful load that legitimately found zero. An uncertain result
+   *  must never be treated as "confirmed no moments" for the purpose of
+   *  an automatic interruption (F-05). */
+  hasMomentsError: boolean;
   isTabHidden: boolean;
   authPending: boolean;
   momentsLoading: boolean;
@@ -158,6 +164,7 @@ export function isEligibleToAutoOpen(input: {
 }): { eligible: true } | { eligible: false; reason: MorningBriefBlocker } {
   if (input.authPending) return { eligible: false, reason: "pending-auth" };
   if (input.momentsLoading) return { eligible: false, reason: "loading" };
+  if (input.hasMomentsError) return { eligible: false, reason: "moments-error" };
   if (input.isTabHidden) return { eligible: false, reason: "hidden-tab" };
   if (input.hasBlockingInteraction) return { eligible: false, reason: "blocking-dialog" };
   if (!isPastMorningThreshold(input.now, input.timeZone)) return { eligible: false, reason: "before-threshold" };

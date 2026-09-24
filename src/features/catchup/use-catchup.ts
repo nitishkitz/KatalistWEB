@@ -56,20 +56,33 @@ async function fetchCatchupMoments(): Promise<CatchUpMoment[]> {
   const { data: auth } = await supabase.auth.getUser();
   let myActorId: string | null = null;
   if (auth.user) {
-    const { data: actor } = await supabase
+    const { data: actor, error: actorError } = await supabase
       .from("actors")
       .select("id")
       .eq("profile_id", auth.user.id)
       .maybeSingle();
+    // F-05: required for correctly viewer-scoping the resolved Things below
+    // (map-thing-rows.ts uses it for capability/pace fields) -- a failure
+    // here must not silently fall through to myActorId = null (which
+    // would look identical to "I have no actor row", a real and different
+    // state) and let the caller believe the resulting moments are
+    // complete/correct.
+    if (actorError) throw actorError;
     myActorId = actor?.id ?? null;
   }
 
   const thingIds = [...new Set(rows.map((r) => r.thing_id))];
-  const { data: thingRows } = await supabase
+  const { data: thingRows, error: thingsError } = await supabase
     .from("things")
     .select(THING_COLUMNS)
     .in("id", thingIds)
     .is("cancelled_at", null);
+  // F-05: this is the required data the whole moments list is built from --
+  // a failure here used to silently become an empty thingRows (via `?? []`),
+  // which made a genuine lookup failure indistinguishable from "none of
+  // these Things are visible/active", i.e. a false successful-empty result
+  // that could suppress a real Morning Brief moment or Catch Up review.
+  if (thingsError) throw thingsError;
   const things = await mapDbThingRows((thingRows ?? []) as DbThingRow[], myActorId);
   const thingById = new Map(things.map((t) => [t.id, t]));
 
@@ -175,6 +188,12 @@ export type UseCatchup = {
   moments: CatchUpMoment[];
   count: number;
   isLoading: boolean;
+  /** F-05: set when the live RPC or one of its required follow-up lookups
+   *  (actor id, Things) failed -- distinct from a genuinely empty result.
+   *  Always null in preview (local derivation can't fail this way). A
+   *  consumer deciding whether to auto-interrupt (Morning Brief) must
+   *  treat this as "unknown", not "confirmed no moments". */
+  error: unknown;
   surfaceMoment: (momentKey: string) => void;
   refresh: () => void;
 };
@@ -238,6 +257,7 @@ export function useCatchup(): UseCatchup {
     moments,
     count: moments.length,
     isLoading: liveAuth && query.isLoading,
+    error: preview ? null : query.error,
     surfaceMoment,
     refresh,
   };

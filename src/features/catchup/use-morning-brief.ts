@@ -87,6 +87,8 @@ export function useMorningBrief(): UseMorningBrief {
   hasBlockingInteractionRef.current = hasBlockingInteraction;
   const catchupCountRef = useRef(catchup.count);
   catchupCountRef.current = catchup.count;
+  const catchupErrorRef = useRef(catchup.error);
+  catchupErrorRef.current = catchup.error;
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -123,6 +125,7 @@ export function useMorningBrief(): UseMorningBrief {
       now,
       timeZone,
       hasActionableMoments: catchup.count > 0,
+      hasMomentsError: catchup.error != null,
       isTabHidden,
       authPending: !preview && !session,
       momentsLoading: catchup.isLoading,
@@ -152,6 +155,7 @@ export function useMorningBrief(): UseMorningBrief {
         contextRef.current === context &&
         !hasBlockingInteractionRef.current &&
         !isTabHiddenRef.current &&
+        catchupErrorRef.current == null &&
         catchupCountRef.current > 0;
       if (result.claimed && stillEligibleToShow) {
         setOpen(true);
@@ -165,7 +169,19 @@ export function useMorningBrief(): UseMorningBrief {
       // fire this same day won't try again and loop).
       console.error("Morning Brief claim failed", err);
     }
-  }, [identityId, context, timeZone, catchup.count, catchup.isLoading, isTabHidden, hasBlockingInteraction, preview, session, qc]);
+  }, [
+    identityId,
+    context,
+    timeZone,
+    catchup.count,
+    catchup.isLoading,
+    catchup.error,
+    isTabHidden,
+    hasBlockingInteraction,
+    preview,
+    session,
+    qc,
+  ]);
 
   // Re-evaluate whenever any input that could flip eligibility changes.
   useEffect(() => {
