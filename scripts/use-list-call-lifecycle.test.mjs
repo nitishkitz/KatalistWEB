@@ -190,3 +190,34 @@ test("H-05: a join() superseded by leave()+join() must not clobber the new room'
 
   cleanup();
 });
+
+test("T03: the blocker engages during 'joining' (pending getUserMedia/permission/signaling), not only once 'connected'", async () => {
+  joinBehavior = "resolve";
+  let gateResolve;
+  joinGate = new Promise((r) => (gateResolve = r));
+  let latest = null;
+  await act(async () => {
+    renderProbe((v) => (latest = v));
+  });
+  assert.equal(latest.isBlocked, false, "not blocking before join() is even called");
+
+  let joinPromise;
+  await act(async () => {
+    joinPromise = latest.call.join();
+  });
+  assert.equal(latest.call.lifecycle, "joining");
+  assert.equal(
+    latest.isBlocked,
+    true,
+    "'joining' alone (before the join actually connects) must already block -- a pending permission prompt/signaling wait is still 'in a call'",
+  );
+
+  await act(async () => {
+    gateResolve();
+    await joinPromise;
+  });
+  assert.equal(latest.call.lifecycle, "connected");
+  assert.equal(latest.isBlocked, true, "still blocked once connected");
+
+  cleanup();
+});

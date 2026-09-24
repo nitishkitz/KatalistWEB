@@ -347,9 +347,13 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     };
   }, []);
 
-  // H02: block Morning Brief (and anything else gated by D03's
-  // InteractionBlockerProvider) from auto-opening over an active call.
-  useBlockWhile(joined, "active-call");
+  // H02/T03: block Morning Brief (and anything else gated by D03's
+  // InteractionBlockerProvider) from auto-opening over an active call --
+  // `joined` alone missed the window between clicking join and actually
+  // connecting (the getUserMedia/signaling wait, including a pending OS
+  // permission prompt), and "reconnecting" after a peer drops, both of
+  // which are still very much "in a call" from the user's perspective.
+  useBlockWhile(lifecycle === "joining" || lifecycle === "connected" || lifecycle === "reconnecting", "active-call");
 
   // H02: roll every peer's raw RTCPeerConnection.connectionState (already
   // reported per-participant by CallRoom) up into one room-level signal.
