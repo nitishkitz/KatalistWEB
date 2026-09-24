@@ -17,6 +17,7 @@ import { TopNav } from "@/components/layout/TopNav";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { PDFViewer, type ThingFile } from "@/features/things/PDFViewer";
 import { markThingAsRead } from "@/features/things/read-state";
+import { useCourt } from "./use-court";
 import { CourtCompactLane } from "./CourtCompactLane";
 import { focusColumns, type CourtFocusSelection, type FocusViewTabId } from "./court-stack-model";
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
@@ -56,6 +57,10 @@ export function CourtFocusView({
 }: CourtFocusViewProps) {
   const [activeLane, setActiveLane] = useState<FocusViewTabId>(selection.lane);
   const [searchQuery, setSearchQuery] = useState("");
+  // T05: markThingAsRead's storage key must be scoped by identity -- see
+  // read-state.ts's own doc comment and the identical pattern in
+  // CourtDetailModal.tsx.
+  const { myActorId } = useCourt();
 
   const selectedThing = useMemo(() => {
     const activeList = activeLane === "theirs" ? (theirs ?? []) : (lanes[activeLane] ?? []);
@@ -124,9 +129,9 @@ export function CourtFocusView({
 
   useEffect(() => {
     if (selectedThing?.id) {
-      markThingAsRead(selectedThing.id);
+      markThingAsRead(selectedThing.id, myActorId);
     }
-  }, [selectedThing?.id]);
+  }, [selectedThing?.id, myActorId]);
 
   useLayoutEffect(() => {
     if (!heroRect || !selectedCardRef.current || !heroFlightRef.current) {

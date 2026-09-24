@@ -5,6 +5,7 @@ import type { Thing } from "@/domain/thing";
 import { PDFViewer, type ThingFile } from "@/features/things/PDFViewer";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { markThingAsRead } from "@/features/things/read-state";
+import { useCourt } from "./use-court";
 import type { CourtLaneId } from "./court-view-model";
 
 type CourtDetailModalProps = {
@@ -25,6 +26,10 @@ export function CourtDetailModal({
   const [selectedFile, setSelectedFile] = useState<ThingFile | null>(() => {
     return thing?.files?.[0] ?? null;
   });
+  // T05: markThingAsRead's storage key must be scoped by identity -- see
+  // read-state.ts's own doc comment for why an unscoped key can't be
+  // trusted as "this specific profile's" read state.
+  const { myActorId } = useCourt();
 
   useEffect(() => {
     if (thing?.files && thing.files.length > 0) {
@@ -61,9 +66,9 @@ export function CourtDetailModal({
 
   useEffect(() => {
     if (isOpen && thing?.id) {
-      markThingAsRead(thing.id);
+      markThingAsRead(thing.id, myActorId);
     }
-  }, [isOpen, thing?.id]);
+  }, [isOpen, thing?.id, myActorId]);
 
   if (!isOpen || !thing) return null;
 

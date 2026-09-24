@@ -61,8 +61,9 @@ export function useCourt() {
       excludePersonallyShreddedThings(query.data?.things ?? [], shred),
       snooze,
     );
+    const myLiveActorId = query.data?.myActorId ?? null;
     const liveThings = visibleThings.map((t) => {
-      const lastRead = getThingLastReadAt(t.id);
+      const lastRead = getThingLastReadAt(t.id, myLiveActorId);
       if (lastRead > 0 && (t.unreadCommentCount ?? 0) > 0) {
         return {
           ...t,

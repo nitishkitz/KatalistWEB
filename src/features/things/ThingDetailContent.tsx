@@ -437,9 +437,9 @@ export function ThingDetailContent({
 
   useEffect(() => {
     if (thing?.id) {
-      markThingAsRead(thing.id);
+      markThingAsRead(thing.id, myActorId);
     }
-  }, [thing?.id]);
+  }, [thing?.id, myActorId]);
 
   // E-03: register a blocker while there's unsent text/files so nothing
   // (Morning Brief's auto-open, etc.) can silently interrupt mid-draft.
