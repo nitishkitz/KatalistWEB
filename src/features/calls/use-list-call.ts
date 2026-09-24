@@ -83,6 +83,16 @@ export type ListCallControls = {
 /** Full-mesh audio/video call for a List, scoped to the current members. */
 export function useListCall(listId: string, selfId: string, selfName: string): ListCallControls {
   const roomRef = useRef<CallRoom | null>(null);
+  // H-05 (audit): join() is async -- its own getUserMedia/signaling wait
+  // (join A pending -> leave A -> join B) means A's catch/finally can
+  // resolve AFTER B already owns roomRef/state. A's unconditional
+  // `roomRef.current = null` / `setConnecting(false)` would then clear B's
+  // ref and flip B's still-legitimately-connecting state to false. Every
+  // join() call captures the generation current when IT started; leave()
+  // and join() both advance it, so a superseded call's continuation can
+  // tell it's no longer the owner and skip touching shared ref/state
+  // (while still disposing whatever room/media IT itself acquired).
+  const joinGenerationRef = useRef(0);
   const [joined, setJoined] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -109,6 +119,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const [lastError, setLastError] = useState<string | null>(null);
 
   const leave = useCallback(() => {
+    joinGenerationRef.current += 1; // supersede any join() still in flight
     roomRef.current?.leave();
     roomRef.current = null;
     setJoined(false);
@@ -135,6 +146,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       toast.error("Sign in to start a call.");
       return false;
     }
+    const myGeneration = ++joinGenerationRef.current;
     setConnecting(true);
     setLifecycle("joining");
     setLastError(null);
@@ -162,11 +174,23 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
         video: true,
       });
+      // H-05: a leave() (or a second join()) could have run while the
+      // above await was pending -- roomRef/state now belong to whatever
+      // superseded this call. This join succeeded on ITS OWN room object,
+      // which is exactly what leave() cannot have already cleaned up (it
+      // only ever touches roomRef.current, and roomRef.current is no
+      // longer this room) -- so this generation must dispose it itself
+      // instead of publishing it as if it were still the active call.
+      if (joinGenerationRef.current !== myGeneration) {
+        room.leave();
+        return false;
+      }
       setLocalStream(stream);
       setJoined(true);
       setLifecycle("connected");
       return true;
     } catch (err) {
+      if (joinGenerationRef.current !== myGeneration) return false; // superseded -- a newer join/leave already owns roomRef/state
       roomRef.current = null;
       const message =
         err instanceof DOMException && err.name === "NotAllowedError"
@@ -177,7 +201,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       setLastError(message);
       return false;
     } finally {
-      setConnecting(false);
+      if (joinGenerationRef.current === myGeneration) setConnecting(false);
     }
   }, [connecting, listId, selfId, selfName]);
 

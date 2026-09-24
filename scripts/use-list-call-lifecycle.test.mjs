@@ -20,14 +20,25 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let joinBehavior = "resolve";
 let lastRoom = null;
+let createdRooms = [];
+// H-05: a shared gate so a test can hold a room's own join() promise open
+// (modeling getUserMedia/signaling still pending) while OTHER calls
+// (leave(), a second join()) happen, then release it -- proving
+// useListCall's own generation guard catches a superseded join even in
+// the worst case where the underlying room's join() still resolves
+// normally afterward (call-room-leave-race.test.mjs already covers
+// CallRoom's own lower-level closed-check separately).
+let joinGate = null;
 
 class FakeCallRoom {
   constructor(opts) {
     this.opts = opts;
     this.closed = false;
     lastRoom = this;
+    createdRooms.push(this);
   }
   async join() {
+    if (joinGate) await joinGate;
     if (joinBehavior === "reject") {
       const err = new DOMException("denied", "NotAllowedError");
       throw err;
@@ -124,6 +135,58 @@ test("a join() permission failure surfaces as error with a specific message, and
   assert.equal(latest.call.lifecycle, "error");
   assert.match(latest.call.lastError ?? "", /permission/i);
   assert.equal(latest.isBlocked, false, "a call that never connected must not hold the blocker");
+
+  cleanup();
+});
+
+test("H-05: a join() superseded by leave()+join() must not clobber the new room's ref/state when it finally resolves", async () => {
+  joinBehavior = "resolve";
+  createdRooms = [];
+  let gateResolve;
+  joinGate = new Promise((r) => (gateResolve = r));
+  let latest = null;
+  await act(async () => {
+    renderProbe((v) => (latest = v));
+  });
+
+  // Room A: join() starts, blocks on the gate (models getUserMedia/
+  // signaling still pending).
+  let joinAPromise;
+  await act(async () => {
+    joinAPromise = latest.call.join();
+  });
+  assert.equal(createdRooms.length, 1);
+  const roomA = createdRooms[0];
+  assert.equal(latest.call.lifecycle, "joining");
+
+  // leave() while A is still pending -- A was never connected, so this is
+  // idle, not "ended".
+  await act(async () => {
+    latest.call.leave();
+  });
+  assert.equal(latest.call.lifecycle, "idle");
+
+  // Room B: a fresh join() -- allowed now that leave() reset roomRef/connecting.
+  let joinBPromise;
+  await act(async () => {
+    joinBPromise = latest.call.join();
+  });
+  assert.equal(createdRooms.length, 2);
+  const roomB = createdRooms[1];
+  assert.notEqual(roomA, roomB);
+
+  // Release the shared gate: A's (stale) and B's (current) join() calls
+  // both resolve around now.
+  await act(async () => {
+    gateResolve();
+    await joinAPromise;
+    await joinBPromise;
+  });
+
+  assert.equal(await joinAPromise, false, "A's own join() call must report it did not become the active call");
+  assert.equal(await joinBPromise, true, "B's join() call succeeds normally");
+  assert.equal(latest.call.lifecycle, "connected", "the live call must be B, not clobbered back to idle/error by A");
+  assert.equal(roomA.closed, true, "A's own room must still be disposed even though it never became the active call");
 
   cleanup();
 });
