@@ -322,7 +322,7 @@ Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T03 is not marked 
 **Status:** LOCAL PASS -- partial, remaining items below. **Owns:** C-08, G-10, G-11; coordinates
 auxiliary count failures with C-04.
 
-**Commit:** `59ef17d`.
+**Commits:** `59ef17d`, `63053e4`.
 
 **Done:**
 - `read-state.ts` (Thing comment "last read" state) had no identity scoping at all -- a real,
@@ -331,22 +331,27 @@ auxiliary count failures with C-04.
   without one; the pre-scoping legacy unscoped key is never read as a fallback, only cleaned up on
   next write. `calculateCommentCounts()` reuses its existing `currentActorId` param as the scoping
   key. Updated all four call sites (`ThingDetailContent.tsx`, `CourtDetailModal.tsx`,
-  `CourtFocusView.tsx`, `use-court.ts`).
+  `CourtFocusView.tsx`, `use-court.ts`). (`59ef17d`)
+- Marking a Thing "read" no longer fires unconditionally on open. `ThingDetailContent.tsx` now
+  gates the mark-read effect on the Comments tab actually being selected AND the comments query
+  having settled without error, anchored to the latest LOADED comment's own timestamp rather than
+  wall-clock `now()` -- a comment that arrives after that boundary still shows unread on the next
+  check. `markThingAsRead()` takes an optional third `atTimestampMs` param for this; callers
+  without a specific boundary still fall back to `now()`. The redundant, unconditional
+  `markThingAsRead()` calls in `CourtDetailModal.tsx`/`CourtFocusView.tsx` (which would have undone
+  this gating) were removed -- `ThingDetailContent`, which both render, now owns it exclusively.
+  `use-thing-comments.ts` exposes `commentsIsLoading` so the gating effect can wait for the load to
+  settle. (`63053e4`)
 
-**Verification:** 570/570 tests (564 T04 baseline + 6 new), 0 typecheck errors, 0 lint errors/75
-warnings (unchanged), clean build. Regression test confirmed to fail (5 of 6 assertions) against
-the pre-fix file.
+**Verification:** 572/572 tests (570 baseline + 2 new), 0 typecheck errors, 0 lint errors/75
+warnings (unchanged), clean build. Both new regression tests confirmed to fail against the pre-fix
+files (via `git stash`) and pass post-fix.
 
 **Remaining (explicit, not started):**
-1. Marking a Thing "read" still fires on open regardless of which tab is showing or whether
-   comments actually loaded -- the plan's "chat must be selected, visible, successfully loaded and
-   showing the relevant message boundary; Files/Call tab visits and failed reads do not clear
-   unread" is not implemented. `markThingAsRead` still uses wall-clock `now()`, not the latest
-   actually-viewed comment's own timestamp.
-2. Hub landing (no-conversations vs. populated-with-no-selection), header using the selected
+1. Hub landing (no-conversations vs. populated-with-no-selection), header using the selected
    conversation record while detail loads, contextual Pin labels, dock close preserving draft, and
    contacts/group-creation pending-state audits -- none investigated in this pass.
-3. Exact-count-failure propagation (unknown/error with retry, never a fabricated zero) for Thing
+2. Exact-count-failure propagation (unknown/error with retry, never a fabricated zero) for Thing
    comment counts specifically was not audited (Hub's own `useConversationUnreadCount`/
    `useConversationMentionCount` already look correct per their own existing code).
 
