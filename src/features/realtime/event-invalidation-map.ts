@@ -66,9 +66,16 @@ const STATIC_TARGETS: Record<Exclude<RealtimeTable, "profile_object_state">, str
   thing_activity: ["thing-activity", "thing", "trophy", "lists"],
   nudges: ["nudges", "nudge-history", "catchup", "thing", "notifications"],
   notifications: ["notifications", "catchup"],
-  list_messages: ["list-messages", "list", "lists", "hub-conversations"],
+  list_messages: ["list-messages", "list", "lists", "hub-conversations", "hub-conversation"],
   bucket_items: ["bucket", "buckets", "bucket-items"],
-  list_members: ["list", "lists"],
+  // C-06: a membership change (in particular a revocation) can make a List
+  // inaccessible -- every mounted surface that shows List-scoped content
+  // must re-derive from a real refetch (which discovers "no longer
+  // accessible" via RLS), not just List detail/index. Previously only
+  // "list"/"lists" were here, so Hub's conversation sidebar/detail, List
+  // chat, Hub/List files and meetings never even attempted a refetch that
+  // would have discovered the access loss.
+  list_members: ["list", "lists", "list-messages", "hub-conversations", "hub-conversation", "hub-files", "list-meetings", "upcoming-meetings"],
   list_meetings: ["list-meetings", "upcoming-meetings"],
 };
 

@@ -98,7 +98,7 @@ export function AsyncState<T>({
     };
   }, [isLoading]);
 
-  const branch = resolveAsyncBranch({ online, isLoading, hasError: Boolean(error), isEmpty, hasFetchedOnce });
+  const branch = resolveAsyncBranch({ online, isLoading, error, isEmpty, hasFetchedOnce });
 
   if (branch === "offline-blocked") {
     return (
@@ -198,6 +198,13 @@ export function AsyncState<T>({
   return (
     <>
       {!online ? <OfflineBanner /> : null}
+      {/* B-03: reaching "ready" with a non-null error means resolveAsyncBranch
+          already confirmed this is NOT a confirmed access-loss (those are
+          forced to "error-blocked" even with stale data present) -- only an
+          ambiguous/transient failure with existing content to fall back on
+          lands here. Surface it as a soft, non-blocking warning instead of
+          silently hiding that the latest refresh failed. */}
+      {online && error != null ? <TransientErrorBanner error={error} onRetry={onRetry} /> : null}
       {children(data as T)}
     </>
   );
@@ -210,6 +217,22 @@ function OfflineBanner() {
       className="mb-3 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"
     >
       <span>You're offline. Showing what was already loaded.</span>
+    </div>
+  );
+}
+
+function TransientErrorBanner({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  return (
+    <div
+      role="status"
+      className="mb-3 flex items-center justify-between gap-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900"
+    >
+      <span>Couldn't refresh — showing what was already loaded. {extractErrorMessage(error) ?? ""}</span>
+      {onRetry ? (
+        <button type="button" onClick={onRetry} className="shrink-0 font-medium underline">
+          Retry
+        </button>
+      ) : null}
     </div>
   );
 }

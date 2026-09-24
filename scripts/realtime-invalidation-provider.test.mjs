@@ -2,6 +2,7 @@ import "./dom-test-setup.mjs";
 import assert from "node:assert/strict";
 import { test, mock } from "node:test";
 import { createElement as h, StrictMode, useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { act } from "react";
 import { render, cleanup } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -271,7 +272,7 @@ test("an event delivered to a stale (already-retired) channel handler does not i
   cleanup();
 });
 
-test("membership revocation: a DELETE removing MY OWN membership proactively evicts that List's cached detail/messages", async () => {
+test("membership revocation: a DELETE removing MY OWN membership invalidates that List's cached detail/messages (not removeQueries, which would defeat an active observer's own refetch -- see the dedicated observer test below)", async () => {
   resetHarness();
   const qc = newTestClientWithPersistentCache();
 
@@ -291,6 +292,10 @@ test("membership revocation: a DELETE removing MY OWN membership proactively evi
   // reason.
   qc.setQueryData(["list", "list-1"], { id: "list-1", name: "stale" });
   qc.setQueryData(["list-messages", "list-1"], [{ id: "m1" }]);
+  // C-06: Hub's own conversation detail and files panel for the SAME
+  // List were not covered by this fast path at all before this fix.
+  qc.setQueryData(["hub-conversation", "list-1"], { id: "list-1" });
+  qc.setQueryData(["hub-files", "list-1"], [{ id: "f1" }]);
 
   const handlers = handlersByChannel.get(channelsCreated[0].name);
   const listMembersHandler = handlers.find((h2) => h2.filter.table === "list_members");
@@ -301,8 +306,16 @@ test("membership revocation: a DELETE removing MY OWN membership proactively evi
     old: { profile_id: "profile-A", list_id: "list-1" },
   });
 
-  assert.equal(qc.getQueryData(["list", "list-1"]), undefined, "the now-inaccessible List's detail cache must be evicted");
-  assert.equal(qc.getQueryData(["list-messages", "list-1"]), undefined, "the now-inaccessible List's messages cache must be evicted");
+  // C-06: checking isInvalidated (not getQueryData() === undefined --
+  // that was removeQueries()'s own contract, which this fix deliberately
+  // replaced) -- an invalidated query still returns its last-known data
+  // synchronously, but is guaranteed to refetch the next time anything
+  // observes it, and refetches immediately if something already does
+  // (proven separately below with a real mounted observer).
+  assert.equal(qc.getQueryState(["list", "list-1"])?.isInvalidated, true, "the now-inaccessible List's detail cache must be invalidated");
+  assert.equal(qc.getQueryState(["list-messages", "list-1"])?.isInvalidated, true, "the now-inaccessible List's messages cache must be invalidated");
+  assert.equal(qc.getQueryState(["hub-conversation", "list-1"])?.isInvalidated, true, "Hub's own conversation detail for the same List must be invalidated too");
+  assert.equal(qc.getQueryState(["hub-files", "list-1"])?.isInvalidated, true, "the files panel for the same List must be invalidated too");
 
   unmount();
   qc.clear();
@@ -334,9 +347,9 @@ test("membership revocation fast path does not fire for someone ELSE's removed m
   });
 
   assert.notEqual(
-    qc.getQueryData(["list", "list-1"]),
-    undefined,
-    "removing a DIFFERENT profile's membership must not evict MY cached access to the same List",
+    qc.getQueryState(["list", "list-1"])?.isInvalidated,
+    true,
+    "removing a DIFFERENT profile's membership must not invalidate MY cached access to the same List",
   );
 
   unmount();
@@ -368,9 +381,9 @@ test("membership revocation fast path does nothing when the payload lacks the ne
   assert.doesNotThrow(() => listMembersHandler.cb({ eventType: "DELETE", old: { id: "membership-row-id" } }));
 
   assert.notEqual(
-    qc.getQueryData(["list", "list-1"]),
-    undefined,
-    "an incomplete payload must not be treated as grounds to evict -- the batched invalidate-and-refetch is the real mechanism, not this fast path",
+    qc.getQueryState(["list", "list-1"])?.isInvalidated,
+    true,
+    "an incomplete payload must not be treated as grounds to invalidate -- the batched invalidate-and-refetch is the real mechanism, not this fast path",
   );
 
   unmount();
@@ -508,6 +521,70 @@ test("P9: a reconnect after an identity switch belongs to the NEW identity's own
   await settle();
 
   assert.equal(invalidateCallCount, 0, "a stale reconnect notification for a retired identity's owner must not replay a catch-up pass into the new identity's cache");
+
+  unmount();
+  qc.clear();
+  cleanup();
+});
+
+test("C-06: a mounted List-detail observer actually refetches (not just the raw cache entry changing) once the batched invalidation flushes", async () => {
+  // The audit's own point: removeQueries() alone is not proof a live
+  // consumer visibly reacts -- confirmed directly: an active, already-fresh
+  // QueryObserver does NOT automatically re-fetch just because its cache
+  // entry was removed (verified against a bare QueryObserver: calls stayed
+  // at 1 after removeQueries(), only invalidateQueries() drove a second
+  // fetch). The REAL guarantee for a mounted observer -- already the
+  // documented intent of the surrounding code, not a new claim -- is the
+  // BATCHED invalidateQueries() path every membership event also enqueues
+  // (targetsForEvent -> the expanded list_members target list fixed by
+  // this same change). This mounts a real useQuery observer and proves
+  // THAT path actually drives a visible refetch once the batcher flushes.
+  resetHarness();
+  const qc = newTestClientWithPersistentCache();
+  let observed = null;
+  let queryFnCalls = 0;
+
+  function ListObserver() {
+    const query = useQuery({
+      queryKey: ["list", "list-1"],
+      queryFn: async () => {
+        queryFnCalls += 1;
+        return { id: "list-1", name: `refetched-${queryFnCalls}` };
+      },
+      enabled: true,
+    });
+    useEffect(() => {
+      observed = { data: query.data, isLoading: query.isLoading };
+    });
+    return null;
+  }
+
+  let unmount;
+  await act(async () => {
+    ({ unmount } = render(h(QueryClientProvider, { client: qc }, h(Harness, {}), h(ListObserver))));
+  });
+  await act(async () => {
+    setTestSession(liveSession("profile-A"));
+  });
+  await settle();
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+  const callsBeforeEvent = queryFnCalls;
+  assert.ok(callsBeforeEvent > 0, "sanity: the observer fetched at least once on mount");
+
+  const handlers = handlersByChannel.get(channelsCreated[0].name);
+  const listMembersHandler = handlers.find((h2) => h2.filter.table === "list_members");
+
+  await act(async () => {
+    listMembersHandler.cb({ eventType: "DELETE", old: { profile_id: "profile-A", list_id: "list-1" } });
+  });
+  await settleBatcher();
+
+  assert.ok(
+    queryFnCalls > callsBeforeEvent,
+    "the mounted observer must have actually re-fetched once the batched invalidation flushed, not just had its cache entry silently removed",
+  );
 
   unmount();
   qc.clear();

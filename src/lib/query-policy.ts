@@ -70,22 +70,37 @@ export type AsyncBranch = "offline-blocked" | "error-blocked" | "loading" | "emp
  * `"pending"` the whole time, it just isn't actively fetching — which
  * would be indistinguishable from a confirmed empty result if derived
  * from those two flags alone.
+ *
+ * B-03: takes the actual `error` (not a bare `hasError` boolean) so it can
+ * tell a CONFIRMED access-loss (unauthenticated/forbidden/not-found — the
+ * caller must act or nothing will change) apart from an ambiguous/transient
+ * failure (network blip, 5xx, timeout). Stale non-empty data survives a
+ * transient failure (the caller can layer a soft warning on top of
+ * `children` itself), but confirmed access loss must clear protected
+ * content even when stale data is still cached — old data plus a 403 is
+ * not the same fact as a harmless background refetch failure.
  */
 export function resolveAsyncBranch(input: {
   online: boolean;
   isLoading: boolean;
-  hasError: boolean;
+  error: unknown;
   isEmpty: boolean;
   hasFetchedOnce: boolean;
 }): AsyncBranch {
-  const { online, isLoading, hasError, isEmpty, hasFetchedOnce } = input;
+  const { online, isLoading, error, isEmpty, hasFetchedOnce } = input;
   // A successfully-loaded-but-empty result is a confirmed fact ("you
   // genuinely have zero Lists"), not an unknown — blocking it behind
   // "offline, nothing cached yet" would misrepresent a known result as
   // unknown. Only block offline when there's neither non-empty data to
   // fall back on (isEmpty is false) nor a confirmed result to trust.
   if (!online && isEmpty && !hasFetchedOnce) return "offline-blocked";
-  if (hasError && isEmpty) return "error-blocked";
+  if (error != null) {
+    const kind = classifyAsyncError(error);
+    const isConfirmedAccessLoss = kind === "unauthenticated" || kind === "forbidden" || kind === "not-found";
+    if (isConfirmedAccessLoss || isEmpty) return "error-blocked";
+    // Otherwise: an ambiguous/transient failure with stale non-empty data
+    // already loaded -- fall through to "ready" below.
+  }
   if (isLoading) return "loading";
   if (isEmpty) return "empty";
   return "ready";

@@ -83,20 +83,33 @@ export function RealtimeInvalidationProvider() {
       channel.on("postgres_changes", { event: "*", schema: "public", table }, (payload) => {
         if (!isEpochCurrent(qc, epoch)) return;
         batcher.enqueue(targetsForEvent({ table }));
-        // P8 membership-revocation fast path: best-effort, NOT the
-        // primary mechanism. If this DELETE's old row happens to
-        // identify OUR OWN removed membership, proactively evict the
-        // now-inaccessible List's cached detail/messages instead of
-        // waiting for the batched invalidate-and-refetch above to
-        // discover it. Deliberately conditional on the payload
-        // actually containing these fields: a DELETE payload may only
-        // include primary-key columns unless the table's REPLICA
-        // IDENTITY is FULL, which this code has no way to verify
-        // without live database access (an open, blocked verification
-        // item -- see the P8/P10 report). The batched invalidate above
-        // is the real guarantee: it forces a refetch that discovers
-        // "no longer accessible" via RLS regardless of whether this
-        // fast path fires at all.
+        // P8/C-06 membership-revocation fast path: best-effort, NOT the
+        // primary mechanism (the batched invalidate above, using the
+        // expanded list_members target list, is what actually guarantees
+        // coverage). If this DELETE's old row happens to identify OUR OWN
+        // removed membership, invalidate the now-inaccessible List's own
+        // surfaces immediately rather than waiting for the batcher's
+        // debounce. Deliberately conditional on the payload actually
+        // containing these fields: a DELETE payload may only include
+        // primary-key columns unless the table's REPLICA IDENTITY is
+        // FULL, which this code has no way to verify without live
+        // database access (an open, blocked verification item -- see the
+        // P8/P10 report).
+        //
+        // C-06: this used to call removeQueries(), which deletes the
+        // query object outright -- for an ALREADY-MOUNTED, already-fresh
+        // observer (e.g. the exact List detail page the user is looking
+        // at when their access is revoked), that silently defeats the
+        // batched invalidateQueries() enqueued just above: invalidating a
+        // query that no longer exists in the cache is a no-op, so the
+        // mounted observer never actually re-fetched and never
+        // discovered the access loss (confirmed directly against a bare
+        // QueryObserver: invalidateQueries after removeQueries left the
+        // fetch count unchanged). invalidateQueries alone both forces an
+        // immediate refetch for any currently-active observer AND marks
+        // the query invalidated for the next time it's observed even
+        // while inactive -- it does not require anything to have been
+        // removed first.
         if (
           table === "list_members" &&
           payload?.eventType === "DELETE" &&
@@ -104,8 +117,10 @@ export function RealtimeInvalidationProvider() {
           typeof payload.old?.list_id === "string"
         ) {
           const listId = payload.old.list_id;
-          qc.removeQueries({ queryKey: ["list", listId] });
-          qc.removeQueries({ queryKey: ["list-messages", listId] });
+          void qc.invalidateQueries({ queryKey: ["list", listId] });
+          void qc.invalidateQueries({ queryKey: ["list-messages", listId] });
+          void qc.invalidateQueries({ queryKey: ["hub-conversation", listId] });
+          void qc.invalidateQueries({ queryKey: ["hub-files", listId] });
         }
       });
     }

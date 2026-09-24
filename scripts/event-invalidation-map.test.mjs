@@ -35,3 +35,30 @@ test("targetKey is stable for equal targets and distinguishes different ones", (
   assert.equal(targetKey(["court"]), targetKey(["court"]));
   assert.notEqual(targetKey(["court"]), targetKey(["thing"]));
 });
+
+// C-06 (audit): list_members previously routed to only ["list", "lists"] --
+// a membership change (in particular a revocation) never invalidated Hub's
+// conversation sidebar/detail, List chat, Hub/List files, or meetings, so
+// none of those mounted surfaces ever attempted the refetch that would
+// discover "no longer accessible" via RLS.
+test("list_members -> every List-scoped surface that could show now-inaccessible content, not just List detail/index", () => {
+  const flat = targetsForEvent({ table: "list_members" }).map((t) => t[0]);
+  for (const expected of [
+    "list",
+    "lists",
+    "list-messages",
+    "hub-conversations",
+    "hub-conversation",
+    "hub-files",
+    "list-meetings",
+    "upcoming-meetings",
+  ]) {
+    assert.ok(flat.includes(expected), `list_members must invalidate "${expected}"`);
+  }
+});
+
+test("list_messages -> also invalidates hub-conversation (the Hub detail view of the same List), not only the sidebar index", () => {
+  const flat = targetsForEvent({ table: "list_messages" }).map((t) => t[0]);
+  assert.ok(flat.includes("hub-conversation"));
+  assert.ok(flat.includes("hub-conversations"));
+});
