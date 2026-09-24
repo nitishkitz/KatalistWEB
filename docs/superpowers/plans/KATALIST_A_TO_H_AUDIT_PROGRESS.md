@@ -316,3 +316,38 @@ Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T03 is not marked 
 **Evidence:** 564/564 full tests, typecheck clean, lint 0 errors/75 existing warnings, migration exercised in PGlite, and `build:app` clean. New focused tests cover 1,001 same-timestamp rows, invalid cursor syntax, concurrent same-draft sends, lost-response recovery, retry UUID reuse, identity retirement, realtime echo dedupe, shared two-composer draft/attachment state, focused-search suppression on confirmed access loss, and atomic SQL notification claims. Existing tests updated only where their old flat-cache/source-shape assumptions no longer represented behavior.
 
 **Still open:** no actual browser pass for scroll geometry, cross-surface navigation, or staging Supabase/RLS; the additive Supabase migration is **not deployed**. The List route still contains its separate chat markup until T11 replaces it with `ListChatPanel`; it consumes the same draft/send/pagination contract in the interim. T02's file-resource and durable-comment-attachment items and T05's read/unread semantics remain separate open packages. T06 owns the remaining unbounded overview aggregate and Hub summary reads. Do not treat this local code pass as release clearance.
+
+### T05 — Read state, counts, and Team/Hub behavior
+
+**Status:** LOCAL PASS -- partial, remaining items below. **Owns:** C-08, G-10, G-11; coordinates
+auxiliary count failures with C-04.
+
+**Commit:** `59ef17d`.
+
+**Done:**
+- `read-state.ts` (Thing comment "last read" state) had no identity scoping at all -- a real,
+  live bug matching the exact hazard `chat-read-state.ts` (Hub conversations) had already been
+  fixed for. `getThingLastReadAt()`/`markThingAsRead()` now require an identity and are no-ops
+  without one; the pre-scoping legacy unscoped key is never read as a fallback, only cleaned up on
+  next write. `calculateCommentCounts()` reuses its existing `currentActorId` param as the scoping
+  key. Updated all four call sites (`ThingDetailContent.tsx`, `CourtDetailModal.tsx`,
+  `CourtFocusView.tsx`, `use-court.ts`).
+
+**Verification:** 570/570 tests (564 T04 baseline + 6 new), 0 typecheck errors, 0 lint errors/75
+warnings (unchanged), clean build. Regression test confirmed to fail (5 of 6 assertions) against
+the pre-fix file.
+
+**Remaining (explicit, not started):**
+1. Marking a Thing "read" still fires on open regardless of which tab is showing or whether
+   comments actually loaded -- the plan's "chat must be selected, visible, successfully loaded and
+   showing the relevant message boundary; Files/Call tab visits and failed reads do not clear
+   unread" is not implemented. `markThingAsRead` still uses wall-clock `now()`, not the latest
+   actually-viewed comment's own timestamp.
+2. Hub landing (no-conversations vs. populated-with-no-selection), header using the selected
+   conversation record while detail loads, contextual Pin labels, dock close preserving draft, and
+   contacts/group-creation pending-state audits -- none investigated in this pass.
+3. Exact-count-failure propagation (unknown/error with retry, never a fabricated zero) for Thing
+   comment counts specifically was not audited (Hub's own `useConversationUnreadCount`/
+   `useConversationMentionCount` already look correct per their own existing code).
+
+Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T05 is not marked complete.
