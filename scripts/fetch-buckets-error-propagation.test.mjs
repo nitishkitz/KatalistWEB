@@ -51,6 +51,11 @@ mock.module("@/features/things/map-thing-rows", {
   },
 });
 mock.module("@/features/people/actor-query", { namedExports: { getActorId: async () => "actor-1" } });
+mock.module("@/integrations/supabase/rpcs", { namedExports: {
+  callUngeneratedRpc: () => ({ abortSignal: async () => failingTable === "progress"
+    ? { data: null, error: new Error("progress read failed") }
+    : { data: [{ bucket_id: "b1", progress_completed: 0, progress_total: 1 }], error: null } }),
+} });
 mock.module("@/features/lists/map-list-rows", {
   namedExports: {
     mapDbListRows: async (qc, profileId, rows) => rows.map((r) => ({ id: r.id, name: "l", members: [] })),
@@ -81,6 +86,15 @@ test("fetchBuckets rejects when the Lists read fails, instead of silently omitti
   failingTable = "lists";
   try {
     await assert.rejects(fetchBuckets({}, "work", "profile-1"), /lists read failed/);
+  } finally {
+    failingTable = null;
+  }
+});
+
+test("fetchBuckets rejects when unique progress cannot be read", async () => {
+  failingTable = "progress";
+  try {
+    await assert.rejects(fetchBuckets({}, "work", "profile-1"), /progress read failed/);
   } finally {
     failingTable = null;
   }

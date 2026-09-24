@@ -49,6 +49,9 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
   const actorMock = mock.module("@/features/people/actor-query", {
     namedExports: { getActorId: () => Promise.resolve("actor-1") },
   });
+  const progressMock = mock.module("@/integrations/supabase/rpcs", {
+    namedExports: { callUngeneratedRpc: () => ({ abortSignal: () => track("progress-query", () => delay({ data: [{ bucket_id: "b1", progress_completed: 0, progress_total: 1 }], error: null })) }) },
+  });
 
   const chainable = (name, result) => {
     const node = {
@@ -85,12 +88,12 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
     // both start before either resolves (they only run after
     // bucket-items-query resolves, which is a genuine dependency and
     // stays sequential).
-    const queriesStart = events.indexOf("things-query:start");
-    const queriesEnd = events.findIndex((e, i) => i > queriesStart - 1 && (e === "things-query:end" || e === "lists-query:end"));
+    const queriesStart = Math.min(events.indexOf("things-query:start"), events.indexOf("lists-query:start"), events.indexOf("progress-query:start"));
+    const queriesEnd = events.findIndex((e, i) => i > queriesStart - 1 && (e === "things-query:end" || e === "lists-query:end" || e === "progress-query:end"));
     const startedBeforeEitherQueryEnded = new Set(events.slice(queriesStart, queriesEnd).filter((e) => e.endsWith(":start")));
     assert.deepEqual(
       startedBeforeEitherQueryEnded,
-      new Set(["things-query:start", "lists-query:start"]),
+      new Set(["things-query:start", "lists-query:start", "progress-query:start"]),
       `expected the Things and Lists queries to start together; event order was: ${events.join(", ")}`,
     );
 
@@ -114,6 +117,7 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
     mapThingsMock.restore();
     mapListsMock.restore();
     actorMock.restore();
+    progressMock.restore();
     clientMock.restore();
   }
 });

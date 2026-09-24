@@ -17,6 +17,9 @@ mock.module("@/features/things/map-thing-rows", {
   },
 });
 mock.module("@/features/people/actor-query", { namedExports: { getActorId: async () => "actor-1" } });
+mock.module("@/integrations/supabase/rpcs", { namedExports: {
+  callUngeneratedRpc: () => ({ abortSignal: async () => ({ data: [{ bucket_id: "b1", progress_completed: 1, progress_total: 2 }], error: null }) }),
+} });
 mock.module("@/features/lists/map-list-rows", {
   namedExports: {
     mapDbListRows: async (qc, profileId, rows) =>

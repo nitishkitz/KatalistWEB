@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import { mapDbThingRows, THING_OVERVIEW_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { getActorId } from "@/features/people/actor-query";
 import { mapDbListRows, type DbListRow } from "@/features/lists/map-list-rows";
@@ -7,6 +8,18 @@ import type { BucketCard } from "./fixtures";
 import { withReadDeadline } from "@/lib/read-request";
 
 const COLORS = ["bg-violet-500", "bg-sky-500", "bg-emerald-500", "bg-amber-500", "bg-rose-500"];
+type BucketProgress = { bucket_id: string; progress_completed: number; progress_total: number };
+
+export async function fetchBucketProgress(ids: string[], signal?: AbortSignal): Promise<BucketProgress[]> {
+  const rows: BucketProgress[] = [];
+  for (let offset = 0; offset < ids.length; offset += 500) {
+    const request = callUngeneratedRpc("get_bucket_progress", { p_bucket_ids: ids.slice(offset, offset + 500) });
+    const { data, error } = await (signal ? request.abortSignal(signal) : request);
+    if (error) throw error;
+    rows.push(...(data ?? []) as BucketProgress[]);
+  }
+  return rows;
+}
 
 /**
  * Kept in its own module (no React/JSX imports) so it's importable from a
@@ -28,7 +41,7 @@ export async function fetchBuckets(
   // 15s window per phase, and wired to React Query's own cancellation
   // signal so a superseded/refetched call or unmount stops whichever
   // request is actually in flight.
-  const { buckets, items, thingRows, listRows, listMemberThingRows } = await withReadDeadline(querySignal, async (signal) => {
+  const { buckets, items, thingRows, listRows, progressRows } = await withReadDeadline(querySignal, async (signal) => {
     const { data: buckets, error } = await supabase
       .from("buckets")
       .select("id,name,context,updated_at")
@@ -50,17 +63,13 @@ export async function fetchBuckets(
     const thingIds = (items ?? []).map((i) => i.thing_id).filter(Boolean) as string[];
     const listIds = (items ?? []).map((i) => i.list_id).filter(Boolean) as string[];
 
-    // Three independent reads, run concurrently: direct Things, referenced
-    // Lists' own metadata, and the referenced Lists' MEMBER Thing ids
-    // (id/list_id/work_status only -- just enough to deduplicate against
-    // bucketThingIds below; mapDbListRows' own aggregate thingCount/
-    // doneCount don't expose which specific Things they counted, so this is
-    // a second, narrower query rather than a shared-type change to
-    // ListRow).
+    // Three independent reads: direct Thing cards, referenced List cards,
+    // and one RLS-scoped unique progress aggregate. The aggregate replaces
+    // transferring every member Thing solely to deduplicate progress.
     const [
       { data: thingRows, error: thingsError },
       { data: listRows, error: listsError },
-      { data: listMemberThingRows, error: listMemberThingsError },
+      progressRows,
     ] = await Promise.all([
       thingIds.length
         ? supabase.from("things").select(THING_OVERVIEW_COLUMNS).in("id", thingIds).abortSignal(signal)
@@ -68,15 +77,12 @@ export async function fetchBuckets(
       listIds.length
         ? supabase.from("lists").select("id,name,context,owner_profile_id,updated_at").in("id", listIds).abortSignal(signal)
         : Promise.resolve({ data: [] as DbListRow[], error: null }),
-      listIds.length
-        ? supabase.from("things").select("id,list_id,work_status").in("list_id", listIds).abortSignal(signal)
-        : Promise.resolve({ data: [] as Array<{ id: string; list_id: string; work_status: string }>, error: null }),
+      fetchBucketProgress(ids, signal),
     ]);
     if (thingsError) throw thingsError;
     if (listsError) throw listsError;
-    if (listMemberThingsError) throw listMemberThingsError;
 
-    return { buckets, items, thingRows, listRows, listMemberThingRows };
+    return { buckets, items, thingRows, listRows, progressRows };
   });
 
   // Same reasoning: each mapper only needs its own rows.
@@ -89,43 +95,16 @@ export async function fetchBuckets(
 
   const thingMap = new Map(mappedThings.map((t) => [t.id, t]));
   const listMap = new Map(mappedLists.map((l) => [l.id, l]));
-  // G03: list_id -> that list's member Thing rows, for the dedup below.
-  const memberThingsByListId = new Map<string, Array<{ id: string; work_status: string }>>();
-  for (const row of listMemberThingRows ?? []) {
-    if (!row.list_id || !row.id) continue;
-    const arr = memberThingsByListId.get(row.list_id) ?? [];
-    arr.push({ id: row.id, work_status: row.work_status ?? "" });
-    memberThingsByListId.set(row.list_id, arr);
-  }
+  const progressByBucket = new Map(progressRows.map((row) => [row.bucket_id, row]));
 
   return (buckets ?? []).map((b, i) => {
     const refs = (items ?? []).filter((it) => it.bucket_id === b.id);
     const bucketThingIds = refs.map((r) => r.thing_id).filter(Boolean) as string[];
     const bucketListIds = refs.map((r) => r.list_id).filter(Boolean) as string[];
-    const directThings = bucketThingIds.map((id) => thingMap.get(id)).filter(Boolean);
-    const activeDirectThings = directThings.filter((thing) => thing?.workStatus !== "cancelled");
-
-    // G03: denominator is UNIQUE accessible non-cancelled Things across
-    // BOTH direct bucket items and every referenced List's own members --
-    // a Thing that's a direct item AND also belongs to a referenced List
-    // must only be counted once. Naively adding activeDirectThings.length
-    // to each list's own thingCount (the previous behavior) double-counted
-    // exactly that overlap.
-    const uniqueActiveThingIds = new Set<string>();
-    const uniqueSortedThingIds = new Set<string>();
-    for (const thing of activeDirectThings) {
-      uniqueActiveThingIds.add(thing!.id);
-      if (thing!.workStatus === "sorted") uniqueSortedThingIds.add(thing!.id);
-    }
-    for (const lid of bucketListIds) {
-      for (const row of memberThingsByListId.get(lid) ?? []) {
-        if (row.work_status === "cancelled") continue;
-        uniqueActiveThingIds.add(row.id);
-        if (row.work_status === "sorted") uniqueSortedThingIds.add(row.id);
-      }
-    }
-    const progressCompleted = uniqueSortedThingIds.size;
-    const progressTotal = uniqueActiveThingIds.size;
+    const progress = progressByBucket.get(b.id);
+    if (!progress) throw new Error(`Bucket progress unavailable for ${b.id}`);
+    const progressCompleted = progress.progress_completed;
+    const progressTotal = progress.progress_total;
 
     const bucketCollaborators: { id: string; name: string; avatarUrl: string | null; initials: string }[] = [];
     const seenCollab = new Set<string>();

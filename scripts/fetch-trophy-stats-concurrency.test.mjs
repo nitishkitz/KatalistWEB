@@ -4,7 +4,7 @@ import { QueryClient } from "@tanstack/react-query";
 
 /**
  * Batch C1: fetchTrophyStats had two independent-but-sequential shapes:
- * (1) the actor+events chain and the shredded-objects lookup don't
+ * (1) the activity aggregate and the shredded-objects lookup don't
  * depend on each other at all; (2) the three name-resolution queries
  * (things/lists/buckets) each depend only on shreddedRows, not on each
  * other. Same deterministic event-order approach as the other C1 tests.
@@ -30,7 +30,7 @@ function makeTracker() {
   };
 }
 
-test("fetchTrophyStats runs the actor/events chain and the shredded lookup concurrently, then the three name lookups concurrently", async () => {
+test("fetchTrophyStats runs the bounded activity aggregate and Shred lookup concurrently, then the three name lookups concurrently", async () => {
   const { events, track } = makeTracker();
 
   const chainable = (name, result) => {
@@ -53,12 +53,6 @@ test("fetchTrophyStats runs the actor/events chain and the shredded lookup concu
     namedExports: {
       supabase: {
         from: (table) => {
-          if (table === "actors") return chainable("actor-lookup", { data: { id: "actor-1" }, error: null });
-          if (table === "thing_activity")
-            return chainable("events-query", {
-              data: [{ event: "sorted", created_at: new Date().toISOString(), actor_id: "actor-1" }],
-              error: null,
-            });
           if (table === "profile_object_state")
             return chainable("shredded-query", {
               data: [
@@ -76,19 +70,29 @@ test("fetchTrophyStats runs the actor/events chain and the shredded lookup concu
       },
     },
   });
+  const rpcMock = mock.module("@/integrations/supabase/rpcs", {
+    namedExports: {
+      callUngeneratedRpc: (name) => {
+        assert.equal(name, "get_trophy_activity_stats");
+        return track("activity-aggregate", () => delay({
+          data: [{ sorted_count: 1, caught_count: 0, weekly_count: 1, streak_days: 1 }], error: null,
+        }));
+      },
+    },
+  });
 
   try {
     const { fetchTrophyStats } = await import("@/features/me/use-trophy");
     const stats = await fetchTrophyStats("profile-1", new QueryClient());
 
-    // Proof #1: the actor/events chain and the shredded lookup both
+    // Proof #1: the aggregate and Shred lookup both
     // start before either resolves.
-    const start1 = events.indexOf("actor-lookup:start");
-    const end1 = events.findIndex((e, i) => i > start1 - 1 && (e === "events-query:end" || e === "shredded-query:end"));
+    const start1 = events.indexOf("activity-aggregate:start");
+    const end1 = events.findIndex((e, i) => i > start1 - 1 && (e === "activity-aggregate:end" || e === "shredded-query:end"));
     const startedBeforeEitherEnded1 = new Set(events.slice(start1, end1).filter((e) => e.endsWith(":start")));
     assert.ok(
-      startedBeforeEitherEnded1.has("actor-lookup:start") && startedBeforeEitherEnded1.has("shredded-query:start"),
-      `expected the actor/events chain and shredded lookup to start together; event order was: ${events.join(", ")}`,
+      startedBeforeEitherEnded1.has("activity-aggregate:start") && startedBeforeEitherEnded1.has("shredded-query:start"),
+      `expected the activity aggregate and shredded lookup to start together; event order was: ${events.join(", ")}`,
     );
 
     // Proof #2: the three name-resolution queries all start before any
@@ -121,6 +125,7 @@ test("fetchTrophyStats runs the actor/events chain and the shredded lookup concu
       { id: "b1", title: "My Bucket", kind: "bucket" },
     );
   } finally {
+    rpcMock.restore();
     clientMock.restore();
   }
 });

@@ -78,7 +78,7 @@ function MePage() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const uploadAvatar = useUploadAvatar();
   const updateProfile = useUpdateProfile();
-  const { stats, restore } = useTrophy();
+  const { stats, restore, readState: trophyReadState, retry: retryTrophy } = useTrophy();
   const { context } = useAppContext();
 
   const [panel, setPanel] = useState<string | null>(null);
@@ -315,19 +315,25 @@ function MePage() {
         </div>
 
         {/* Trophy stat strip */}
+        {trophyReadState === "error" || trophyReadState === "stale" ? (
+          <div role="alert" className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-950">
+            <span>{trophyReadState === "stale" ? "Trophy stats may be out of date." : "Trophy stats are unavailable. Your activity has not been erased."}</span>
+            <button type="button" onClick={retryTrophy} className="shrink-0 font-semibold underline">Retry</button>
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {(
             [
-              { icon: Crown, tint: "bg-[#f0ebfd] text-[#975ee2]", value: String(stats.sorted), label: "Things sorted" },
-              { icon: BarChart3, tint: "bg-[#e6fcf0] text-[#12a15f]", value: String(stats.caught), label: "Things caught" },
-              { icon: Flame, tint: "bg-[#fef0e4] text-[#fd983f]", value: stats.streak, label: "Current streak" },
+              { icon: Crown, tint: "bg-[#f0ebfd] text-[#975ee2]", value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.sorted), label: "Things sorted" },
+              { icon: BarChart3, tint: "bg-[#e6fcf0] text-[#12a15f]", value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.caught), label: "Things caught" },
+              { icon: Flame, tint: "bg-[#fef0e4] text-[#fd983f]", value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : stats.streak, label: "Current streak" },
               {
                 // G06: stats.weekly is a rolling 7-day window (now - 7
                 // days), not a calendar week -- "This week" implied a
                 // reset every Sunday/Monday that never actually happens.
                 icon: Calendar,
                 tint: "bg-[#eef1ff] text-[#2874f4]",
-                value: String(stats.weekly),
+                value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.weekly),
                 label: "Last 7 days",
               },
             ] as const
@@ -411,7 +417,7 @@ function MePage() {
                 onClick={() => setPanel("shredded")}
                 className="rounded-lg border border-border px-3 py-2 text-[12px] text-foreground hover:bg-muted"
               >
-                Recently Shredded{stats.shredded.length ? ` (${stats.shredded.length})` : ""}
+                Recently Shredded{trophyReadState === "ready" || trophyReadState === "stale" ? stats.shredded.length ? ` (${stats.shredded.length})` : "" : ""}
               </button>
               <button
                 type="button"
@@ -493,7 +499,9 @@ function MePage() {
               <>
                 <h2 className="text-[15px] font-semibold">Recently Shredded</h2>
                 <p className="mt-1 text-[12px] text-muted-foreground">Restore something you shredded from your surfaces.</p>
-                {stats.shredded.length === 0 ? (
+                {trophyReadState === "error" || trophyReadState === "loading" ? (
+                  <p className="mt-4 text-[13px] text-muted-foreground">{trophyReadState === "loading" ? "Loading Shred history…" : "Shred history unavailable. Retry from the Trophy section."}</p>
+                ) : stats.shredded.length === 0 ? (
                   <p className="mt-4 text-[13px] text-muted-foreground">Nothing shredded yet.</p>
                 ) : (
                   <ul className="mt-4 space-y-2">

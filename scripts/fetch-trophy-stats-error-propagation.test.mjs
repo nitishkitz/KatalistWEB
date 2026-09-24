@@ -3,17 +3,16 @@ import { test, mock } from "node:test";
 import { QueryClient } from "@tanstack/react-query";
 
 /**
- * Batch C1/P2 read-error policy: the actor lookup and the Shred
+ * T06 read-error policy: the activity aggregate and the Shred
  * history are stats-bearing reads, not decorative -- a failed read
  * must reject, not silently masquerade as "you haven't sorted/shredded
- * anything" (a false zero). A legitimate "no actor row yet" is not an
- * error (.maybeSingle() -> { data: null, error: null }) and must keep
- * resolving normally. The three name-resolution queries (things/lists/
+ * anything" (a false zero). A legitimate "no actor row yet" is returned
+ * by the aggregate as exact zeros. The three name-resolution queries (things/lists/
  * buckets) stay decorative: a failed name lookup degrades to the
  * object_type fallback label rather than rejecting the batch.
  */
 
-let failing = null; // "actor" | "shredded" | null
+let failing = null; // "activity" | "shredded" | null
 
 const chainable = (table, result) => {
   const node = {
@@ -23,11 +22,6 @@ const chainable = (table, result) => {
     not: () => node,
     order: () => node,
     limit: () => node,
-    maybeSingle: () => {
-      if (table === "actor-missing") return Promise.resolve({ data: null, error: null });
-      if (failing === "actor" && table === "actors") return Promise.resolve({ data: null, error: new Error("actors read failed") });
-      return Promise.resolve(result);
-    },
     then: (resolve) => {
       if (failing === "shredded" && table === "profile_object_state") {
         resolve({ data: null, error: new Error("profile_object_state read failed") });
@@ -43,12 +37,6 @@ mock.module("@/integrations/supabase/client", {
   namedExports: {
     supabase: {
       from: (table) => {
-        if (table === "actors") return chainable(table, { data: { id: "actor-1" }, error: null });
-        if (table === "thing_activity")
-          return chainable(table, {
-            data: [{ event: "sorted", created_at: new Date().toISOString(), actor_id: "actor-1" }],
-            error: null,
-          });
         if (table === "profile_object_state") return chainable(table, { data: [], error: null });
         if (table === "things" || table === "lists" || table === "buckets") return chainable(table, { data: [], error: null });
         throw new Error(`unexpected table: ${table}`);
@@ -56,16 +44,23 @@ mock.module("@/integrations/supabase/client", {
     },
   },
 });
+mock.module("@/integrations/supabase/rpcs", {
+  namedExports: {
+    callUngeneratedRpc: (name) => {
+      assert.equal(name, "get_trophy_activity_stats");
+      return Promise.resolve(failing === "activity"
+        ? { data: null, error: new Error("activity aggregate read failed") }
+        : { data: [{ sorted_count: 1, caught_count: 0, weekly_count: 1, streak_days: 1 }], error: null });
+    },
+  },
+});
 
 const { fetchTrophyStats } = await import("@/features/me/use-trophy");
 
-test("fetchTrophyStats rejects when the actor read fails, instead of silently zeroing every stat", async () => {
-  failing = "actor";
+test("fetchTrophyStats rejects when activity aggregate fails, instead of silently zeroing every stat", async () => {
+  failing = "activity";
   try {
-    // A fresh QueryClient -- the actor lookup is cached by (qc,
-    // profileId) via the P4 actor cache, so reusing one across these
-    // differently-scenario'd tests would serve a stale result.
-    await assert.rejects(fetchTrophyStats("profile-1", new QueryClient()), /actors read failed/);
+    await assert.rejects(fetchTrophyStats("profile-1", new QueryClient()), /activity aggregate read failed/);
   } finally {
     failing = null;
   }

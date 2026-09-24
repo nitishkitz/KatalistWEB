@@ -375,7 +375,7 @@ Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T05 is not marked 
 ### T06 — Summary/detail separation and efficient auxiliary data
 
 **Status:** IN PROGRESS — code and isolated SQL fixtures are implemented for the main
-Court/List/Hub paths, but T06 is **not** closed. The four additive migrations below
+Court/List/Bucket/Hub paths, but T06 is **not** closed. The additive migrations below
 are not deployed; no staging or live RLS/performance measurement has run.
 
 **Implemented locally:**
@@ -402,6 +402,20 @@ are not deployed; no staging or live RLS/performance measurement has run.
   Hub and List identity mapping now queries only the owner/member/author
   profile IDs discovered from their authorized page (in ≤100-ID chunks),
   rather than downloading the full directory on the common path.
+- `get_bucket_progress` (`20260924200000_bucket_progress.sql`) computes
+  exact, RLS-visible unique progress across direct Things and referenced
+  List members in ≤500-Bucket batches. It removes the prior full member-Thing
+  ID transfer while preserving the direct-plus-List overlap semantics; an
+  isolated SQL fixture proves the dedup and a client regression checks the
+  mapping. A failed/missing count rejects rather than displaying zero.
+- `get_trophy_activity_stats` (`20260924210000_trophy_activity_stats.sql`)
+  computes lifetime sorted/caught counts, rolling seven-day event count, and
+  a local-calendar streak under invoker RLS in one response rather than
+  transferring the entire actor activity history. Trophy and the capped
+  Shred-history read still run concurrently. A failed aggregate rejects;
+  the page now shows unavailable/retry (or labels cached data stale) rather
+  than displaying fabricated zero counters. SQL and client failure fixtures
+  cover the contract.
 - `get_hub_conversation_page` (`20260924170000_hub_conversation_page.sql`)
   returns one latest-message summary per RLS-visible DM/group in a ≤100-row
   keyset page. `useConversations` uses infinite-query pages; the Hub rail has
@@ -412,11 +426,11 @@ are not deployed; no staging or live RLS/performance measurement has run.
   unknown instead of zero or an N-per-row fallback. Hub member/read errors
   no longer become a false empty rail.
 
-**Local evidence:** isolated PGlite tests execute all four migrations against
+**Local evidence:** isolated PGlite tests execute all six T06 migrations against
 owner/member/outsider policies and verify grants, bounds, exact counts,
 self-authorship, latest-only ordering, and keyset behavior after a newly
 arriving conversation. Client tests verify 0/30/300-Thing aggregate calls
-(0/1/1), 0/10/100-List count calls (0/1/1), and 0/10/100-Hub page calls
+(0/1/1), 0/10/100-List and Bucket count calls (each 0/1/1), and 0/10/100-Hub page calls
   (one summary request; one count/member request and one scoped-identity
   helper call for nonempty pages). These are
 mocked transport request-volume/adapter-duration fixtures, **not** actual
@@ -431,18 +445,9 @@ parallelization and actor cache were retained.
   RLS (especially `thing_attachments` policies); do not turn on the new
   client against an environment that lacks the RPCs without accepting the
   explicit limited/error states. No migration was run in this local pass.
-- `fetchBuckets` still fetches referenced Lists' member Thing IDs to compute
-  cross-list/direct-item *unique* progress exactly. This is intentionally
-  preserved for correctness, but its scaling remains unmeasured; replace it
-  only with an authorized unique-count aggregate that passes the overlap
-  regression tests. Other screens still call the broad cached
+- Other screens still call the broad cached
   `getProfileIdentities()` directory helper; audit their cold-route volume
   separately before claiming app-wide directory efficiency.
-- `use-trophy.ts` still loads the actor's entire activity history to compute
-  lifetime counts and streak, although Shred is already limited to ten rows.
-  Decide and test a bounded server aggregate if this path is in T06's launch
-  performance budget. Do not describe this path as optimized merely because
-  its independent reads are parallel.
 - Browser verification of detail/overview transitions, unavailable-count
   banners, Hub pagination/search, and explicit PDF preview remains part of
   the later validation pass requested by the user.

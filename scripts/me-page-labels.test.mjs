@@ -13,14 +13,14 @@ import { test } from "node:test";
  *   a real contact email.
  */
 const me = readFileSync(new URL("../src/routes/me.tsx", import.meta.url), "utf8");
-const trophy = readFileSync(new URL("../src/features/me/use-trophy.ts", import.meta.url), "utf8");
+const trophySql = readFileSync(new URL("../supabase/migrations/20260924210000_trophy_activity_stats.sql", import.meta.url), "utf8");
 
 test("the rolling-7-day stat is labeled accurately, not \"This week\"", () => {
   assert.doesNotMatch(me, /label:\s*"This week"/);
   assert.match(me, /label:\s*"Last 7 days"/);
   // Confirms the underlying metric really is a rolling window, not a
   // calendar week -- the label fix matches the actual computation.
-  assert.match(trophy, /weekAgo\s*=\s*Date\.now\(\)\s*-\s*7\s*\*\s*24\s*\*\s*60\s*\*\s*60\s*\*\s*1000/);
+  assert.match(trophySql, /created_at\s*>=\s*now\(\)\s*-\s*interval\s*'7 days'/);
 });
 
 test("a synthetic @katalist.local auth email is never shown as a contact email", () => {

@@ -7,7 +7,10 @@ import { test, mock } from "node:test";
  * (unrelated) thingCount/doneCount, added together with no
  * cross-referencing -- a Thing that is BOTH a direct bucket item AND a
  * member of a referenced List was counted twice. This proves the fix:
- * the same Thing appearing both ways is counted once.
+ * the same Thing appearing both ways is counted once. The actual dedup
+ * guarantee now lives in get_bucket_progress SQL and its PGlite test; this
+ * test proves the client consumes that exact aggregate without re-adding
+ * List totals and double-counting it.
  */
 mock.module("@/features/things/map-thing-rows", {
   namedExports: {
@@ -18,6 +21,9 @@ mock.module("@/features/things/map-thing-rows", {
   },
 });
 mock.module("@/features/people/actor-query", { namedExports: { getActorId: async () => "actor-1" } });
+mock.module("@/integrations/supabase/rpcs", { namedExports: {
+  callUngeneratedRpc: () => ({ abortSignal: async () => ({ data: [{ bucket_id: "b1", progress_completed: 1, progress_total: 1 }], error: null }) }),
+} });
 mock.module("@/features/lists/map-list-rows", {
   namedExports: {
     // thingCount/doneCount mirror the SAME underlying rows fetch-buckets'
