@@ -439,6 +439,11 @@ export function ListCallPanel({
             {count} {count === 1 ? "in call" : "in call"}
             {call.connecting ? (
               <span>· connecting…</span>
+            ) : call.lifecycle === "reconnecting" ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#f59e0b]" />
+                Reconnecting…
+              </span>
             ) : call.joined ? (
               <span className="inline-flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#12a15f]" />

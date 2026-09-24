@@ -1,8 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { CallRoom, type CallParticipant, type DrawOp } from "./call-room";
 
 export type CallReaction = { id: string; from: string; emoji: string };
+
+/**
+ * Explicit call lifecycle, derived from real join()/leave() outcomes and
+ * live per-peer RTCPeerConnection.connectionState (CallRoom already reports
+ * each participant's raw `connection` state; this rolls that up to one
+ * room-level signal instead of leaving every consumer to reimplement it):
+ *  - idle: never joined (or cleanly left without having connected)
+ *  - joining: join() in flight
+ *  - connected: joined, and no peer is currently disconnected/failed
+ *  - reconnecting: joined, but at least one peer's connection dropped --
+ *    CallRoom already calls pc.restartIce()/rebuilds failed peers on its
+ *    own, this just surfaces that it's happening
+ *  - ended: leave() was called while previously connected/reconnecting
+ *    (distinct from idle so the UI can show a "call ended" beat instead of
+ *    silently vanishing); cleared by the next join()
+ *  - error: join() itself failed (permission denied or device/network
+ *    failure) -- see lastError for the message already shown via toast
+ */
+export type CallLifecycleState = "idle" | "joining" | "connected" | "reconnecting" | "ended" | "error";
 
 /** Reduces one incoming/outgoing DrawOp onto the shared whiteboard history. */
 function applyDrawOp(prev: DrawOp[], op: DrawOp): DrawOp[] {
@@ -46,6 +66,10 @@ export type ListCallControls = {
   raisedHandQueue: { id: string; name: string }[];
   /** True when *you* have your hand raised. */
   handRaised: boolean;
+  /** Explicit lifecycle state -- see CallLifecycleState for what each value means. */
+  lifecycle: CallLifecycleState;
+  /** Message from the most recent join() failure, if lifecycle is "error". */
+  lastError: string | null;
   join: () => Promise<boolean>;
   leave: () => void;
   toggleMute: () => void;
@@ -81,6 +105,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const [drawOps, setDrawOps] = useState<DrawOp[]>([]);
   const [raisedHandQueue, setRaisedHandQueue] = useState<{ id: string; name: string }[]>([]);
   const [handRaised, setHandRaised] = useState(false);
+  const [lifecycle, setLifecycle] = useState<CallLifecycleState>("idle");
+  const [lastError, setLastError] = useState<string | null>(null);
 
   const leave = useCallback(() => {
     roomRef.current?.leave();
@@ -100,6 +126,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setDrawOps([]);
     setRaisedHandQueue([]);
     setHandRaised(false);
+    setLifecycle((prev) => (prev === "connected" || prev === "reconnecting" ? "ended" : "idle"));
   }, []);
 
   const join = useCallback(async (): Promise<boolean> => {
@@ -109,6 +136,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       return false;
     }
     setConnecting(true);
+    setLifecycle("joining");
+    setLastError(null);
     const room = new CallRoom({
       listId,
       selfId,
@@ -135,14 +164,17 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       });
       setLocalStream(stream);
       setJoined(true);
+      setLifecycle("connected");
       return true;
     } catch (err) {
       roomRef.current = null;
-      toast.error(
+      const message =
         err instanceof DOMException && err.name === "NotAllowedError"
           ? "Camera and microphone permission is required to join the call."
-          : "Could not start the call on this device.",
-      );
+          : "Could not start the call on this device.";
+      toast.error(message);
+      setLifecycle("error");
+      setLastError(message);
       return false;
     } finally {
       setConnecting(false);
@@ -255,6 +287,24 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     };
   }, []);
 
+  // H02: block Morning Brief (and anything else gated by D03's
+  // InteractionBlockerProvider) from auto-opening over an active call.
+  useBlockWhile(joined, "active-call");
+
+  // H02: roll every peer's raw RTCPeerConnection.connectionState (already
+  // reported per-participant by CallRoom) up into one room-level signal.
+  // CallRoom itself already calls pc.restartIce()/rebuilds a "failed" peer
+  // on its own -- this only surfaces that recovery is in progress instead of
+  // the call silently looking connected while a peer is actually dropped.
+  useEffect(() => {
+    if (!joined) return;
+    const anyDisconnected = participants.some((p) => p.connection === "disconnected" || p.connection === "failed");
+    setLifecycle((prev) => {
+      if (anyDisconnected) return prev === "connected" ? "reconnecting" : prev;
+      return prev === "reconnecting" ? "connected" : prev;
+    });
+  }, [participants, joined]);
+
   const screenSharerId = useMemo(() => {
     if (sharing) return "self";
     return participants.find((p) => p.sharing)?.id ?? null;
@@ -295,6 +345,8 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setDocPage,
     raisedHandQueue,
     handRaised,
+    lifecycle,
+    lastError,
     join,
     leave,
     toggleMute,

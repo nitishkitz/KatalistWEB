@@ -18,6 +18,15 @@ import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
  */
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+// use-morning-brief.ts reads the real wall clock (`new Date()`) to decide
+// whether it's past the morning threshold in the mocked profile timezone
+// (America/New_York). Pinning Date to a fixed instant well past 7am ET
+// makes every test deterministic regardless of what time it actually is
+// when this suite runs (it was previously wall-clock-dependent and failed
+// whenever run before ~7am ET). Only Date is faked -- setTimeout below
+// still uses real timers.
+mock.timers.enable({ apis: ["Date"], now: new Date("2026-06-15T15:00:00Z").getTime() });
+
 let testSession = { user: { id: "profile-1" }, session: { user: { id: "profile-1", app_metadata: {} } } };
 let testPreview = false;
 let catchupCount = 1;
