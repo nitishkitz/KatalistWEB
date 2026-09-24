@@ -12,6 +12,28 @@ export type ProfileIdentity = {
   avatar_url: string | null;
 };
 
+/** Resolve only participants already discovered through an authorized List or
+ * Hub member read. The view contains display name/avatar, never email/phone.
+ * Chunk IDs so even a large group does not build an oversized URL. */
+export async function fetchProfileIdentitiesByIds(ids: string[], signal?: AbortSignal): Promise<ProfileIdentity[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const result: ProfileIdentity[] = [];
+  for (let offset = 0; offset < unique.length; offset += 100) {
+    const request = supabase.from("public_identities")
+      .select("id,display_name,avatar_url")
+      .in("id", unique.slice(offset, offset + 100));
+    const { data, error } = await (signal ? request.abortSignal(signal) : request);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      if (!row.id) continue;
+      result.push({
+        id: row.id, display_name: row.display_name ?? "Member", avatar_url: row.avatar_url ?? null, email: null,
+      });
+    }
+  }
+  return result;
+}
+
 export async function fetchProfileIdentities(): Promise<ProfileIdentity[]> {
   const map = new Map<string, ProfileIdentity>();
 
@@ -205,4 +227,3 @@ export function getProfileIdentities(qc: QueryClient): Promise<ProfileIdentity[]
     staleTime: PROFILE_DIRECTORY_STALE_TIME_MS,
   });
 }
-

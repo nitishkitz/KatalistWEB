@@ -13,8 +13,10 @@ mock.module("@/features/things/map-thing-rows", {
     mapDbThingRows: async (rows) =>
       rows.map((r) => ({ id: r.id, title: `Thing ${r.id}`, workStatus: r.work_status ?? "not_started", assignee: {}, owner: {} })),
     THING_COLUMNS: "id",
+    THING_OVERVIEW_COLUMNS: "id",
   },
 });
+mock.module("@/features/people/actor-query", { namedExports: { getActorId: async () => "actor-1" } });
 mock.module("@/features/lists/map-list-rows", {
   namedExports: {
     mapDbListRows: async (qc, profileId, rows) =>

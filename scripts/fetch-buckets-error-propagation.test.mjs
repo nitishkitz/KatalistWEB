@@ -47,8 +47,10 @@ mock.module("@/features/things/map-thing-rows", {
   namedExports: {
     mapDbThingRows: async (rows) => rows.map((r) => ({ id: r.id, title: "t", workStatus: "not_started" })),
     THING_COLUMNS: "id",
+    THING_OVERVIEW_COLUMNS: "id",
   },
 });
+mock.module("@/features/people/actor-query", { namedExports: { getActorId: async () => "actor-1" } });
 mock.module("@/features/lists/map-list-rows", {
   namedExports: {
     mapDbListRows: async (qc, profileId, rows) => rows.map((r) => ({ id: r.id, name: "l", members: [] })),

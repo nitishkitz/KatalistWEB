@@ -39,6 +39,13 @@ export type Thing = {
   unreadCommentCount?: number;
   attachmentCount?: number;
   files?: ThingFile[];
+  /** Summary objects never claim to contain the full attachment/detail set. */
+  detailLevel?: "overview" | "detail";
+  /** Counts unavailable is distinct from a confirmed zero. */
+  overviewStatsUnavailable?: boolean;
+  /** A detail attachment read failed; an empty files array is not authoritative. */
+  attachmentsUnavailable?: boolean;
+  commentCountsUnavailable?: boolean;
 };
 
 export type ThingFileType = "image" | "video" | "pdf" | "docx" | "excel" | "other" | "png" | "jpg";

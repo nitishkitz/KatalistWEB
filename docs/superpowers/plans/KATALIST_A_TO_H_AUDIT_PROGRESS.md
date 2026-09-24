@@ -371,3 +371,78 @@ errors/75 warnings (unchanged), clean build. Every new regression test confirmed
 its pre-fix source (via `git stash`) and pass post-fix.
 
 Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T05 is not marked complete.
+
+### T06 — Summary/detail separation and efficient auxiliary data
+
+**Status:** IN PROGRESS — code and isolated SQL fixtures are implemented for the main
+Court/List/Hub paths, but T06 is **not** closed. The four additive migrations below
+are not deployed; no staging or live RLS/performance measurement has run.
+
+**Implemented locally:**
+- `THING_OVERVIEW_COLUMNS` excludes `notes`. Court, List, Bucket, Bucket detail,
+  accessible-Thing picker, and Catch Up overview fetchers use the overview mapper.
+  The selected Thing still uses `useThing()`/`THING_COLUMNS` for full detail.
+  `ThingStackCard` no longer mounts `PdfCanvas`; a PDF is a reserved-size file
+  tile until the user explicitly opens the viewer.
+- `get_thing_overview_stats` (`20260924160000_thing_overview_stats.sql`) is an
+  invoker/RLS-scoped, ≤500-ID aggregate with context validation, exact comment,
+  viewer-unread, and ready-attachment counts plus one preview descriptor. The
+  client sends T05's local read watermark and batches preview URL signing.
+  It never falls back to downloading all comment/attachment rows when the RPC
+  is missing or fails: counts are `undefined`, and overview UI says “Counts
+  unavailable.” Detail attachment and comment-count failures likewise remain
+  distinguishable from confirmed empty results and expose retry.
+- `createSignedUrls` now signs deduplicated Thing paths in ≤100-path requests,
+  preserving per-file URL errors. The Court modal loads the selected Thing's
+  full files only on detail intent, not from its one-file overview preview.
+- `get_list_overview_counts` (`20260924180000_list_overview_counts.sql`)
+  replaces `mapDbListRows`'s transfer of every Thing row solely to compute
+  List counts; member and cover reads remain concurrent with the aggregate.
+  A missing aggregate row or a query error rejects instead of reporting zero.
+  Hub and List identity mapping now queries only the owner/member/author
+  profile IDs discovered from their authorized page (in ≤100-ID chunks),
+  rather than downloading the full directory on the common path.
+- `get_hub_conversation_page` (`20260924170000_hub_conversation_page.sql`)
+  returns one latest-message summary per RLS-visible DM/group in a ≤100-row
+  keyset page. `useConversations` uses infinite-query pages; the Hub rail has
+  “Load more,” and search explicitly says it covers loaded conversations.
+  `get_hub_unread_counts` (`20260924190000_hub_unread_counts.sql`) computes
+  unread and mention counts for the whole visible page in one viewer-scoped
+  request, excluding self-authored messages. A failed count aggregate shows
+  unknown instead of zero or an N-per-row fallback. Hub member/read errors
+  no longer become a false empty rail.
+
+**Local evidence:** isolated PGlite tests execute all four migrations against
+owner/member/outsider policies and verify grants, bounds, exact counts,
+self-authorship, latest-only ordering, and keyset behavior after a newly
+arriving conversation. Client tests verify 0/30/300-Thing aggregate calls
+(0/1/1), 0/10/100-List count calls (0/1/1), and 0/10/100-Hub page calls
+  (one summary request; one count/member request and one scoped-identity
+  helper call for nonempty pages). These are
+mocked transport request-volume/adapter-duration fixtures, **not** actual
+network or route latency claims. The pre-existing Court/Thing mapper
+parallelization and actor cache were retained.
+
+**Still required before T06 closure:**
+- Route-level cold/warm request counters and measured duration boundaries for
+  Court, Lists, Bucket and Hub in a safe browser/staging environment. The
+  adapter fixtures above do not prove full-route volume or live speed.
+- Verify these additive migrations on the actual staging schema and deployed
+  RLS (especially `thing_attachments` policies); do not turn on the new
+  client against an environment that lacks the RPCs without accepting the
+  explicit limited/error states. No migration was run in this local pass.
+- `fetchBuckets` still fetches referenced Lists' member Thing IDs to compute
+  cross-list/direct-item *unique* progress exactly. This is intentionally
+  preserved for correctness, but its scaling remains unmeasured; replace it
+  only with an authorized unique-count aggregate that passes the overlap
+  regression tests. Other screens still call the broad cached
+  `getProfileIdentities()` directory helper; audit their cold-route volume
+  separately before claiming app-wide directory efficiency.
+- `use-trophy.ts` still loads the actor's entire activity history to compute
+  lifetime counts and streak, although Shred is already limited to ten rows.
+  Decide and test a bounded server aggregate if this path is in T06's launch
+  performance budget. Do not describe this path as optimized merely because
+  its independent reads are parallel.
+- Browser verification of detail/overview transitions, unavailable-count
+  banners, Hub pagination/search, and explicit PDF preview remains part of
+  the later validation pass requested by the user.

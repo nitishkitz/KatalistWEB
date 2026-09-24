@@ -45,7 +45,7 @@ mock.module("@/integrations/supabase/client", {
   },
 });
 mock.module("@/features/people/directory", {
-  namedExports: { getProfileIdentities: async () => [], matchAvatarByName: () => null },
+  namedExports: { fetchProfileIdentitiesByIds: async () => [], matchAvatarByName: () => null },
 });
 mock.module("@/features/realtime/identity-cache-policy", {
   namedExports: { getIdentityEpoch: () => ({ epoch: 1 }), isEpochCurrent: () => true },

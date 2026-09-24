@@ -36,12 +36,16 @@ test("fetchBucketItems runs the Things and Lists lookups concurrently", async ()
       mapDbThingRows: (rows) =>
         track("map-things", () => delay(rows.map((r) => ({ id: r.id, title: "t" })))),
       THING_COLUMNS: "id",
+      THING_OVERVIEW_COLUMNS: "id",
     },
   });
   const mapListsMock = mock.module("@/features/lists/map-list-rows", {
     namedExports: {
       mapDbListRows: (qc, profileId, rows) => track("map-lists", () => delay(rows.map((r) => ({ id: r.id, name: "l" })))),
     },
+  });
+  const actorMock = mock.module("@/features/people/actor-query", {
+    namedExports: { getActorId: () => Promise.resolve("actor-1") },
   });
 
   const chainable = (name, result) => {
@@ -98,6 +102,7 @@ test("fetchBucketItems runs the Things and Lists lookups concurrently", async ()
   } finally {
     mapThingsMock.restore();
     mapListsMock.restore();
+    actorMock.restore();
     clientMock.restore();
   }
 });

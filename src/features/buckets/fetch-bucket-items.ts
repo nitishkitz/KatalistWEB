@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Thing } from "@/domain/thing";
 import type { ListRow } from "@/features/lists/fixtures";
 import { mapDbListRows, type DbListRow } from "@/features/lists/map-list-rows";
-import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { mapDbThingRows, THING_OVERVIEW_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { getActorId } from "@/features/people/actor-query";
 import { withReadDeadline } from "@/lib/read-request";
 
 export type BucketItem =
@@ -55,10 +56,11 @@ export async function fetchBucketItems(
     const [things, lists] = await Promise.all([
       (async () => {
         const { data: thingRows, error: thingError } = thingIds.length
-          ? await supabase.from("things").select(THING_COLUMNS).in("id", thingIds).abortSignal(signal)
+          ? await supabase.from("things").select(THING_OVERVIEW_COLUMNS).in("id", thingIds).abortSignal(signal)
           : { data: [], error: null };
         if (thingError) throw thingError;
-        return mapDbThingRows((thingRows ?? []) as DbThingRow[]);
+        if (!thingRows?.length) return [];
+        return mapDbThingRows(thingRows as DbThingRow[], await getActorId(qc, profileId), "overview");
       })(),
       fetchListsByIds(qc, profileId, listIds, signal),
     ]);

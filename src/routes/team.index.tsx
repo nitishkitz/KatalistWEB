@@ -10,7 +10,7 @@ export const Route = createFileRoute("/team/")({
 
 function TeamHome() {
   const { openContacts } = useHub();
-  const { conversations, isLoading: conversationsLoading } = useConversations();
+  const { conversations, isLoading: conversationsLoading, error: conversationsError, refetch } = useConversations();
   const { lists, isLoading: listsLoading } = useLists();
   // T05: the sidebar can genuinely be empty (a brand-new account with no
   // conversations or lists yet) or merely unselected (plenty exist, none
@@ -26,6 +26,13 @@ function TeamHome() {
         Loading your conversations…
       </div>
     );
+  }
+
+  if (conversationsError && conversations.length === 0) {
+    return <div role="alert" className="flex min-h-full flex-1 flex-col items-center justify-center gap-3 px-6 py-16 text-center text-sm text-[#6a769c]">
+      Conversations could not be loaded.
+      <button type="button" className="text-[#6638ec] underline" onClick={refetch}>Retry</button>
+    </div>;
   }
 
   return (

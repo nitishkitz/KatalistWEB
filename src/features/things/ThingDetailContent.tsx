@@ -745,6 +745,18 @@ export function ThingDetailContent({
         </p>
 
         {viewOnly && <ThingViewOnlyBanner />}
+        {thing.detailLevel === "overview" && live.error && (
+          <div role="alert" className="mt-3 text-xs text-amber-700">
+            Full Thing detail could not be loaded. The information below may be incomplete.
+            <button type="button" className="ml-2 underline" onClick={() => void live.refetch()}>Retry</button>
+          </div>
+        )}
+        {thing.commentCountsUnavailable && (
+          <div role="status" className="mt-3 text-xs text-amber-700">
+            Comment counts could not be loaded.
+            <button type="button" className="ml-2 underline" onClick={() => void live.refetch()}>Retry</button>
+          </div>
+        )}
 
         <div className="space-y-4 pt-4">
           {/* People / Status Row */}
@@ -989,6 +1001,14 @@ export function ThingDetailContent({
                 </button>
               )}
             </div>
+            {((thing.detailLevel === "overview" && live.isLoading) || thing.attachmentsUnavailable) && (
+              <div role="status" className="mb-2 text-xs text-amber-700">
+                {thing.attachmentsUnavailable ? "Files could not be loaded." : "Loading files…"}
+                {thing.attachmentsUnavailable && (
+                  <button type="button" className="ml-2 underline" onClick={() => void live.refetch()}>Retry</button>
+                )}
+              </div>
+            )}
             {displayFiles.length > 0 ? (
               <div className="overflow-hidden rounded-[8px] border border-[#eeeff6] bg-[#fdfcfd]">
                 {displayFiles.map((file, idx) => {
@@ -1259,6 +1279,12 @@ export function ThingDetailContent({
           <span>Updated {format(new Date(thing.updatedAt), "MMM d · h:mm a")}</span>
         </p>
         {viewOnly && <ThingViewOnlyBanner />}
+        {(thing.commentCountsUnavailable || thing.attachmentsUnavailable || (thing.detailLevel === "overview" && live.error)) && (
+          <div role="alert" className="mt-3 text-xs text-amber-700">
+            Some Thing details could not be loaded.
+            <button type="button" className="ml-2 underline" onClick={() => void live.refetch()}>Retry</button>
+          </div>
+        )}
       </header>
 
       <div className="grid grid-cols-1 gap-4 px-5 py-4 xl:grid-cols-2">

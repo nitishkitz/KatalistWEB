@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Thing } from "@/domain/thing";
 import { supabase } from "@/integrations/supabase/client";
-import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { mapDbThingRows, THING_OVERVIEW_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { getActorId } from "@/features/people/actor-query";
 import { withReadDeadline, READ_DEADLINE_MS } from "@/lib/read-request";
 
@@ -64,12 +64,12 @@ export async function fetchCourt(
     withReadDeadline(
       querySignal,
       async (signal) =>
-        supabase.from("things").select(THING_COLUMNS).eq("context", context).is("cancelled_at", null).abortSignal(signal),
+        supabase.from("things").select(THING_OVERVIEW_COLUMNS).eq("context", context).is("cancelled_at", null).abortSignal(signal),
       readDeadlineMs,
     ),
   ]);
 
   if (error) throw error;
-  const things = await mapDbThingRows((rows ?? []) as DbThingRow[], myActorId);
+  const things = await mapDbThingRows((rows ?? []) as DbThingRow[], myActorId, "overview");
   return { things, myActorId };
 }

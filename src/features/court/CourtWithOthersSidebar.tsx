@@ -212,7 +212,7 @@ export function CourtWithOthersSidebar({
                     </div>
 
                     {/* Badges line: comments and files */}
-                    {((thing.commentCount ?? 0) > 0 || (thing.files?.length ?? 0) > 0 || (thing.attachmentCount ?? 0) > 0) && (
+                    {((thing.commentCount ?? 0) > 0 || (thing.files?.length ?? 0) > 0 || (thing.attachmentCount ?? 0) > 0 || thing.overviewStatsUnavailable) && (
                       <div className="mt-1.5 flex items-center gap-2.5 text-[11px] text-muted-foreground">
                         {(thing.commentCount ?? 0) > 0 && (
                           <span
@@ -230,9 +230,10 @@ export function CourtWithOthersSidebar({
                         {((thing.files?.length ?? 0) > 0 || (thing.attachmentCount ?? 0) > 0) && (
                           <span className="inline-flex items-center gap-1 text-slate-500 font-medium">
                             <KatalistIcon name="attachment" className="h-3 w-3" />
-                            {thing.files?.length ?? thing.attachmentCount} {((thing.files?.length ?? thing.attachmentCount) === 1) ? "file" : "files"}
+                            {thing.attachmentCount ?? thing.files?.length ?? 0} {((thing.attachmentCount ?? thing.files?.length ?? 0) === 1) ? "file" : "files"}
                           </span>
                         )}
+                        {thing.overviewStatsUnavailable && <span title="Open this Thing to retry its counts">Counts unavailable</span>}
                       </div>
                     )}
 

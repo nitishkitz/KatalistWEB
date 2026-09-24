@@ -45,7 +45,7 @@ mock.module("@/features/doorman/use-doorman", { namedExports: { isDoormanEnabled
 // identities, etc.) go several levels deep for no benefit to these tests.
 mock.module("@/features/people/resolve-actors", { namedExports: { resolveActorPeople: async () => new Map() } });
 mock.module("@/features/things/map-thing-rows", {
-  namedExports: { mapDbThingRows: async () => [], THING_COLUMNS: "id" },
+  namedExports: { mapDbThingRows: async () => [], THING_COLUMNS: "id", THING_OVERVIEW_COLUMNS: "id" },
 });
 mock.module("@/features/things/local-state", {
   namedExports: {

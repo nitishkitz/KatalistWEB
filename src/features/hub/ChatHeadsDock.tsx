@@ -58,7 +58,7 @@ function UnreadReporter({
 }: {
   conversation: Conversation;
   myId: string | undefined;
-  onChange: (id: string, count: number) => void;
+  onChange: (id: string, count: number | "unknown") => void;
 }) {
   const count = useConversationUnreadCount(conversation, myId);
   useEffect(() => onChange(conversation.id, count), [conversation.id, count, onChange]);
@@ -88,7 +88,9 @@ function SwitcherBubble({
       )}
     >
       <PersonAvatar name={conversation.title} src={conversation.avatarUrl} size={36} />
-      {count > 0 ? (
+      {count === "unknown" ? (
+        <span title="Unread count unavailable — retrying" className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-amber-500 px-0.5 text-[9px] font-semibold text-white">?</span>
+      ) : count > 0 ? (
         <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-[#fc404d] px-0.5 text-[9px] font-semibold text-white">
           {count > 99 ? "99+" : count}
         </span>
@@ -173,7 +175,7 @@ export function ChatHeadsDock() {
   const [pos, setPos] = useState(loadPosition);
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [unreadById, setUnreadById] = useState<Record<string, number>>({});
+  const [unreadById, setUnreadById] = useState<Record<string, number | "unknown">>({});
   const [pipWindow, setPipWindow] = useState<PipWindow | null>(null);
   const bubbleRef = useRef<HTMLButtonElement | null>(null);
   const dragRef = useRef<{
@@ -200,11 +202,12 @@ export function ChatHeadsDock() {
   }, [pipWindow]);
 
   const totalUnread = useMemo(
-    () => Object.values(unreadById).reduce((sum, n) => sum + n, 0),
+    () => Object.values(unreadById).reduce<number>((sum, n) => sum + (n === "unknown" ? 0 : n), 0),
     [unreadById],
   );
+  const hasUnknownUnread = Object.values(unreadById).includes("unknown");
 
-  const onUnreadChange = (id: string, count: number) => setUnreadById((prev) => (prev[id] === count ? prev : { ...prev, [id]: count }));
+  const onUnreadChange = (id: string, count: number | "unknown") => setUnreadById((prev) => (prev[id] === count ? prev : { ...prev, [id]: count }));
 
   const openPip = async () => {
     const dpip = getDocumentPip();
@@ -302,14 +305,14 @@ export function ChatHeadsDock() {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            title="Chats"
+            title={hasUnknownUnread ? "Chats — some unread counts unavailable" : "Chats"}
             style={{ left: pos.x, top: pos.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE, touchAction: "none" }}
             className="fixed z-40 flex items-center justify-center rounded-full bg-white shadow-lg outline-none ring-1 ring-black/10 cursor-grab active:cursor-grabbing"
           >
             <img src={katalistMark.url} alt="" className="h-7 w-7" />
-            {totalUnread > 0 ? (
-              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background bg-[#fc404d] px-1 text-[10px] font-semibold text-white">
-                {totalUnread > 99 ? "99+" : totalUnread}
+            {totalUnread > 0 || hasUnknownUnread ? (
+              <span className={cn("absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background px-1 text-[10px] font-semibold text-white", hasUnknownUnread ? "bg-amber-500" : "bg-[#fc404d]")}>
+                {hasUnknownUnread ? "?" : totalUnread > 99 ? "99+" : totalUnread}
               </span>
             ) : null}
           </button>

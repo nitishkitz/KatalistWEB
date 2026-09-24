@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import type { Thing } from "@/domain/thing";
 import { PDFViewer, type ThingFile } from "@/features/things/PDFViewer";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
+import { useThing } from "@/features/things/use-thing";
 import type { CourtLaneId } from "./court-view-model";
 
 type CourtDetailModalProps = {
@@ -21,25 +22,17 @@ export function CourtDetailModal({
   onClose,
   onOpenFullView,
 }: CourtDetailModalProps) {
-  const [selectedFile, setSelectedFile] = useState<ThingFile | null>(() => {
-    return thing?.files?.[0] ?? null;
-  });
+  const detail = useThing(isOpen ? thing?.id ?? null : null);
+  const detailFiles = detail.thing?.detailLevel === "overview" ? undefined : detail.thing?.files;
+  const [selectedFile, setSelectedFile] = useState<ThingFile | null>(null);
 
   useEffect(() => {
-    if (thing?.files && thing.files.length > 0) {
-      if (!selectedFile || !thing.files.some((f) => f.id === selectedFile.id)) {
-        setSelectedFile(thing.files[0]);
-      }
-    } else {
-      setSelectedFile(null);
-    }
-    // Deliberately keyed only by thing.id: this resets the selected file
-    // when the Thing identity changes, not on every re-render where
-    // thing.files is a new array reference or selectedFile just changed
-    // (which this effect itself sets) — including either would fight the
-    // user's in-modal file selection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [thing?.id]);
+    setSelectedFile((current) => {
+      if (!detailFiles?.length) return null;
+      return current && detailFiles.some((file) => file.id === current.id)
+        ? current : detailFiles[0];
+    });
+  }, [thing?.id, detailFiles]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -66,7 +59,7 @@ export function CourtDetailModal({
 
   if (!isOpen || !thing) return null;
 
-  const hasFiles = Boolean(thing.files && thing.files.length > 0);
+  const hasFiles = (thing.attachmentCount ?? detailFiles?.length ?? thing.files?.length ?? 0) > 0;
 
   return (
     <div

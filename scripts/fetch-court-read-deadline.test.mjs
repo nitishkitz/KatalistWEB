@@ -17,6 +17,7 @@ mock.module("@/features/things/map-thing-rows", {
   namedExports: {
     mapDbThingRows: (rows) => Promise.resolve(rows.map((r) => ({ id: r.id, title: "mapped" }))),
     THING_COLUMNS: "id",
+    THING_OVERVIEW_COLUMNS: "id",
   },
 });
 mock.module("@/features/people/actor-query", {

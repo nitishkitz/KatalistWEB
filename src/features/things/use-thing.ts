@@ -28,7 +28,7 @@ export function useThing(thingId: string | null) {
     staleTime: 10_000,
   });
 
-  if (!thingId) return { thing: null, isLoading: false };
-  if (preview) return { thing: getThing(thingId) ?? null, isLoading: false };
-  return { thing: query.data ?? null, isLoading: query.isLoading, error: query.error };
+  if (!thingId) return { thing: null, isLoading: false, refetch: query.refetch };
+  if (preview) return { thing: getThing(thingId) ?? null, isLoading: false, refetch: query.refetch };
+  return { thing: query.data ?? null, isLoading: query.isLoading, error: query.error, refetch: query.refetch };
 }

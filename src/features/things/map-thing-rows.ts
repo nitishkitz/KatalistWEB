@@ -6,9 +6,12 @@ import { authedFetch } from "@/lib/authed-fetch";
 import { getThing } from "./local-state";
 import { calculateCommentCounts } from "./read-state";
 import { fetchRealAttachments } from "./attachments";
+import { fetchThingOverviewStats } from "./fetch-thing-overview-stats";
 
 export const THING_COLUMNS =
   "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at,created_at,notes";
+export const THING_OVERVIEW_COLUMNS =
+  "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at,created_at";
 
 export type DbThingRow = {
   id: string;
@@ -128,7 +131,11 @@ async function resolveCommentCounts(
   return commentCountsByThing;
 }
 
-export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | null): Promise<Thing[]> {
+export async function mapDbThingRows(
+  rows: DbThingRow[],
+  myActorId?: string | null,
+  mode: "overview" | "detail" = "detail",
+): Promise<Thing[]> {
   if (!rows.length) return [];
   const actorIds = new Set<string>();
   for (const r of rows) {
@@ -139,6 +146,39 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
   const listIds = [...new Set(rows.map((r) => r.list_id).filter(Boolean))] as string[];
   const thingIds = rows.map((r) => r.id);
 
+  if (mode === "overview") {
+    const [people, listNames, statsResult] = await Promise.all([
+      resolveActorPeople([...actorIds]),
+      resolveListNames(listIds),
+      fetchThingOverviewStats(rows, myActorId).then(
+        (map) => ({ available: true as const, map }),
+        () => ({ available: false as const, map: null }),
+      ),
+    ]);
+    return rows.map((r) => {
+      const stats = statsResult.map?.get(r.id);
+      const fallback = (id: string) => personOrSomeone(people, id);
+      return {
+        id: r.id, title: r.title,
+        creator: fallback(r.creator_actor_id), owner: fallback(r.owner_actor_id),
+        assignee: fallback(r.current_assignee_actor_id),
+        acknowledgement: r.acknowledgement, workStatus: r.work_status,
+        ownerImportance: r.owner_importance, personalPace: r.assignee_personal_pace,
+        dueAt: r.due_at, dueHasTime: r.due_has_time, context: r.context,
+        listId: r.list_id, listName: r.list_id ? (listNames.get(r.list_id) ?? null) : "Standalone",
+        cancelledAt: r.cancelled_at, sortedAt: r.sorted_at, caughtAt: r.caught_at,
+        updatedAt: r.updated_at, createdAt: r.created_at ?? undefined,
+        description: null,
+        files: stats?.previewFile ? [stats.previewFile] : undefined,
+        attachmentCount: stats?.attachmentCount,
+        commentCount: stats?.commentCount,
+        unreadCommentCount: stats?.unreadCommentCount,
+        detailLevel: "overview",
+        overviewStatsUnavailable: !stats,
+      } satisfies Thing;
+    });
+  }
+
   // These four lookups are independent of each other — only the final
   // per-row assembly below needs all of their results — so they run
   // concurrently instead of as a sequential await chain. This reduces
@@ -148,7 +188,7 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
   // scripts/map-thing-rows-concurrency.test.mjs for a deterministic
   // (event-order, not wall-clock) proof that all four start before any
   // of them resolves.
-  const [people, listNames, commentCountsResult, realAttachmentsByThing] = await Promise.all([
+  const [people, listNames, commentCountsResult, attachmentResult] = await Promise.all([
     resolveActorPeople([...actorIds]),
     resolveListNames(listIds),
     // Comment counts are stats, not decorative — a failed read must not
@@ -164,7 +204,10 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
     // priority over the legacy things.notes JSON blob, whose file URLs
     // were often ephemeral blob: URLs that die outside the tab that
     // created them.
-    fetchRealAttachments(thingIds).catch(() => new Map<string, ThingFile[]>()),
+    fetchRealAttachments(thingIds).then(
+      (map) => ({ available: true as const, map }),
+      () => ({ available: false as const, map: null }),
+    ),
   ]);
   const fallback = (id: string) => personOrSomeone(people, id);
 
@@ -184,7 +227,7 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
     }
 
     const localThing = getThing(r.id);
-    const realFiles = realAttachmentsByThing.get(r.id);
+    const realFiles = attachmentResult.map?.get(r.id);
     const finalFiles = realFiles?.length ? realFiles : (parsedFiles ?? localThing?.files);
     // `undefined` (unavailable) is distinct from `0` (confirmed no
     // comments) at the data level, even though both currently render
@@ -215,7 +258,10 @@ export async function mapDbThingRows(rows: DbThingRow[], myActorId?: string | nu
       createdAt: r.created_at ?? undefined,
       description: descriptionText,
       files: finalFiles,
-      attachmentCount: finalFiles?.length,
+      detailLevel: "detail",
+      attachmentCount: attachmentResult.available ? finalFiles?.length ?? 0 : undefined,
+      attachmentsUnavailable: !attachmentResult.available,
+      commentCountsUnavailable: !commentCountsResult.available,
       commentCount: commentData.commentCount,
       unreadCommentCount: commentData.unreadCommentCount,
     };

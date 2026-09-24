@@ -89,26 +89,32 @@ export function isConversationUnread(c: Conversation, myId: string | undefined, 
 /** Exact unread count for one conversation — a lightweight head-count query,
  *  only fired while that conversation is actually flagged unread. Shared by
  *  the chat-heads bubble and the Team Hub sidebar so both surfaces agree. */
-export function useConversationUnreadCount(conversation: Conversation, myId: string | undefined): number {
+export function useConversationUnreadCount(conversation: Conversation, myId: string | undefined): number | "unknown" {
   useConversationReadState();
   const lastReadAt = getConversationLastReadAt(conversation.id, myId);
   const unread = isConversationUnread(conversation, myId, lastReadAt);
+  const pageCountIsCurrent = conversation.readWatermark === lastReadAt && typeof conversation.unreadCount === "number";
+  const pageCountUnavailable = conversation.readWatermark === lastReadAt && conversation.unreadCount === "unknown";
   const query = useQuery({
     queryKey: ["conversation-unread-count", conversation.id, lastReadAt, conversation.lastAt],
-    enabled: unread,
+    enabled: unread && !pageCountIsCurrent && !pageCountUnavailable,
     staleTime: 10_000,
     queryFn: async () => {
-      const { count } = await supabase
+      const { count, error } = await supabase
         .from("list_messages")
         .select("id", { count: "exact", head: true })
         .eq("list_id", conversation.id)
         .is("deleted_at", null)
         .gt("created_at", new Date(lastReadAt).toISOString())
         .neq("author_profile_id", myId ?? "");
+      if (error) throw error;
       return count ?? 0;
     },
   });
+  if (pageCountIsCurrent) return conversation.unreadCount as number;
+  if (pageCountUnavailable) return "unknown";
   if (!unread) return 0;
+  if (query.isError) return "unknown";
   return query.data ?? 1; // optimistic "1" while the exact count is still loading
 }
 
@@ -126,9 +132,11 @@ export function useConversationMentionCount(
   useConversationReadState();
   const lastReadAt = getConversationLastReadAt(conversation.id, myId);
   const unread = isConversationUnread(conversation, myId, lastReadAt);
+  const pageCountIsCurrent = conversation.readWatermark === lastReadAt && typeof conversation.mentionCount === "number";
+  const pageCountUnavailable = conversation.readWatermark === lastReadAt && conversation.mentionCount === "unknown";
   const query = useQuery({
     queryKey: ["conversation-mention-count", conversation.id, lastReadAt, conversation.lastAt, myId],
-    enabled: unread && Boolean(myId),
+    enabled: unread && Boolean(myId) && !pageCountIsCurrent && !pageCountUnavailable,
     staleTime: 10_000,
     queryFn: async () => {
       const { count, error } = await supabase
@@ -143,6 +151,8 @@ export function useConversationMentionCount(
       return count ?? 0;
     },
   });
+  if (pageCountIsCurrent) return conversation.mentionCount as number;
+  if (pageCountUnavailable) return "unknown";
   if (!unread || !myId) return 0;
   // Loading still waits for the real number (a mention is specific enough
   // to wait for), but a query that has actually failed must not collapse

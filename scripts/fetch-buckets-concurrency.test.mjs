@@ -38,12 +38,16 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
     namedExports: {
       mapDbThingRows: (rows) => track("map-things", () => delay(rows.map((r) => ({ id: r.id, title: "t", workStatus: "not_started" })))),
       THING_COLUMNS: "id",
+      THING_OVERVIEW_COLUMNS: "id",
     },
   });
   const mapListsMock = mock.module("@/features/lists/map-list-rows", {
     namedExports: {
       mapDbListRows: (qc, profileId, rows) => track("map-lists", () => delay(rows.map((r) => ({ id: r.id, name: "l", members: [] })))),
     },
+  });
+  const actorMock = mock.module("@/features/people/actor-query", {
+    namedExports: { getActorId: () => Promise.resolve("actor-1") },
   });
 
   const chainable = (name, result) => {
@@ -92,7 +96,7 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
 
     // Deterministic concurrency proof #2: the two mappers both start
     // before either finishes.
-    const mapStart = events.indexOf("map-things:start");
+    const mapStart = Math.min(events.indexOf("map-things:start"), events.indexOf("map-lists:start"));
     const mapEnd = events.findIndex((e, i) => i > mapStart - 1 && (e === "map-things:end" || e === "map-lists:end"));
     const startedBeforeEitherMapEnded = new Set(events.slice(mapStart, mapEnd).filter((e) => e.endsWith(":start")));
     assert.deepEqual(
@@ -109,6 +113,7 @@ test("fetchBuckets runs the Things/Lists queries concurrently, and their mappers
   } finally {
     mapThingsMock.restore();
     mapListsMock.restore();
+    actorMock.restore();
     clientMock.restore();
   }
 });

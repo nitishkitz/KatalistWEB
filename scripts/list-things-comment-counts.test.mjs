@@ -43,6 +43,7 @@ let mapDbThingRowsCalls = [];
 mock.module("@/features/things/map-thing-rows", {
   namedExports: {
     THING_COLUMNS: "id,title",
+    THING_OVERVIEW_COLUMNS: "id,title",
     mapDbThingRows: (rows, myActorId) => {
       mapDbThingRowsCalls.push({ rows, myActorId });
       return Promise.resolve(rows.map((r) => ({ id: r.id, title: "mapped", commentCount: 3, unreadCommentCount: 2 })));

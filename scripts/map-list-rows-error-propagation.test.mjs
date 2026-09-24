@@ -3,7 +3,7 @@ import { test, mock } from "node:test";
 
 /**
  * Batch C1 error-propagation requirement: a failed list_members or
- * Things read must reject mapDbListRows(), not silently present as
+ * aggregate counts read must reject mapDbListRows(), not silently present as
  * "this List has no members/Things". Cover-URL signing stays
  * nonblocking (it already fails open internally via its own try/catch)
  * — not tested here as a failure case, since that's the one query this
@@ -23,7 +23,6 @@ const chainable = (table) => {
       }
       const byTable = {
         list_members: [{ list_id: "list-1", profile_id: "owner-1", role: "owner" }],
-        things: [{ id: "t1", list_id: "list-1", work_status: "sorted" }],
       };
       resolve({ data: byTable[table] ?? [], error: null });
     },
@@ -39,9 +38,16 @@ mock.module("@/integrations/supabase/client", {
     },
   },
 });
+mock.module("@/integrations/supabase/rpcs", {
+  namedExports: {
+    callUngeneratedRpc: async () => failingTable === "counts"
+      ? { data: null, error: new Error("counts read failed") }
+      : { data: [{ list_id: "list-1", thing_count: 1, done_count: 1, in_progress_count: 0 }], error: null },
+  },
+});
 mock.module("@/features/people/directory", {
   namedExports: {
-    getProfileIdentities: async () => [{ id: "owner-1", display_name: "Ada", avatar_url: null }],
+    fetchProfileIdentitiesByIds: async () => [{ id: "owner-1", display_name: "Ada", avatar_url: null }],
     matchAvatarByName: () => null,
   },
 });
@@ -67,10 +73,10 @@ test("mapDbListRows rejects when the list_members read fails, instead of returni
   }
 });
 
-test("mapDbListRows rejects when the Things read fails, instead of silently reporting zero Things", async () => {
-  failingTable = "things";
+test("mapDbListRows rejects when the aggregate read fails, instead of silently reporting zero Things", async () => {
+  failingTable = "counts";
   try {
-    await assert.rejects(mapDbListRows({}, "owner-1", [row]), /things read failed/);
+    await assert.rejects(mapDbListRows({}, "owner-1", [row]), /counts read failed/);
   } finally {
     failingTable = null;
   }

@@ -109,12 +109,13 @@ export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
             {thing.commentCount} {thing.commentCount === 1 ? "comment" : "comments"}
           </span>
         ) : null}
-        {(thing.files?.length ?? 0) > 0 ? (
+        {(thing.attachmentCount ?? thing.files?.length ?? 0) > 0 ? (
           <span className="inline-flex items-center gap-1.5">
             <KatalistIcon name="attachment" className="h-3.5 w-3.5" />
-            {thing.files!.length} {thing.files!.length === 1 ? "file" : "files"}
+            {thing.attachmentCount ?? thing.files?.length ?? 0} {(thing.attachmentCount ?? thing.files?.length ?? 0) === 1 ? "file" : "files"}
           </span>
         ) : null}
+        {thing.overviewStatsUnavailable && <span title="Open this Thing to retry its counts">Counts unavailable</span>}
       </div>
 
       {/* Description preview */}

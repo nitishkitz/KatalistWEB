@@ -16,6 +16,35 @@ type AttachmentRow = {
   created_at: string;
 };
 
+export type SignedThingPath = { url?: string; error?: string };
+
+/** Dedupe and cap private Storage signing requests for both detail files and
+ * bounded overview previews. Every requested path receives an outcome. */
+export async function signThingAttachmentPaths(paths: string[]): Promise<Map<string, SignedThingPath>> {
+  const uniquePaths = [...new Set(paths.filter(Boolean))];
+  const signingByPath = new Map<string, SignedThingPath>();
+  for (let offset = 0; offset < uniquePaths.length; offset += 100) {
+    const batch = uniquePaths.slice(offset, offset + 100);
+    const { data, error: signingError } = await supabase.storage
+      .from(BUCKET).createSignedUrls(batch, SIGNED_URL_TTL_SECONDS);
+    if (signingError) throw signingError;
+    for (const entry of data ?? []) {
+      const item = entry as { path: string; signedUrl?: string; error?: string | { message?: string } };
+      const reason = item.error
+        ? typeof item.error === "string" ? item.error : item.error.message
+        : undefined;
+      signingByPath.set(item.path, {
+        url: item.signedUrl || undefined,
+        error: reason || (!item.signedUrl ? "Preview unavailable for this file." : undefined),
+      });
+    }
+  }
+  for (const path of uniquePaths) {
+    if (!signingByPath.has(path)) signingByPath.set(path, { error: "Preview unavailable for this file." });
+  }
+  return signingByPath;
+}
+
 /**
  * Real, persisted attachments for a batch of Things, with fresh signed URLs.
  * RLS on thing_attachments already scopes rows to Things the caller can view
@@ -35,27 +64,7 @@ export async function fetchRealAttachments(thingIds: string[]): Promise<Map<stri
   if (!rows?.length) return result;
 
   const typedRows = rows as AttachmentRow[];
-  const uniquePaths = [...new Set(typedRows.map((row) => row.storage_key))];
-  const signingByPath = new Map<string, { url?: string; error?: string }>();
-  // Supabase Storage signs many paths per call. Bound each request so a
-  // large detail view does not create one enormous request or one request
-  // per file; keep the response correlated by path, not array position.
-  for (let offset = 0; offset < uniquePaths.length; offset += 100) {
-    const paths = uniquePaths.slice(offset, offset + 100);
-    const { data, error: signingError } = await supabase.storage
-      .from(BUCKET).createSignedUrls(paths, SIGNED_URL_TTL_SECONDS);
-    if (signingError) throw signingError;
-    for (const entry of data ?? []) {
-      const item = entry as { path: string; signedUrl?: string; error?: string | { message?: string } };
-      const reason = item.error
-        ? typeof item.error === "string" ? item.error : item.error.message
-        : undefined;
-      signingByPath.set(item.path, {
-        url: item.signedUrl || undefined,
-        error: reason || (!item.signedUrl ? "Preview unavailable for this file." : undefined),
-      });
-    }
-  }
+  const signingByPath = await signThingAttachmentPaths(typedRows.map((row) => row.storage_key));
 
   const signed = typedRows.map((row) => {
       const signing = signingByPath.get(row.storage_key);

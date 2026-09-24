@@ -41,6 +41,7 @@ test("fetchCourt runs the actor lookup and the Things query concurrently, withou
     namedExports: {
       mapDbThingRows: (rows) => Promise.resolve(rows.map((r) => ({ id: r.id, title: "mapped" }))),
       THING_COLUMNS: "id",
+      THING_OVERVIEW_COLUMNS: "id",
     },
   });
 

@@ -65,6 +65,7 @@ function ConversationRow({
   onOpen: () => void;
 }) {
   const unread = useConversationUnreadCount(c, myId);
+  const hasUnread = unread === "unknown" || unread > 0;
   const mentions = useConversationMentionCount(c, myId);
   return (
     <button
@@ -84,7 +85,7 @@ function ConversationRow({
       <span className="min-w-0 flex-1">
         <span className="flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1">
-            <span className={cn("truncate text-[13px]", unread > 0 ? "font-bold text-[#000533]" : "font-semibold text-[#000533]")}>
+            <span className={cn("truncate text-[13px]", hasUnread ? "font-bold text-[#000533]" : "font-semibold text-[#000533]")}>
               {c.title}
             </span>
             {mentions === "unknown" ? (
@@ -107,10 +108,12 @@ function ConversationRow({
           <span className="shrink-0 text-[10.5px] text-[#8487a7]">{relativeTime(c.lastAt)}</span>
         </span>
         <span className="flex items-center justify-between gap-2">
-          <span className={cn("block truncate text-[11.5px]", unread > 0 ? "font-medium text-[#000533]" : "text-[#6a769c]")}>
+          <span className={cn("block truncate text-[11.5px]", hasUnread ? "font-medium text-[#000533]" : "text-[#6a769c]")}>
             {c.lastMessage || (c.kind === "group" ? `${c.memberCount} members` : "Say hello")}
           </span>
-          {unread > 0 ? (
+          {unread === "unknown" ? (
+            <span title="Unread count unavailable — retrying" className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">?</span>
+          ) : unread > 0 ? (
             <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#fc404d] px-1 text-[10px] font-semibold text-white">
               {unread > 99 ? "99+" : unread}
             </span>
@@ -127,7 +130,7 @@ export function HubSidebar() {
   const activeId = params.conversationId;
   const online = usePresence();
   const { user } = useSession();
-  const { conversations, isLoading: conversationsLoading } = useConversations();
+  const { conversations, isLoading: conversationsLoading, error: conversationsError, refetch: refetchConversations, hasMore, loadMore, isLoadingMore } = useConversations();
   const { lists, isLoading: listsLoading } = useLists();
   const { members } = useTeam();
   const { openContacts } = useHub();
@@ -260,9 +263,14 @@ export function HubSidebar() {
             <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Conversations</p>
             {conversationsLoading ? (
               <ConversationListSkeleton />
+            ) : conversationsError && conversations.length === 0 ? (
+              <div role="alert" className="px-2 py-6 text-center text-[12px] text-amber-700">
+                Conversations could not be loaded.
+                <button type="button" className="ml-1 underline" onClick={refetchConversations}>Retry</button>
+              </div>
             ) : filteredConversations.length === 0 ? (
               <p className="px-2 py-6 text-center text-[12px] text-[#6a769c]">
-                No conversations yet. Search a name above or open Contacts to start one.
+                {q ? "No matches in loaded conversations." : "No conversations yet. Search a name above or open Contacts to start one."}
               </p>
             ) : (
               filteredConversations.map((c) => {
@@ -278,6 +286,16 @@ export function HubSidebar() {
                   />
                 );
               })
+            )}
+            {q && hasMore && <p className="px-2 py-1 text-[11px] text-[#8487a7]">Search covers loaded conversations. Load more to include older ones.</p>}
+            {conversationsError && conversations.length > 0 && (
+              <p role="alert" className="px-2 py-1 text-[11px] text-amber-700">The conversation list could not refresh. Your loaded conversations remain visible.</p>
+            )}
+            {hasMore && (
+              <button type="button" disabled={isLoadingMore} onClick={loadMore}
+                className="mx-2 my-3 w-[calc(100%-1rem)] rounded-lg border border-[#ebecf7] px-3 py-2 text-xs text-[#6638ec] disabled:opacity-50">
+                {isLoadingMore ? "Loading…" : "Load more conversations"}
+              </button>
             )}
           </>
         )}

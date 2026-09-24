@@ -9,7 +9,8 @@ import { useAppContext } from "@/features/context/use-app-context";
 import { useLists } from "@/features/lists/use-lists";
 import { keys } from "@/domain/query-keys";
 import type { Thing } from "@/domain/thing";
-import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { mapDbThingRows, THING_OVERVIEW_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { getActorId } from "@/features/people/actor-query";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import {
   excludePersonallyShreddedThings,
@@ -39,14 +40,18 @@ export function useAccessibleThings() {
   const { context } = useAppContext();
   const version = useLocalVersion();
   const shred = usePersonalShred();
+  const qc = useQueryClient();
 
   const query = useQuery({
     queryKey: keys.accessibleThings(user?.id, context),
     enabled: Boolean(user) && !preview,
     queryFn: async (): Promise<Thing[]> => {
-      const { data, error } = await supabase.from("things").select(THING_COLUMNS).eq("context", context);
+      const [myActorId, { data, error }] = await Promise.all([
+        getActorId(qc, user!.id),
+        supabase.from("things").select(THING_OVERVIEW_COLUMNS).eq("context", context),
+      ]);
       if (error) throw error;
-      return mapDbThingRows((data ?? []) as DbThingRow[]);
+      return mapDbThingRows((data ?? []) as DbThingRow[], myActorId, "overview");
     },
     staleTime: 15_000,
   });

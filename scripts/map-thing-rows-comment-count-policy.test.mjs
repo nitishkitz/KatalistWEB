@@ -35,6 +35,7 @@ const row = (overrides = {}) => ({
 });
 
 let commentsShouldFail = false;
+let attachmentsShouldFail = false;
 
 const peopleMock = mock.module("@/features/people/resolve-actors", {
   namedExports: {
@@ -44,7 +45,11 @@ const peopleMock = mock.module("@/features/people/resolve-actors", {
 });
 const attachmentsMock = mock.module("@/features/things/attachments", {
   namedExports: {
-    fetchRealAttachments: async () => new Map(),
+    fetchRealAttachments: async () => {
+      if (attachmentsShouldFail) throw new Error("attachment read failed");
+      return new Map();
+    },
+    signThingAttachmentPaths: async () => new Map(),
   },
 });
 const clientMock = mock.module("@/integrations/supabase/client", {
@@ -90,6 +95,18 @@ test("a failed comments read reports commentCount: undefined (unavailable), not 
     assert.equal(thing.creator.name, "Ada");
   } finally {
     commentsShouldFail = false;
+  }
+});
+
+test("a failed attachment read is distinguishable from zero files", async () => {
+  attachmentsShouldFail = true;
+  try {
+    const [thing] = await mapDbThingRows([row()], "a1");
+    assert.equal(thing.attachmentCount, undefined);
+    assert.equal(thing.attachmentsUnavailable, true);
+    assert.equal(thing.id, "t1");
+  } finally {
+    attachmentsShouldFail = false;
   }
 });
 

@@ -380,10 +380,12 @@ export function CourtFocusView({
                           <span className="font-medium text-[#8487a7]">
                             {thing.commentCount} {thing.commentCount === 1 ? "comment" : "comments"}
                           </span>
-                        ) : (thing.files?.length ?? 0) > 0 ? (
+                        ) : (thing.attachmentCount ?? thing.files?.length ?? 0) > 0 ? (
                           <span className="font-medium text-[#8487a7]">
-                            {thing.files!.length} {thing.files!.length === 1 ? "file" : "files"}
+                            {thing.attachmentCount ?? thing.files?.length ?? 0} {(thing.attachmentCount ?? thing.files?.length ?? 0) === 1 ? "file" : "files"}
                           </span>
+                        ) : thing.overviewStatsUnavailable ? (
+                          <span className="font-medium text-amber-700">Counts unavailable</span>
                         ) : null}
                       </div>
                     </div>

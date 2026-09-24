@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { mapDbThingRows, THING_OVERVIEW_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { getActorId } from "@/features/people/actor-query";
 import { mapDbListRows, type DbListRow } from "@/features/lists/map-list-rows";
 import type { BucketCard } from "./fixtures";
 import { withReadDeadline } from "@/lib/read-request";
@@ -62,7 +63,7 @@ export async function fetchBuckets(
       { data: listMemberThingRows, error: listMemberThingsError },
     ] = await Promise.all([
       thingIds.length
-        ? supabase.from("things").select(THING_COLUMNS).in("id", thingIds).abortSignal(signal)
+        ? supabase.from("things").select(THING_OVERVIEW_COLUMNS).in("id", thingIds).abortSignal(signal)
         : Promise.resolve({ data: [] as DbThingRow[], error: null }),
       listIds.length
         ? supabase.from("lists").select("id,name,context,owner_profile_id,updated_at").in("id", listIds).abortSignal(signal)
@@ -80,7 +81,9 @@ export async function fetchBuckets(
 
   // Same reasoning: each mapper only needs its own rows.
   const [mappedThings, mappedLists] = await Promise.all([
-    mapDbThingRows((thingRows ?? []) as DbThingRow[]),
+    (async () => thingRows?.length
+      ? mapDbThingRows(thingRows as DbThingRow[], await getActorId(qc, profileId), "overview")
+      : [])(),
     mapDbListRows(qc, profileId, (listRows ?? []) as DbListRow[]),
   ]);
 

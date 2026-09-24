@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getProfileIdentities, matchAvatarByName } from "../people/directory";
+import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
+import { fetchProfileIdentitiesByIds, matchAvatarByName } from "../people/directory";
 import { DEMO_ACTOR_BY_KEY } from "../demo/identities";
 import type { ListRow, ListMember } from "./fixtures";
 
@@ -18,6 +19,18 @@ export type DbListRow = {
 
 const COVER_BUCKET = "list-covers";
 const COVER_URL_TTL_SECONDS = 60 * 60; // 1 hour
+
+type ListCounts = { list_id: string; thing_count: number; done_count: number; in_progress_count: number };
+
+export async function fetchListCounts(ids: string[]): Promise<Map<string, ListCounts>> {
+  const counts = new Map<string, ListCounts>();
+  for (let offset = 0; offset < ids.length; offset += 500) {
+    const { data, error } = await callUngeneratedRpc("get_list_overview_counts", { p_list_ids: ids.slice(offset, offset + 500) });
+    if (error) throw error;
+    for (const row of (data ?? []) as ListCounts[]) counts.set(row.list_id, row);
+  }
+  return counts;
+}
 
 /** Batch-sign the private cover paths into displayable URLs. */
 async function signCoverUrls(paths: string[]): Promise<Map<string, string>> {
@@ -60,7 +73,7 @@ const DEFAULT_PERSONAS = [
  * Safe List identity mapping: members + owner via public_identities + profiles + actors lens.
  * Resolves complete display names and real avatars. Never returns "Someone" or "S".
  */
-export async function mapDbListRows(qc: QueryClient, profileId: string, lists: DbListRow[]): Promise<ListRow[]> {
+export async function mapDbListRows(_qc: QueryClient, profileId: string, lists: DbListRow[]): Promise<ListRow[]> {
   if (!lists.length) return [];
   const ids = lists.map((l) => l.id);
   // These three are independent of each other — cover URLs only need
@@ -70,21 +83,20 @@ export async function mapDbListRows(qc: QueryClient, profileId: string, lists: D
   // identity-resolution chain below does depend on `members`, so it
   // still waits for this Promise.all to settle.)
   //
-  // members/things are required data: a failed read must not silently
+  // members/counts are required data: a failed read must not silently
   // present as "this List has no members/Things" — that's a false empty
   // state. Cover-URL signing is decorative (signCoverUrls already fails
   // open internally, see its own try/catch) and stays nonblocking.
   const [
     coverUrls,
     { data: members, error: membersError },
-    { data: things, error: thingsError },
+    counts,
   ] = await Promise.all([
     signCoverUrls(lists.map((l) => l.cover_storage_path).filter((p): p is string => Boolean(p))),
     supabase.from("list_members").select("list_id,profile_id,role").in("list_id", ids),
-    supabase.from("things").select("id,list_id,work_status").in("list_id", ids),
+    fetchListCounts(ids),
   ]);
   if (membersError) throw membersError;
-  if (thingsError) throw thingsError;
 
   const memberRows = members ?? [];
   const profileIds = [
@@ -94,9 +106,10 @@ export async function mapDbListRows(qc: QueryClient, profileId: string, lists: D
   const unique = [...new Set(profileIds.filter(Boolean))];
   const identities = new Map<string, { display_name: string; avatar_url: string | null }>();
 
-  // 1. Fetch complete directory (server directory + assignable people + demo fallback)
+  // 1. Resolve only this page's owner/member profile IDs. The former broad
+  // directory fetch transferred unrelated people on every cold List page.
   try {
-    const dir = await getProfileIdentities(qc);
+    const dir = await fetchProfileIdentitiesByIds(unique);
     for (const p of dir) {
       if (p.id && p.display_name && p.display_name !== "Someone") {
         identities.set(p.id, {
@@ -154,7 +167,8 @@ export async function mapDbListRows(qc: QueryClient, profileId: string, lists: D
     const listMembers = memberRows.filter((m) => m.list_id === l.id);
     const mine = listMembers.find((m) => m.profile_id === profileId);
     const role = l.owner_profile_id === profileId ? "owner" : ((mine?.role as ListRow["role"] | undefined) ?? "view_only");
-    const listThings = (things ?? []).filter((t) => t.list_id === l.id);
+    const listCounts = counts.get(l.id);
+    if (!listCounts) throw new Error(`List counters unavailable for ${l.id}`);
     const ownerName = identities.get(l.owner_profile_id)?.display_name;
     const ownerLine =
       l.owner_profile_id === profileId
@@ -219,9 +233,9 @@ export async function mapDbListRows(qc: QueryClient, profileId: string, lists: D
       ownerActorId: l.owner_profile_id,
       members: allMembers,
       memberCount: allMembers.length,
-      thingCount: listThings.length,
-      doneCount: listThings.filter((t) => t.work_status === "sorted").length,
-      inProgressCount: listThings.filter((t) => t.work_status === "under_progress").length,
+      thingCount: listCounts.thing_count,
+      doneCount: listCounts.done_count,
+      inProgressCount: listCounts.in_progress_count,
       unread: 0,
       latestActivity: "Updated",
       updatedAt: new Date(l.updated_at).toLocaleString(),
@@ -229,4 +243,3 @@ export async function mapDbListRows(qc: QueryClient, profileId: string, lists: D
     } satisfies ListRow;
   });
 }
-

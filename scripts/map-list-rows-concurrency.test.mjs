@@ -3,7 +3,7 @@ import { test, mock } from "node:test";
 
 /**
  * Batch C1: mapDbListRows' cover-URL signing, list_members query, and
- * things query are independent of each other (none needs another's
+ * aggregate counts query are independent of each other (none needs another's
  * result — only the identity-resolution chain further down needs
  * `members`), but were awaited strictly in sequence. Same deterministic
  * event-order approach as the other C1 tests.
@@ -29,13 +29,18 @@ function makeTracker() {
   };
 }
 
-test("mapDbListRows runs cover signing, members, and Things concurrently", async () => {
+test("mapDbListRows runs cover signing, members, and aggregate counts concurrently", async () => {
   const { events, track } = makeTracker();
 
   const directoryMock = mock.module("@/features/people/directory", {
     namedExports: {
-      getProfileIdentities: () => track("directory", () => delay([{ id: "owner-1", display_name: "Ada", avatar_url: null }])),
+      fetchProfileIdentitiesByIds: () => track("directory", () => delay([{ id: "owner-1", display_name: "Ada", avatar_url: null }])),
       matchAvatarByName: () => null,
+    },
+  });
+  const rpcMock = mock.module("@/integrations/supabase/rpcs", {
+    namedExports: {
+      callUngeneratedRpc: () => track("counts-query", () => delay({ data: [{ list_id: "list-1", thing_count: 1, done_count: 1, in_progress_count: 0 }], error: null })),
     },
   });
 
@@ -63,7 +68,6 @@ test("mapDbListRows runs cover signing, members, and Things concurrently", async
         from: (table) => {
           if (table === "list_members")
             return chainable("members-query", { data: [{ list_id: "list-1", profile_id: "owner-1", role: "owner" }], error: null });
-          if (table === "things") return chainable("things-query", { data: [{ id: "t1", list_id: "list-1", work_status: "sorted" }], error: null });
           throw new Error(`unexpected table: ${table}`);
         },
       },
@@ -85,20 +89,20 @@ test("mapDbListRows runs cover signing, members, and Things concurrently", async
     ]);
 
     // Deterministic concurrency proof: cover signing, members, and
-    // Things all start before any of them resolves.
+    // aggregate counts all start before any of them resolves.
     const start = Math.min(
       events.indexOf("cover-sign:start"),
       events.indexOf("members-query:start"),
-      events.indexOf("things-query:start"),
+      events.indexOf("counts-query:start"),
     );
     const firstEnd = events.findIndex(
-      (e, i) => i > start - 1 && (e === "members-query:end" || e === "things-query:end" || e === "cover-sign:end"),
+      (e, i) => i > start - 1 && (e === "members-query:end" || e === "counts-query:end" || e === "cover-sign:end"),
     );
     const startedBeforeAnyEnded = new Set(events.slice(start, firstEnd).filter((e) => e.endsWith(":start")));
     assert.deepEqual(
       startedBeforeAnyEnded,
-      new Set(["members-query:start", "things-query:start", "cover-sign:start"]),
-      `expected members, Things, and cover-sign to start together; event order was: ${events.join(", ")}`,
+      new Set(["members-query:start", "counts-query:start", "cover-sign:start"]),
+      `expected members, counts, and cover-sign to start together; event order was: ${events.join(", ")}`,
     );
     // Directory resolution (part of the identity chain, which needs
     // `members`) must not start until members-query has resolved.
@@ -115,6 +119,7 @@ test("mapDbListRows runs cover signing, members, and Things concurrently", async
     assert.equal(row.coverUrl, "https://signed.example/covers/list-1.jpg");
   } finally {
     directoryMock.restore();
+    rpcMock.restore();
     clientMock.restore();
   }
 });

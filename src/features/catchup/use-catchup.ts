@@ -7,7 +7,7 @@ import { useSession } from "@/hooks/useSession";
 import { useAppContext } from "@/features/context/use-app-context";
 import { isPreviewSession } from "@/lib/session-mode";
 import { isActiveThing, type Person, type Thing } from "@/domain/thing";
-import { mapDbThingRows, THING_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
+import { mapDbThingRows, THING_OVERVIEW_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { resolveActorPeople } from "@/features/people/resolve-actors";
 import { useLocalVersion } from "@/features/things/use-local-version";
 import { currentDemoActorId } from "@/features/demo/identities";
@@ -89,7 +89,7 @@ async function fetchCatchupMoments(profileId: string | null, querySignal?: Abort
     const thingIds = [...new Set(rows.map((r) => r.thing_id))];
     const { data: thingRows, error: thingsError } = await supabase
       .from("things")
-      .select(THING_COLUMNS)
+      .select(THING_OVERVIEW_COLUMNS)
       .in("id", thingIds)
       .is("cancelled_at", null)
       .abortSignal(signal);
@@ -99,7 +99,7 @@ async function fetchCatchupMoments(profileId: string | null, querySignal?: Abort
     // these Things are visible/active", i.e. a false successful-empty result
     // that could suppress a real Morning Brief moment or Catch Up review.
     if (thingsError) throw thingsError;
-    const things = await mapDbThingRows((thingRows ?? []) as DbThingRow[], myActorId);
+    const things = await mapDbThingRows((thingRows ?? []) as DbThingRow[], myActorId, "overview");
     const thingById = new Map(things.map((t) => [t.id, t]));
 
     const actorIds = [...new Set(rows.map((r) => r.actor_id).filter(Boolean))] as string[];

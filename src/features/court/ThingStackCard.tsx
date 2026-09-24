@@ -107,6 +107,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     const faceAvatar = assignedByOther ? ownerAvatar : assigneeAvatar;
     const disabled = pendingAction !== null;
     const styling = laneCardBorder[lane];
+    const fileCount = thing.attachmentCount ?? thing.files?.length ?? 0;
 
     const run = (event: MouseEvent<HTMLButtonElement>, action: CourtStackAction) => {
       event.stopPropagation();
@@ -222,7 +223,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           )}
 
           {/* Badges: comments & files */}
-          {((thing.commentCount ?? 0) > 0 || (thing.files?.length ?? 0) > 0) && (
+          {((thing.commentCount ?? 0) > 0 || fileCount > 0 || thing.overviewStatsUnavailable) && (
             <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
               {(thing.commentCount ?? 0) > 0 && (
                 <span
@@ -239,15 +240,16 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                     : `${thing.commentCount} ${thing.commentCount === 1 ? "comment" : "comments"}`}
                 </span>
               )}
-              {(thing.files?.length ?? 0) > 0 && (
+              {fileCount > 0 && (
                 <span className="inline-flex items-center gap-1 text-muted-foreground font-medium">
                   <KatalistIcon name="attachment" className="h-3 w-3" />
-                  {thing.files!.length} {thing.files!.length === 1 ? "file" : "files"}
-                  {thing.files!.some((f) => f.isNew) && (
+                  {fileCount} {fileCount === 1 ? "file" : "files"}
+                  {thing.files?.some((f) => f.isNew) && (
                     <span className="text-blue-600 font-semibold">· 1 new</span>
                   )}
                 </span>
               )}
+              {thing.overviewStatsUnavailable ? <span title="Open this Thing to retry its counts">Counts unavailable</span> : null}
             </div>
           )}
 

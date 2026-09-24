@@ -51,6 +51,7 @@ test("mapDbThingRows starts its four independent lookups before any of them reso
   const attachmentsMock = mock.module("@/features/things/attachments", {
     namedExports: {
       fetchRealAttachments: () => track("attachments", () => delay(new Map())),
+      signThingAttachmentPaths: async () => new Map(),
     },
   });
   const authedFetchMock = mock.module("@/lib/authed-fetch", {

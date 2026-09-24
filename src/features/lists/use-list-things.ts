@@ -13,7 +13,7 @@ import {
   usePersonalShred,
 } from "@/features/things/personal-shred";
 import { withReadDeadline } from "@/lib/read-request";
-import { THING_COLUMNS, type DbThingRow, mapDbThingRows } from "@/features/things/map-thing-rows";
+import { THING_OVERVIEW_COLUMNS, type DbThingRow, mapDbThingRows } from "@/features/things/map-thing-rows";
 
 export function useListThings(listId: string | undefined) {
   const { session } = useSession();
@@ -36,7 +36,7 @@ export function useListThings(listId: string | undefined) {
       const { data, error } = await withReadDeadline(signal, async (combined) =>
         supabase
           .from("things")
-          .select(THING_COLUMNS)
+          .select(THING_OVERVIEW_COLUMNS)
           .eq("list_id", listId!)
           .abortSignal(combined),
       );
@@ -45,7 +45,7 @@ export function useListThings(listId: string | undefined) {
       // comment/attachment counts, viewer-scoped unread comparisons, and
       // failure-vs-zero distinction -- this route previously hand-rolled a
       // narrower mapping that never computed comment counts at all.
-      return mapDbThingRows((data ?? []) as DbThingRow[], myActorId);
+      return mapDbThingRows((data ?? []) as DbThingRow[], myActorId, "overview");
     },
   });
 
