@@ -266,3 +266,41 @@ commits. Each fix's regression test confirmed to fail against the pre-fix file.
    (plan's own explicit item) -- not investigated in this pass.
 
 Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T02 is not marked complete.
+
+### T03 — Shared actions and complete interaction blocking
+
+**Status:** LOCAL PASS -- partial, remaining items below. **Owns:** B-05, F-04 and the coordination
+portion of F-07.
+
+**Commits:** `e0c1e65`, `3471ba3`.
+
+**Done:**
+- `MagicBox.tsx` registered no blocker at all -- added a `processingFiles` counter (same pattern as
+  `ThingDetailContent`'s `processingCommentFiles`) and `useBlockWhile("magic-box-draft")` while
+  there's unsent text, an attached file, or a file still processing.
+- `use-bucket-note-editor.ts` registered no blocker at all -- added `useBlockWhile("bucket-note-
+  draft")` gated on the editor being open AND `noteIsDirty` (the same dirtiness check already
+  driving the discard-confirmation logic).
+- `use-list-call.ts`'s `useBlockWhile(joined, "active-call")` missed the "joining" window (pending
+  getUserMedia/permission/signaling) and "reconnecting" -- both still very much "in a call". Changed
+  to block on `lifecycle === "joining" || "connected" || "reconnecting"`.
+- Fixed two existing test files (`use-bucket-note-editor.test.mjs`, `bucket-note-editor-live-
+  mutation.test.mjs`) whose render helpers didn't wrap in `InteractionBlockerProvider` -- adding the
+  note-editor blocker made `useBlockWhile` throw in all 15 of that file's existing tests until fixed.
+
+**Verification:** 552/552 tests (548 T02 baseline + 4 new), 0 typecheck errors, 0 lint errors/75
+warnings (unchanged), clean build. Each fix's regression test confirmed to fail against the pre-fix
+file.
+
+**Remaining (explicit, not started):**
+1. `ListChatPanel.tsx`'s own compose draft has no blocker registration (not audited/fixed in this
+   pass).
+2. Explicit action-outcome return values (`performed`/`already-in-flight`/`failed`/`retired`) for
+   Morning Brief Catch/pace/Move Now actions -- not implemented; those still don't return a typed
+   outcome a caller can branch on.
+3. Routing Morning Brief's own actions through the shared `query-updates.ts` claim/patch mechanism
+   -- not investigated; Morning Brief's action dispatch was not touched in this pass.
+4. Confirming at most one automatic Morning Brief controller is active for the visible Court mode
+   (hidden responsive variants must not each attempt the daily claim) -- not investigated.
+
+Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T03 is not marked complete.
