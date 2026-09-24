@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import type { useBucketNotes } from "./use-bucket-notes";
 
 /**
@@ -122,8 +123,15 @@ export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeo
     const savedKey = noteDraftKey(editingNoteId);
     const savedGeneration = noteSessionRef.current;
     const savedRevision = noteEditRevisionRef.current;
+    // T02: a save/delete's continuation must not touch shared state (or
+    // emit a toast) once a SUCCESSOR IDENTITY has taken over -- session/
+    // revision alone only guard against a same-identity note switch, not
+    // an account switch, which this component instance may not unmount
+    // across.
+    const savedEpoch = getIdentityEpoch(qc).epoch;
     noteIsSavingRef.current = true;
     const done = (createdId?: string) => {
+      if (!isEpochCurrent(qc, savedEpoch)) return;
       // Only close/clear if nothing has superseded this edit session
       // since (Cancel doesn't wait for a pending save, so the user may
       // already be editing a DIFFERENT note by the time this resolves).
@@ -158,6 +166,7 @@ export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeo
       setNoteOpen(false);
     };
     const fail = (err: unknown) => {
+      if (!isEpochCurrent(qc, savedEpoch)) return;
       if (noteSessionRef.current !== savedGeneration) return;
       toast.error(domainErrorMessage(err));
     };
@@ -175,13 +184,21 @@ export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeo
     if (!editingNoteId || notesApi.remove.isPending) return;
     const id = editingNoteId;
     const savedGeneration = noteSessionRef.current;
+    const savedEpoch = getIdentityEpoch(qc).epoch;
     void notesApi.remove.mutateAsync(id).then(
       () => {
+        // T02: a delete resolving after a successor identity has taken
+        // over must not clear that identity's draft/editor state or show
+        // this identity's own "deleted" toast on their screen.
+        if (!isEpochCurrent(qc, savedEpoch)) return;
         toast.success("Note deleted.");
         clearDraft(qc, "bucket-note", noteDraftKey(id));
         if (noteSessionRef.current === savedGeneration) setNoteOpen(false);
       },
-      (err) => toast.error(domainErrorMessage(err)),
+      (err) => {
+        if (!isEpochCurrent(qc, savedEpoch)) return;
+        toast.error(domainErrorMessage(err));
+      },
     );
   };
 

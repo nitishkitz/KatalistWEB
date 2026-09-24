@@ -68,6 +68,7 @@ mock.module("@/integrations/supabase/client", {
 const { useBucketNoteEditor } = await import("@/features/buckets/use-bucket-note-editor");
 const { useBucketNotes } = await import("@/features/buckets/use-bucket-notes");
 const { getDraft } = await import("@/features/drafts/session-drafts");
+const { advanceIdentityEpoch } = await import("@/features/realtime/identity-cache-policy");
 
 function newClient() {
   return new QueryClient({
@@ -372,6 +373,93 @@ test("follow-up review of R-03: creating a note while continuing to type migrate
   });
 
   assert.equal(latest.noteTitle, "", "a second new note must start blank, not resurrect the first note's abandoned draft");
+
+  cleanup();
+  qc.clear();
+});
+
+// T02: a save/delete resolving AFTER a successor identity has taken over
+// must not touch that identity's state or emit this identity's own toast --
+// session/edit-revision guards alone only cover a same-identity note
+// switch, not an account switch this component instance may not unmount
+// across.
+
+test("T02: a save that resolves AFTER an identity switch does not close/clear the successor identity's editor or toast", async () => {
+  let resolveUpdate;
+  updateImpl = () => new Promise((r) => (resolveUpdate = () => r({ data: null, error: null })));
+  const qc = newClient();
+  let latest = null;
+  await act(async () => {
+    renderProbe(qc, (v) => (latest = v));
+  });
+
+  await act(async () => {
+    latest.openNoteEditor({ id: "note-1", title: "original title", body: "original body" });
+  });
+  await act(async () => {
+    latest.setNoteTitle("edited before switch");
+  });
+  await act(async () => {
+    latest.saveNote(); // starts the update, gated on resolveUpdate
+  });
+  assert.equal(latest.noteOpen, true, "still open while the save is pending");
+
+  // A different identity takes over this same component instance (it did
+  // not unmount across the switch).
+  advanceIdentityEpoch(qc, { kind: "live", profileId: "a-different-profile" });
+
+  await act(async () => {
+    resolveUpdate();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(
+    latest.noteOpen,
+    true,
+    "the stale save's success must not close the successor identity's editor -- it never asked for this to close",
+  );
+  assert.equal(latest.noteTitle, "edited before switch", "the successor identity's own live state must be untouched");
+
+  cleanup();
+  qc.clear();
+});
+
+test("T02: a delete that resolves AFTER an identity switch does not close the successor identity's editor or clear their draft", async () => {
+  // deleteNote() also goes through the "update" mock (bucket_notes'
+  // deleted_at column), sharing the same updateImpl gate as saveNote().
+  let resolveDelete;
+  updateImpl = () => new Promise((r) => (resolveDelete = () => r({ data: null, error: null })));
+  const qc = newClient();
+  let latest = null;
+  await act(async () => {
+    renderProbe(qc, (v) => (latest = v));
+  });
+
+  await act(async () => {
+    latest.openNoteEditor({ id: "note-1", title: "original title", body: "original body" });
+  });
+  await act(async () => {
+    latest.deleteNote(); // starts the remove mutation, gated on resolveDelete
+  });
+  assert.equal(latest.noteOpen, true, "still open while the delete is pending");
+
+  // A different identity takes over this same component instance --
+  // deliberately WITHOUT calling openNoteEditor()/requestCloseNoteEditor()
+  // again, since either would also bump the session generation and mask
+  // this bug behind the (already-passing) session guard. This isolates
+  // the epoch guard specifically: session is unchanged, only identity is.
+  advanceIdentityEpoch(qc, { kind: "live", profileId: "a-different-profile" });
+
+  await act(async () => {
+    resolveDelete();
+    await new Promise((r) => setTimeout(r, 10));
+  });
+
+  assert.equal(
+    latest.noteOpen,
+    true,
+    "the stale delete's success must not close the editor once a successor identity owns this instance -- session alone is unchanged, only identity is",
+  );
 
   cleanup();
   qc.clear();
