@@ -232,6 +232,16 @@ export function CourtDesktop({
     () => applyCourtView({ now, next, later, theirs }, filters, query, sort),
     [now, next, later, theirs, filters, query, sort],
   );
+  // T09/E05 fix: MagicBox's "Open" toast action is created at
+  // mutation-success time but clicked later, after further renders/
+  // refetches -- a callback that closes over `view` directly would keep
+  // reading the array snapshot from whichever render defined it. This ref
+  // is written on every render (not via useEffect, which would lag one
+  // render behind) so the callback below always resolves against the
+  // latest `view`, matching the existing viewRef/xRef idiom already used
+  // in src/features/catchup/use-morning-brief.ts for the same problem.
+  const viewRef = useRef(view);
+  viewRef.current = view;
 
   // T09/E-04: "nothing to show" used to render the same per-lane "No
   // Things match this view." regardless of WHY -- a genuinely empty Court
@@ -778,18 +788,23 @@ export function CourtDesktop({
                 <MagicBox
                   desktop
                   extraPeople={collaborators}
-                  // T09/E05: looked up in `view` at CLICK time (this
-                  // closure is re-created every render), not when the
-                  // toast was created -- the invalidation MagicBox already
-                  // triggers on success needs time to actually refetch
-                  // before the newly created Thing shows up here. Reuses
-                  // the same no-hero-animation open path as
-                  // openCatchUpThing (the origin card doesn't exist for a
-                  // toast-triggered open).
+                  // T09/E05: resolved against viewRef.current at CLICK
+                  // time, not the `view` snapshot from whenever this
+                  // closure happened to be created -- the toast can be
+                  // clicked well after further Court renders/refetches, and
+                  // a captured `view` would silently miss the newly created
+                  // Thing even after the invalidation MagicBox triggers on
+                  // success has finished refetching it in. Reuses the same
+                  // no-hero-animation open path as openCatchUpThing (the
+                  // origin card doesn't exist for a toast-triggered open).
                   onThingCreated={(thingId) => {
-                    const created = [...view.now, ...view.next, ...view.later, ...view.theirs].find(
-                      (candidate) => candidate.id === thingId,
-                    );
+                    const currentView = viewRef.current;
+                    const created = [
+                      ...currentView.now,
+                      ...currentView.next,
+                      ...currentView.later,
+                      ...currentView.theirs,
+                    ].find((candidate) => candidate.id === thingId);
                     if (created) openCatchUpThing(created);
                   }}
                 />
