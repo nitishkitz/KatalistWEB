@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, FileText, Folder, Hash, Layers, List, Paperclip, Sparkles, X } from "lucide-react";
+import { AtSign, FileText, Folder, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { useAppContext } from "@/features/context/use-app-context";
@@ -14,7 +14,7 @@ import { isPreviewMode } from "@/lib/session-mode";
 import { parseToss, tossBlockedByPerson } from "./parse-toss";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import type { ThingFile, Person } from "@/domain/thing";
-import { processFileForUpload } from "@/lib/file-utils";
+import { processFileForUpload, formatFileSize } from "@/lib/file-utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
@@ -79,6 +79,16 @@ export function MagicBox({
   // typed text or an already-attached file (same reasoning as
   // ThingDetailContent's own processingCommentFiles).
   const [processingFiles, setProcessingFiles] = useState(0);
+  // T09/E05: a file that failed validation/processing used to be silently
+  // dropped with just a toast -- no visible chip, no way to retry without
+  // re-picking the file from the OS file dialog again. Each entry keeps
+  // the original File object (so Retry re-runs processFileForUpload on the
+  // SAME file, not a re-selection) under a stable operation id, and is
+  // independent of `attachedFiles` -- one file failing never touches
+  // others that already succeeded.
+  const [failedAttachments, setFailedAttachments] = useState<
+    Array<{ id: string; file: File; name: string; sizeLabel: string; error: string }>
+  >([]);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -99,7 +109,10 @@ export function MagicBox({
   // a file still processing) so nothing (Morning Brief's auto-open, etc.)
   // can silently interrupt a mid-capture the way ThingDetailContent's own
   // comment composer already guards against.
-  useBlockWhile(Boolean(value.trim()) || attachedFiles.length > 0 || processingFiles > 0, "magic-box-draft");
+  useBlockWhile(
+    Boolean(value.trim()) || attachedFiles.length > 0 || processingFiles > 0 || failedAttachments.length > 0,
+    "magic-box-draft",
+  );
 
   // T09/E05: re-hydrate whenever the draft slot itself changes (switching
   // List, or switching Work/Home context on the bare Court composer) --
@@ -108,6 +121,10 @@ export function MagicBox({
     const draft = getDraft<string>(qc, "magic-box", draftEntityId);
     setValue(draft?.value ?? "");
     setAttachedFiles((draft?.attachments as ThingFile[] | undefined) ?? []);
+    // Failed/in-flight uploads are transient per-composer-instance state,
+    // not part of the persisted draft -- a validation failure against one
+    // destination has no meaning once switched to a different one.
+    setFailedAttachments([]);
     setRetryAssigneeIds(null);
     setTrigger(null);
     setDismissedSuggestionId(null);
@@ -126,44 +143,66 @@ export function MagicBox({
     setDraft(qc, "magic-box", draftEntityId, { value, attachments: attachedFiles });
   }, [qc, draftEntityId, value, attachedFiles]);
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const applyFirstAsTitleIfEmpty = (firstNewFile: ThingFile) => {
+    // If input value is empty, auto-populate with the file name (without extension)
+    // so the user immediately sees what they are tossing, can edit it or add tags,
+    // and the Toss button enables immediately.
+    if (value.trim()) return;
+    const cleanName = firstNewFile.name
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[-_]+/g, " ")
+      .trim();
+    if (cleanName) setValue(cleanName);
+  };
+
+  const processOneFile = async (opId: string, file: File) => {
+    setProcessingFiles((n) => n + 1);
     try {
-      const files = e.target.files;
-      if (!files || files.length === 0) return;
-      setProcessingFiles((n) => n + 1);
-      const newFiles: ThingFile[] = [];
-      for (let i = 0; i < files.length; i++) {
-        try {
-          const processed = await processFileForUpload(files[i]);
-          newFiles.push(processed);
-        } catch (err) {
-          console.error("Failed to process file:", err);
-          toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
-        }
-      }
-      if (newFiles.length > 0) {
-        setAttachedFiles((prev) => [...prev, ...newFiles]);
-        // If input value is empty, auto-populate with the file name (without extension)
-        // so the user immediately sees what they are tossing, can edit it or add tags,
-        // and the Toss button enables immediately.
-        if (!value.trim()) {
-          const cleanName = newFiles[0].name
-            .replace(/\.[^/.]+$/, "")
-            .replace(/[-_]+/g, " ")
-            .trim();
-          if (cleanName) {
-            setValue(cleanName);
-          }
-        }
-      }
+      const processed = await processFileForUpload(file);
+      setAttachedFiles((prev) => [...prev, processed]);
+      applyFirstAsTitleIfEmpty(processed);
+    } catch (err) {
+      console.error("Failed to process file:", err);
+      const message = err instanceof Error ? err.message : `Could not attach ${file.name}`;
+      setFailedAttachments((prev) => [
+        ...prev,
+        { id: opId, file, name: file.name, sizeLabel: formatFileSize(file.size), error: message },
+      ]);
     } finally {
-      if (fileInputRef.current) fileInputRef.current.value = "";
       setProcessingFiles((n) => Math.max(0, n - 1));
     }
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    // Each file gets its own stable operation id and its own
+    // validating->ready|failed transition, entirely independent of the
+    // others -- one slow/failing file never blocks or drops another that
+    // already succeeded.
+    const picked = Array.from(files).map((file) => ({
+      id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+    }));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    await Promise.all(picked.map(({ id, file }) => processOneFile(id, file)));
+  };
+
   const removeAttachedFile = (fileId: string) => {
     setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
+  };
+
+  const removeFailedAttachment = (opId: string) => {
+    setFailedAttachments((prev) => prev.filter((f) => f.id !== opId));
+  };
+
+  const retryFailedAttachment = async (opId: string) => {
+    const entry = failedAttachments.find((f) => f.id === opId);
+    if (!entry) return;
+    setFailedAttachments((prev) => prev.filter((f) => f.id !== opId));
+    // Same stable id on retry -- this is the same logical operation
+    // continuing, not a new one.
+    await processOneFile(opId, entry.file);
   };
 
   const isMac = typeof navigator !== "undefined" && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent);
@@ -423,6 +462,7 @@ export function MagicBox({
       if (!hasPartialFailure) {
         setValue("");
         setAttachedFiles([]);
+        setFailedAttachments([]);
       }
       setRetryAssigneeIds(hasPartialFailure ? failedAssigneeIds : null);
       setTrigger(null);
@@ -671,6 +711,60 @@ export function MagicBox({
                 onClick={() => removeAttachedFile(file.id)}
                 className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Remove ${file.name}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* T09/E05: files still being validated/processed -- an indeterminate
+          spinner, not a fabricated percentage, since processFileForUpload
+          has no real byte-level progress to report. */}
+      {processingFiles > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5" role="status" aria-live="polite">
+          {Array.from({ length: processingFiles }).map((_, i) => (
+            <div
+              key={i}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-slate-50 px-2.5 py-1 text-[12px] font-medium text-slate-500"
+            >
+              <RotateCw className="h-3 w-3 animate-spin" />
+              <span>Checking file…</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* T09/E05: a file that failed validation/processing is no longer
+          silently dropped -- it keeps its own chip with a truthful "failed"
+          state plus Retry (re-runs processFileForUpload on the SAME File
+          under the SAME stable operation id) and Remove. Every other
+          already-succeeded file in attachedFiles above is untouched. */}
+      {failedAttachments.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {failedAttachments.map((f) => (
+            <div
+              key={f.id}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[12px] font-medium text-red-700"
+              title={f.error}
+            >
+              <span className="max-w-[140px] truncate">{f.name}</span>
+              <span className="text-[12px] font-normal text-red-500">Failed</span>
+              <button
+                type="button"
+                onClick={() => void retryFailedAttachment(f.id)}
+                className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-red-500 hover:text-red-700 hover:bg-red-100 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Retry ${f.name}`}
+                title="Retry"
+              >
+                <RotateCw className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => removeFailedAttachment(f.id)}
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-red-500 hover:text-red-700 hover:bg-red-100 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Remove ${f.name}`}
               >
                 <X className="h-3 w-3" />
               </button>
