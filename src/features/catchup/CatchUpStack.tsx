@@ -398,7 +398,7 @@ export function CatchUpStack({
                   {entry.status === "resolved" ? (
                     <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                   ) : (
-                    <span className="w-3.5 shrink-0 text-center text-[10px] text-slate-400">
+                    <span className="w-3.5 shrink-0 text-center text-[12px] text-slate-400">
                       {i + 1}
                     </span>
                   )}
@@ -406,7 +406,7 @@ export function CatchUpStack({
                     <span className="block truncate font-medium lg:whitespace-normal lg:break-words">
                       {m.thing.title}
                     </span>
-                    <span className="hidden text-[11px] text-slate-400 lg:block">
+                    <span className="hidden text-[12px] text-slate-400 lg:block">
                       {reasonLabelFor(m.kind, m.reason)} · {relativeTimeLabel(m.occurredAt)}
                     </span>
                   </span>
