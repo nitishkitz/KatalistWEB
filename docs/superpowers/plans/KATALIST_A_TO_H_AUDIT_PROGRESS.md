@@ -892,15 +892,29 @@ findings above were both in items 2-4 (Magic Box), not item 5.
 
 ### T10 — Complete Morning Brief once, including its actual design
 
-**Status:** LOCAL PASS, PARTIAL -- only packages T10-01 and T10-02 of
-`docs/superpowers/plans/KATALIST_T10_DETAILED_EXECUTION_PLAN.md`'s seven
-ordered packages (T10-01 through T10-07) are implemented and verified.
-T10-03 through T10-07, and the T03 action-outcome/receipt-retry
-dependencies T10-04 needs, are **not started**. This section records only
-what has actual evidence; it does not claim T10 (plan line 59) is done, and
-that checkbox is correctly left unchecked.
+**Status:** LOCAL PASS, ALL SEVEN PACKAGES IMPLEMENTED, GATE-VERIFIED, AND
+BROWSER-VERIFIED (T10-01 through T10-07 of
+`docs/superpowers/plans/KATALIST_T10_DETAILED_EXECUTION_PLAN.md`). The
+plan's five-viewport Playwright pass (section 7) was run for real, using a
+Demo Persona sign-in (`VITE_KATALIST_DEMO_MODE=true`, a synthetic
+localStorage-only session that makes zero real Supabase calls -- confirmed
+by a network-assertion test, not just by architecture reading) rather than
+`tests/e2e/staging/` credentials, none of which are configured in this
+environment. That run found and this pass fixed one real bug
+(`use-catchup.ts`'s preview `isEmpty` hardcoded `true`) and precisely
+documented one real, reproducible, PRE-EXISTING product gap it did not fix
+(Morning Brief has no reachable entry point below the 1024px `lg`
+breakpoint) -- see the T10-07 section below for both. The one remaining
+RELEASE-02/03-class item is a true live-backend/staging check (real Supabase
+RLS, a real signed-in account, concurrent devices), which this demo-mode run
+cannot and does not claim to substitute for.
 
-**Commits:** `998a873` (T10-01), `6891222` (T10-02).
+**Commits (in order):** `998a873` (T10-01), `6891222` (T10-02), `56ed7c0`
+(T10-03 schedule-arithmetic fix), `d7471dd` (T10-03 controller rewrite),
+`2ed1cc8` (T10-04 run-thing-action module), `83a9498` (T10-05 stable queue +
+action-outcome wiring), `af39cdf` (T10-06 responsive overlay/banner states),
+`2be7de9` (T10-06 queue+detail layout), `fd03bd2` (T08 typography-floor fix
+surfaced by the full suite).
 
 **Done (T10-01 only -- context and readiness contract):**
 1. `fetchCatchupMoments()` (`src/features/catchup/use-catchup.ts`) now takes
@@ -996,27 +1010,266 @@ new migration files applied together.
 tests), `npx tsc --noEmit` 0 errors, `npm run lint` 0 errors / 69 warnings
 (unchanged baseline), `npm run build:app` clean.
 
-**Remaining (explicit, not started):**
-- T10-03 (scope-owned presentation controller: replace `use-morning-brief.ts`'s
-  independent booleans with an explicit `BriefScope` + attempt-token
-  ownership; correct the wall-clock/tomorrow DST arithmetic in
-  `morning-brief-schedule.ts`; apply the plan's required test correction
-  to the existing delayed-across-midnight test, which currently is
-  **unexamined** by this pass).
-- T10-04 (the T03 action-outcome contract itself: `ActionOutcome`-typed
-  domain-action runner, QueryClient-scoped token claims, receipt-only
-  retry, `ListChatPanel` blocker verification) -- this is also T10's
-  explicit T03 prerequisite closure, and remains fully open.
-- T10-05 (ID-based stable-key queue replacing `CatchUpStack.tsx`'s frozen
-  `useState(() => moments)` deck).
-- T10-06 (the actual desktop/mobile Morning Brief interface -- current
-  `CatchUpOverlay.tsx` is still the narrow `max-w-xl` single-card stack,
-  not the ~960px queue+detail layout the plan specifies).
-- T10-07 (full consumer sweep, Court single-controller wiring, SQL
-  compatibility check, and the five-viewport Playwright browser pass).
-- The full T10 test matrix (D03; S01-S14; R01-R04; A01-A05; Q01-Q04;
-  U01-U04; SQL01) beyond the D01/D02/D04/D05 cases covered above.
-- `docs/superpowers/plans/KATALIST_T10_FINAL_HANDOFF.md` was intentionally
-  **not created** -- the plan specifies it as a closing artifact reconciling
-  every T10 clause with evidence, and producing it now would misrepresent
-  six of seven packages as reconciled when they have not been attempted.
+**Done (T10-03 -- scope-owned presentation controller and clock):**
+1. `morning-brief-schedule.ts`'s `nextMorningThreshold` derived "tomorrow" by
+   round-tripping a UTC-noon guess through the target timezone and then
+   adding a UTC day -- at an extreme offset (UTC+14) that round-trip can
+   already land on the NEXT local calendar day before the "+1 day" step even
+   runs, silently overshooting by an extra day (confirmed by hand-computing
+   the old code's output against `Pacific/Kiritimati`). Replaced with direct
+   local-calendar-date arithmetic (`addCalendarDays`, working on plain
+   year/month/day components via a UTC-labeled scratch `Date` used only as a
+   calendar calculator, never converted through a timezone) shared by
+   `nextMorningThreshold` and the new `nextLocalMidnight` (needed for scope
+   retirement). New tests cover UTC+14, UTC-12, a half-hour-offset zone
+   (Asia/Kolkata), and the existing DST spring/fall pair.
+2. `use-morning-brief.ts` rewritten around an explicit `BriefScope`
+   (epoch/identityKind/identityId/context/timezone/localDate) and per-scope
+   attempt-ownership tokens, replacing the previous independent
+   `open`/`alreadyPresentedToday` booleans and single `attemptedKeyRef`:
+   - Profile timezone readiness is classified explicitly (`pending`/`error`/
+     `resolved`) from `isPending`/`isError`, not inferred from `isLoading`
+     alone, so a successful no-profile result is distinguished from a
+     still-loading one.
+   - `alreadyPresentedToday` is derived from a receipt matching the CURRENT
+     scope (identity/context/local date) -- an old receipt retained for a
+     retired scope can no longer mark a newer scope (a different context, or
+     a new day) as already presented.
+   - Visible `open` is gated by the presented scope matching the current
+     scope at render time; a context/identity/zone/local-date change retires
+     the open review, capturing dismissal ownership before clearing.
+   - A `before-threshold` rejection (the T10-02 `MorningBriefClaimRejected`)
+     triggers a bounded per-scope retry (30s, then 120s; none after the
+     scope retires) instead of relying solely on the next-07:00 timer;
+     ordinary errors are logged without retry-storming.
+   - A local-midnight timer (via `nextLocalMidnight`) runs alongside the
+     existing next-07:00 timer so a scope actually retires at the date
+     rollover. `dismiss()` now targets the exact presented receipt via
+     `dismissMorningBriefLive`'s `exactLocalDate` parameter.
+   - **Bug found and fixed while testing this package:** `currentScope` is
+     memoized on identity/context/timezone (deliberately, so an unrelated
+     render can't thrash it), which meant its local date only ever refreshed
+     when the scheduled midnight timer fired -- a tab backgrounded across
+     local midnight and only later returning to the foreground never
+     recomputed on that return, contradicting the plan's own "on focus/
+     visibility return, recompute from the current clock" requirement. Fixed
+     by also bumping the recompute tick from the existing
+     visibilitychange/focus listener.
+   - **Required test correction applied, plus one more of the same kind
+     found by testing:** the existing delayed-across-midnight test asserted
+     `alreadyPresentedToday === true` for an old (now cross-midnight)
+     receipt -- corrected to `false` with the scoped reasoning explained
+     inline, per the plan's explicit instruction. An independent-review-style
+     issue of the identical shape was also found and fixed in the F-03
+     in-flight-context-switch test (asserted `true` after a "work" claim
+     resolved into a "home" render; corrected to `false` -- a "work" receipt
+     must not mark "home" as already presented).
+
+**Tests (T10-03):** `morning-brief-schedule.test.mjs` +5 (UTC+14, UTC-12,
+half-hour zone, `nextLocalMidnight` base case, `nextLocalMidnight` DST case);
+`use-morning-brief.test.mjs` all 15 existing cases retained and green (2
+corrected as above), no hang (confirmed by an isolated single-file run, not
+just as part of the full suite).
+
+**Verification (T10-03):** `npx tsc --noEmit` 0 errors; full `npm test`
+green (two independent full runs, both exit 0); `npm run build:app` clean.
+
+**Done (T10-04 -- shared action-outcome/claim module, the T03
+prerequisite):**
+1. Added `src/features/things/run-thing-action.ts`: one shared entry point
+   for every Thing-mutating Catch Up action (Catch, set-pace/Move-Now, Timed
+   Snooze, Nudge, dismiss a ghost breakthrough), returning a typed
+   `ActionOutcome` (`performed`/`already-in-flight`/`retired`/`failed`)
+   instead of throw-or-not. Built directly on `query-updates.ts`'s own
+   low-level primitives (`claimThingMutation`, `cancelThingReads`,
+   `patchThingInCaches`, `releaseThingMutation`) rather than wrapping
+   `withOptimisticPatch` (which already claims internally -- wrapping it
+   would double-claim). Argument validation (pace, snooze option) happens
+   before any claim or RPC dispatch.
+2. `ListChatPanel`'s dirty/upload interaction blocker (`useBlockWhile` on
+   `list-chat-draft`) was verified already present from prior T03 work --
+   confirmed via direct source inspection, not re-added.
+
+**Tests (T10-04):** `scripts/run-thing-action.test.mjs`, 14 cases: single
+successful catch with optimistic patch; duplicate synchronous clicks (only
+the first performs); a cross-surface preclaimed Thing blocks a second
+caller; two independent Things claim independently; a domain failure rolls
+back the patch and returns `failed`; a released claim is available again for
+a fresh retry; an identity switch resets epoch-scoped in-flight tracking so
+a new identity is never blocked by an old identity's stale, unreleased
+claim; pace/snooze argument validation; move_now/nudge/snooze field
+semantics; dismiss_ghost success and failure.
+
+**Verification (T10-04):** `npx tsc --noEmit` 0 errors; this module's own
+suite 14/14; `npm run build:app` clean.
+
+**Done (T10-05 -- stable keyed queue and action-outcome wiring in
+CatchUpStack):**
+1. Replaced `CatchUpStack.tsx`'s frozen `useState(() => moments)` deck with
+   an append-only ordered key list (`order`) plus a live keyed entry map
+   (`entries: Map<string, QueueEntry>`, status `active`/`resolved`/
+   `unavailable`). Selection is keyed, not indexed, so it survives
+   reorder/refetch; new moments append at the end without jumping the
+   current selection; a moment that disappears WITHOUT this review acting on
+   it is marked `unavailable` (actions cleared, last-known title kept for
+   orientation) rather than silently vanishing; one this review DID resolve
+   stays visible using its last known data so its acknowledgement-retry
+   state is never lost even after the server stops returning it.
+2. Actions now dispatch through `run-thing-action.ts` with per-outcome
+   handling, an epoch captured before dispatch and rechecked after the
+   action and again after the separately-awaited `surfaceMoment` call. A
+   domain success with a failed receipt shows a "Retry acknowledgement"
+   affordance that calls ONLY `surfaceMoment`, never re-running the domain
+   action.
+3. Viewed count, action-completed count, and pager position are three
+   separate figures ("3 of 8" / "Viewed 3 of 8" / "2 actions completed").
+   Previous/Next/Finish are plain callbacks driven by the current key's
+   index -- no parent `onClose()` call nested inside a `setState` updater
+   (the prior implementation's pattern). Open Thing closes the review and
+   hands off by the Thing's own current data with no domain mutation or
+   receipt.
+
+**Tests (T10-05):** `scripts/catchup-stack.test.mjs`, 11 cases covering
+Q01-Q04 (capability recompute, unavailable marking, new-moment append,
+stable selection), A01-A04 (failed/already-in-flight/receipt-failure-retry/
+success-advance outcomes), Open Thing, Finish-on-last-item, Previous
+disabled-state, and viewed/action-count separation.
+
+**Verification (T10-05):** `npx tsc --noEmit` 0 errors; targeted suite
+(morning-brief-schedule, use-morning-brief, catchup-stack, run-thing-action,
+catchup-context[-preview], catchup-logic, query-updates-rollback) 96/96
+green; `npm run build:app` clean.
+
+**Done (T10-06 -- the actual desktop/mobile interface):**
+1. `CatchUpOverlay.tsx` now uses the shared `AsyncState` component
+   (`src/components/katalist/AsyncState.tsx`, already used elsewhere in the
+   app) instead of only ever rendering `CatchUpStack` when
+   `moments.length > 0`: initial loading (skeleton), initial failure
+   (Retry), successful empty ("You're all caught up"), and a
+   background-failure warning banner over stale-but-usable content are all
+   real, distinct states, computed from the same `branch`/`isEmpty`/
+   `hasFetchedOnce` facts `use-catchup.ts` already exposes (the last of
+   which is now exposed directly from the hook rather than re-derived from
+   `!isLoading`).
+2. Dialog sizing widened to ~960px on desktop (this repo's `lg` breakpoint,
+   1024px -- the nearest existing token; there is no dedicated ~960px
+   breakpoint anywhere in the codebase) and full-height/edge-to-edge
+   (`h-dvh`) on mobile so the sticky action row stays reachable without the
+   dialog itself needing to scroll.
+3. `CatchUpBanner.tsx` and its Court-level gate both dropped the
+   `catchup.count > 0` gate: once the moments query has settled at least
+   once, the banner renders a real state for a settled error (Review still
+   reachable) or a settled empty result (Review still reachable), not only
+   for a non-empty result.
+4. Added a bounded queue sidebar to `CatchUpStack.tsx` per the plan's layout
+   sketch: on desktop, a ~280px scrollable column of native, keyboard-
+   focusable buttons (one per moment key) beside the selected moment's
+   detail card; on mobile, the same buttons render as a horizontal scroll
+   strip above the detail card. Each row shows a numbered index or a
+   resolved checkmark, the Thing's title, and (desktop only) its
+   reason/relative-time. Selecting a row jumps directly to that moment.
+   Reuses this app's existing focus-ring/hit-target/elevation conventions
+   (`focus-visible:ring-2 focus-visible:ring-ring`, `katalist-elevation-dialog`,
+   h-9/h-10 controls) rather than inventing new ones.
+5. **Bug found and fixed by the full test suite, not by inspection:** the
+   new queue row's secondary text used `text-[10px]`/`text-[11px]`, below
+   this codebase's own enforced 12px typography floor
+   (`scripts/t08-typography-floor.test.mjs`). Bumped both to `text-[12px]`.
+
+**Tests (T10-06):** one new `catchup-stack.test.mjs` case (clicking a queue
+item jumps directly to that moment); `morning-brief-label.test.mjs` 2/2
+(user-visible "Morning Brief" label unchanged); the Court-desktop/stack-
+component/magic-box/inline-detail-workspace/invalidate-personal-surfaces
+suite together 43/43 (confirms the widened dialog and banner gate removal
+did not regress existing Court behavior).
+
+**Verification (T10-06):** `npx tsc --noEmit` 0 errors; `npm run lint` 0
+errors/69 warnings (unchanged baseline); `npm run build:app` clean.
+
+**Done (T10-07 -- integration and compatibility sweep):**
+1. `rg`-swept every `useCatchup`/`CatchUpOverlay`/`CatchUpStack`/
+   `surfaceMoment` reference in `src/`: the only real consumer outside the
+   `catchup` feature itself is `CourtDesktop.tsx`, already updated with the
+   new props (`isLoading`/`error`/`isEmpty`/`hasFetchedOnce` for the
+   overlay; `error`/`hasFetchedOnce` for the banner). All other hits are
+   either the implementation files themselves or doc-comment references.
+2. Confirmed Court's single-controller wiring: `useMorningBrief()` is called
+   in exactly one place (`CourtDesktop.tsx`); the mobile Court route
+   (`src/routes/index.tsx`) renders the same `CourtDesktop` component
+   CSS-hidden/shown by breakpoint rather than mounting a second instance --
+   this was already true before T10 and remains true now (confirmed
+   directly, not assumed).
+3. SQL/notification/daily-maintenance compatibility: no RPC signatures
+   changed (`dismissMorningBriefLive`'s new third argument is the ADDITIVE
+   `dismiss_morning_brief(text, text, date)` overload from T10-02's own
+   migration, confirmed present at
+   `supabase/migrations/20260925110000_morning_brief_exact_dismiss.sql`; the
+   2-argument overload is untouched). `rg` confirms neither
+   `src/routes/api/jobs/daily-maintenance.ts` nor
+   `src/features/notifications/NotificationPanel.tsx` reference any Morning
+   Brief/Catch Up RPC at all -- no compatibility risk to check further.
+4. `VITE_KATALIST_MORNING_BRIEF_AUTO_OPEN` remains default-off
+   (`morning-brief-flag.ts` untouched by this batch).
+5. **Ran the plan's five-viewport Playwright pass for real**
+   (`tests/e2e/preview/morning-brief.spec.ts`, new), signing in via a Demo
+   Persona (`VITE_KATALIST_DEMO_MODE=true`) rather than staging credentials
+   -- a synthetic, localStorage-only `Session` that makes zero real Supabase
+   calls (confirmed by a dedicated network-assertion test in the spec, not
+   just by reading the architecture), so it stays inside
+   `tests/e2e/preview/`'s own "safe with no real backend" contract. At the
+   `>=lg` (1024px) desktop/full-hd/tablet-landscape projects: the banner, the
+   real ~37-item queue+detail layout, no horizontal overflow, and
+   Escape+focus-restore all pass, screenshots inspected directly. At the
+   `<1024px` mobile/tablet-portrait projects, the spec checks the mobile
+   Court lane list's own overflow and asserts Morning Brief's absence there
+   as a checked, named fact (see finding below), not a silent skip.
+   - **Bug found and fixed by this run:** `use-catchup.ts`'s `isEmpty` was
+     hardcoded `true` for every preview session -- the banner showed "37
+     moments need you" while the overlay it opened simultaneously rendered
+     "You're all caught up". Dormant until T10-06 wired the overlay through
+     the shared `AsyncState` component (which does consume `isEmpty`).
+     Fixed to report the real computed value for preview; added a
+     regression test.
+   - **Pre-existing product gap found, precisely documented, NOT fixed
+     here:** `src/routes/index.tsx` renders `CourtDesktop` (Morning Brief's
+     only mount point) alongside a completely separate, simpler mobile
+     lane-list UI in an `lg:hidden` block. Below the 1024px `lg` breakpoint,
+     `CourtDesktop`'s own rendered output -- including `CatchUpBanner`/
+     `CatchUpOverlay` -- is CSS-hidden, and the separate mobile block has no
+     Catch Up wiring of its own. **Morning Brief has no reachable entry
+     point on any viewport narrower than 1024px today.** This predates T10;
+     T10-06's mobile full-height dialog CSS is correct but currently inert
+     there since nothing can open it. Fixing this is an architecture
+     decision (where a mobile entry point lives, and how the `catchup`/
+     `morningBrief` hook results reach both `CourtDesktop` and the separate
+     mobile block) large enough that attempting it under this pass's time
+     budget risked a rushed, under-tested change to a real product surface
+     neither this pass nor the T10 plan otherwise touches. Left as a named,
+     reproducible defect (trigger: view Court at any narrow viewport;
+     impact: Morning Brief/Catch Up entirely unreachable on phones/narrow
+     tablets; location: `src/routes/index.tsx`'s `lg:hidden` block versus
+     `CourtDesktop.tsx`'s own responsive wrapper).
+
+**Remaining -- one named RELEASE-gated item, plus the one product gap named
+directly above:**
+- A true live-backend/staging Playwright run (`tests/e2e/staging/`, real
+  Supabase RLS, a real signed-in account, concurrent devices/tabs) remains
+  RELEASE-02/03 and was not attempted -- `KATALIST_STAGING_BASE_URL`/
+  `KATALIST_TEST_ACCOUNT_EMAIL`/`KATALIST_TEST_ACCOUNT_PASSWORD` are not
+  configured in this environment, and no
+  `tests/e2e/staging/morning-brief.spec.ts` exists yet. The demo-mode run
+  above exercises the same UI/interaction code paths but cannot substitute
+  for real RLS/auth/concurrency evidence.
+- Two illustrative dimensions of the plan's full test matrix (S02, S04, S10,
+  S11 -- timer-driven auto-open/retirement scenarios) are exercised
+  indirectly through the pure `morning-brief-schedule.ts` timer-math tests
+  and the controller's F-03/F-05/R-04 race tests, but not through a
+  fake-`setTimeout` harness that actually fires the scheduled
+  threshold/midnight timers early; this repo's `mock.timers` usage here only
+  fakes `Date`, not `setTimeout`. Building that harness was judged
+  disproportionate to this batch; the underlying logic those timers call
+  (`nextMorningThreshold`/`nextLocalMidnight`/`maybeAttempt`) is fully unit-
+  tested on its own.
+- `docs/superpowers/plans/KATALIST_T10_FINAL_HANDOFF.md` has now been
+  created (see that file) reconciling all seven T10 packages against
+  evidence, including the one RELEASE-gated item above named precisely.

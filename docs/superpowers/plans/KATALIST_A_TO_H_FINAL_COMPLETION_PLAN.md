@@ -56,7 +56,7 @@ Each checkbox below closes only after its numbered acceptance conditions pass or
 - [ ] **T07 — Finish precise realtime invalidation and reconnect behavior.**
 - [x] **T08 — Apply shared typography, controls, elevation, and motion.**
 - [ ] **T09 — Complete Court, shared detail, and Magic Box.**
-- [ ] **T10 — Complete Morning Brief behavior, actions, and responsive layout.**
+- [x] **T10 — Complete Morning Brief behavior, actions, and responsive layout.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T10 section and `KATALIST_T10_FINAL_HANDOFF.md`. Live RLS/concurrent-devices/staging Playwright remain RELEASE-02/03; one pre-existing mobile-entry-point defect is named and unfixed.)
 - [ ] **T11 — Complete Lists and Buckets.**
 - [ ] **T12 — Complete welcome, authentication, and three-step onboarding.**
 - [ ] **T13 — Complete Nudges, Me, preferences, and public-profile checks.**
