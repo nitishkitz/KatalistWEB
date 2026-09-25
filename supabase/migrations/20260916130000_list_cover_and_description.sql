@@ -48,18 +48,25 @@ GRANT EXECUTE ON FUNCTION public.create_list(text, public.context_kind, text, te
 -- 2. Storage policies for the private list-covers bucket.
 --    Any authenticated user may read a cover (they are shown on list cards to
 --    members); write/replace/delete are limited to the uploading owner.
-CREATE POLICY "list covers readable by authenticated"
-  ON storage.objects FOR SELECT TO authenticated
-  USING (bucket_id = 'list-covers');
-
-CREATE POLICY "list covers insertable by owner"
-  ON storage.objects FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'list-covers' AND owner = auth.uid());
-
-CREATE POLICY "list covers updatable by owner"
-  ON storage.objects FOR UPDATE TO authenticated
-  USING (bucket_id = 'list-covers' AND owner = auth.uid());
-
-CREATE POLICY "list covers deletable by owner"
-  ON storage.objects FOR DELETE TO authenticated
-  USING (bucket_id = 'list-covers' AND owner = auth.uid());
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='list covers readable by authenticated') THEN
+    CREATE POLICY "list covers readable by authenticated"
+      ON storage.objects FOR SELECT TO authenticated
+      USING (bucket_id = 'list-covers');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='list covers insertable by owner') THEN
+    CREATE POLICY "list covers insertable by owner"
+      ON storage.objects FOR INSERT TO authenticated
+      WITH CHECK (bucket_id = 'list-covers' AND owner = auth.uid());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='list covers updatable by owner') THEN
+    CREATE POLICY "list covers updatable by owner"
+      ON storage.objects FOR UPDATE TO authenticated
+      USING (bucket_id = 'list-covers' AND owner = auth.uid());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='storage' AND tablename='objects' AND policyname='list covers deletable by owner') THEN
+    CREATE POLICY "list covers deletable by owner"
+      ON storage.objects FOR DELETE TO authenticated
+      USING (bucket_id = 'list-covers' AND owner = auth.uid());
+  END IF;
+END $$;

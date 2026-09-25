@@ -21,6 +21,7 @@ DO $$ BEGIN
   END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_device_tokens_profile ON public.device_tokens (profile_id);
+DROP TRIGGER IF EXISTS trg_device_tokens_updated_at ON public.device_tokens;
 CREATE TRIGGER trg_device_tokens_updated_at
   BEFORE UPDATE ON public.device_tokens
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

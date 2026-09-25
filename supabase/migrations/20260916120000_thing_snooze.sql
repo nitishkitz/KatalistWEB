@@ -7,7 +7,7 @@
 -- shared Thing. This is deliberately distinct from snooze_breakthrough, which
 -- remains exclusive to Doorman.
 
-CREATE TABLE public.thing_snooze (
+CREATE TABLE IF NOT EXISTS public.thing_snooze (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   profile_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   thing_id uuid NOT NULL REFERENCES public.things(id) ON DELETE CASCADE,
@@ -20,12 +20,17 @@ CREATE TABLE public.thing_snooze (
 GRANT SELECT ON public.thing_snooze TO authenticated;
 GRANT ALL ON public.thing_snooze TO service_role;
 ALTER TABLE public.thing_snooze ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "own thing snooze is readable"
-  ON public.thing_snooze FOR SELECT TO authenticated
-  USING (profile_id = auth.uid());
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname='public' AND tablename='thing_snooze' AND policyname='own thing snooze is readable') THEN
+    CREATE POLICY "own thing snooze is readable"
+      ON public.thing_snooze FOR SELECT TO authenticated
+      USING (profile_id = auth.uid());
+  END IF;
+END $$;
 
-CREATE INDEX idx_thing_snooze_profile ON public.thing_snooze (profile_id, snoozed_until);
+CREATE INDEX IF NOT EXISTS idx_thing_snooze_profile ON public.thing_snooze (profile_id, snoozed_until);
 
+DROP TRIGGER IF EXISTS trg_thing_snooze_updated_at ON public.thing_snooze;
 CREATE TRIGGER trg_thing_snooze_updated_at
   BEFORE UPDATE ON public.thing_snooze
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

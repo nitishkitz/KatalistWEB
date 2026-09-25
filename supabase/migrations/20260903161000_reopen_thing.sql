@@ -17,14 +17,14 @@ BEGIN
   END IF;
 
   UPDATE public.things
-     SET work_status = 'not_started,
+     SET work_status = 'not_started',
          cancelled_at = NULL,
-         acknowledgement = 'waiting_for_catch,
+         acknowledgement = 'waiting_for_catch',
          updated_at = now()
    WHERE id = p_thing_id
    RETURNING * INTO v_thing;
 
-  PERFORM katalist_priv.log_activity(p_thing_id, v_me, 'reopened, '{}'::jsonb);
+  PERFORM katalist_priv.log_activity(p_thing_id, v_me, 'reopened', '{}'::jsonb);
   RETURN v_thing;
 END;
 $$;

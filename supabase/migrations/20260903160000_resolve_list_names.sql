@@ -25,19 +25,7 @@ $$;
 REVOKE ALL ON FUNCTION public.resolve_list_names(uuid[]) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.resolve_list_names(uuid[]) TO authenticated;
 
--- Also broaden can_view_list to allow viewing a list if caller has a Thing in that list
-CREATE OR REPLACE FUNCTION katalist_priv.can_view_list(_list_id uuid)
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = pg_catalog, public, katalist_priv AS $$
-  SELECT katalist_priv.is_list_owner(_list_id)
-      OR katalist_priv.is_list_member(_list_id)
-      OR EXISTS (
-        SELECT 1
-        FROM public.things t
-        JOIN public.actors a ON a.id = t.current_assignee_actor_id
-                             OR a.id = t.owner_actor_id
-                             OR a.id = t.creator_actor_id
-        WHERE t.list_id = _list_id
-          AND a.profile_id = auth.uid()
-      );
-$$;
+-- Deliberately do not broaden katalist_priv.can_view_list here. A Thing
+-- participant may resolve the containing List's name through the narrowly
+-- scoped RPC above, but owner/member access remains required for the List,
+-- its other Things, chat, files and meetings.

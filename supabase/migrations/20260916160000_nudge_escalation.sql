@@ -32,6 +32,7 @@ DO $$ BEGIN
       USING (katalist_priv.can_view_thing(thing_id));
   END IF;
 END $$;
+DROP TRIGGER IF EXISTS trg_thing_nudge_state_updated_at ON public.thing_nudge_state;
 CREATE TRIGGER trg_thing_nudge_state_updated_at
   BEFORE UPDATE ON public.thing_nudge_state
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
