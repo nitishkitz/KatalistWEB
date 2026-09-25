@@ -2,9 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  List,
   Users,
-  Search,
   Calendar,
   Phone,
   PhoneOff,
@@ -23,9 +21,7 @@ import { ListDetailSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { supabase } from "@/integrations/supabase/client";
-import { MagicBox } from "@/features/court/MagicBox";
-import { ThingDetailContent } from "@/features/things/ThingDetailContent";
-import { PDFViewer, type ThingFile } from "@/features/things/PDFViewer";
+import { type ThingFile } from "@/features/things/PDFViewer";
 import { formatCourtDue } from "@/features/court/court-view-model";
 import { laneOf, type Person } from "@/domain/thing";
 import { format, isToday, isTomorrow } from "date-fns";
@@ -38,6 +34,7 @@ import { useListMessages } from "@/features/lists/use-list-messages";
 import { ListChatPanel } from "@/features/lists/ListChatPanel";
 import { ListInviteDialog, type ListInviteRole } from "@/features/lists/components/ListInviteDialog";
 import { ListMembersSection, type MemberRoleFilter } from "@/features/lists/components/ListMembersSection";
+import { ListThingsSection, type ListLaneId } from "@/features/lists/components/ListThingsSection";
 import type { ListMember } from "@/features/lists/fixtures";
 import { domainErrorMessage, extractErrorMessage } from "@/lib/domain-error";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
@@ -209,7 +206,7 @@ function ListDetailPage() {
   }
   const selectedId = selectedState.listId === listId ? selectedState.thingId : null;
   const setSelectedId = (thingId: string | null) => setSelectedState({ listId, thingId });
-  const [navLane, setNavLane] = useState<"now" | "next" | "later">("now");
+  const [navLane, setNavLane] = useState<ListLaneId>("now");
   const [navSearch, setNavSearch] = useState("");
   const [selectedFile, setSelectedFile] = useState<ThingFile | null>(null);
 
@@ -372,6 +369,21 @@ function ListDetailPage() {
     () => grouped[navLane].filter((t) => t.title.toLowerCase().includes(navSearch.trim().toLowerCase())),
     [grouped, navLane, navSearch],
   );
+  const laneCounts: Record<ListLaneId, number> = {
+    now: grouped.now.length,
+    next: grouped.next.length,
+    later: grouped.later.length,
+  };
+  const selectLane = (lane: ListLaneId) => {
+    setNavLane(lane);
+    setSelectedId(null);
+  };
+  const closeSelectedThing = () => setSelectedId(null);
+  const clearThingFilters = () => {
+    setThingsFilter("all");
+    setDueFilter("all");
+    setPersonFilter(null);
+  };
   const selectedIsVisible = Boolean(selected && filteredThings.some((thing) => thing.id === selected.id));
   const activeThing = selectedId
     ? selectedIsVisible ? selected : null
@@ -668,290 +680,30 @@ function ListDetailPage() {
         {/* TAB 1: THINGS */}
         {/* ========================================================================= */}
         {tab === "things" && (
-              <div className="flex flex-col min-h-0 gap-3 h-[calc(100vh-9.5rem)]">
-                <div className="flex min-h-0 flex-1 gap-3">
-                {/* Navigator card */}
-                <aside className="flex w-[340px] shrink-0 flex-col min-h-0 overflow-hidden rounded-[10px] bg-white">
-                  <div className="flex items-center gap-5 border-b border-[#e2e4f5] px-5 pt-4">
-                    {laneTabs.map((lt) => {
-                      const active = navLane === lt.id;
-                      return (
-                        <button
-                          key={lt.id}
-                          type="button"
-                          onClick={() => {
-                            setNavLane(lt.id);
-                            setSelectedId(null);
-                          }}
-                          style={{ color: lt.color }}
-                          className={cn(
-                            "relative pb-2.5 text-[15px] whitespace-nowrap transition-all cursor-pointer",
-                            active ? "font-medium" : "font-normal opacity-90 hover:opacity-100",
-                          )}
-                        >
-                          <span>
-                            {lt.label} <span className="text-[12.5px]">{grouped[lt.id].length}</span>
-                          </span>
-                          {active && (
-                            <span
-                              className="absolute -bottom-px left-0 right-0 h-0.5 rounded-full"
-                              style={{ backgroundColor: lt.id === "now" ? "#fe0734" : lt.color }}
-                            />
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="px-4 pt-3 pb-2">
-                    <div className="relative flex items-center">
-                      <Search className="absolute left-3 h-4 w-4 text-[#8487a7] pointer-events-none" />
-                      <input
-                        value={navSearch}
-                        onChange={(e) => setNavSearch(e.target.value)}
-                        placeholder="Search Things..."
-                        className="h-[40px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
-                      />
-                    </div>
-                    {/* G02: thingsFilter already drove filteredThings/grouped/
-                        laneThings, but had no control to actually change it --
-                        "all" (every Thing, including sorted/cancelled) stays
-                        the default for compatibility with existing behavior. */}
-                    <div
-                      role="tablist"
-                      aria-label="Filter Things by status"
-                      className="mt-2 flex items-center gap-1 rounded-[9px] bg-[#f4f5fb] p-1"
-                    >
-                      {(
-                        [
-                          ["active", "Active"],
-                          ["all", "All"],
-                          ["completed", "Completed"],
-                        ] as const
-                      ).map(([id, label]) => (
-                        <button
-                          key={id}
-                          type="button"
-                          role="tab"
-                          aria-selected={thingsFilter === id}
-                          onClick={() => setThingsFilter(id)}
-                          className={cn(
-                            "flex-1 rounded-[7px] py-1.5 text-[12px] font-medium transition-colors",
-                            thingsFilter === id
-                              ? "bg-white text-[#000533] "
-                              : "text-[#6a769c] hover:text-[#000533]",
-                          )}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between border-b border-[#eef0f6] px-4 py-2 text-[12px]">
-                    <div className="flex items-center gap-1.5 font-medium text-[#8487a7]">
-                      <List className="h-3.5 w-3.5 text-[#5f5f90]" />
-                      <span>{laneThings.length} Things</span>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-auto min-h-0 p-2">
-                    {laneThings.map((thing) => {
-                      const isSelected = thing.id === activeThing?.id;
-                      const due = formatCourtDue(thing);
-                      const isSorted = thing.workStatus === "sorted";
-                      const inProgress =
-                        !isSorted &&
-                        thing.workStatus !== "cancelled" &&
-                        (thing.workStatus === "under_progress" || thing.acknowledgement === "caught");
-                      const isWaiting = thing.acknowledgement === "waiting_for_catch";
-                      return (
-                        <div
-                          key={thing.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => setSelectedId(thing.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              setSelectedId(thing.id);
-                            }
-                          }}
-                          style={
-                            isSelected
-                              ? { backgroundColor: selTint.bg, borderColor: selTint.border }
-                              : undefined
-                          }
-                          className={cn(
-                            "relative flex items-start justify-between gap-2.5 rounded-[10px] p-3 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                            isSelected
-                              ? "border-l-[3px]"
-                              : "border-l-[3px] border-transparent hover:bg-[#f9f9fe]",
-                          )}
-                        >
-                          <div className="flex min-w-0 flex-1 items-start gap-2.5">
-                            <PersonAvatar
-                              name={thing.assignee.name}
-                              initials={thing.assignee.initials}
-                              src={thing.assignee.avatarUrl}
-                              size={24}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <p
-                                className={cn(
-                                  "truncate text-[12.5px] font-medium leading-snug text-[#000533]",
-                                  isSorted && "line-through",
-                                )}
-                              >
-                                {thing.title}
-                              </p>
-                              <div className="mt-1 flex flex-col gap-0.5 text-[12px]">
-                                {due.label && due.label !== "No due date" ? (
-                                  <span
-                                    className="font-medium"
-                                    style={{ color: due.urgent ? "#fe1e26" : "#525d87" }}
-                                  >
-                                    {due.label}
-                                  </span>
-                                ) : null}
-                                {(thing.unreadCommentCount ?? 0) > 0 ? (
-                                  <span className="font-medium text-[#0242f5]">
-                                    {thing.unreadCommentCount} new{" "}
-                                    {thing.unreadCommentCount === 1 ? "comment" : "comments"}
-                                  </span>
-                                ) : (thing.commentCount ?? 0) > 0 ? (
-                                  <span className="font-medium text-[#8487a7]">
-                                    {thing.commentCount}{" "}
-                                    {thing.commentCount === 1 ? "comment" : "comments"}
-                                  </span>
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="shrink-0 pt-0.5">
-                            <span className="inline-flex items-center gap-1.5 text-[12px] text-[#8186a5]">
-                              <span
-                                className="h-3 w-3 rounded-full border-2 bg-white"
-                                style={{
-                                  borderColor: isSorted
-                                    ? "#12a15f"
-                                    : inProgress
-                                      ? "#247cfc"
-                                      : isWaiting
-                                        ? "#f59e0b"
-                                        : "#626d96",
-                                }}
-                              />
-                              <span>
-                                {isWaiting
-                                  ? "Waiting"
-                                  : inProgress
-                                    ? "Under Progress"
-                                    : isSorted
-                                      ? "Sorted"
-                                      : "Not Started"}
-                              </span>
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {laneThings.length === 0 && (
-                      <div className="py-8 text-center text-[12px] text-muted-foreground">
-                        No Things in this lane.
-                      </div>
-                    )}
-                  </div>
-                </aside>
-
-                {/* Right: detail | preview */}
-                <div className="flex flex-1 flex-col min-h-0 overflow-hidden rounded-[10px] bg-white">
-                  <div className="flex flex-1 flex-row min-h-0 overflow-hidden">
-                    <div className="flex-1 min-h-0 overflow-auto bg-[#fefdfd] px-8 pt-6 pb-8">
-                      <div className="mx-auto w-full max-w-3xl">
-                        {selectedId && selected && !selectedIsVisible ? (
-                          <div role="status" className="flex min-h-[320px] flex-col items-center justify-center text-center">
-                            <p className="text-[14px] font-semibold text-[#000533]">This Thing is hidden by your filters.</p>
-                            <p className="mt-1 text-[12px] text-[#6a769c]">Clear the filters to return to the selected Thing.</p>
-                            <div className="mt-4 flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setThingsFilter("all");
-                                  setDueFilter("all");
-                                  setPersonFilter(null);
-                                }}
-                                className="rounded-lg bg-[#975ee2] px-3 py-2 text-[12px] font-semibold text-white"
-                              >
-                                Clear filters
-                              </button>
-                              <button type="button" onClick={() => setSelectedId(null)} className="rounded-lg border px-3 py-2 text-[12px] font-semibold">
-                                Close
-                              </button>
-                            </div>
-                          </div>
-                        ) : selectedId && !selected ? (
-                          <div role="alert" className="flex min-h-[320px] flex-col items-center justify-center text-center">
-                            <p className="text-[14px] font-semibold text-[#000533]">This Thing is no longer available.</p>
-                            <p className="mt-1 text-[12px] text-[#6a769c]">Your access may have changed, or the Thing may have been removed.</p>
-                            <button type="button" onClick={() => setSelectedId(null)} className="mt-4 rounded-lg border px-3 py-2 text-[12px] font-semibold">
-                              Close
-                            </button>
-                          </div>
-                        ) : activeThing ? (
-                          <ThingDetailContent
-                            key={activeThing.id}
-                            initialThing={activeThing}
-                            headerAction={null}
-                            onAfterTerminalAction={() => setSelectedId(null)}
-                            variant="court"
-                            viewOnly={viewOnly}
-                            onFileSelect={(file) => setSelectedFile(file)}
-                          />
-                        ) : (
-                          <div className="flex min-h-[320px] items-center justify-center text-[12px] text-muted-foreground">
-                            No Things in this list yet.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    {selectedFile && (
-                      <PDFViewer
-                        file={selectedFile}
-                        addedByName={activeThing?.creator.name}
-                        addedLabel={
-                          activeThing?.updatedAt
-                            ? format(new Date(activeThing.updatedAt), "MMM d, h:mm a")
-                            : undefined
-                        }
-                      />
-                    )}
-                  </div>
-                </div>
-                </div>
-
-                {/* Toss composer — outside the detail container */}
-                {!viewOnly && (
-                  <div className="flex shrink-0 justify-center">
-                    <div className="w-full max-w-2xl">
-                      <MagicBox
-                        listId={list.id}
-                        listName={list.name}
-                        desktop
-                        extraPeople={list.members.map((m) => ({
-                          id: m.actorId || m.profileId || m.name,
-                          name: m.name,
-                          initials: m.initials,
-                          avatarUrl: m.avatarUrl,
-                          actorId: m.actorId,
-                          profileId: m.profileId,
-                        }))}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-          )}
+          <ListThingsSection
+            list={list}
+            viewOnly={viewOnly}
+            laneTabs={laneTabs}
+            navLane={navLane}
+            onSelectLane={selectLane}
+            laneCounts={laneCounts}
+            navSearch={navSearch}
+            onNavSearchChange={setNavSearch}
+            thingsFilter={thingsFilter}
+            onThingsFilterChange={setThingsFilter}
+            laneThings={laneThings}
+            selectedId={selectedId}
+            selected={selected}
+            selectedIsVisible={selectedIsVisible}
+            activeThing={activeThing}
+            selTint={selTint}
+            onSelectThing={setSelectedId}
+            onCloseSelected={closeSelectedThing}
+            onClearFilters={clearThingFilters}
+            selectedFile={selectedFile}
+            onFileSelect={setSelectedFile}
+          />
+        )}
 
         {/* ========================================================================= */}
         {/* TAB 2: CHAT */}

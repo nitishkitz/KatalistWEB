@@ -6,10 +6,17 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 
 test("Lists keep Thing detail inline; desktop Buckets use the workspace and retain a mobile sheet", () => {
   const lists = read("src/routes/lists.$listId.tsx");
+  const listThingsSection = read("src/features/lists/components/ListThingsSection.tsx");
   const buckets = read("src/routes/buckets.$bucketId.tsx");
 
-  assert.match(lists, /<ThingDetailContent/);
+  // T11-03 extracted the Things tab's presentation into ListThingsSection.tsx
+  // (mutation/selection ownership stayed in the route); the route renders
+  // that component, and the component itself is where ThingDetailContent
+  // actually mounts inline (no sheet/drawer/modal wrapper anywhere).
+  assert.match(lists, /<ListThingsSection/);
   assert.doesNotMatch(lists, /<ThingDetailSheet/);
+  assert.match(listThingsSection, /<ThingDetailContent/);
+  assert.doesNotMatch(listThingsSection, /<ThingDetailSheet/);
 
   assert.match(buckets, /<InlineThingDetailWorkspace/);
   assert.match(buckets, /<ThingDetailSheet/);
@@ -31,8 +38,10 @@ test("route-level Thing detail never falls back to the legacy sheet", () => {
   }
 
   const lists = read("src/routes/lists.$listId.tsx");
-  assert.match(lists, /<ThingDetailContent/);
   assert.doesNotMatch(lists, /ThingDetailSheet/);
+  const listThingsSection = read("src/features/lists/components/ListThingsSection.tsx");
+  assert.match(listThingsSection, /<ThingDetailContent/);
+  assert.doesNotMatch(listThingsSection, /ThingDetailSheet/);
 
   // Buckets intentionally use the accessible sheet below 1024px while
   // desktop keeps the inline workspace, with only one detail tree active.
