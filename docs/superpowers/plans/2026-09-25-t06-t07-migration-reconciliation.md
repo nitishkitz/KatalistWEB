@@ -44,7 +44,7 @@ production to produce this result, only read.
 
 ## The 25 local-only migrations (still pending, unchanged by this pass)
 
-These remain genuinely unapplied to production, spanning 2026-09-03 through
+These versions remain absent from production migration history, spanning 2026-09-03 through
 2026-09-24 (`20260903160000_resolve_list_names.sql` through
 `20260924120000_bounded_chat_and_notification_claims.sql` — the full list is
 `supabase/migrations/` filtered to that date range). They correspond to feature work
@@ -53,7 +53,7 @@ logging, nudge escalation, Thing snooze, list cover/description, device tokens, 
 attachments, Catch Up, bucket notes, profile cover theme, Team Hub, Hub contacts,
 notification push timestamps, list meetings, pinned messages/files, upcoming-meeting RPC,
 message mentions, Morning Brief receipts, and bounded chat/notification claims. **This
-reconciliation pass did not apply any of them** — that is a separate, larger decision
+reconciliation pass did not apply or mark any of them** — that is a separate, larger decision
 (each of T06's six migrations and T07's one migration were applied only after explicit,
 itemized authorization, per the existing ledger; the same discipline applies here).
 
@@ -109,13 +109,30 @@ DDL. Where only part is present, use a reviewed additive delta before marking
 the version complete. Do not repair a version solely because an object with
 the same name exists; definition, grants and RLS must match.
 
+### Access change requiring a product decision
+
+The first pending file, `20260903160000_resolve_list_names.sql`, adds the
+targeted `resolve_list_names(uuid[])` RPC **and** replaces
+`katalist_priv.can_view_list(uuid)`. The production predicate currently allows
+only the List owner or member. The pending definition would also allow any
+profile whose actor owns, created, or is assigned one Thing in that List.
+`can_view_list` is used by List, member, message, file and meeting access
+policies; `can_view_thing` also delegates to `can_view_list`, so the broadened
+predicate can expose **other Things in the same List** as well. Applying this
+file unchanged therefore grants substantially more
+than the List-name lookup named by the migration. Decide whether a Thing
+participant should gain access to the whole List and its conversations. A
+narrow alternative is to add only `resolve_list_names` and keep the existing
+`can_view_list` predicate, but this changes the checked-in migration and must
+be tested against the intended product access model before deployment.
+
 ## Verification
 
 ```
 $ supabase migration list
 ```
 now reports every version at or before `20260825125932` matching on both `local` and
-`remote`; the only remaining mismatches are the 25 genuinely-pending local-only versions
+`remote`; the only remaining mismatches are the 25 locally-present, history-pending versions
 listed above (confirmed: exactly 25, matching the count in the prior status report).
 
 No production database state was changed by this pass. `npx tsc --noEmit`, `npm test`
