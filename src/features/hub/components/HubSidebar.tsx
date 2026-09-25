@@ -200,7 +200,7 @@ export function HubSidebar() {
             onClick={() => setView(v)}
             className={cn(
               "flex flex-1 items-center justify-center gap-1.5 rounded-[8px] px-2 py-1.5 text-[12.5px] font-medium capitalize transition-colors",
-              view === v ? "bg-white text-[#6638ec] shadow-2xs" : "text-[#6a769c] hover:text-[#000533]",
+              view === v ? "bg-white text-[#6638ec] " : "text-[#6a769c] hover:text-[#000533]",
             )}
           >
             {v === "conversations" ? <MessageCircle className="h-3.5 w-3.5" /> : <ListIcon className="h-3.5 w-3.5" />}

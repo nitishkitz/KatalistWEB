@@ -60,7 +60,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
   };
 
   return (
-    <aside className="flex flex-col w-[290px] shrink-0 rounded-2xl border border-border/80 bg-white/95 p-4 shadow-sm backdrop-blur-xs transition-all">
+    <aside className="flex flex-col w-[290px] shrink-0 rounded-2xl border border-border/80 bg-white/95 p-4 backdrop-blur-xs transition-all">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 pb-3">
         <div className="flex items-center gap-2">
@@ -168,14 +168,14 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                 className={cn(
                   "group relative flex items-center justify-between rounded-xl border p-2.5 transition-all duration-150 cursor-pointer",
                   isTarget
-                    ? "border-sky-500 bg-sky-50/80 shadow-sm scale-[1.02] ring-2 ring-sky-300/50 border-dashed"
-                    : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/70 shadow-2xs",
+                    ? "border-sky-500 bg-sky-50/80 scale-[1.02] ring-2 ring-sky-300/50 border-dashed"
+                    : "border-slate-100 bg-white hover:border-slate-200 hover:bg-slate-50/70",
                 )}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <div
                     className={cn(
-                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white font-bold text-[12px] shadow-2xs",
+                      "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white font-bold text-[12px]",
                       colorClass,
                     )}
                   >
@@ -193,7 +193,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
 
                 <div className="shrink-0 pl-1.5">
                   {isTarget ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary text-white px-2 py-0.5 text-[12px] font-bold shadow-xs animate-pulse">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary text-white px-2 py-0.5 text-[12px] font-bold animate-pulse">
                       <Check className="h-3 w-3" />
                       Drop here to add
                     </span>

@@ -570,7 +570,7 @@ export function ConversationWorkspace({
       <Dialog open={Boolean(imagePreview)} onOpenChange={(open) => !open && setImagePreview(null)}>
         <DialogContent className="max-w-[92vw] w-fit gap-0 border-none bg-transparent p-0 shadow-none sm:rounded-none">
           {imagePreview ? (
-            <div className="flex max-h-[90vh] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex max-h-[90vh] flex-col overflow-hidden rounded-2xl bg-white katalist-elevation-dialog">
               <div className="flex items-center justify-between gap-3 border-b border-[#eef0f6] px-4 py-2.5">
                 <DialogTitle className="min-w-0 truncate text-[13px] font-medium text-[#000533]">
                   {imagePreview.name}

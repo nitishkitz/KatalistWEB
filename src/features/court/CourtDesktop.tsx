@@ -136,10 +136,10 @@ function TheirSummaryCard({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "flex min-h-[50px] items-center gap-2.5 rounded-xl border bg-white px-3 py-2 text-left shadow-2xs outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring",
+        "flex min-h-[50px] items-center gap-2.5 rounded-xl border bg-white px-3 py-2 text-left  outline-none transition-all duration-200 focus-visible:ring-2 focus-visible:ring-ring",
         active
           ? "border-primary ring-1 ring-primary/40 bg-primary/[0.02]"
-          : "border-border/70 hover:border-primary/45 hover:shadow-xs",
+          : "border-border/70 hover:border-primary/45 ",
       )}
     >
       <span
@@ -517,7 +517,7 @@ export function CourtDesktop({
                     className={cn(
                       "flex items-center gap-1.5 rounded-full border px-2 py-1 !rounded-full h-7 transition-all duration-200 outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
                       isActive
-                        ? "border-primary bg-primary/10 ring-2 ring-primary ring-offset-2 scale-110 shadow-xs"
+                        ? "border-primary bg-primary/10 ring-2 ring-primary ring-offset-2 scale-110 "
                         : "border-border/80 hover:border-primary/45 opacity-75 hover:opacity-100 hover:scale-105",
                     )}
                   >

@@ -477,7 +477,7 @@ export const ListChatPanel = forwardRef<
         <button
           type="button"
           onClick={scrollToBottom}
-          className="absolute bottom-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#975ee2] px-3 py-1.5 text-[12px] font-medium text-white shadow-lg transition hover:brightness-95"
+          className="absolute bottom-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#975ee2] px-3 py-1.5 text-[12px] font-medium text-white katalist-elevation-card transition hover:brightness-95"
         >
           New messages
           <ArrowDown className="h-3.5 w-3.5" />
@@ -499,7 +499,7 @@ export const ListChatPanel = forwardRef<
             </div>
           ) : null}
           {mentionTrigger && mentionMatches.length > 0 ? (
-            <div className="absolute bottom-full left-0 z-10 mb-1 w-56 overflow-hidden rounded-[10px] border border-[#ebecf7] bg-white shadow-lg">
+            <div className="absolute bottom-full left-0 z-10 mb-1 w-56 overflow-hidden rounded-[10px] border border-[#ebecf7] bg-white katalist-elevation-popover">
               {mentionMatches.map((p) => (
                 <button
                   key={p.id}

@@ -253,10 +253,10 @@
 /* D01: elevation for the four overlay surface types, sourced from the
    --elevation-* tokens above. Deliberately a plain `box-shadow` property
    rather than Tailwind's `shadow-*` utilities -- those compose through the
-   `--tw-shadow`/`--tw-shadow-colored` variables, which the global
-   suppression below zeroes with `!important`; a direct box-shadow bypasses
-   that entirely, so these three surfaces get visible elevation today
-   without waiting on (or being affected by) that suppression's removal. */
+   `--tw-shadow`/`--tw-shadow-colored` variables, which a global suppression
+   (since removed, see the T08/D01 note below) used to zero with
+   `!important`; a direct box-shadow bypassed that entirely, so these three
+   surfaces got visible elevation before that suppression's removal too. */
 @utility katalist-elevation-card {
   box-shadow: var(--elevation-card);
 }
@@ -269,13 +269,17 @@
   box-shadow: var(--elevation-dialog);
 }
 
-/* Keep borders and focus rings, but remove elevation shadows from every surface. */
-@layer utilities {
-  * {
-    --tw-shadow: 0 0 #0000 !important;
-    --tw-shadow-colored: 0 0 #0000 !important;
-  }
-}
+/* D01/T08: the universal shadow suppression that used to live here (a
+   wildcard selector zeroing the Tailwind shadow variables with !important)
+   is gone. Every shadow consumer in the app's components was individually
+   classified first: dialogs/sheets/alert-dialogs now use
+   katalist-elevation-dialog; popovers/menus/select/context-menu/hover-card
+   use katalist-elevation-popover; genuinely floating cards/toasts/docks use
+   katalist-elevation-card; base cards/inputs/buttons/tables/panels and
+   selected/focus/drag state indicators had their decorative shadow removed
+   outright, since border/ring/background already convey them. Two
+   drop-shadow uses on hero artwork were left alone -- that is illustration,
+   not component elevation. */
 
 @utility katalist-page-title {
   font-size: 1.75rem;

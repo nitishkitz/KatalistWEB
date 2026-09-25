@@ -59,7 +59,7 @@ export function PersonAvatar({
   return (
     <span
       className={cn(
-        "relative inline-flex shrink-0 overflow-hidden rounded-full font-semibold items-center justify-center select-none shadow-2xs",
+        "relative inline-flex shrink-0 overflow-hidden rounded-full font-semibold items-center justify-center select-none ",
         bgColor,
         className,
       )}

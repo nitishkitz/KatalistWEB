@@ -311,7 +311,7 @@ export function ChatHeadsDock() {
             title={hasUnknownUnread ? "Chats — some unread counts unavailable" : "Chats"}
             aria-label={hasUnknownUnread ? "Chats — some unread counts unavailable" : "Chats"}
             style={{ left: pos.x, top: pos.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE, touchAction: "none" }}
-            className="fixed z-40 flex items-center justify-center rounded-full bg-white shadow-lg outline-none ring-1 ring-black/10 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[#7b56fd]"
+            className="fixed z-40 flex items-center justify-center rounded-full bg-white katalist-elevation-card outline-none ring-1 ring-black/10 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[#7b56fd]"
           >
             <img src={katalistMark.url} alt="" className="h-7 w-7" />
             {totalUnread > 0 || hasUnknownUnread ? (

@@ -82,7 +82,7 @@ export function ThingRow({
             <MoreHorizontal className="h-4 w-4" />
             <span className="sr-only">Thing actions</span>
           </summary>
-          <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-lg border border-border bg-card py-1 text-left shadow-sm">
+          <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-lg border border-border bg-card py-1 text-left katalist-elevation-popover">
             <button type="button" className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted" onClick={() => onSelect?.(thing)}>
               Open
             </button>

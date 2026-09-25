@@ -199,7 +199,7 @@ export function InlineThingDetailWorkspace({
                       <div
                         key={item.id}
                         onClick={() => onSelectThing?.(item.id)}
-                        className="relative rounded-2xl border-2 border-primary/40 bg-primary/[0.04] p-3 transition-all cursor-pointer text-left shadow-xs"
+                        className="relative rounded-2xl border-2 border-primary/40 bg-primary/[0.04] p-3 transition-all cursor-pointer text-left "
                       >
                         <div className="flex items-start gap-2.5">
                           <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
@@ -240,7 +240,7 @@ export function InlineThingDetailWorkspace({
                     <div
                       key={item.id}
                       onClick={() => onSelectThing?.(item.id)}
-                      className="rounded-xl border border-border/60 bg-white hover:bg-muted/30 p-3 transition-colors cursor-pointer text-left flex items-start gap-2.5 shadow-2xs"
+                      className="rounded-xl border border-border/60 bg-white hover:bg-muted/30 p-3 transition-colors cursor-pointer text-left flex items-start gap-2.5 "
                     >
                       <PersonAvatar
                         name={item.assignee.name}
@@ -325,7 +325,7 @@ export function InlineThingDetailWorkspace({
       <div
         className={cn(
           "min-w-0 p-6 md:p-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200",
-          flatPanel ? "rounded-[10px] bg-white" : "rounded-2xl border border-border/80 bg-white shadow-xs",
+          flatPanel ? "rounded-[10px] bg-white" : "rounded-2xl border border-border/80 bg-white ",
         )}
         style={flatPanel ? { boxShadow: FLAT_PANEL_SHADOW } : undefined}
       >

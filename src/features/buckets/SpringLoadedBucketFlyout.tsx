@@ -36,7 +36,7 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
           onClose();
         }
       }}
-      className="fixed z-50 overflow-hidden rounded-2xl border border-border/80 bg-white/95 p-3 shadow-2xl backdrop-blur-md animate-in fade-in-50 zoom-in-95 duration-150 md:left-[225px] md:top-[105px] md:w-[320px] left-4 right-4 bottom-16 max-h-[75vh]"
+      className="fixed z-50 overflow-hidden rounded-2xl border border-border/80 bg-white/95 p-3 katalist-elevation-card backdrop-blur-md animate-in fade-in-50 zoom-in-95 duration-150 md:left-[225px] md:top-[105px] md:w-[320px] left-4 right-4 bottom-16 max-h-[75vh]"
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 pb-2 px-1 mb-2">
@@ -117,14 +117,14 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
                 className={cn(
                   "group relative flex items-center justify-between rounded-xl border p-2.5 transition-all duration-150 cursor-pointer",
                   isTarget
-                    ? "border-primary bg-primary/10 shadow-sm scale-[1.02] ring-2 ring-primary/40"
+                    ? "border-primary bg-primary/10 scale-[1.02] ring-2 ring-primary/40"
                     : "border-border/60 bg-white hover:border-border hover:bg-muted/40",
                 )}
               >
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <div
                     className={cn(
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white font-bold text-[12px] shadow-2xs",
+                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white font-bold text-[12px]",
                       b.color || "bg-violet-500",
                     )}
                   >
@@ -142,7 +142,7 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
 
                 <div className="shrink-0 pl-2">
                   {isTarget ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary text-white px-2 py-0.5 text-[12px] font-bold shadow-xs animate-pulse">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary text-white px-2 py-0.5 text-[12px] font-bold animate-pulse">
                       <Check className="h-3 w-3" />
                       Drop here
                     </span>

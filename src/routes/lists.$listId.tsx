@@ -869,7 +869,7 @@ function ListDetailPage() {
                           className={cn(
                             "flex-1 rounded-[7px] py-1.5 text-[12px] font-medium transition-colors",
                             thingsFilter === id
-                              ? "bg-white text-[#000533] shadow-2xs"
+                              ? "bg-white text-[#000533] "
                               : "text-[#6a769c] hover:text-[#000533]",
                           )}
                         >
@@ -1763,7 +1763,7 @@ function ListDetailPage() {
             {/* Invite Member Modal */}
             {inviting && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-                <div className="w-full max-w-lg rounded-2xl border border-border bg-white p-6 shadow-xl animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col">
+                <div className="w-full max-w-lg rounded-2xl border border-border bg-white p-6 katalist-elevation-dialog animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col">
                   {/* Header */}
                   <div className="flex items-center justify-between">
                     <div>
@@ -1828,7 +1828,7 @@ function ListDetailPage() {
                       </span>
                     </div>
 
-                    <label className="flex h-9 items-center gap-2 rounded-xl border border-border/80 bg-muted/20 px-3 shadow-2xs focus-within:border-primary focus-within:bg-white transition-all">
+                    <label className="flex h-9 items-center gap-2 rounded-xl border border-border/80 bg-muted/20 px-3  focus-within:border-primary focus-within:bg-white transition-all">
                       <Search className="h-3.5 w-3.5 text-muted-foreground" />
                       <input
                         value={inviteSearch}
@@ -1960,7 +1960,7 @@ function ListDetailPage() {
                       <button
                         type="submit"
                         disabled={!inviteEmail.trim()}
-                        className="h-9 rounded-xl bg-slate-900 px-3 text-[12px] font-semibold text-white shadow-xs transition-all hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+                        className="h-9 rounded-xl bg-slate-900 px-3 text-[12px] font-semibold text-white  transition-all hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
                       >
                         Send Invite
                       </button>

@@ -74,7 +74,7 @@ export function CourtDetailModal({
       }}
     >
       <div
-        className={`relative flex w-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-white shadow-2xl animate-in zoom-in-98 duration-150 ${
+        className={`relative flex w-full flex-col overflow-hidden rounded-2xl border border-border/80 bg-white katalist-elevation-dialog animate-in zoom-in-98 duration-150 ${
           hasFiles
             ? "h-[88vh] max-h-[900px] max-w-7xl"
             : "max-h-[88vh] max-w-3xl"

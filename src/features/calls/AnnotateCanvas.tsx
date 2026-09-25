@@ -346,7 +346,7 @@ export const AnnotateCanvas = forwardRef<
       />
 
       {/* Toolbar — everyone on the call can always draw. */}
-      <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/10 bg-white/95 px-2 py-1.5 shadow-lg backdrop-blur-sm">
+      <div className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-black/10 bg-white/95 px-2 py-1.5 katalist-elevation-card backdrop-blur-sm">
         {TOOLS.map(({ id, Icon, label }) => (
           <button
             key={id}

@@ -105,7 +105,7 @@ export function StartCallDialog({
                 aria-pressed={!withVideo}
                 className={cn(
                   "flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  !withVideo ? "bg-white text-[#000533] shadow-sm" : "text-[#6a769c]",
+                  !withVideo ? "bg-white text-[#000533]" : "text-[#6a769c]",
                 )}
               >
                 <Phone className="h-3.5 w-3.5" />
@@ -117,7 +117,7 @@ export function StartCallDialog({
                 aria-pressed={withVideo}
                 className={cn(
                   "flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  withVideo ? "bg-[#7b56fd] text-white shadow-sm" : "text-[#6a769c]",
+                  withVideo ? "bg-[#7b56fd] text-white" : "text-[#6a769c]",
                 )}
               >
                 <Video className="h-3.5 w-3.5" />

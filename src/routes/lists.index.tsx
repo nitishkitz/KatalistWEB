@@ -494,7 +494,7 @@ function ListsPage() {
       <div className="space-y-4">
         {/* Toolbar: search, filters, role pills, sort, New List — single row */}
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex h-9 w-full items-center gap-2 rounded-xl border border-border/80 bg-white px-3 shadow-2xs focus-within:border-primary focus-within:ring-2 focus-within:ring-ring sm:w-56">
+          <label className="flex h-9 w-full items-center gap-2 rounded-xl border border-border/80 bg-white px-3  focus-within:border-primary focus-within:ring-2 focus-within:ring-ring sm:w-56">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
               value={query}
@@ -521,7 +521,7 @@ function ListsPage() {
               className={cn(
                 "inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-all duration-200",
                 roleFilter === "all"
-                  ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
+                  ? "border-primary bg-primary/10 font-semibold text-primary "
                   : "border-border/80 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground",
               )}
             >
@@ -533,7 +533,7 @@ function ListsPage() {
               className={cn(
                 "inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-all duration-200",
                 roleFilter === "owner"
-                  ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
+                  ? "border-primary bg-primary/10 font-semibold text-primary "
                   : "border-border/80 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground",
               )}
             >
@@ -545,7 +545,7 @@ function ListsPage() {
               className={cn(
                 "inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-all duration-200",
                 roleFilter === "collaborator"
-                  ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
+                  ? "border-primary bg-primary/10 font-semibold text-primary "
                   : "border-border/80 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground",
               )}
             >
@@ -557,7 +557,7 @@ function ListsPage() {
               className={cn(
                 "inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-all duration-200",
                 roleFilter === "view_only"
-                  ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
+                  ? "border-primary bg-primary/10 font-semibold text-primary "
                   : "border-border/80 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground",
               )}
             >
@@ -569,7 +569,7 @@ function ListsPage() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-2 rounded-xl border border-border/80 bg-white px-3 text-[12px] font-medium text-foreground shadow-2xs hover:bg-muted/40"
+                className="inline-flex h-8 items-center gap-2 rounded-xl border border-border/80 bg-white px-3 text-[12px] font-medium text-foreground  hover:bg-muted/40"
               >
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>{sortLabels[sortOption]}</span>
@@ -653,7 +653,7 @@ function ListsPage() {
       {creating || isEditing ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
           <form
-            className="w-full max-w-md rounded-2xl border border-border bg-white p-6 shadow-xl animate-in fade-in zoom-in-95"
+            className="w-full max-w-md rounded-2xl border border-border bg-white p-6 katalist-elevation-dialog animate-in fade-in zoom-in-95"
             onSubmit={(e) => {
               e.preventDefault();
               void handleSubmit();
@@ -757,7 +757,7 @@ function ListsPage() {
               <button
                 type="submit"
                 disabled={!name.trim() || submitting}
-                className="h-9 rounded-xl bg-primary px-4 text-[13px] font-semibold text-primary-foreground shadow-xs transition-all hover:bg-primary/90 disabled:opacity-50"
+                className="h-9 rounded-xl bg-primary px-4 text-[13px] font-semibold text-primary-foreground  transition-all hover:bg-primary/90 disabled:opacity-50"
               >
                 {isEditing
                   ? submitting

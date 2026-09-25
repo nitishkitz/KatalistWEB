@@ -239,7 +239,7 @@ function MePage() {
                     Change cover
                   </button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-64 rounded-2xl border border-border/80 bg-white p-3 shadow-xl">
+                <PopoverContent align="end" className="w-64 rounded-2xl border border-border/80 bg-white p-3">
                   <p className="mb-2 text-[12px] font-semibold text-[#000533]">Choose a wallpaper</p>
                   <div className="grid grid-cols-4 gap-2">
                     {COVER_THEMES.map((c) => {
@@ -434,7 +434,7 @@ function MePage() {
 
       {/* Edit profile dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="rounded-2xl bg-white p-5 shadow-xl sm:max-w-md">
+        <DialogContent className="rounded-2xl bg-white p-5 sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[15px] font-bold">Edit profile</DialogTitle>
             <DialogDescription className="text-[12.5px]">

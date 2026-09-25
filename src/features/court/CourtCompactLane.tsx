@@ -28,7 +28,7 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
     return (
       <aside
         className={cn(
-          "min-w-0 h-full min-h-[380px] overflow-hidden rounded-2xl border shadow-xs transition-all duration-200 flex flex-col items-center py-3.5 px-1 cursor-pointer hover:shadow-sm select-none",
+          "min-w-0 h-full min-h-[380px] overflow-hidden rounded-2xl border transition-all duration-200 flex flex-col items-center py-3.5 px-1 cursor-pointer select-none",
           content.bgTone,
           content.borderTone,
         )}
@@ -36,12 +36,12 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
         aria-label={`${content.label} lane, ${things.length} Things, collapsed. Hover to expand.`}
       >
         <div className="flex flex-col items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/90 shadow-2xs border border-border/40">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/90 border border-border/40">
             <KatalistIcon name={content.icon} className={cn("h-3.5 w-3.5", content.tone)} />
           </div>
           <span
             className={cn(
-              "flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[12px] font-black bg-white shadow-2xs border border-border/50",
+              "flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[12px] font-black bg-white border border-border/50",
               content.tone,
             )}
           >
@@ -75,7 +75,7 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
   return (
     <aside
       className={cn(
-        "min-w-0 overflow-hidden rounded-2xl border shadow-xs p-3 transition-all duration-200",
+        "min-w-0 overflow-hidden rounded-2xl border p-3 transition-all duration-200",
         content.bgTone,
         content.borderTone,
       )}
@@ -104,7 +104,7 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
               key={thing.id}
               type="button"
               onClick={(event) => onOpen(thing, event.currentTarget)}
-              className="w-full rounded-xl border border-border/60 bg-white p-3 text-left shadow-2xs outline-none transition-all duration-200 hover:border-border hover:shadow-xs focus-visible:ring-2 focus-visible:ring-ring"
+              className="w-full rounded-xl border border-border/60 bg-white p-3 text-left outline-none transition-all duration-200 hover:border-border focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="block line-clamp-2 text-[12px] font-bold leading-snug text-foreground">
                 {thing.title}

@@ -23,7 +23,7 @@ export function NotificationBell() {
         {unread ? <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-destructive" /> : null}
       </button>
       {open ? (
-        <div className="absolute right-0 z-50 mt-2 w-[320px] overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <div className="absolute right-0 z-50 mt-2 w-[320px] overflow-hidden rounded-xl border border-border bg-card katalist-elevation-popover">
           <div className="border-b border-border px-3 py-2 text-[12px] font-semibold">Movement</div>
           <ul className="max-h-80 overflow-y-auto">
             {items.length === 0 ? (

@@ -271,7 +271,7 @@ function BucketsPage() {
       {creating ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
           <form
-            className="w-full max-w-sm rounded-2xl border border-border/80 bg-white p-5 shadow-xl"
+            className="w-full max-w-sm rounded-2xl border border-border/80 bg-white p-5 katalist-elevation-dialog"
             onSubmit={(e) => {
               e.preventDefault();
               if (!name.trim()) return;

@@ -186,7 +186,7 @@ function CommentRow({
                   key={att.id}
                   type="button"
                   onClick={() => onFileSelect?.(att)}
-                  className="group/att flex items-center gap-2 rounded-lg border border-border/80 bg-slate-50/70 hover:bg-white hover:border-slate-300 p-1.5 text-left transition-all cursor-pointer shadow-2xs"
+                  className="group/att flex items-center gap-2 rounded-lg border border-border/80 bg-slate-50/70 hover:bg-white hover:border-slate-300 p-1.5 text-left transition-all cursor-pointer"
                 >
                   {isImg && att.url ? (
                     <img src={att.url} alt={att.name} className="h-8 w-8 rounded-md object-cover border border-slate-200" />
@@ -931,7 +931,7 @@ export function ThingDetailContent({
                   <ChevronDown className="h-3 w-3 text-[#5d6786]" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-white shadow-lg border border-border/70 rounded-xl p-1 z-50">
+              <DropdownMenuContent align="end" className="w-56 bg-white border border-border/70 rounded-xl p-1 z-50">
                 {buckets.length === 0 ? (
                   <DropdownMenuItem disabled className="text-[12px]">
                     No buckets yet
@@ -1146,7 +1146,7 @@ export function ThingDetailContent({
                     {commentAttachments.map((att) => (
                       <div
                         key={att.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-800 shadow-2xs"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-800"
                       >
                         {att.type === "image" && att.url ? (
                           <img src={att.url} alt={att.name} className="h-4 w-4 rounded object-cover" />

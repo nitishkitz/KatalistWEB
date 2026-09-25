@@ -19,7 +19,7 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
   return (
     <nav
       className={cn(
-        "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border shadow-xs p-3",
+        "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border  p-3",
         content.bgTone,
         content.borderTone,
       )}
@@ -54,9 +54,9 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
               aria-current={selected}
               onClick={() => onSelect(thing.id)}
               className={cn(
-                "w-full rounded-xl p-3 text-left shadow-2xs outline-none transition-all duration-200 focus-visible:ring-1 focus-visible:ring-primary/40",
+                "w-full rounded-xl p-3 text-left  outline-none transition-all duration-200 focus-visible:ring-1 focus-visible:ring-primary/40",
                 selected
-                  ? "border-2 border-red-400 bg-white ring-2 ring-red-400/20 shadow-xs"
+                  ? "border-2 border-red-400 bg-white ring-2 ring-red-400/20 "
                   : "border border-border/60 bg-white hover:border-border",
               )}
             >

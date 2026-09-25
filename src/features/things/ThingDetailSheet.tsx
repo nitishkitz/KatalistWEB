@@ -15,7 +15,10 @@ export function ThingDetailSheet({ thing, open, onOpenChange, viewOnly = false }
       <SheetContent
         side="right"
         aria-label="Thing details"
-        className="w-full overflow-y-auto border-l border-border bg-white p-0 shadow-2xl sm:max-w-[480px] z-[60]"
+        // D01/T08: elevation already comes from the shared sheetVariants()
+        // (katalist-elevation-dialog) -- a redundant shadow-2xl override
+        // here would fight it.
+        className="w-full overflow-y-auto border-l border-border bg-white p-0 sm:max-w-[480px] z-[60]"
       >
         <ThingDetailContent
           initialThing={thing}
