@@ -892,15 +892,15 @@ findings above were both in items 2-4 (Magic Box), not item 5.
 
 ### T10 — Complete Morning Brief once, including its actual design
 
-**Status:** LOCAL PASS, PARTIAL -- only package T10-01 of
+**Status:** LOCAL PASS, PARTIAL -- only packages T10-01 and T10-02 of
 `docs/superpowers/plans/KATALIST_T10_DETAILED_EXECUTION_PLAN.md`'s seven
-ordered packages (T10-01 through T10-07) is implemented and verified.
-T10-02 through T10-07, and the T03 action-outcome/receipt-retry
+ordered packages (T10-01 through T10-07) are implemented and verified.
+T10-03 through T10-07, and the T03 action-outcome/receipt-retry
 dependencies T10-04 needs, are **not started**. This section records only
 what has actual evidence; it does not claim T10 (plan line 59) is done, and
 that checkbox is correctly left unchecked.
 
-**Commits:** `998a873` (T10-01).
+**Commits:** `998a873` (T10-01), `6891222` (T10-02).
 
 **Done (T10-01 only -- context and readiness contract):**
 1. `fetchCatchupMoments()` (`src/features/catchup/use-catchup.ts`) now takes
@@ -940,11 +940,63 @@ all passing.
 --noEmit` 0 errors, `npm run lint` 0 errors / 69 warnings (unchanged
 baseline), `npm run build:app` clean.
 
+**Done (T10-02 -- receipt adapter and preview reliability):**
+1. `classifyClaimError()` (`src/features/catchup/morning-brief-receipts.ts`)
+   inspects the caught value's `message`/`code` fields directly instead of
+   `err instanceof Error` (which is always false for the raw
+   `{message,code,details,hint}` shape `callUngeneratedRpc` actually
+   throws), and now recognizes three narrow, source-confirmed rejections:
+   `before-threshold` (`claim_morning_brief`'s exact "before morning
+   threshold" text), `unauthorized` (`"not authenticated"`/`42501`/
+   `"permission denied"`), `unavailable` (`42883`/`"does not exist"`,
+   the not-yet-deployed-migration case). Recognized cases become a typed
+   `MorningBriefClaimRejected`; anything else is rethrown completely
+   unchanged (an ordinary network error is never wrapped or reclassified).
+2. `claimMorningBriefLive` validates the returned row's `claimed` (boolean),
+   `local_date` (`YYYY-MM-DD`), `timezone` (non-empty), and `presented_at`
+   (parseable) before trusting it -- a malformed shape rejects as
+   `unavailable` rather than being trusted as a receipt.
+3. Added `PresentedReceiptRef` (identity kind/id/epoch, context, localDate,
+   timezone, presentedAt) -- the typed receipt reference T10-03's
+   presentation controller is expected to hold and later dismiss exactly.
+4. Verified against the actual deployed SQL
+   (`supabase/migrations/20260923100000_morning_brief_receipts.sql`) that
+   `dismiss_morning_brief(context, timezone)` targets "the caller's most
+   recent undismissed row for this profile/context" with **no** `local_date`
+   filter at all -- confirming the plan's suspicion that it can target the
+   wrong (newer) row once a later day's claim exists. Added a purely
+   additive `dismiss_morning_brief(context, timezone, local_date)` overload
+   (`supabase/migrations/20260925110000_morning_brief_exact_dismiss.sql`,
+   new function signature, not a `REPLACE` of the existing one) that matches
+   profile/context/local_date exactly; the 2-arg form is untouched and still
+   used by any caller with no exact receipt to target.
+5. Added a bounded (64-entry, FIFO-evicted) in-memory same-session fallback
+   for the preview adapter, consulted only when a real `localStorage`
+   read/write actually throws -- a successful read (including a clean "not
+   present" or a deliberately-rejected malformed stored shape) is always
+   authoritative and never shadowed by stale fallback state. Added an
+   in-process per-key serialization queue (`withKeySerialized`) so two
+   same-realm concurrent preview claims resolve to exactly one winner even
+   in environments without the Web Locks API (this repo's jsdom tests have
+   no `navigator.locks`); the existing Web Locks path is preserved and now
+   also routes through the same queue for uniform behavior.
+
+**Tests (T10-02):** extended `morning-brief-receipts-live.test.mjs` (raw
+object before-threshold classification, ordinary-error passthrough,
+unauthorized classification, three malformed-row cases, the new dismiss
+overload's argument shaping), `morning-brief-receipts-preview.test.mjs`
+(throwing-storage same-session fallback, malformed JSON, malformed shape,
+same-realm race), and `morning-brief-receipts-sql.test.mjs` (exact-date
+dismiss with a newer undismissed row present, no-op on no match,
+unauthenticated/other-profile isolation, EXECUTE grants on the new
+overload) -- 15 new tests, all passing, run against both the original and
+new migration files applied together.
+
+**Verification:** `npm test` 713/713 pass (698 after T10-01 + 15 new T10-02
+tests), `npx tsc --noEmit` 0 errors, `npm run lint` 0 errors / 69 warnings
+(unchanged baseline), `npm run build:app` clean.
+
 **Remaining (explicit, not started):**
-- T10-02 (receipt adapter: structured claim-rejection normalization, typed
-  presented-receipt with identity/epoch/context/localDate/timezone, exact
-  same-receipt dismissal, Web Locks preview hardening, malformed-row
-  rejection, additive migration if exact dismissal needs it).
 - T10-03 (scope-owned presentation controller: replace `use-morning-brief.ts`'s
   independent booleans with an explicit `BriefScope` + attempt-token
   ownership; correct the wall-clock/tomorrow DST arithmetic in
