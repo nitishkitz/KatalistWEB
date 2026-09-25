@@ -1,47 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
-  ChevronLeft,
-  ChevronRight,
   List,
-  FileText,
-  Clock,
-  RefreshCw,
-  CheckCircle2,
   Users,
   Search,
-  Filter,
-  ArrowUpDown,
   Calendar,
-  Sparkles,
-  MoreHorizontal,
-  Star,
-  Plus,
-  Mic,
-  MessageSquare,
-  Mail,
-  Pin,
-  Send,
-  Paperclip,
-  AtSign,
-  Smile,
-  Download,
-  FileSpreadsheet,
-  FileCode,
-  Check,
-  Minus,
-  Shield,
-  ShieldCheck,
-  Crown,
-  UserPlus,
-  UserCheck,
-  Pencil,
-  PlusCircle,
-  Eye,
-  X,
-  ExternalLink,
-  ChevronDown,
   Phone,
   PhoneOff,
   Video,
@@ -60,21 +24,21 @@ import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { supabase } from "@/integrations/supabase/client";
 import { MagicBox } from "@/features/court/MagicBox";
-import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { PDFViewer, type ThingFile } from "@/features/things/PDFViewer";
 import { formatCourtDue } from "@/features/court/court-view-model";
-import { laneOf } from "@/domain/thing";
+import { laneOf, type Person } from "@/domain/thing";
 import { format, isToday, isTomorrow } from "date-fns";
 import { useListThings } from "@/features/lists/use-list-things";
+import { useListThingsFilter } from "@/features/lists/use-list-things-filter";
 import { useList } from "@/features/lists/use-lists";
+import { currentDemoActorId } from "@/features/demo/identities";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { useListMessages, useListMessageSearch, type ChatAttachment } from "@/features/lists/use-list-messages";
-import { useSessionDraft } from "@/features/drafts/use-session-draft";
-import { getChatScroll, saveChatScroll } from "@/features/lists/chat-scroll-state";
-import { getDraft, getDraftRevision, setDraft } from "@/features/drafts/session-drafts";
-import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
-import { formatFileSize } from "@/lib/file-utils";
+import { useListMessages } from "@/features/lists/use-list-messages";
+import { ListChatPanel } from "@/features/lists/ListChatPanel";
+import { ListInviteDialog, type ListInviteRole } from "@/features/lists/components/ListInviteDialog";
+import { ListMembersSection, type MemberRoleFilter } from "@/features/lists/components/ListMembersSection";
+import type { ListMember } from "@/features/lists/fixtures";
 import { domainErrorMessage, extractErrorMessage } from "@/lib/domain-error";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { toast } from "sonner";
@@ -88,8 +52,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -98,64 +60,16 @@ export const Route = createFileRoute("/lists/$listId")({
 });
 
 type TabType = "things" | "chat" | "members";
-type QuickFilterType =
-  | "all"
-  | "active"
-  | "mine"
-  | "theirs"
-  | "waiting"
-  | "progress"
-  | "completed"
-  | "cancelled"
-  | "sorted";
 type DueFilterType = "all" | "today" | "overdue" | "no_due";
-type SortOption = "due" | "updated" | "importance" | "title";
-
-/** Renders a chat attachment: an inline preview for images, a file chip otherwise. */
-function ChatAttachmentView({ attachment }: { attachment: ChatAttachment }) {
-  const isImage = (attachment.mime ?? "").startsWith("image/");
-  const sizeLabel = attachment.size ? formatFileSize(attachment.size) : null;
-  if (isImage && attachment.url) {
-    return (
-      <a href={attachment.url} target="_blank" rel="noreferrer" className="mt-1.5 block w-fit">
-        <img
-          src={attachment.url}
-          alt={attachment.name}
-          className="max-h-56 max-w-[260px] rounded-[10px] border border-[#ebecf7] object-cover"
-        />
-      </a>
-    );
-  }
-  return (
-    <a
-      href={attachment.url}
-      target="_blank"
-      rel="noreferrer"
-      className="mt-1.5 inline-flex max-w-[280px] items-center gap-2.5 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 py-2 transition-colors hover:border-[#975ee2]"
-    >
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef0f6] text-[#6a769c]">
-        <FileText className="h-4 w-4" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12px] font-medium text-[#000533]">{attachment.name}</span>
-        {sizeLabel ? <span className="block text-[12px] text-[#8487a7]">{sizeLabel}</span> : null}
-      </span>
-      <Download className="h-3.5 w-3.5 shrink-0 text-[#8487a7]" />
-    </a>
-  );
-}
 
 function ListDetailPage() {
   const { listId } = Route.useParams();
-  const navigate = useNavigate();
+  const listIdRef = useRef(listId);
+  listIdRef.current = listId;
   const qc = useQueryClient();
   useLocalVersion();
   const { list, isLoading, error, refetch: refetchList } = useList(listId);
   const chat = useListMessages(listId);
-  const chatDraft = useSessionDraft("list-chat", listId, "");
-  const msg = chatDraft.value;
-  const stagedChatAttachment = chatDraft.attachments?.[0] as ChatAttachment | undefined;
-  const setMsg = chatDraft.write;
   const { things: listThings, myActorId } = useListThings(listId);
   const { user, session } = useSession();
   const preview = isPreviewSession(session);
@@ -286,7 +200,15 @@ function ListDetailPage() {
   const assignablePeople = useAssignablePeople();
 
   const [tab, setTab] = useState<TabType>("things");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedState, setSelectedState] = useState<{ listId: string; thingId: string | null }>(() => ({
+    listId,
+    thingId: null,
+  }));
+  if (selectedState.listId !== listId) {
+    setSelectedState({ listId, thingId: null });
+  }
+  const selectedId = selectedState.listId === listId ? selectedState.thingId : null;
+  const setSelectedId = (thingId: string | null) => setSelectedState({ listId, thingId });
   const [navLane, setNavLane] = useState<"now" | "next" | "later">("now");
   const [navSearch, setNavSearch] = useState("");
   const [selectedFile, setSelectedFile] = useState<ThingFile | null>(null);
@@ -296,98 +218,17 @@ function ListDetailPage() {
   // sorted/cancelled) is the compatibility default when nothing has been
   // saved yet, matching the pre-existing behavior before this filter had a
   // UI control at all.
-  const thingsFilterStorageKey = `katalist.lists.things_filter.${user?.id ?? "anon"}.${listId}`;
-  const [thingsFilter, setThingsFilter] = useState<QuickFilterType>(() => {
-    if (typeof window === "undefined") return "all";
-    try {
-      const stored = window.localStorage.getItem(thingsFilterStorageKey);
-      return (stored as QuickFilterType) || "all";
-    } catch {
-      return "all";
-    }
-  });
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(thingsFilterStorageKey, thingsFilter);
-    } catch {
-      // Storage unavailable (quota/privacy mode) -- the filter still
-      // applies for this session, it just won't survive a reload.
-    }
-  }, [thingsFilterStorageKey, thingsFilter]);
+  const filterIdentityId = preview ? currentDemoActorId() : user?.id ?? null;
+  const { value: thingsFilter, setValue: setThingsFilter } = useListThingsFilter(filterIdentityId, listId);
   const [dueFilter, setDueFilter] = useState<DueFilterType>("all");
   const [personFilter, setPersonFilter] = useState<string | null>(null);
-  const [sortOption, setSortOption] = useState<SortOption>("due");
-
-  // Chat tab state
-  const [chatSearch, setChatSearch] = useState("");
-  const [chatSearchOpen, setChatSearchOpen] = useState(false);
-  const [debouncedChatSearch, setDebouncedChatSearch] = useState("");
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedChatSearch(chatSearch.trim()), 250);
-    return () => clearTimeout(timer);
-  }, [chatSearch]);
-  const chatSearchQuery = useListMessageSearch(listId, debouncedChatSearch);
-  const [uploadingFile, setUploadingFile] = useState(false);
-  useBlockWhile((tab === "chat" && (Boolean(msg.trim()) || Boolean(stagedChatAttachment))) || uploadingFile, "list-chat-draft");
-  const chatFileInputRef = useRef<HTMLInputElement | null>(null);
-  const chatScrollRef = useRef<HTMLDivElement | null>(null);
-  const olderChatAnchorRef = useRef<{ height: number; top: number } | null>(null);
-  const chatEdgeRef = useRef<string | null>(null);
-  const chatNearBottomRef = useRef(true);
-  const chatRestoredRef = useRef(false);
-  const chatRenderedListRef = useRef(listId);
-  const [newChatMessages, setNewChatMessages] = useState(false);
-  useEffect(() => {
-    if (tab !== "chat") {
-      chatRestoredRef.current = false;
-      chatEdgeRef.current = null;
-    }
-  }, [tab]);
-  useLayoutEffect(() => {
-    const el = chatScrollRef.current;
-    if (!el) return;
-    if (chatRenderedListRef.current !== listId) {
-      chatRenderedListRef.current = listId;
-      chatRestoredRef.current = false;
-      chatEdgeRef.current = null;
-      olderChatAnchorRef.current = null;
-      chatNearBottomRef.current = true;
-      setNewChatMessages(false);
-    }
-    const anchor = olderChatAnchorRef.current;
-    if (anchor) {
-      el.scrollTop = anchor.top + el.scrollHeight - anchor.height;
-      olderChatAnchorRef.current = null;
-      return;
-    }
-    if (!chatRestoredRef.current && !chat.isLoading) {
-      const saved = getChatScroll(qc, listId);
-      el.scrollTop = saved && saved.fromBottom > 80 ? saved.top : el.scrollHeight;
-      chatNearBottomRef.current = !saved || saved.fromBottom <= 80;
-      chatRestoredRef.current = true;
-    }
-    const lastId = chat.messages.at(-1)?.id ?? null;
-    const previous = chatEdgeRef.current;
-    chatEdgeRef.current = lastId;
-    if (previous === null || previous === lastId || debouncedChatSearch.length >= 2) return;
-    if (chatNearBottomRef.current) el.scrollTop = el.scrollHeight;
-    else setNewChatMessages(true);
-  }, [chat.messages, chat.isLoading, qc, listId, debouncedChatSearch, tab]);
-  const loadOlderChat = async () => {
-    const el = chatScrollRef.current;
-    if (el) olderChatAnchorRef.current = { height: el.scrollHeight, top: el.scrollTop };
-    try { await chat.loadOlder(); } catch { olderChatAnchorRef.current = null; }
-  };
 
   // Members tab state
-  const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | "owner" | "collaborator" | "view_only">("all");
+  const [memberRoleFilter, setMemberRoleFilter] = useState<MemberRoleFilter>("all");
   const [memberSearch, setMemberSearch] = useState("");
   const [inviting, setInviting] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteSearch, setInviteSearch] = useState("");
-  const [inviteRole, setInviteRole] = useState<"collaborator" | "view_only">("collaborator");
   const [addingPersonId, setAddingPersonId] = useState<string | null>(null);
+  const memberOperationKeysRef = useRef(new Set<string>());
 
   const viewOnly = list?.role === "view_only";
   const selected = listThings.find((t) => t.id === selectedId) ?? null;
@@ -482,76 +323,15 @@ function ListDetailPage() {
       return true;
     });
 
-    // Sorting
+    // The route exposes no sort control: due-soon is the documented fixed
+    // order, so keep it derived instead of retaining inert option state.
     return [...list_].sort((a, b) => {
-      if (sortOption === "due") {
-        if (!a.dueAt && !b.dueAt) return 0;
-        if (!a.dueAt) return 1;
-        if (!b.dueAt) return -1;
-        return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
-      }
-      if (sortOption === "updated") {
-        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
-      }
-      if (sortOption === "importance") {
-        const order: Record<string, number> = { now: 3, next: 2, later: 1 };
-        const aVal = order[a.ownerImportance] || 0;
-        const bVal = order[b.ownerImportance] || 0;
-        return bVal - aVal;
-      }
-      if (sortOption === "title") {
-        return a.title.localeCompare(b.title);
-      }
-      return 0;
+      if (!a.dueAt && !b.dueAt) return 0;
+      if (!a.dueAt) return 1;
+      if (!b.dueAt) return -1;
+      return new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime();
     });
-  }, [listThings, thingsFilter, dueFilter, personFilter, myActorId, sortOption, listCollaborators]);
-
-  // Things Metrics (purely dynamic)
-  const thingsMetrics = useMemo(() => {
-    const total = listThings.length;
-    const waiting = listThings.filter((t) => t.acknowledgement === "waiting_for_catch").length;
-    const inProgress = listThings.filter((t) => t.workStatus === "under_progress").length;
-    const completed = listThings.filter((t) => t.workStatus === "sorted").length;
-    const collaboratorsCount = listCollaborators.length;
-    return { total, waiting, inProgress, completed, collaboratorsCount };
-  }, [listThings, listCollaborators]);
-
-  // Search is server-side across the authorized history, including pages not
-  // loaded in the timeline yet.
-  const filteredChatMessages = useMemo(() => {
-    if (chat.accessLost) return [];
-    if (debouncedChatSearch.length < 2) return chat.messages;
-    return chatSearchQuery.data ?? [];
-  }, [chat.accessLost, chat.messages, debouncedChatSearch, chatSearchQuery.data]);
-
-  // Upload a chat attachment (any file type) and post it as a message.
-  const handleChatFile = async (file: File | null | undefined) => {
-    if (!file) return;
-    if (stagedChatAttachment) {
-      toast.error("Send or remove the current attachment first.");
-      return;
-    }
-    const MAX_BYTES = 50 * 1024 * 1024; // 50 MB
-    if (file.size > MAX_BYTES) {
-      toast.error("That file is larger than 50 MB.");
-      return;
-    }
-    setUploadingFile(true);
-    try {
-      const attachment = await chat.uploadAttachment(file);
-      const current = getDraft<string>(qc, "list-chat", listId);
-      if (current?.attachments?.length) {
-        toast.error("Send or remove the current attachment first.");
-        return;
-      }
-      setDraft(qc, "list-chat", listId, { value: current?.value ?? "", attachments: [attachment], metadata: current?.metadata });
-    } catch (err) {
-      toast.error(domainErrorMessage(err));
-    } finally {
-      setUploadingFile(false);
-      if (chatFileInputRef.current) chatFileInputRef.current.value = "";
-    }
-  };
+  }, [listThings, thingsFilter, dueFilter, personFilter, myActorId, listCollaborators]);
 
   // Members search & filter
   const filteredMembers = useMemo(() => {
@@ -592,7 +372,10 @@ function ListDetailPage() {
     () => grouped[navLane].filter((t) => t.title.toLowerCase().includes(navSearch.trim().toLowerCase())),
     [grouped, navLane, navSearch],
   );
-  const activeThing = selected ?? laneThings[0] ?? filteredThings[0] ?? null;
+  const selectedIsVisible = Boolean(selected && filteredThings.some((thing) => thing.id === selected.id));
+  const activeThing = selectedId
+    ? selectedIsVisible ? selected : null
+    : laneThings[0] ?? filteredThings[0] ?? null;
   const selTint =
     navLane === "next"
       ? { bg: "#eef4ff", border: "#0b62f8" }
@@ -651,12 +434,98 @@ function ListDetailPage() {
     );
   }
 
-  const roleBadgeLabel =
-    list.role === "owner" ? "Role: Owner" : list.role === "view_only" ? "Role: View only" : "Role: Collaborator";
-
   const ownerMembers = filteredMembers.filter((m) => m.role === "owner");
   const collaboratorMembers = filteredMembers.filter((m) => m.role === "collaborator" || (!m.role && m.role !== "owner" && m.role !== "view_only"));
   const viewOnlyMembers = filteredMembers.filter((m) => m.role === "view_only");
+
+  const addMember = async (person: Person, requestedRole: ListInviteRole) => {
+    const operationListId = list.id;
+    const operationKey = `add:${operationListId}:${person.id}`;
+    if (memberOperationKeysRef.current.has(operationKey)) return;
+    memberOperationKeysRef.current.add(operationKey);
+    setAddingPersonId(person.id);
+    const addEpoch = getIdentityEpoch(qc).epoch;
+    try {
+      await rpcAddListMember(operationListId, person.profileId || person.id, requestedRole);
+      if (!isEpochCurrent(qc, addEpoch) || listIdRef.current !== operationListId) return;
+      toast.success(`Added ${person.name} as ${requestedRole === "collaborator" ? "Collaborator" : "View only"}`);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["list", operationListId] }),
+        qc.invalidateQueries({ queryKey: ["lists"] }),
+        qc.invalidateQueries({ queryKey: ["assignable-people"] }),
+      ]);
+    } catch (err: unknown) {
+      if (isEpochCurrent(qc, addEpoch) && listIdRef.current === operationListId) {
+        toast.error(extractErrorMessage(err) ?? "Couldn't add team member. Please try again.");
+      }
+    } finally {
+      memberOperationKeysRef.current.delete(operationKey);
+      if (isEpochCurrent(qc, addEpoch) && listIdRef.current === operationListId) {
+        setAddingPersonId((current) => (current === person.id ? null : current));
+      }
+    }
+  };
+
+  const changeMemberRole = async (member: ListMember, currentRole: "collaborator" | "view_only") => {
+    const operationListId = list.id;
+    const memberId = member.profileId || member.actorId || member.name;
+    const operationKey = `role:${operationListId}:${memberId}`;
+    if (memberOperationKeysRef.current.has(operationKey)) return;
+    memberOperationKeysRef.current.add(operationKey);
+    const roleEpoch = getIdentityEpoch(qc).epoch;
+    try {
+      await rpcChangeListRole(
+        operationListId,
+        memberId,
+        currentRole === "collaborator" ? "view_only" : "collaborator",
+      );
+      if (!isEpochCurrent(qc, roleEpoch) || listIdRef.current !== operationListId) return;
+      toast.success(`Updated ${member.name}'s role`);
+      await qc.invalidateQueries({ queryKey: ["list", operationListId] });
+      await qc.invalidateQueries({ queryKey: ["lists"] });
+    } catch (err: unknown) {
+      if (isEpochCurrent(qc, roleEpoch) && listIdRef.current === operationListId) {
+        toast.error(extractErrorMessage(err) ?? "Failed to update role");
+      }
+    } finally {
+      memberOperationKeysRef.current.delete(operationKey);
+    }
+  };
+
+  const removeMember = async (member: ListMember) => {
+    const operationListId = list.id;
+    const memberId = member.profileId || member.actorId || member.name;
+    const operationKey = `remove:${operationListId}:${memberId}`;
+    if (memberOperationKeysRef.current.has(operationKey)) return;
+    memberOperationKeysRef.current.add(operationKey);
+    const removeEpoch = getIdentityEpoch(qc).epoch;
+    try {
+      await rpcRemoveListMember(operationListId, memberId);
+      if (!isEpochCurrent(qc, removeEpoch) || listIdRef.current !== operationListId) return;
+      toast.success(`Removed ${member.name} from list`);
+      await qc.invalidateQueries({ queryKey: ["list", operationListId] });
+      await qc.invalidateQueries({ queryKey: ["lists"] });
+      await qc.invalidateQueries({ queryKey: ["assignable-people"] });
+    } catch (err: unknown) {
+      if (isEpochCurrent(qc, removeEpoch) && listIdRef.current === operationListId) {
+        toast.error(extractErrorMessage(err) ?? "Failed to remove member");
+      }
+    } finally {
+      memberOperationKeysRef.current.delete(operationKey);
+    }
+  };
+
+  const copyInviteLink = async () => {
+    try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) {
+        throw new Error("Clipboard access is unavailable");
+      }
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Invite link copied");
+    } catch {
+      toast.error("Couldn't copy the invite link. Copy it from the address bar instead.");
+    }
+  };
 
   const listInitials =
     list.name
@@ -1000,7 +869,36 @@ function ListDetailPage() {
                   <div className="flex flex-1 flex-row min-h-0 overflow-hidden">
                     <div className="flex-1 min-h-0 overflow-auto bg-[#fefdfd] px-8 pt-6 pb-8">
                       <div className="mx-auto w-full max-w-3xl">
-                        {activeThing ? (
+                        {selectedId && selected && !selectedIsVisible ? (
+                          <div role="status" className="flex min-h-[320px] flex-col items-center justify-center text-center">
+                            <p className="text-[14px] font-semibold text-[#000533]">This Thing is hidden by your filters.</p>
+                            <p className="mt-1 text-[12px] text-[#6a769c]">Clear the filters to return to the selected Thing.</p>
+                            <div className="mt-4 flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setThingsFilter("all");
+                                  setDueFilter("all");
+                                  setPersonFilter(null);
+                                }}
+                                className="rounded-lg bg-[#975ee2] px-3 py-2 text-[12px] font-semibold text-white"
+                              >
+                                Clear filters
+                              </button>
+                              <button type="button" onClick={() => setSelectedId(null)} className="rounded-lg border px-3 py-2 text-[12px] font-semibold">
+                                Close
+                              </button>
+                            </div>
+                          </div>
+                        ) : selectedId && !selected ? (
+                          <div role="alert" className="flex min-h-[320px] flex-col items-center justify-center text-center">
+                            <p className="text-[14px] font-semibold text-[#000533]">This Thing is no longer available.</p>
+                            <p className="mt-1 text-[12px] text-[#6a769c]">Your access may have changed, or the Thing may have been removed.</p>
+                            <button type="button" onClick={() => setSelectedId(null)} className="mt-4 rounded-lg border px-3 py-2 text-[12px] font-semibold">
+                              Close
+                            </button>
+                          </div>
+                        ) : activeThing ? (
                           <ThingDetailContent
                             key={activeThing.id}
                             initialThing={activeThing}
@@ -1060,200 +958,12 @@ function ListDetailPage() {
         {/* ========================================================================= */}
         {tab === "chat" && (
           <div className="flex min-h-0 flex-col gap-3 h-[calc(100vh-9.5rem)] lg:flex-row">
-            {/* Left: List Chat panel */}
-            <div className="flex min-h-0 flex-1 flex-col rounded-[10px] bg-white p-5">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h2 className="text-[19.75px] font-medium text-[#000533]">List Chat</h2>
-                  <p className="mt-1 text-[12px] text-[#6a769c]">
-                    Conversation for {list.name} • {list.members.length} members
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setChatSearchOpen((o) => {
-                      if (o) setChatSearch("");
-                      return !o;
-                    });
-                  }}
-                  title="Search messages"
-                  aria-label="Search messages"
-                  aria-pressed={chatSearchOpen}
-                  className={cn(
-                    "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
-                    chatSearchOpen ? "bg-[#f0e9fb] text-[#975ee2]" : "text-[#8487a7] hover:bg-[#f4f5fb]",
-                  )}
-                >
-                  <Search className="h-4 w-4" />
-                </button>
-              </div>
-
-              {chatSearchOpen && (
-                <div className="mt-3">
-                  <div className="relative flex items-center">
-                    <Search className="absolute left-3 h-4 w-4 text-[#8487a7] pointer-events-none" />
-                    <input
-                      autoFocus
-                      value={chatSearch}
-                      maxLength={80}
-                      onChange={(e) => setChatSearch(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") {
-                          setChatSearch("");
-                          setChatSearchOpen(false);
-                        }
-                      }}
-                      placeholder="Search messages"
-                      className="h-[38px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
-                    />
-                  </div>
-                  {debouncedChatSearch.length >= 2 ? <p className="mt-1 text-[12px] text-[#8487a7]">{chatSearchQuery.isFetching ? "Searching all messages…" : chatSearchQuery.error ? "Search failed. Edit the query to retry." : "Search covers the full conversation history."}</p> : null}
-                </div>
-              )}
-
-              <div ref={chatScrollRef} onScroll={(event) => {
-                const el = event.currentTarget;
-                const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-                chatNearBottomRef.current = fromBottom < 80;
-                saveChatScroll(qc, listId, el.scrollTop, fromBottom);
-                if (chatNearBottomRef.current) setNewChatMessages(false);
-              }} className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-                {!debouncedChatSearch && (chat.hasMore || chat.olderError) ? (
-                  <button type="button" disabled={chat.isLoadingOlder} onClick={() => void loadOlderChat()} className="w-full rounded-lg border border-[#ebecf7] px-3 py-2 text-xs font-medium text-[#6638ec] disabled:opacity-50">
-                    {chat.isLoadingOlder ? "Loading older messages…" : chat.olderError ? "Couldn't load older messages. Retry" : "Load older messages"}
-                  </button>
-                ) : null}
-                {debouncedChatSearch.length >= 2 && chatSearchQuery.hasMore ? <button type="button" disabled={chatSearchQuery.isLoadingMore} onClick={() => void chatSearchQuery.loadMore()} className="w-full rounded-lg border border-[#ebecf7] px-3 py-2 text-xs text-[#6638ec] disabled:opacity-50">{chatSearchQuery.isLoadingMore ? "Loading more results…" : "Load more search results"}</button> : null}
-                {chat.error && chat.messages.length === 0 ? <p role="alert" className="text-xs text-red-600">Couldn't load messages. Reopen this List to retry.</p> : null}
-                {chat.error && filteredChatMessages.length === 0 ? null : filteredChatMessages.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <MessageSquare className="mx-auto mb-1.5 h-7 w-7 text-[#c5cae0]" />
-                    <p className="text-[12.5px] font-medium text-[#000533]">No messages yet</p>
-                    <p className="mt-0.5 text-[12px] text-[#6a769c]">
-                      {viewOnly ? "There are no messages in this room." : "Start the conversation below."}
-                    </p>
-                  </div>
-                ) : (
-                  filteredChatMessages.map((m) =>
-                    m.kind === "system" ? (
-                      <div key={m.id} className="flex items-center justify-center gap-2 py-1">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5fb] px-3 py-1 text-[12px] text-[#6a769c]">
-                          <Phone className="h-3 w-3 text-[#12a15f]" />
-                          <span className="font-medium text-[#000533]">{m.author}</span>
-                          {m.body}
-                          <span className="text-[#a3a9c9]">
-                            ·{" "}
-                            {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
-                        </span>
-                        {m.delivery === "failed" ? <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="text-[12px] text-red-600 underline">Retry entry</button> : null}
-                      </div>
-                    ) : (
-                      <div key={m.id} className="flex items-start gap-3">
-                        <PersonAvatar
-                          name={m.author}
-                          initials={m.author.slice(0, 2).toUpperCase()}
-                          src={m.avatarUrl}
-                          size={34}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-[12.5px] font-medium text-[#000533]">{m.author}</span>
-                            <span className="text-[12px] text-[#757b9e]">
-                              {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
-                            </span>
-                          </div>
-                          {m.body ? <p className="mt-0.5 text-[12px] text-[#1a2345]">{m.body}</p> : null}
-                          {m.attachment ? <ChatAttachmentView attachment={m.attachment} /> : null}
-                          {m.delivery === "pending" ? <p className="text-[12px] text-[#8487a7]">Sending…</p> : null}
-                          {m.delivery === "failed" ? (
-                            <div className="mt-1 flex gap-2 text-[12px] text-red-600">
-                              <span>Couldn't send.</span>
-                              <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="font-semibold underline">Retry</button>
-                              <button type="button" onClick={() => chat.removeFailed(m.id)} className="underline">Remove</button>
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    ),
-                  )
-                )}
-              </div>
-
-              {newChatMessages ? <button type="button" onClick={() => {
-                const el = chatScrollRef.current;
-                if (el) el.scrollTop = el.scrollHeight;
-                chatNearBottomRef.current = true;
-                setNewChatMessages(false);
-              }} className="mt-1 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground">New messages</button> : null}
-
-              {viewOnly ? (
-                <p className="mt-3 rounded-[8px] bg-[#f6f8fd] p-2.5 text-center text-[12px] text-[#6a769c]">
-                  View-only members can observe the conversation and comment on Things.
-                </p>
-              ) : (
-                <>
-                {stagedChatAttachment ? <div className="mt-2 flex items-center gap-2 rounded-lg border border-[#ebecf7] px-3 py-2 text-xs text-[#3d3f74]"><Paperclip className="h-3.5 w-3.5" /><span className="min-w-0 flex-1 truncate">{stagedChatAttachment.name} ready to send</span><button type="button" onClick={() => chatDraft.write(msg, [])} className="text-[#8487a7] hover:text-red-600">Remove</button></div> : null}
-                <form
-                  className="mt-4 flex items-center gap-2 rounded-[8px] border border-[#e5e7f6] bg-white px-3 py-2"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const submittedBody = msg.trim();
-                    if ((!submittedBody && !stagedChatAttachment) || chat.send.isPending) return;
-                    chatDraft.clear();
-                    const draftRevision = getDraftRevision(qc, "list-chat", listId);
-                    void chat.send.mutateAsync({ body: submittedBody, attachment: stagedChatAttachment, draftRevision }).catch((err) => toast.error(domainErrorMessage(err)));
-                  }}
-                >
-                  <input
-                    ref={chatFileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => void handleChatFile(e.target.files?.[0])}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => chatFileInputRef.current?.click()}
-                    disabled={uploadingFile || Boolean(stagedChatAttachment)}
-                    className="flex h-7 w-7 items-center justify-center rounded text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-40 outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Attach file"
-                    title="Attach a file"
-                  >
-                    <Paperclip className="h-4 w-4" />
-                  </button>
-                  <input
-                    value={msg}
-                    onChange={(e) => setMsg(e.target.value)}
-                    placeholder={uploadingFile ? "Uploading file…" : `Message ${list.name}....`}
-                    className="min-w-0 flex-1 bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#6a6b8e]"
-                  />
-                  <button
-                    type="button"
-                    className="flex h-7 w-7 items-center justify-center rounded text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Mention"
-                  >
-                    <AtSign className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    className="flex h-7 w-7 items-center justify-center rounded text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Emoji"
-                  >
-                    <Smile className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={(!msg.trim() && !stagedChatAttachment) || chat.send.isPending || uploadingFile}
-                    className="inline-flex h-[34px] items-center rounded-[6px] bg-[#975ee2] px-4 text-[13px] font-medium text-white hover:brightness-95 transition disabled:opacity-40 cursor-pointer"
-                  >
-                    Send
-                  </button>
-                </form>
-                </>
-              )}
-            </div>
-
+            <ListChatPanel
+              listId={listId}
+              placeholderName={list.name}
+              viewOnly={viewOnly}
+              className="min-h-0 flex-1 rounded-[10px] bg-white"
+            />
             {/* Right: List info sidebar */}
             <div className="w-full shrink-0 min-h-0 overflow-y-auto rounded-[10px] bg-white p-5 lg:w-[440px]">
               <h2 className="text-[22px] font-medium text-[#000533]">{list.name}</h2>
@@ -1505,482 +1215,31 @@ function ListDetailPage() {
         {/* TAB 3: MEMBERS & PERMISSIONS */}
         {/* ========================================================================= */}
         {tab === "members" && (
-          <div>
-            <div className="flex flex-col gap-3 lg:flex-row">
-              {/* Left: members management card */}
-              <div className="flex-1 rounded-[10px] bg-white p-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="text-[19.75px] font-medium text-[#000533]">Members &amp; Permissions</h2>
-                    <p className="mt-1 text-[12px] font-medium text-[#6a769c]">
-                      Control who can see and move Things in {list.name}.
-                    </p>
-                  </div>
-                  {list.role === "owner" && (
-                    <div className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (typeof navigator !== "undefined" && navigator.clipboard) {
-                            void navigator.clipboard.writeText(window.location.href);
-                          }
-                          toast.success("Invite link copied");
-                        }}
-                        className="inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-[#ebf1fd] bg-[#f6f8fd] px-3.5 text-[12px] font-medium text-[#1b2031] hover:brightness-95 transition cursor-pointer"
-                      >
-                        <Paperclip className="h-3.5 w-3.5" />
-                        Copy invite link
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setInviting(true)}
-                        className="inline-flex h-[42px] items-center gap-2 rounded-[10px] bg-[#1d2335] px-3.5 text-[12px] font-medium text-white hover:brightness-110 transition cursor-pointer"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        Invite people
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-5 flex flex-wrap items-center gap-2.5">
-                  <label className="flex h-[42px] min-w-[220px] flex-1 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3">
-                    <Search className="h-4 w-4 text-[#8487a7]" />
-                    <input
-                      value={memberSearch}
-                      onChange={(e) => setMemberSearch(e.target.value)}
-                      placeholder="Search members"
-                      className="min-w-0 flex-1 bg-transparent text-[12px] text-[#000533] outline-none placeholder:text-[#8487a7]"
-                    />
-                  </label>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        type="button"
-                        className="inline-flex h-[42px] items-center gap-2 rounded-[10px] border border-[#ebf1fd] bg-[#f6f8fd] px-3.5 text-[12px] font-medium text-[#2548fb] cursor-pointer"
-                      >
-                        {memberRoleFilter === "all"
-                          ? "All Roles"
-                          : memberRoleFilter === "view_only"
-                            ? "View Only"
-                            : memberRoleFilter === "owner"
-                              ? "Owner"
-                              : "Collaborator"}
-                        <ChevronDown className="h-3.5 w-3.5" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40 bg-white">
-                      <DropdownMenuRadioGroup
-                        value={memberRoleFilter}
-                        onValueChange={(v) => setMemberRoleFilter(v as typeof memberRoleFilter)}
-                      >
-                        <DropdownMenuRadioItem value="all" className="text-[12px]">All Roles</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="owner" className="text-[12px]">Owner</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="collaborator" className="text-[12px]">Collaborator</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="view_only" className="text-[12px]">View Only</DropdownMenuRadioItem>
-                      </DropdownMenuRadioGroup>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                {/* Member groups */}
-                <div className="mt-5 space-y-5">
-                  {(
-                    [
-                      { key: "owner", title: `Owner (${ownerMembers.length})`, members: ownerMembers },
-                      { key: "collaborator", title: `Collaborators (${collaboratorMembers.length})`, members: collaboratorMembers },
-                      { key: "view_only", title: `View Only (${viewOnlyMembers.length})`, members: viewOnlyMembers },
-                    ] as const
-                  ).map((group) =>
-                    group.members.length === 0 ? null : (
-                      <div key={group.key} className="space-y-2.5">
-                        <h3 className="text-[15px] font-medium text-[#000533]">{group.title}</h3>
-                        {group.members.map((m) => {
-                          const memberId = m.profileId || m.actorId || m.name;
-                          const role = group.key;
-                          const badge =
-                            role === "owner"
-                              ? { bg: "#edeafe", text: "#2a14a8", label: "Owner" }
-                              : role === "collaborator"
-                                ? { bg: "#e9f0fd", text: "#975ee2", label: "Collaborator" }
-                                : { bg: "#f2f2fb", text: "#484872", label: "View Only" };
-                          const capability =
-                            role === "owner"
-                              ? "Can manage list and members"
-                              : role === "collaborator"
-                                ? "Can create, edit, catch, pace and reassign Things"
-                                : "Can view list and Things";
-                          const rowBg =
-                            role === "owner" ? "bg-[#f9f9fe]" : role === "collaborator" ? "bg-[#fdfdfe]" : "bg-white";
-                          const canManage = list.role === "owner" && role !== "owner";
-                          return (
-                            <div
-                              key={memberId}
-                              className={cn(
-                                "flex items-center gap-3 rounded-[11px] border border-[#f4f4fc] px-4 py-2.5",
-                                rowBg,
-                              )}
-                            >
-                              <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={40} />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-[12.5px] font-medium text-[#000533]">{m.name}</div>
-                                <div className="text-[12px] text-[#686c8d]">{capability}</div>
-                              </div>
-                              <span
-                                className="hidden shrink-0 rounded-[9px] px-3 py-1.5 text-[12px] sm:inline-block"
-                                style={{ backgroundColor: badge.bg, color: badge.text }}
-                              >
-                                {badge.label}
-                              </span>
-                              {canManage ? (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="inline-flex h-[38px] w-[124px] shrink-0 items-center justify-between rounded-[6px] border border-[#e8e9f7] bg-[#fdfdfe] px-3 text-[12px] text-[#686c8d] cursor-pointer"
-                                    >
-                                      {role === "collaborator" ? "Collaborator" : "View only"}
-                                      <ChevronDown className="h-3.5 w-3.5" />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-48 bg-white">
-                                    <DropdownMenuItem
-                                      onClick={async () => {
-                                        const roleEpoch = getIdentityEpoch(qc).epoch;
-                                        try {
-                                          await rpcChangeListRole(
-                                            list.id,
-                                            memberId,
-                                            role === "collaborator" ? "view_only" : "collaborator",
-                                          );
-                                          if (!isEpochCurrent(qc, roleEpoch)) return;
-                                          toast.success(`Updated ${m.name}'s role`);
-                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
-                                          await qc.invalidateQueries({ queryKey: ["lists"] });
-                                        } catch (err: unknown) {
-                                          if (isEpochCurrent(qc, roleEpoch)) {
-                                            toast.error(extractErrorMessage(err) ?? "Failed to update role");
-                                          }
-                                        }
-                                      }}
-                                      className="text-[12px]"
-                                    >
-                                      {role === "collaborator" ? (
-                                        <>
-                                          <Eye className="mr-2 h-3.5 w-3.5 text-emerald-500" /> Make View only
-                                        </>
-                                      ) : (
-                                        <>
-                                          <Users className="mr-2 h-3.5 w-3.5 text-blue-500" /> Make Collaborator
-                                        </>
-                                      )}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-[12px] text-destructive focus:text-destructive"
-                                      onClick={async () => {
-                                        const removeEpoch = getIdentityEpoch(qc).epoch;
-                                        try {
-                                          await rpcRemoveListMember(list.id, memberId);
-                                          if (!isEpochCurrent(qc, removeEpoch)) return;
-                                          toast.success(`Removed ${m.name} from list`);
-                                          await qc.invalidateQueries({ queryKey: ["list", listId] });
-                                          await qc.invalidateQueries({ queryKey: ["lists"] });
-                                          await qc.invalidateQueries({ queryKey: ["assignable-people"] });
-                                        } catch (err: unknown) {
-                                          if (isEpochCurrent(qc, removeEpoch)) {
-                                            toast.error(extractErrorMessage(err) ?? "Failed to remove member");
-                                          }
-                                        }
-                                      }}
-                                    >
-                                      <X className="mr-2 h-3.5 w-3.5 text-destructive" /> Remove from list
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              ) : (
-                                <span className="inline-flex h-[38px] w-[124px] shrink-0 items-center gap-1.5 rounded-[6px] border border-[#eeeffb] bg-[#f6f6fd] px-3 text-[12px] text-[#686c8d]">
-                                  <Crown className="h-3.5 w-3.5 text-[#d9a441]" />
-                                  {badge.label}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ),
-                  )}
-                  {filteredMembers.length === 0 && (
-                    <p className="py-8 text-center text-[12px] text-[#6a769c]">No members match this filter.</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Right: Permission Guide */}
-              <div className="w-full shrink-0 space-y-3 lg:w-[360px]">
-                <div className="rounded-[10px] bg-white p-5">
-                  <h3 className="text-[18px] font-medium text-[#000533]">Permission Guide</h3>
-                  <div className="mt-4 space-y-4">
-                    {[
-                      {
-                        icon: <Users className="h-5 w-5" />,
-                        circle: "bg-[#ede8fe] text-[#975ee2]",
-                        label: "Collaborator",
-                        desc: "Create, edit, catch pace and reassign Things",
-                      },
-                      {
-                        icon: <Eye className="h-5 w-5" />,
-                        circle: "bg-[#e6ecfd] text-[#3b6ff5]",
-                        label: "View Only",
-                        desc: "Read List and Things",
-                      },
-                      {
-                        icon: <Crown className="h-5 w-5" />,
-                        circle: "bg-[#fdeede] text-[#d9822b]",
-                        label: "Owner",
-                        desc: "Manage members, roles and list",
-                      },
-                    ].map((g) => (
-                      <div key={g.label} className="flex items-center gap-3">
-                        <span
-                          className={cn(
-                            "flex h-11 w-11 shrink-0 items-center justify-center rounded-full",
-                            g.circle,
-                          )}
-                        >
-                          {g.icon}
-                        </span>
-                        <div className="min-w-0">
-                          <div className="text-[14px] font-medium text-[#000533]">{g.label}</div>
-                          <div className="text-[12px] text-[#6a769c]">{g.desc}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Invite Member Modal */}
-            {inviting && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-xs">
-                <div className="w-full max-w-lg rounded-2xl border border-border bg-white p-6 katalist-elevation-dialog animate-in fade-in zoom-in-95 max-h-[90vh] flex flex-col">
-                  {/* Header */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-[16px] font-bold text-foreground">Invite to {list.name}</h2>
-                      <p className="mt-0.5 text-[12px] text-muted-foreground">
-                        Add people from your team or invite external collaborators.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setInviting(false)}
-                      aria-label="Close dialog"
-                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-
-                  {/* Role Selector */}
-                  <div className="mt-4">
-                    <label className="block text-[12px] font-semibold text-foreground mb-1.5">
-                      Permission Role to Grant
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setInviteRole("collaborator")}
-                        className={cn(
-                          "flex items-center justify-center gap-2 rounded-xl border py-2 text-[12px] font-medium transition-all cursor-pointer",
-                          inviteRole === "collaborator"
-                            ? "border-primary bg-primary/10 font-semibold text-primary"
-                            : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <Users className="h-3.5 w-3.5" />
-                        Collaborator
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setInviteRole("view_only")}
-                        className={cn(
-                          "flex items-center justify-center gap-2 rounded-xl border py-2 text-[12px] font-medium transition-all cursor-pointer",
-                          inviteRole === "view_only"
-                            ? "border-primary bg-primary/10 font-semibold text-primary"
-                            : "border-border/80 bg-white text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        View only
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Search Your Team */}
-                  <div className="mt-4 flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[12px] font-semibold text-foreground">
-                        Your Team Members
-                      </label>
-                      <span className="text-[12px] text-muted-foreground font-medium">
-                        {assignablePeople.length} contacts
-                      </span>
-                    </div>
-
-                    <label className="flex h-9 items-center gap-2 rounded-xl border border-border/80 bg-muted/20 px-3  focus-within:border-primary focus-within:bg-white transition-all">
-                      <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                      <input
-                        value={inviteSearch}
-                        onChange={(e) => setInviteSearch(e.target.value)}
-                        placeholder="Search team members by name..."
-                        className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
-                      />
-                      {inviteSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setInviteSearch("")}
-                          aria-label="Clear search"
-                          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </label>
-
-                    {/* Team Members List */}
-                    <div className="mt-2.5 space-y-1.5 max-h-[200px] overflow-y-auto pr-1">
-                      {assignablePeople
-                        .filter((p) => {
-                          if (!inviteSearch.trim()) return true;
-                          return p.name.toLowerCase().includes(inviteSearch.toLowerCase());
-                        })
-                        .map((person) => {
-                          const isAlreadyMember =
-                            (list.members || []).some(
-                              (m) =>
-                                (person.profileId && m.profileId === person.profileId) ||
-                                m.profileId === person.id ||
-                                m.actorId === person.id ||
-                                m.name.toLowerCase() === person.name.toLowerCase(),
-                            ) ||
-                            list.ownerActorId === person.id ||
-                            (person.profileId && list.ownerActorId === person.profileId);
-
-                          const isAdding = addingPersonId === person.id;
-
-                          return (
-                            <div
-                              key={person.id}
-                              className="flex items-center justify-between rounded-xl border border-border/60 bg-white p-2.5 hover:bg-muted/30 transition-colors"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <PersonAvatar
-                                  name={person.name}
-                                  initials={person.initials}
-                                  src={person.avatarUrl}
-                                  size={28}
-                                />
-                                <div className="min-w-0">
-                                  <span className="block truncate text-[12.5px] font-bold text-foreground">
-                                    {person.name}
-                                  </span>
-                                  <span className="block text-[12px] text-muted-foreground">
-                                    Connected teammate
-                                  </span>
-                                </div>
-                              </div>
-
-                              {isAlreadyMember ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[12px] font-semibold text-emerald-600 border border-emerald-200/60">
-                                  <Check className="h-3 w-3" />
-                                  In List
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={isAdding}
-                                  onClick={async () => {
-                                    setAddingPersonId(person.id);
-                                    const addEpoch = getIdentityEpoch(qc).epoch;
-                                    try {
-                                      await rpcAddListMember(list.id, person.profileId || person.id, inviteRole);
-                                      if (!isEpochCurrent(qc, addEpoch)) return;
-                                      toast.success(`Added ${person.name} as ${inviteRole === "collaborator" ? "Collaborator" : "View only"}`);
-                                      await qc.invalidateQueries({ queryKey: ["list", listId] });
-                                      await qc.invalidateQueries({ queryKey: ["lists"] });
-                                      await qc.invalidateQueries({ queryKey: ["assignable-people"] });
-                                    } catch (err: unknown) {
-                                      if (isEpochCurrent(qc, addEpoch)) {
-                                        toast.error(extractErrorMessage(err) ?? "Couldn't add team member. Please try again.");
-                                      }
-                                    } finally {
-                                      setAddingPersonId(null);
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-primary/10 hover:bg-primary hover:text-white px-2.5 py-1 text-[12px] font-semibold text-primary transition-all disabled:opacity-50 cursor-pointer"
-                                >
-                                  <Plus className="h-3 w-3" />
-                                  {isAdding ? "Adding..." : "Add"}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-
-                      {assignablePeople.length === 0 && (
-                        <div className="py-4 text-center text-[12px] text-muted-foreground">
-                          No team members found in directory.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* External Email Invite Section */}
-                  <form
-                    className="mt-4 pt-3 border-t border-border/70"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!inviteEmail.trim()) return;
-                      toast.success(`Invitation sent to ${inviteEmail.trim()}`);
-                      setInviteEmail("");
-                    }}
-                  >
-                    <label className="block text-[12px] font-semibold text-foreground mb-1">
-                      Or invite by email address
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="email"
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                        placeholder="colleague@company.com"
-                        className="h-9 flex-1 rounded-xl border border-border px-3 text-[12px] outline-none focus:border-primary focus:ring-2 focus:ring-ring"
-                      />
-                      <button
-                        type="submit"
-                        disabled={!inviteEmail.trim()}
-                        className="h-9 rounded-xl bg-slate-900 px-3 text-[12px] font-semibold text-white  transition-all hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
-                      >
-                        Send Invite
-                      </button>
-                    </div>
-                  </form>
-
-                  {/* Modal Footer */}
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      type="button"
-                      className="h-8 rounded-xl border border-border px-4 text-[12.5px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
-                      onClick={() => setInviting(false)}
-                    >
-                      Done
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+          <ListMembersSection
+            list={list}
+            memberSearch={memberSearch}
+            onMemberSearchChange={setMemberSearch}
+            memberRoleFilter={memberRoleFilter}
+            onMemberRoleFilterChange={setMemberRoleFilter}
+            ownerMembers={ownerMembers}
+            collaboratorMembers={collaboratorMembers}
+            viewOnlyMembers={viewOnlyMembers}
+            filteredMembersEmpty={filteredMembers.length === 0}
+            onCopyInviteLink={() => void copyInviteLink()}
+            onOpenInvite={() => setInviting(true)}
+            onChangeRole={(member, currentRole) => void changeMemberRole(member, currentRole)}
+            onRemoveMember={(member) => void removeMember(member)}
+          />
+        )}
+        {tab === "members" && (
+          <ListInviteDialog
+            open={inviting}
+            onOpenChange={setInviting}
+            list={list}
+            people={assignablePeople}
+            addingPersonId={addingPersonId}
+            onAdd={addMember}
+          />
         )}
       </div>
       <ListCallPanel
