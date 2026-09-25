@@ -17,6 +17,7 @@ import type { ThingFile, Person } from "@/domain/thing";
 import { processFileForUpload } from "@/lib/file-utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
+import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
 
 export function MagicBox({
   listId,
@@ -40,7 +41,17 @@ export function MagicBox({
    *  it and the success toast just identifies the Thing by title instead. */
   onThingCreated?: (thingId: string, title: string) => void;
 }) {
-  const [value, setValue] = useState("");
+  const { context } = useAppContext();
+  const qc = useQueryClient();
+  // T09/E05: one Magic Box draft slot per (destination List, or Work/Home
+  // context when there's no List) -- switching Work<->Home context does
+  // not unmount this component, so without the context in the key a
+  // half-typed Home toss would still be sitting in the input after
+  // switching to Work. A List-scoped composer keys off the List instead,
+  // since it never changes context underneath the same instance.
+  const draftEntityId = listId ? `list:${listId}` : `court:${context}`;
+
+  const [value, setValue] = useState(() => getDraft<string>(qc, "magic-box", draftEntityId)?.value ?? "");
   const [tossed, setTossed] = useState(false);
   const [trigger, setTrigger] = useState<{
     type: "person" | "list" | "bucket";
@@ -50,7 +61,9 @@ export function MagicBox({
   const [activeIndex, setActiveIndex] = useState(0);
   // tracks which person ID the user has explicitly dismissed from the suggestion prompt
   const [dismissedSuggestionId, setDismissedSuggestionId] = useState<string | null>(null);
-  const [attachedFiles, setAttachedFiles] = useState<ThingFile[]>([]);
+  const [attachedFiles, setAttachedFiles] = useState<ThingFile[]>(
+    () => (getDraft<string>(qc, "magic-box", draftEntityId)?.attachments as ThingFile[] | undefined) ?? [],
+  );
   // E04: a multi-assignee toss used to Promise.all() every rpcCreateThing
   // call -- if even one rejected, the whole mutation rejected too, but the
   // OTHER assignees' Things were already really created (Promise.all
@@ -69,8 +82,6 @@ export function MagicBox({
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const { context } = useAppContext();
-  const qc = useQueryClient();
   const assignablePeople = useAssignablePeople();
   const people = useMemo(() => {
     if (!extraPeople?.length) return assignablePeople;
@@ -89,6 +100,31 @@ export function MagicBox({
   // can silently interrupt a mid-capture the way ThingDetailContent's own
   // comment composer already guards against.
   useBlockWhile(Boolean(value.trim()) || attachedFiles.length > 0 || processingFiles > 0, "magic-box-draft");
+
+  // T09/E05: re-hydrate whenever the draft slot itself changes (switching
+  // List, or switching Work/Home context on the bare Court composer) --
+  // the lazy initializers above only ever run once, on first mount.
+  useEffect(() => {
+    const draft = getDraft<string>(qc, "magic-box", draftEntityId);
+    setValue(draft?.value ?? "");
+    setAttachedFiles((draft?.attachments as ThingFile[] | undefined) ?? []);
+    setRetryAssigneeIds(null);
+    setTrigger(null);
+    setDismissedSuggestionId(null);
+  }, [draftEntityId, qc]);
+
+  // T09/E05: write-through -- every edit persists immediately, so typed
+  // text, chosen assignees (embedded in the text itself), and already-
+  // processed attachment upload handles all survive unmount/remount (e.g.
+  // navigating away from a List and back) the same way ThingDetailContent's
+  // comment composer already does for its own draft.
+  useEffect(() => {
+    if (!value && attachedFiles.length === 0) {
+      clearDraft(qc, "magic-box", draftEntityId);
+      return;
+    }
+    setDraft(qc, "magic-box", draftEntityId, { value, attachments: attachedFiles });
+  }, [qc, draftEntityId, value, attachedFiles]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
@@ -586,6 +622,17 @@ export function MagicBox({
         className="hidden"
         accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
       />
+
+      {/* T09/E05: destination List and Work/Home context, shown before
+          submit -- previously only surfaced as a placeholder string that
+          vanished the moment the user started typing, so there was no
+          persistent pre-submit confirmation of where a Thing would land. */}
+      <div className="mb-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+        <Folder className="h-3 w-3 shrink-0" />
+        <span>{listName ?? "Court"}</span>
+        <span aria-hidden="true">·</span>
+        <span className="capitalize">{context}</span>
+      </div>
 
       {/* Pending attached files chips */}
       {attachedFiles.length > 0 && (
