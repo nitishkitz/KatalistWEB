@@ -889,3 +889,82 @@ extraction boundaries themselves (the `variant`-branching choice for
 `ThingIdentityHeader`/`ThingStatusControls` and the default-only
 `moreActionsPanel` slot on `ThingDiscussion`) found no issues; the two
 findings above were both in items 2-4 (Magic Box), not item 5.
+
+### T10 — Complete Morning Brief once, including its actual design
+
+**Status:** LOCAL PASS, PARTIAL -- only package T10-01 of
+`docs/superpowers/plans/KATALIST_T10_DETAILED_EXECUTION_PLAN.md`'s seven
+ordered packages (T10-01 through T10-07) is implemented and verified.
+T10-02 through T10-07, and the T03 action-outcome/receipt-retry
+dependencies T10-04 needs, are **not started**. This section records only
+what has actual evidence; it does not claim T10 (plan line 59) is done, and
+that checkbox is correctly left unchecked.
+
+**Commits:** `998a873` (T10-01).
+
+**Done (T10-01 only -- context and readiness contract):**
+1. `fetchCatchupMoments()` (`src/features/catchup/use-catchup.ts`) now takes
+   `context` explicitly and filters the resolved, capability-mapped Things
+   on their own `context` field before building moments -- previously the
+   query key varied by Work/Home but the fetch itself did not, so a moment
+   for the other context's Thing could appear or be counted.
+2. `derivePreviewMoments()` now gates the `nudge` and `snooze_ended`
+   categories through `accessibleDemoThings(context)` (the same
+   context+access set Court itself uses) instead of resolving via a bare
+   `getThing(id)`, which ignored both context and accessibility. Ghost
+   breakthroughs are the deliberate, preserved exception: `getGhostCandidate()`
+   surfaces a Thing from the *other* context by design, and still resolves
+   via `getThing()`.
+3. `useCatchup()` exposes `branch` (`AsyncBranch`), `isEmpty`, and
+   `confirmedAccessLoss`, reusing `src/lib/query-policy.ts`'s existing
+   `resolveAsyncBranch`/`classifyAsyncError` (the same helper `use-profile.ts`
+   sits on top of) rather than a parallel invention, so a consumer can tell
+   an unsettled/paused query apart from a confirmed-empty result instead of
+   trusting `!isLoading`.
+4. `surfaceMoment` is now awaitable: preview resolves after the local
+   receipt write; live resolves/rejects on the RPC's own outcome (via
+   `mutateAsync`). Its one call site (`CatchUpStack.tsx`) is updated to
+   keep its prior fire-and-forget/best-effort behavior (`.catch(() => {})`)
+   -- outcome-aware sequencing and receipt-only retry are T10-04/T10-05
+   scope, not touched here.
+
+**Tests:** `scripts/catchup-context.test.mjs` (live: D01 mixed Work/Home
+filtering, D01b context switch, D04 pending-vs-confirmed-empty, D05
+background failure with cached non-empty data staying "ready", plus a
+structured-403 `confirmedAccessLoss` case) and
+`scripts/catchup-context-preview.test.mjs` (preview: D02 nudge/snooze_ended
+context+access gating, and the ghost cross-context exception). 8 new tests,
+all passing.
+
+**Verification:** `npm test` 698/698 pass (690 prior + 8 new), `npx tsc
+--noEmit` 0 errors, `npm run lint` 0 errors / 69 warnings (unchanged
+baseline), `npm run build:app` clean.
+
+**Remaining (explicit, not started):**
+- T10-02 (receipt adapter: structured claim-rejection normalization, typed
+  presented-receipt with identity/epoch/context/localDate/timezone, exact
+  same-receipt dismissal, Web Locks preview hardening, malformed-row
+  rejection, additive migration if exact dismissal needs it).
+- T10-03 (scope-owned presentation controller: replace `use-morning-brief.ts`'s
+  independent booleans with an explicit `BriefScope` + attempt-token
+  ownership; correct the wall-clock/tomorrow DST arithmetic in
+  `morning-brief-schedule.ts`; apply the plan's required test correction
+  to the existing delayed-across-midnight test, which currently is
+  **unexamined** by this pass).
+- T10-04 (the T03 action-outcome contract itself: `ActionOutcome`-typed
+  domain-action runner, QueryClient-scoped token claims, receipt-only
+  retry, `ListChatPanel` blocker verification) -- this is also T10's
+  explicit T03 prerequisite closure, and remains fully open.
+- T10-05 (ID-based stable-key queue replacing `CatchUpStack.tsx`'s frozen
+  `useState(() => moments)` deck).
+- T10-06 (the actual desktop/mobile Morning Brief interface -- current
+  `CatchUpOverlay.tsx` is still the narrow `max-w-xl` single-card stack,
+  not the ~960px queue+detail layout the plan specifies).
+- T10-07 (full consumer sweep, Court single-controller wiring, SQL
+  compatibility check, and the five-viewport Playwright browser pass).
+- The full T10 test matrix (D03; S01-S14; R01-R04; A01-A05; Q01-Q04;
+  U01-U04; SQL01) beyond the D01/D02/D04/D05 cases covered above.
+- `docs/superpowers/plans/KATALIST_T10_FINAL_HANDOFF.md` was intentionally
+  **not created** -- the plan specifies it as a closing artifact reconciling
+  every T10 clause with evidence, and producing it now would misrepresent
+  six of seven packages as reconciled when they have not been attempted.
