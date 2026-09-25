@@ -752,11 +752,13 @@ or database change was made by this package.
 
 ### T09 — Court, common detail sections, and Magic Box
 
-**Status:** LOCAL PASS -- complete, pending independent review. **Owns:** A-02,
-E-01 through E-05.
+**Status:** LOCAL PASS -- complete; an independent review found two Magic
+Box race conditions, both fixed and reverified (see "Independent review
+findings" below). **Owns:** A-02, E-01 through E-05.
 
 **Commits:** `c81aba5`, `52bbb37`, `37ce6e5`, `12c0a9a`, `c736118` (items 1-4,
-6-9), plus this pass's item-5 extraction commit(s) below.
+6-9); `e0fdbbb` (item 5 extraction); `b111048`, `d3e2ded` (independent-review
+race fixes, below).
 
 **Done (all 9 plan items):**
 1. Queue/navigator click targets converted to native controls, with
@@ -772,7 +774,8 @@ E-01 through E-05.
 5. **This pass:** extracted the four shared Thing-detail sections --
    `ThingIdentityHeader`, `ThingStatusControls`, `ThingAttachments`,
    `ThingDiscussion` -- out of `ThingDetailContent.tsx` (1868 lines before,
-   ~910 after) into `src/features/things/components/`, following the same
+   1028 after, confirmed via `wc -l`) into `src/features/things/components/`,
+   following the same
    presentational-extraction discipline already established by
    `ThingViewOnlyBanner` (confirmed shared, byte-identical between variants)
    earlier in T09. `ThingIdentityHeader` and `ThingStatusControls` take a
@@ -840,7 +843,49 @@ and do not recreate prior successful work (items 2-4, unaffected by this
 pass's detail-section extraction). T09 is closed locally. No deployment or
 database change was made by this package.
 
-**Remaining (explicit):** independent review of item 5's extraction
-boundaries (in particular the `variant`-branching choice for
+**Independent review findings (both fixed):** a separate review pass found
+that item 5's extraction was sound (confirmed against a full rerun:
+688/688 tests, 0 typecheck errors, 0 lint errors, clean build) but flagged
+two real races in Magic Box (items 2-4) that this pass's own verification
+had not exercised, plus one inaccurate metric:
+1. **Destination-scoped async work (P1).** File processing (`processOneFile`,
+   used by both file-pick and Retry) and the Toss mutation are async and
+   were not tied to the `draftEntityId`/context that started them --
+   switching Work/Home or List destination while either was still in
+   flight let the stale operation append a file to, or clear, the newly
+   selected destination's draft once it resolved. Fixed (`b111048`) with an
+   `epochRef` bumped on every `draftEntityId` change; each async operation
+   captures the epoch before its first `await` and drops its result (does
+   not call `setAttachedFiles`/`setFailedAttachments`/`setValue`/etc.) if
+   the epoch no longer matches on completion. Regression-tested in
+   `scripts/magic-box-destination-race.test.mjs` -- confirmed to hang/fail
+   against the pre-fix code (a same-instance `rerender` with a changed
+   `listId` while a mocked, manually-resolved `processFileForUpload`/
+   `rpcCreateThing` promise is still pending) and pass cleanly post-fix.
+2. **Stale `view` in the toast's Open callback (P1).** `onThingCreated` in
+   `CourtDesktop` closed over the `view` memo directly; since the toast is
+   created at mutation-success time but can be clicked much later, after
+   further Court renders/refetches, the callback could keep searching an
+   outdated snapshot and silently fail to open the newly created Thing even
+   after data had actually refreshed in. Fixed (`d3e2ded`) with a
+   `viewRef` written on every render (the same `xRef.current = x` idiom
+   already used in `src/features/catchup/use-morning-brief.ts` for this
+   exact "async callback needs the latest value, not its creation-time
+   closure" problem), and the callback now searches `viewRef.current`.
+   `scripts/magic-box-capture-ux.test.mjs`'s existing CourtDesktop-wiring
+   test was updated to assert the ref pattern instead of the direct-closure
+   pattern it previously asserted (which was in fact asserting the bug).
+3. **Inaccurate line-count metric.** Item 5's note above previously claimed
+   `ThingDetailContent.tsx` was "~910" lines after extraction; `wc -l`
+   confirms 1028. Corrected in place.
+
+Full verification after both fixes: `npm test` 690/690 pass (688 prior +
+2 new destination-race regression tests), `npx tsc --noEmit` 0 errors,
+`npm run lint` 0 errors / 69 warnings (unchanged), `npm run build:app`
+clean.
+
+**Remaining (explicit):** none known. Independent review of item 5's
+extraction boundaries themselves (the `variant`-branching choice for
 `ThingIdentityHeader`/`ThingStatusControls` and the default-only
-`moreActionsPanel` slot on `ThingDiscussion`) has not yet happened.
+`moreActionsPanel` slot on `ThingDiscussion`) found no issues; the two
+findings above were both in items 2-4 (Magic Box), not item 5.
