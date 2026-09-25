@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { getThingCapabilities } from "@/domain/capabilities";
@@ -12,7 +12,12 @@ import type { SnoozeOption } from "@/features/things/personal-snooze";
 import { useDoorman } from "@/features/doorman/use-doorman";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { CatchUpStackCard } from "./CatchUpStackCard";
-import { catchUpActionsFor, type CatchUpActionId } from "./catchup-logic";
+import {
+  catchUpActionsFor,
+  reasonLabelFor,
+  relativeTimeLabel,
+  type CatchUpActionId,
+} from "./catchup-logic";
 import type { CatchUpMoment } from "./use-catchup";
 
 type Props = {
@@ -65,7 +70,12 @@ type QueueEntry = {
   ack: AckState;
 };
 
-function buildRequest(id: CatchUpActionId, thingId: string, arg: string | undefined, reason: string): ThingActionRequest | null {
+function buildRequest(
+  id: CatchUpActionId,
+  thingId: string,
+  arg: string | undefined,
+  reason: string,
+): ThingActionRequest | null {
   switch (id) {
     case "catch":
       return { kind: "catch", thingId };
@@ -103,7 +113,14 @@ function actionSuccessLabel(id: CatchUpActionId, arg?: string): string {
   }
 }
 
-export function CatchUpStack({ moments, myActorId, surfaceMoment, onOpenThing, onClose, onRefresh }: Props) {
+export function CatchUpStack({
+  moments,
+  myActorId,
+  surfaceMoment,
+  onOpenThing,
+  onClose,
+  onRefresh,
+}: Props) {
   const qc = useQueryClient();
   const doorman = useDoorman();
 
@@ -114,10 +131,18 @@ export function CatchUpStack({ moments, myActorId, surfaceMoment, onOpenThing, o
   // latest response.
   const [order, setOrder] = useState<string[]>(() => moments.map((m) => m.momentKey));
   const [entries, setEntries] = useState<Map<string, QueueEntry>>(
-    () => new Map(moments.map((m) => [m.momentKey, { key: m.momentKey, status: "active", live: m, lastKnown: m, ack: "none" }])),
+    () =>
+      new Map(
+        moments.map((m) => [
+          m.momentKey,
+          { key: m.momentKey, status: "active", live: m, lastKnown: m, ack: "none" },
+        ]),
+      ),
   );
   const [selectedKey, setSelectedKey] = useState<string | null>(() => order[0] ?? null);
-  const [viewedKeys, setViewedKeys] = useState<Set<string>>(() => new Set(order[0] ? [order[0]] : []));
+  const [viewedKeys, setViewedKeys] = useState<Set<string>>(
+    () => new Set(order[0] ? [order[0]] : []),
+  );
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   // Reconcile on every `moments` change (initial load, background refetch,
@@ -234,7 +259,8 @@ export function CatchUpStack({ moments, myActorId, surfaceMoment, onOpenThing, o
 
   const runAction = useCallback(
     async (id: CatchUpActionId, arg?: string) => {
-      if (!currentEntry || currentEntry.status !== "active" || !currentEntry.live || busyKey) return;
+      if (!currentEntry || currentEntry.status !== "active" || !currentEntry.live || busyKey)
+        return;
       const moment = currentEntry.live;
       const thing = moment.thing;
 
@@ -301,7 +327,19 @@ export function CatchUpStack({ moments, myActorId, surfaceMoment, onOpenThing, o
         });
       }
     },
-    [busyKey, currentEntry, doorman.dismiss, goNext, markResolved, onClose, onOpenThing, onRefresh, qc, setAck, surfaceMoment],
+    [
+      busyKey,
+      currentEntry,
+      doorman.dismiss,
+      goNext,
+      markResolved,
+      onClose,
+      onOpenThing,
+      onRefresh,
+      qc,
+      setAck,
+      surfaceMoment,
+    ],
   );
 
   const resolvedCount = useMemo(() => {
@@ -318,52 +356,123 @@ export function CatchUpStack({ moments, myActorId, surfaceMoment, onOpenThing, o
     ? getThingCapabilities(displayMoment.thing, myActorId)
     : { canCatch: false, canSetPace: false, canNudge: false };
   const actions = isActive
-    ? catchUpActionsFor(displayMoment.kind, { canCatch: caps.canCatch, canSetPace: caps.canSetPace, canNudge: caps.canNudge })
+    ? catchUpActionsFor(displayMoment.kind, {
+        canCatch: caps.canCatch,
+        canSetPace: caps.canSetPace,
+        canNudge: caps.canNudge,
+      })
     : (["open"] as CatchUpActionId[]);
   const busy = busyKey === currentEntry.key;
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="relative">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+        {/* T10-06: bounded queue (~280px on desktop) -- native buttons with
+          accessible selected state and visible focus, titles wrap rather
+          than truncate unreadably, and the list itself scrolls once it
+          exceeds its own bounded height rather than growing the dialog. */}
         {order.length > 1 ? (
-          <div className="pointer-events-none absolute -top-2 left-3 right-3 h-full rounded-[16px] border border-slate-200/70 bg-white/80" />
+          <nav
+            aria-label="Moments in this review"
+            className="order-2 flex gap-2 overflow-x-auto pb-1 lg:order-1 lg:w-[280px] lg:shrink-0 lg:flex-col lg:gap-1.5 lg:overflow-x-visible lg:overflow-y-auto lg:pb-0 lg:max-h-[60vh]"
+          >
+            {order.map((key, i) => {
+              const entry = entries.get(key);
+              if (!entry) return null;
+              const m = entry.live ?? entry.lastKnown;
+              const selected = key === currentEntry.key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => selectKey(key)}
+                  aria-current={selected ? "true" : undefined}
+                  className={cn(
+                    "flex shrink-0 items-center gap-2 rounded-[10px] border px-3 py-2 text-left text-[12.5px] outline-none transition focus-visible:ring-2 focus-visible:ring-ring cursor-pointer lg:w-full lg:shrink",
+                    selected
+                      ? "border-primary/40 bg-primary/[0.06] text-slate-900"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                    entry.status === "unavailable" && "opacity-50",
+                  )}
+                >
+                  {entry.status === "resolved" ? (
+                    <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  ) : (
+                    <span className="w-3.5 shrink-0 text-center text-[10px] text-slate-400">
+                      {i + 1}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium lg:whitespace-normal lg:break-words">
+                      {m.thing.title}
+                    </span>
+                    <span className="hidden text-[11px] text-slate-400 lg:block">
+                      {reasonLabelFor(m.kind, m.reason)} · {relativeTimeLabel(m.occurredAt)}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
         ) : null}
-        {order.length > 2 ? (
-          <div className="pointer-events-none absolute -top-4 left-6 right-6 h-full rounded-[16px] border border-slate-200/50 bg-white/60" />
-        ) : null}
-        {!isActive ? (
-          <div className="relative z-10 flex flex-col gap-3 rounded-[16px] border border-slate-200 bg-white p-5 text-center shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
-            <h3 className="text-[16px] font-semibold text-slate-800">{displayMoment.thing.title}</h3>
-            {currentEntry.status === "resolved" ? (
-              <>
-                <p className="text-[13px] text-slate-500">Action saved for this moment.</p>
-                {currentEntry.ack === "error" || currentEntry.ack === "pending" ? (
-                  <button
-                    type="button"
-                    onClick={() => void runAcknowledgement(currentEntry.key, displayMoment.momentKey)}
-                    disabled={currentEntry.ack === "pending"}
-                    className="inline-flex h-9 items-center justify-center gap-2 self-center rounded-[10px] border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 outline-none transition hover:border-slate-300 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-                  >
-                    <RefreshCw className={cn("h-3.5 w-3.5", currentEntry.ack === "pending" && "animate-spin")} />
-                    {currentEntry.ack === "pending" ? "Retrying…" : "Retry acknowledgement"}
-                  </button>
-                ) : (
-                  <p className="text-[12px] text-slate-400">Review acknowledgement saved.</p>
-                )}
-              </>
-            ) : (
-              <p className="text-[13px] text-slate-500">This moment is no longer available.</p>
-            )}
-          </div>
-        ) : (
-          <CatchUpStackCard moment={displayMoment} actions={actions} busy={busy} onAction={runAction} />
-        )}
+
+        <div className="relative order-1 min-w-0 flex-1 lg:order-2">
+          {order.length > 1 ? (
+            <div className="pointer-events-none absolute -top-2 left-3 right-3 h-full rounded-[16px] border border-slate-200/70 bg-white/80" />
+          ) : null}
+          {order.length > 2 ? (
+            <div className="pointer-events-none absolute -top-4 left-6 right-6 h-full rounded-[16px] border border-slate-200/50 bg-white/60" />
+          ) : null}
+          {!isActive ? (
+            <div className="relative z-10 flex flex-col gap-3 rounded-[16px] border border-slate-200 bg-white p-5 text-center shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
+              <h3 className="text-[16px] font-semibold text-slate-800">
+                {displayMoment.thing.title}
+              </h3>
+              {currentEntry.status === "resolved" ? (
+                <>
+                  <p className="text-[13px] text-slate-500">Action saved for this moment.</p>
+                  {currentEntry.ack === "error" || currentEntry.ack === "pending" ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void runAcknowledgement(currentEntry.key, displayMoment.momentKey)
+                      }
+                      disabled={currentEntry.ack === "pending"}
+                      className="inline-flex h-9 items-center justify-center gap-2 self-center rounded-[10px] border border-slate-200 bg-white px-4 text-[13px] font-semibold text-slate-700 outline-none transition hover:border-slate-300 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "h-3.5 w-3.5",
+                          currentEntry.ack === "pending" && "animate-spin",
+                        )}
+                      />
+                      {currentEntry.ack === "pending" ? "Retrying…" : "Retry acknowledgement"}
+                    </button>
+                  ) : (
+                    <p className="text-[12px] text-slate-400">Review acknowledgement saved.</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-[13px] text-slate-500">This moment is no longer available.</p>
+              )}
+            </div>
+          ) : (
+            <CatchUpStackCard
+              moment={displayMoment}
+              actions={actions}
+              busy={busy}
+              onAction={runAction}
+            />
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-4">
         <span className="text-[12px] text-slate-500" data-testid="catchup-viewed-summary">
           Viewed {viewedKeys.size} of {order.length}
-          {resolvedCount > 0 ? ` · ${resolvedCount} action${resolvedCount === 1 ? "" : "s"} completed` : ""}
+          {resolvedCount > 0
+            ? ` · ${resolvedCount} action${resolvedCount === 1 ? "" : "s"} completed`
+            : ""}
         </span>
         <div className="flex items-center gap-3">
           <button

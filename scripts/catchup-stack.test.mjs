@@ -132,10 +132,10 @@ test("Q03: a new moment streaming in mid-review is appended at the end without j
   const a = makeMoment("a");
   const b = makeMoment("b");
   const view = renderStack({ moments: [a] });
-  assert.equal(screen.getByText("Thing a").textContent, "Thing a");
+  assert.equal(screen.getByRole("heading", { name: "Thing a" }).textContent, "Thing a");
 
   await view.rerender({ moments: [a, b] });
-  assert.equal(screen.getByText("Thing a").textContent, "Thing a", "selection stayed on the first moment");
+  assert.equal(screen.getByRole("heading", { name: "Thing a" }).textContent, "Thing a", "selection stayed on the first moment");
   assert.match(screen.getByTestId("catchup-pager-position").textContent, /1 of 2/);
 
   cleanup();
@@ -182,7 +182,7 @@ test("A01: a failed domain action shows an error, never advances, and never surf
 
   assert.equal(runCalls.length, 1);
   assert.equal(surfaceCalls.length, 0, "a failed action never surfaces a receipt");
-  assert.ok(screen.getByText("Thing a"), "still on the same (failed) moment -- did not advance");
+  assert.ok(screen.getByRole("heading", { name: "Thing a" }), "still on the same (failed) moment -- did not advance");
 
   cleanup();
 });
@@ -199,7 +199,7 @@ test("A02: an already-in-flight outcome does not advance or surface a receipt ei
   });
 
   assert.equal(surfaceCalls.length, 0);
-  assert.ok(screen.getByText("Thing a"));
+  assert.ok(screen.getByRole("heading", { name: "Thing a" }));
 
   cleanup();
 });
@@ -243,7 +243,7 @@ test("A03: a successful action with a successful receipt advances to the next mo
   });
 
   assert.equal(surfaceCalls.length, 1);
-  assert.ok(screen.getByText("Thing b"), "advanced to the next moment");
+  assert.ok(screen.getByRole("heading", { name: "Thing b" }), "advanced to the next moment");
 
   cleanup();
 });
@@ -291,7 +291,7 @@ test("Previous is disabled on the first item, enabled after moving forward", asy
     fireEvent.click(screen.getByLabelText("Next"));
   });
   assert.equal(screen.getByLabelText("Previous").disabled, false);
-  assert.ok(screen.getByText("Thing b"));
+  assert.ok(screen.getByRole("heading", { name: "Thing b" }));
 
   cleanup();
 });
@@ -316,6 +316,25 @@ test("viewed count and action-completed count are tracked separately from naviga
     await new Promise((r) => setTimeout(r, 0));
   });
   assert.match(screen.getByTestId("catchup-viewed-summary").textContent, /1 action completed/);
+
+  cleanup();
+});
+
+test("T10-06: clicking a queue item jumps directly to that moment (not just Previous/Next)", async () => {
+  resetShared();
+  const a = makeMoment("a");
+  const b = makeMoment("b");
+  const c = makeMoment("c");
+  renderStack({ moments: [a, b, c] });
+
+  assert.ok(screen.getByRole("heading", { name: "Thing a" }), "starts on the first moment");
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole("navigation", { name: /moments in this review/i }).querySelectorAll("button")[2]);
+  });
+
+  assert.ok(screen.getByRole("heading", { name: "Thing c" }), "jumped directly to the third moment");
+  assert.match(screen.getByTestId("catchup-pager-position").textContent, /3 of 3/);
 
   cleanup();
 });
