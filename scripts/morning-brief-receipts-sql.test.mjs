@@ -88,13 +88,36 @@ async function insertProfile(db, id, timezone = SAFE_ZONE) {
   await db.query(`insert into public.profiles (id, timezone) values ('${id}', '${timezone}')`);
 }
 
+/**
+ * PGlite returns `date` columns as JS `Date` objects; `String(date)` renders
+ * them in the machine's LOCAL timezone (e.g. "Wed Jan 01 2020 05:30:00
+ * GMT+0530 ..."), not the SQL date literal -- both an unreliable map key
+ * and, if ever re-interpolated into a query, a broken/misinterpreted SQL
+ * literal. Always go through this instead of `String()`/template-literal
+ * coercion for any `local_date` value that round-trips through JS.
+ */
+function isoDate(value) {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value);
+}
+
 const MIGRATION_SQL = readFileSync(
   new URL("../supabase/migrations/20260923100000_morning_brief_receipts.sql", import.meta.url),
   "utf8",
 );
 
+// T10-02: the additive exact-dismiss overload. Applied in every test below
+// alongside the original migration, matching the plan's "exercise
+// historical migrations plus new migration in fixtures" instruction --
+// this proves the new overload coexists with (does not replace or break)
+// the original one.
+const EXACT_DISMISS_MIGRATION_SQL = readFileSync(
+  new URL("../supabase/migrations/20260925110000_morning_brief_exact_dismiss.sql", import.meta.url),
+  "utf8",
+);
+
 async function applyMigration(db) {
   await db.exec(MIGRATION_SQL);
+  await db.exec(EXACT_DISMISS_MIGRATION_SQL);
 }
 
 test("the migration's SQL executes without error against a real Postgres-compatible engine", async () => {
@@ -340,4 +363,95 @@ test("F-02/F-03: dismiss only ever targets the caller's own most recent undismis
   const byProfile = Object.fromEntries(rows.rows.map((r) => [r.profile_id, r.dismissed_at]));
   assert.equal(byProfile[PROFILE_A], null, "A's own receipt must be untouched by B's dismiss");
   assert.ok(byProfile[PROFILE_B], "B's own receipt must be dismissed");
+});
+
+// ── T10-02: additive exact-date dismiss overload ────────────────────────────
+
+test("T10-02: dismiss_morning_brief(context, timezone, local_date) dismisses the exact old receipt, not a newer undismissed row", async () => {
+  const db = await makeDb();
+  await setAuthUid(db, PROFILE_A);
+  await insertProfile(db, PROFILE_A, SAFE_ZONE);
+  await applyMigration(db);
+
+  // Simulate an older still-open receipt from a prior day (e.g. a tab left
+  // open across local midnight) alongside today's freshly claimed row.
+  const oldDate = "2020-01-01";
+  await db.query(
+    `insert into public.morning_brief_presentations (profile_id, context, local_date, timezone)
+     values ('${PROFILE_A}', 'work', '${oldDate}', '${SAFE_ZONE}')`,
+  );
+  await db.query(`select * from public.claim_morning_brief('work', null)`); // today's row
+
+  await db.query(`select public.dismiss_morning_brief('work', null, '${oldDate}')`);
+
+  const rows = await db.query(
+    `select local_date, dismissed_at from public.morning_brief_presentations
+      where profile_id = '${PROFILE_A}' and context = 'work' order by local_date`,
+  );
+  const byDate = Object.fromEntries(rows.rows.map((r) => [isoDate(r.local_date), r.dismissed_at]));
+  assert.ok(byDate[oldDate], "the exact old receipt must be dismissed");
+  const todaysDate = Object.keys(byDate).find((d) => d !== oldDate);
+  assert.equal(byDate[todaysDate], null, "today's newer receipt must remain untouched");
+});
+
+test("T10-02: the exact-date overload is a no-op (not an error) when no matching row exists", async () => {
+  const db = await makeDb();
+  await setAuthUid(db, PROFILE_A);
+  await insertProfile(db, PROFILE_A, SAFE_ZONE);
+  await applyMigration(db);
+
+  await db.query(`select public.dismiss_morning_brief('work', null, '2020-01-01')`);
+  const count = await db.query(`select count(*)::int as n from public.morning_brief_presentations`);
+  assert.equal(count.rows[0].n, 0, "no row must be created or thrown for a non-existent exact receipt");
+});
+
+test("T10-02: the exact-date overload rejects an unauthenticated caller and never touches another profile's row", async () => {
+  const db = await makeDb();
+  await insertProfile(db, PROFILE_A, SAFE_ZONE);
+  await insertProfile(db, PROFILE_B, SAFE_ZONE);
+  await setAuthUid(db, PROFILE_A);
+  await applyMigration(db);
+
+  await db.query(`select * from public.claim_morning_brief('work', null)`);
+  const claimedDate = isoDate(
+    (await db.query(`select local_date from public.morning_brief_presentations where profile_id = '${PROFILE_A}'`))
+      .rows[0].local_date,
+  );
+
+  // B attempts to dismiss using A's own claimed date -- the function has no
+  // profile_id parameter at all, so it can only ever target the caller's
+  // own row (auth.uid()), never A's, regardless of which date is passed.
+  await setAuthUid(db, PROFILE_B);
+  await db.query(`select public.dismiss_morning_brief('work', null, '${claimedDate}')`);
+
+  const aRow = await db.query(
+    `select dismissed_at from public.morning_brief_presentations where profile_id = '${PROFILE_A}'`,
+  );
+  assert.equal(aRow.rows[0].dismissed_at, null, "profile A's receipt must be untouched by profile B's call");
+
+  // A genuinely unauthenticated caller (no auth.uid()) is rejected outright.
+  await db.query(`create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;`);
+  await assert.rejects(
+    db.query(`select public.dismiss_morning_brief('work', null, '${claimedDate}')`),
+    /not authenticated/,
+  );
+});
+
+test("T10-02: EXECUTE on the exact-date overload is granted to authenticated/service_role only, never anon", async () => {
+  const db = await makeDb();
+  await setAuthUid(db, PROFILE_A);
+  await insertProfile(db, PROFILE_A, SAFE_ZONE);
+  await applyMigration(db);
+
+  const grants = await db.query(`
+    select routine_name, grantee, specific_name
+    from information_schema.routine_privileges
+    where routine_schema = 'public'
+      and routine_name = 'dismiss_morning_brief'
+      and privilege_type = 'EXECUTE'
+    order by grantee
+  `);
+  const grantees = grants.rows.map((r) => r.grantee);
+  assert.ok(grantees.includes("authenticated"));
+  assert.ok(!grantees.includes("anon"), "anon must never be able to call any dismiss_morning_brief overload");
 });
