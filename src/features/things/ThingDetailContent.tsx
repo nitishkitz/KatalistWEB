@@ -3,42 +3,20 @@ import type * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
-  AlertCircle,
-  AtSign,
   Bell,
   Calendar,
   Check,
-  ChevronDown,
-  ChevronLeft,
-  FileText,
-  Flag,
-  Folder,
   Hand,
-  Loader2,
   List as ListIcon,
+  Loader2,
   Lock,
   MoreHorizontal,
-  Paperclip,
-  Play,
-  RotateCcw,
   Trash2,
-  UserPlus,
   X,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { domainErrorMessage } from "@/lib/domain-error";
-import type { Pace, Thing, WorkStatus } from "@/domain/thing";
-import { AcknowledgementBadge } from "@/components/katalist/AcknowledgementBadge";
-import { WorkStatusBadge } from "@/components/katalist/WorkStatusBadge";
-import { PersonCell } from "@/components/katalist/PersonCell";
-import { PersonAvatar } from "@/components/katalist/PersonAvatar";
-import { cn } from "@/lib/utils";
+import type { Pace, Thing } from "@/domain/thing";
 import {
   isUuid,
   rpcAddThingFile,
@@ -76,7 +54,10 @@ import { useLocalVersion } from "./use-local-version";
 import { type ThingFile } from "@/features/things/PDFViewer";
 import { markThingAsRead } from "@/features/things/read-state";
 import { processFileForUpload } from "@/lib/file-utils";
-import { ThingViewOnlyBanner } from "./components/ThingViewOnlyBanner";
+import { ThingIdentityHeader } from "./components/ThingIdentityHeader";
+import { ThingStatusControls } from "./components/ThingStatusControls";
+import { ThingAttachments } from "./components/ThingAttachments";
+import { ThingDiscussion } from "./components/ThingDiscussion";
 import { getDraft, setDraft, clearDraft, getDraftRevision } from "@/features/drafts/session-drafts";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 
@@ -89,159 +70,6 @@ export type ThingDetailContentProps = {
   onFileSelect?: (file: ThingFile) => void;
 };
 
-const paces: Pace[] = ["now", "next", "later"];
-const statuses: WorkStatus[] = ["not_started", "under_progress", "sorted"];
-
-/** File-type chip colors matching the Figma detail dialog. */
-function fileTypeChip(type: ThingFile["type"]): {
-  label: string;
-  bg: string;
-  text: string;
-  border: string;
-} {
-  switch (type) {
-    case "pdf":
-      return { label: "PDF", bg: "#fef9fa", text: "#ff080a", border: "#fdecec" };
-    case "docx":
-      return { label: "DOCX", bg: "#dde9fe", text: "#0238fa", border: "#dde9fe" };
-    case "excel":
-      return { label: "XLS", bg: "#dcfce7", text: "#16a34a", border: "#bbf7d0" };
-    case "video":
-      return { label: "VID", bg: "#eadffe", text: "#4218f0", border: "#eadffe" };
-    case "image":
-    case "png":
-    case "jpg":
-      return { label: "PNG", bg: "#eadffe", text: "#4218f0", border: "#eadffe" };
-    default:
-      return { label: "FILE", bg: "#eef0f6", text: "#515b8e", border: "#e4e6ef" };
-  }
-}
-const paceTone: Record<Pace, string> = {
-  now: "text-status-now",
-  next: "text-status-next",
-  later: "text-status-later",
-};
-
-function initialsForName(name: string) {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
-  return initials || "?";
-}
-
-function CommentRow({
-  author,
-  body,
-  at,
-  avatarUrl: explicitAvatar,
-  sending,
-  attachments,
-  onFileSelect,
-}: {
-  author: string;
-  body: string;
-  at: string;
-  avatarUrl?: string | null;
-  sending?: boolean;
-  attachments?: ThingFile[];
-  onFileSelect?: (file: ThingFile) => void;
-}) {
-  const avatarUrl = useAvatarUrl(author, null, explicitAvatar);
-
-  return (
-    <div
-      className={cn(
-        "flex gap-2.5 rounded-xl border border-border/70 bg-white px-3 py-2.5 transition-opacity",
-        sending && "opacity-75 bg-muted/15",
-      )}
-    >
-      <PersonAvatar name={author} initials={initialsForName(author)} src={avatarUrl} size={24} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline gap-2">
-          <p className="truncate text-[12px] font-semibold text-foreground">{author}</p>
-          <time className="shrink-0 text-[12px] text-muted-foreground flex items-center gap-1">
-            {sending ? (
-              <>
-                <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
-                <span>Sending…</span>
-              </>
-            ) : (
-              format(new Date(at), "MMM d · h:mm a")
-            )}
-          </time>
-        </div>
-        {body ? <p className="mt-0.5 text-[12px] leading-relaxed text-foreground">{body}</p> : null}
-        {attachments && attachments.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {attachments.map((att) => {
-              const isImg = att.type === "image" || att.type === "png" || att.type === "jpg";
-              const isVid = att.type === "video";
-              return (
-                <button
-                  key={att.id}
-                  type="button"
-                  onClick={() => onFileSelect?.(att)}
-                  className="group/att flex items-center gap-2 rounded-lg border border-border/80 bg-slate-50/70 hover:bg-white hover:border-slate-300 p-1.5 text-left transition-all cursor-pointer"
-                >
-                  {isImg && att.url ? (
-                    <img src={att.url} alt={att.name} className="h-8 w-8 rounded-md object-cover border border-slate-200" />
-                  ) : isVid ? (
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-purple-50 text-purple-600 border border-purple-200">
-                      <Play className="h-3.5 w-3.5 fill-current" />
-                    </div>
-                  ) : (
-                    <span
-                      className={cn(
-                        "flex h-7 px-1.5 items-center justify-center rounded text-[12px] font-bold uppercase",
-                        att.type === "pdf"
-                          ? "bg-red-50 text-red-600 border border-red-200"
-                          : att.type === "excel"
-                            ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                            : att.type === "docx"
-                              ? "bg-blue-50 text-blue-600 border border-blue-200"
-                              : "bg-slate-100 text-slate-600 border border-slate-200",
-                      )}
-                    >
-                      {att.type}
-                    </span>
-                  )}
-                  <div className="min-w-0 pr-1">
-                    <p className="text-[12px] font-semibold text-slate-900 group-hover/att:text-primary truncate max-w-[130px]">
-                      {att.name}
-                    </p>
-                    {att.sizeLabel && (
-                      <p className="text-[12px] text-muted-foreground font-medium">
-                        {att.sizeLabel}
-                      </p>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function statusLabel(s: WorkStatus) {
-  switch (s) {
-    case "not_started":
-      return "Not Started";
-    case "under_progress":
-      return "Under Progress";
-    case "sorted":
-      return "Sorted";
-    case "cancelled":
-      return "Cancelled";
-  }
-}
 
 function AssignOutsideBlock({
   thingId,
@@ -722,6 +550,80 @@ export function ThingDetailContent({
   const isAssigneeSameAsOwner = thing.assignee.id === thing.owner.id;
   const isTheirs = !isAssigneeSameAsOwner || !caps?.isAssignee;
 
+  // T09 item 5: these handlers are what ThingStatusControls/ThingDiscussion
+  // call via their `on*` props -- the extraction moved the JSX (buttons,
+  // dropdowns, sections) into src/features/things/components/, but every
+  // rpc*/run.mutate/withOptimisticPatch call stays defined here, unchanged
+  // from what each button used to do inline.
+  const handleSetPace = (pace: Pace) =>
+    run.mutate(
+      withOptimisticPatch(qc, thing.id, { personalPace: pace }, async () => {
+        await rpcSetPersonalPace(thing.id, pace);
+      }),
+    );
+
+  const handleCatchAndStart = () =>
+    run.mutate(
+      withOptimisticPatch(
+        qc,
+        thing.id,
+        { acknowledgement: "caught", workStatus: "under_progress", personalPace: "next" },
+        async () => {
+          await rpcCatchAndStart(thing.id);
+          toast.success("Caught — now in progress.");
+        },
+      ),
+    );
+
+  const handleSort = () =>
+    run.mutate(
+      withOptimisticPatch(
+        qc,
+        thing.id,
+        { workStatus: "sorted", sortedAt: new Date().toISOString() },
+        async () => {
+          await rpcSortThing(thing.id);
+          toast.success("Nicely sorted.");
+          onAfterTerminalAction?.();
+        },
+      ),
+    );
+
+  const handleSelectBucket = (bucketId: string) =>
+    run.mutate(async () => {
+      if (currentBucket && currentBucket.id === bucketId) return;
+      if (currentBucket) await rpcRemoveFromBucket(currentBucket.id, thing.id);
+      await rpcAddToBucket(bucketId, thing.id);
+      toast.success(currentBucket ? "Bucket changed." : "Added to bucket.");
+    });
+
+  const handleReassign = (targetId: string) => {
+    const target = assignableList.find((p) => p.id === targetId);
+    run.mutate(
+      withOptimisticPatch(
+        qc,
+        thing.id,
+        target
+          ? { assignee: target, acknowledgement: "waiting_for_catch", personalPace: null, caughtAt: null }
+          : {},
+        async () => {
+          await rpcReassignThing(thing.id, targetId);
+          toast.success("Waiting for Catch.");
+        },
+      ),
+    );
+  };
+
+  const handleSetWorkStatus = (status: "not_started" | "under_progress") =>
+    run.mutate(
+      withOptimisticPatch(qc, thing.id, { workStatus: status }, async () => {
+        await rpcSetWorkStatus(thing.id, status);
+      }),
+    );
+
+  const handleRemoveCommentAttachment = (id: string) =>
+    setCommentAttachments((prev) => prev.filter((f) => f.id !== id));
+
   if (variant === "court") {
     const displayFiles: ThingFile[] =
       thing.files && thing.files.length > 0 ? thing.files : [];
@@ -729,238 +631,36 @@ export function ThingDetailContent({
 
     return (
       <div className="min-h-[454px] w-full text-left">
-        {headerAction && <div className="mb-2">{headerAction}</div>}
-
-        {/* Title */}
-        <div className="flex items-start justify-between gap-3 pr-9">
-          <h1 className="text-[25px] font-medium leading-tight tracking-tight text-[#000533] break-words flex-1">
-            {thing.title}
-          </h1>
-        </div>
-
-        {/* Subtitle */}
-        <p className="mt-1 text-[12px] text-[#6a769c] font-medium">
-          Created by {thing.creator.name}
-          {thing.updatedAt ? ` • Updated ${format(new Date(thing.updatedAt), "MMM d, h:mm a")}` : ""}
-        </p>
-
-        {viewOnly && <ThingViewOnlyBanner />}
-        {thing.detailLevel === "overview" && live.error && (
-          <div role="alert" className="mt-3 text-xs text-amber-700">
-            Full Thing detail could not be loaded. The information below may be incomplete.
-            <button type="button" className="ml-2 underline" onClick={() => void live.refetch()}>Retry</button>
-          </div>
-        )}
-        {thing.commentCountsUnavailable && (
-          <div role="status" className="mt-3 text-xs text-amber-700">
-            Comment counts could not be loaded.
-            <button type="button" className="ml-2 underline" onClick={() => void live.refetch()}>Retry</button>
-          </div>
-        )}
+        <ThingIdentityHeader
+          variant="court"
+          title={thing.title}
+          headerAction={headerAction}
+          viewOnly={viewOnly}
+          onRetry={() => void live.refetch()}
+          creatorName={thing.creator.name}
+          updatedAt={thing.updatedAt}
+          showOverviewLoadError={thing.detailLevel === "overview" && Boolean(live.error)}
+          commentCountsUnavailable={thing.commentCountsUnavailable}
+        />
 
         <div className="space-y-4 pt-4">
-          {/* People / Status Row */}
-          <div className="flex flex-wrap items-center justify-between gap-4 py-3">
-            <div className="flex items-center gap-7">
-              <div className="flex items-center gap-2.5">
-                <PersonAvatar
-                  name={thing.owner.name}
-                  initials={thing.owner.initials}
-                  src={ownerAvatar}
-                  size={30}
-                />
-                <div>
-                  <span className="block text-[12px] font-medium text-black leading-tight">
-                    {thing.owner.name}
-                  </span>
-                  <span className="block text-[12px] text-[#3a4675] mt-0.5">Owner</span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2.5">
-                <PersonAvatar
-                  name={thing.assignee.name}
-                  initials={thing.assignee.initials}
-                  src={assigneeAvatar}
-                  size={30}
-                />
-                <div>
-                  <span className="block text-[12px] font-medium text-black leading-tight">
-                    {thing.assignee.name}
-                  </span>
-                  <span className="block text-[12px] text-[#3a4675] mt-0.5">
-                    Assignee{isAssigneeSameAsOwner ? "" : " • You"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <span className="text-[12px] text-[#3a4675]">
-                {thing.acknowledgement === "waiting_for_catch" ? "Waiting for Catch" : "Caught"}
-              </span>
-              {(() => {
-                const isSorted = thing.workStatus === "sorted";
-                const isCancelled = thing.workStatus === "cancelled";
-                const inProgress =
-                  !isSorted &&
-                  !isCancelled &&
-                  (thing.workStatus === "under_progress" || thing.acknowledgement === "caught");
-                const label = isCancelled
-                  ? "Cancelled"
-                  : isSorted
-                    ? "Sorted"
-                    : inProgress
-                      ? "Under Progress"
-                      : "Not Started";
-                return (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f0f2fe] px-2.5 py-1.5 text-[12px] font-medium text-[#975ee2]">
-                    <span
-                      className={cn(
-                        "h-2 w-2 rounded-full",
-                        isSorted ? "bg-emerald-500" : inProgress ? "bg-[#975ee2]" : "bg-slate-400",
-                      )}
-                    />
-                    {label}
-                  </span>
-                );
-              })()}
-            </div>
-          </div>
-
-          {/* Info cards: Due · Assigned pace */}
-          <div className="grid grid-cols-[1fr_1.6fr] items-center rounded-[8px] border border-[#f0f1f7] bg-white py-2">
-            <div className="flex items-center gap-2 px-4">
-              <Calendar className="h-4 w-4 shrink-0 text-[#3a4675]" />
-              <div className="min-w-0">
-                <div className="text-[12px] text-[#3a4675]">Due</div>
-                <div className={cn("text-[12px] font-medium", dueLabel ? "text-[#f71a24]" : "text-muted-foreground")}>
-                  {dueLabel ?? "No due date"}
-                </div>
-              </div>
-            </div>
-            <div className="border-l border-[#f0f1f7] px-4">
-              <div className="mb-1 text-[12px] text-[#3a4675]">Assigned pace</div>
-              <div className="inline-flex rounded-[6px] bg-[#f0f1f9] p-0.5">
-                {(["now", "next", "later"] as const).map((pace) => (
-                  <button
-                    key={pace}
-                    type="button"
-                    disabled={busy || !caps?.canSetPace}
-                    onClick={() =>
-                      run.mutate(
-                        withOptimisticPatch(qc, thing.id, { personalPace: pace }, async () => {
-                          await rpcSetPersonalPace(thing.id, pace);
-                        }),
-                      )
-                    }
-                    className={cn(
-                      "h-[22px] min-w-[48px] rounded-[5px] px-2 text-[12px] font-medium capitalize transition-colors cursor-pointer disabled:cursor-not-allowed",
-                      activePace === pace
-                        ? "bg-[#975ee2] text-white"
-                        : "text-[#3a4675] hover:text-[#000533]",
-                    )}
-                  >
-                    {pace}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Action buttons & bucket link */}
-          <div className="flex flex-wrap items-center justify-between gap-3 py-2.5 border-b border-[#eef0f6]">
-            <div className="flex items-center gap-2">
-              {caps?.canCatch ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run.mutate(
-                      withOptimisticPatch(
-                        qc,
-                        thing.id,
-                        { acknowledgement: "caught", workStatus: "under_progress", personalPace: "next" },
-                        async () => {
-                          await rpcCatchAndStart(thing.id);
-                          toast.success("Caught — now in progress.");
-                        },
-                      ),
-                    )
-                  }
-                  className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-[#975ee2] px-3.5 text-[12px] font-medium text-white hover:brightness-95 disabled:opacity-60 transition cursor-pointer"
-                >
-                  Catch
-                </button>
-              ) : caps?.canSort ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run.mutate(
-                      withOptimisticPatch(
-                        qc,
-                        thing.id,
-                        { workStatus: "sorted", sortedAt: new Date().toISOString() },
-                        async () => {
-                          await rpcSortThing(thing.id);
-                          toast.success("Nicely sorted.");
-                          onAfterTerminalAction?.();
-                        },
-                      ),
-                    )
-                  }
-                  className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] bg-[#975ee2] px-3.5 text-[12px] font-medium text-white hover:brightness-95 disabled:opacity-60 transition cursor-pointer"
-                >
-                  <Check className="h-4 w-4" />
-                  Mark Sorted
-                </button>
-              ) : null}
-            </div>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  disabled={busy}
-                  className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#3a4675] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-60"
-                  title={currentBucket?.name ? `Bucket: ${currentBucket.name}` : "Add to bucket"}
-                >
-                  <Folder className="h-3.5 w-3.5" />
-                  <span>{currentBucket?.name || "Add to bucket"}</span>
-                  <ChevronDown className="h-3 w-3 text-[#5d6786]" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56 bg-white border border-border/70 rounded-xl p-1 z-50">
-                {buckets.length === 0 ? (
-                  <DropdownMenuItem disabled className="text-[12px]">
-                    No buckets yet
-                  </DropdownMenuItem>
-                ) : (
-                  buckets.map((b) => (
-                    <DropdownMenuItem
-                      key={b.id}
-                      onClick={() =>
-                        run.mutate(async () => {
-                          if (currentBucket && currentBucket.id === b.id) return;
-                          if (currentBucket) await rpcRemoveFromBucket(currentBucket.id, thing.id);
-                          await rpcAddToBucket(b.id, thing.id);
-                          toast.success(currentBucket ? "Bucket changed." : "Added to bucket.");
-                        })
-                      }
-                      className="flex items-center justify-between gap-2 text-[12px] rounded-lg px-2.5 py-1.5 cursor-pointer"
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <Folder className="h-3.5 w-3.5 text-[#975ee2]" />
-                        <span className="truncate">{b.name}</span>
-                      </span>
-                      {currentBucket?.id === b.id && <Check className="h-3.5 w-3.5 text-[#975ee2]" />}
-                    </DropdownMenuItem>
-                  ))
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <ThingStatusControls
+            variant="court"
+            thing={thing}
+            caps={caps}
+            busy={busy}
+            activePace={activePace}
+            onSetPace={handleSetPace}
+            currentBucket={currentBucket}
+            buckets={buckets}
+            onSelectBucket={handleSelectBucket}
+            ownerAvatar={ownerAvatar}
+            assigneeAvatar={assigneeAvatar}
+            isAssigneeSameAsOwner={isAssigneeSameAsOwner}
+            dueLabel={dueLabel}
+            onCatch={handleCatchAndStart}
+            onSort={handleSort}
+          />
 
           {/* Description Section */}
           {thing.description ? (
@@ -972,534 +672,288 @@ export function ThingDetailContent({
             </div>
           ) : null}
 
-          {/* Files Section: strictly dynamic */}
-          <div className="py-3 border-b border-border/40">
-            <input
-              ref={thingFileInputRef}
-              type="file"
-              multiple
-              onChange={handleThingFileUpload}
-              className="hidden"
-              accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
-            />
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-[13px] font-medium text-[#000533]">Files</span>
-                {displayFiles.length > 0 && (
-                  <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#eef0f6] px-1 text-[12px] font-medium text-[#000533]">
-                    {displayFiles.length}
-                  </span>
-                )}
-              </div>
-              {!viewOnly && (
-                <button
-                  type="button"
-                  onClick={() => thingFileInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 text-[12px] font-medium text-[#975ee2] hover:opacity-80 transition-opacity cursor-pointer"
-                >
-                  + Add file
-                </button>
-              )}
-            </div>
-            {((thing.detailLevel === "overview" && live.isLoading) || thing.attachmentsUnavailable) && (
-              <div role="status" className="mb-2 text-xs text-amber-700">
-                {thing.attachmentsUnavailable ? "Files could not be loaded." : "Loading files…"}
-                {thing.attachmentsUnavailable && (
-                  <button type="button" className="ml-2 underline" onClick={() => void live.refetch()}>Retry</button>
-                )}
-              </div>
-            )}
-            {displayFiles.length > 0 ? (
-              <div className="overflow-hidden rounded-[8px] border border-[#eeeff6] bg-[#fdfcfd]">
-                {displayFiles.map((file, idx) => {
-                  const isSelected = file.id === activeFileId;
-                  const chip = fileTypeChip(file.type);
-                  return (
-                    <button
-                      key={file.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedFileId(file.id);
-                        onFileSelect?.(file);
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-2.5 px-3 py-2 text-left cursor-pointer outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                        idx > 0 && "border-t border-[#eeeff6]",
-                        isSelected ? "bg-[#f3f6ff]" : "hover:bg-[#f6f7fb]",
-                      )}
-                    >
-                      <span
-                        className="inline-flex h-[22px] items-center justify-center rounded-[6px] border px-2 text-[12px] font-medium uppercase"
-                        style={{ backgroundColor: chip.bg, color: chip.text, borderColor: chip.border }}
-                      >
-                        {chip.label}
-                      </span>
-                      <span className="flex-1 truncate text-[12px] text-black">{file.name}</span>
-                      {file.sizeLabel && (
-                        <span className="shrink-0 text-[12px] text-[#515b8e]">{file.sizeLabel}</span>
-                      )}
-                      {file.isNew && (
-                        <span className="shrink-0 rounded bg-[#975ee2] px-1 py-0.5 text-[12px] font-bold text-white">
-                          New
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-[12px] text-[#6a769c] italic">No files attached yet</p>
-            )}
-          </div>
+          <ThingAttachments
+            files={displayFiles}
+            activeFileId={activeFileId}
+            viewOnly={viewOnly}
+            isLoading={thing.detailLevel === "overview" && live.isLoading}
+            attachmentsUnavailable={Boolean(thing.attachmentsUnavailable)}
+            onRetry={() => void live.refetch()}
+            onSelectFile={(file) => {
+              setSelectedFileId(file.id);
+              onFileSelect?.(file);
+            }}
+            onAddFileClick={() => thingFileInputRef.current?.click()}
+            fileInput={
+              <input
+                ref={thingFileInputRef}
+                type="file"
+                multiple
+                onChange={handleThingFileUpload}
+                className="hidden"
+                accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
+              />
+            }
+          />
 
-          {/* Comments and Activity Section */}
-          <div className="pt-3">
-            <div className="flex items-center gap-6 border-b border-border/60 pb-2">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setTab("comments")}
-                  className={cn(
-                    "text-[12px] font-medium transition-colors flex items-center gap-1.5 cursor-pointer pb-2 -mb-2",
-                    tab === "comments"
-                      ? "text-[#975ee2] border-b-2 border-[#975ee2]"
-                      : "text-[#2b2e55] hover:text-[#000533]",
-                  )}
-                >
-                  <span>Comments</span>
-                  <span
-                    className={cn(
-                      "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[12px] font-medium",
-                      tab === "comments" ? "bg-[#f0eafe] text-[#975ee2]" : "bg-[#eef0f6] text-[#2b2e55]",
-                    )}
-                  >
-                    {comments.length}{thread.commentsHasMore ? "+" : ""}
-                  </span>
-                </button>
-                {(thing.unreadCommentCount ?? 0) > 0 && (
-                  <span className="text-[12px] font-medium text-[#975ee2] pb-2 -mb-2">
-                    {thing.unreadCommentCount} new
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setTab("activity")}
-                className={cn(
-                  "text-[12px] font-medium transition-colors cursor-pointer pb-2 -mb-2",
-                  tab === "activity"
-                    ? "text-[#975ee2] border-b-2 border-[#975ee2]"
-                    : "text-[#2b2e55] hover:text-[#000533]",
-                )}
-              >
-                Activity
-              </button>
-            </div>
-
-            {tab === "comments" ? (
-              <div className="pt-3 space-y-3">
-                {thread.commentsHasMore || thread.commentsOlderError ? (
-                  <button type="button" disabled={thread.commentsLoadingOlder} onClick={() => void thread.loadOlderComments()} className="w-full rounded-lg border border-border px-3 py-2 text-xs text-primary disabled:opacity-50">
-                    {thread.commentsLoadingOlder ? "Loading older comments…" : thread.commentsOlderError ? "Couldn't load older comments. Retry" : "Load older comments"}
-                  </button>
-                ) : null}
-                {thread.commentsError && comments.length === 0 ? <p role="alert" className="text-xs text-destructive">Couldn't load comments. Retry by reopening this Thing.</p> : null}
-                {comments.length === 0 ? (
-                  <p className="text-[12px] text-muted-foreground py-3 italic text-center">
-                    No comments yet.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {comments.map((entry, idx) => {
-                      const unread = thing.unreadCommentCount ?? 0;
-                      const isFirstNew = unread > 0 && idx === Math.max(0, comments.length - unread);
-                      return (
-                        <div key={entry.id} className="space-y-3">
-                          {isFirstNew && (
-                            <div className="relative my-3 flex items-center justify-center">
-                              <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-blue-500" />
-                              </div>
-                              <span className="relative bg-white px-3 text-[12px] font-semibold text-blue-600">
-                                New comments
-                              </span>
-                            </div>
-                          )}
-                          <CommentRow
-                            author={entry.author}
-                            avatarUrl={entry.avatarUrl}
-                            body={entry.body}
-                            at={entry.at}
-                            sending={entry.sending}
-                            attachments={entry.attachments}
-                            onFileSelect={onFileSelect}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Comment attachments preview */}
-                {commentAttachments.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-bottom-1">
-                    {commentAttachments.map((att) => (
-                      <div
-                        key={att.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-800"
-                      >
-                        {att.type === "image" && att.url ? (
-                          <img src={att.url} alt={att.name} className="h-4 w-4 rounded object-cover" />
-                        ) : (
-                          <span
-                            className={cn(
-                              "flex h-[18px] px-1 items-center justify-center rounded text-[12px] font-bold uppercase",
-                              att.type === "pdf"
-                                ? "bg-red-50 text-red-600 border border-red-200"
-                                : att.type === "excel"
-                                  ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
-                                  : att.type === "docx"
-                                    ? "bg-blue-50 text-blue-600 border border-blue-200"
-                                    : att.type === "video"
-                                      ? "bg-purple-50 text-purple-600 border border-purple-200"
-                                      : "bg-slate-100 text-slate-600",
-                            )}
-                          >
-                            {att.type}
-                          </span>
-                        )}
-                        <span className="max-w-[130px] truncate">{att.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => setCommentAttachments((prev) => prev.filter((f) => f.id !== att.id))}
-                          className="ml-0.5 flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          aria-label={`Remove ${att.name}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Reply input box */}
-                <input
-                  ref={commentFileInputRef}
-                  type="file"
-                  multiple
-                  onChange={handleCommentFileChange}
-                  className="hidden"
-                  accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
-                />
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    submitComment();
-                  }}
-                  className="flex items-center gap-2 rounded-[9px] border border-[#e9ecf4] bg-[#fdfdfe] px-3 py-2 mt-4"
-                >
-                  <button
-                    type="button"
-                    onClick={() => commentFileInputRef.current?.click()}
-                    className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                    title="Attach file (photo, video, doc, excel, etc.)"
-                    aria-label="Attach file"
-                  >
-                    <Paperclip className="h-4 w-4" />
-                  </button>
-                  <input
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder="Reply to this Thing..."
-                    disabled={thread.post.isPending}
-                    className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground outline-none py-1"
-                  />
-                  <button
-                    type="button"
-                    className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                    aria-label="Mention someone"
-                    title="Mention someone"
-                  >
-                    <AtSign className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={(!comment.trim() && commentAttachments.length === 0) || thread.post.isPending}
-                    className="rounded-[6px] bg-[#975ee2] hover:brightness-95 text-white font-medium text-[12px] px-3.5 py-1.5 transition disabled:opacity-50 cursor-pointer"
-                  >
-                    Send
-                  </button>
-                </form>
-              </div>
-            ) : (
-              <ul className="space-y-2 pt-3">
-                {thread.activityHasMore || thread.activityOlderError ? (
-                  <li><button type="button" disabled={thread.activityLoadingOlder} onClick={() => void thread.loadOlderActivity()} className="w-full rounded-lg border border-border px-3 py-2 text-xs text-primary disabled:opacity-50">
-                    {thread.activityLoadingOlder ? "Loading older activity…" : thread.activityOlderError ? "Couldn't load older activity. Retry" : "Load older activity"}
-                  </button></li>
-                ) : null}
-                {thread.activityError && events.length === 0 ? <li role="alert" className="text-xs text-destructive">Couldn't load activity. Retry by reopening this Thing.</li> : null}
-                {events.map((event) => (
-                  <li key={event.id} className="text-[12px] text-muted-foreground">
-                    <span className="font-medium text-foreground">
-                      {event.event.replaceAll("_", " ")}
-                    </span>
-                    <span className="ml-2">{format(new Date(event.at), "MMM d · h:mm a")}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <ThingDiscussion
+            variant="court"
+            tab={tab}
+            onTabChange={setTab}
+            comments={comments}
+            commentsHasMore={thread.commentsHasMore}
+            commentsOlderError={Boolean(thread.commentsOlderError)}
+            commentsLoadingOlder={thread.commentsLoadingOlder}
+            onLoadOlderComments={() => void thread.loadOlderComments()}
+            commentsError={Boolean(thread.commentsError)}
+            unreadCommentCount={thing.unreadCommentCount ?? 0}
+            events={events}
+            activityHasMore={thread.activityHasMore}
+            activityOlderError={Boolean(thread.activityOlderError)}
+            activityLoadingOlder={thread.activityLoadingOlder}
+            onLoadOlderActivity={() => void thread.loadOlderActivity()}
+            activityError={Boolean(thread.activityError)}
+            commentAttachments={commentAttachments}
+            onRemoveCommentAttachment={handleRemoveCommentAttachment}
+            comment={comment}
+            onCommentChange={setComment}
+            onSubmitComment={submitComment}
+            postIsPending={thread.post.isPending}
+            onOpenCommentFileDialog={() => commentFileInputRef.current?.click()}
+            commentFileInput={
+              <input
+                ref={commentFileInputRef}
+                type="file"
+                multiple
+                onChange={handleCommentFileChange}
+                className="hidden"
+                accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
+              />
+            }
+            onFileSelect={onFileSelect}
+          />
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="min-h-full">
-      <header className="border-b border-border/70 px-5 py-4 text-left">
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="text-[18px] font-semibold leading-snug text-foreground">{thing.title}</h2>
-          {headerAction}
-        </div>
-        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
-          <span className="capitalize">{thing.context}</span>
-          {thing.listName ? (
-            <>
-              <span aria-hidden="true">·</span>
-              <span>{thing.listName}</span>
-            </>
-          ) : null}
-          <span aria-hidden="true">·</span>
-          <span>Updated {format(new Date(thing.updatedAt), "MMM d · h:mm a")}</span>
-        </p>
-        {viewOnly && <ThingViewOnlyBanner />}
-        {(thing.commentCountsUnavailable || thing.attachmentsUnavailable || (thing.detailLevel === "overview" && live.error)) && (
-          <div role="alert" className="mt-3 text-xs text-amber-700">
-            Some Thing details could not be loaded.
-            <button type="button" className="ml-2 underline" onClick={() => void live.refetch()}>Retry</button>
-          </div>
-        )}
-      </header>
+  const moreActionsButton = hasMoreActions ? (
+    <button
+      type="button"
+      onClick={() => setMoreOpen((current) => !current)}
+      className="ml-auto inline-flex h-7 w-8 items-center justify-center rounded-lg border border-border bg-white text-foreground outline-none hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
+      aria-label="Show more Thing actions"
+      title="More actions"
+      aria-expanded={moreOpen}
+    >
+      <MoreHorizontal className="h-3.5 w-3.5" />
+    </button>
+  ) : null;
 
-      <div className="grid grid-cols-1 gap-4 px-5 py-4 xl:grid-cols-2">
-        <section data-detail-region="people" className="space-y-1.5 xl:col-span-2">
-          <h3 className="katalist-section-title">People</h3>
-          <div className="grid gap-2 rounded-lg border border-border/70 bg-white p-3 md:grid-cols-3">
-            <div className="flex min-h-7 items-center justify-between gap-2 md:block">
-              <span className="text-[12px] text-muted-foreground">Creator</span>
-              <PersonCell person={thing.creator} />
-            </div>
-            <div className="flex min-h-7 items-center justify-between gap-2 md:block">
-              <span className="text-[12px] text-muted-foreground">Owner</span>
-              <PersonCell person={thing.owner} />
-            </div>
-            <div className="flex min-h-7 items-center justify-between gap-2 md:block">
-              <span className="text-[12px] text-muted-foreground">Current Assignee</span>
-              <PersonCell person={thing.assignee} />
-            </div>
-          </div>
-          {!viewOnly && (
-            <label className="flex h-9 items-center gap-2 px-1 text-[12px] text-muted-foreground">
-              <UserPlus className="h-3.5 w-3.5 text-primary" />
-              <span className="font-medium text-foreground">Reassign</span>
-              <select
-                disabled={busy || !caps?.canReassign}
-                className="ml-auto h-8 max-w-[170px] rounded-lg border border-border bg-white px-2 text-[12px] text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                id="thing-detail-reassign"
-                value={thing.assignee.id}
-                onChange={(e) => {
-                  const targetId = e.target.value;
-                  if (!targetId || targetId === thing.assignee.id) return;
-                  const target = assignableList.find((p) => p.id === targetId);
-                  run.mutate(
-                    withOptimisticPatch(
-                      qc,
-                      thing.id,
-                      target
-                        ? { assignee: target, acknowledgement: "waiting_for_catch", personalPace: null, caughtAt: null }
-                        : {},
-                      async () => {
-                        await rpcReassignThing(thing.id, targetId);
-                        toast.success("Waiting for Catch.");
-                      },
-                    ),
-                  );
-                }}
-              >
-                {assignableList.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              {!caps?.canReassign ? <Lock className="h-3.5 w-3.5 text-muted-foreground" /> : null}
-            </label>
-          )}
-        </section>
-
-        {viewOnly ? (
-          currentBucket ? (
-            <section className="space-y-1.5 xl:col-span-2">
-              <h3 className="katalist-section-title">Bucket</h3>
-              <p className="text-[12px] text-muted-foreground">
-                In <span className="font-medium text-foreground">{currentBucket.name}</span>
-              </p>
-            </section>
-          ) : null
-        ) : caps?.canAddToBucket ? (
-          <section className="space-y-1.5 xl:col-span-2">
-            <h3 className="katalist-section-title">Add to Bucket</h3>
-            {currentBucket ? (
-              <p className="text-[12px] text-muted-foreground">
-                In <span className="font-medium text-foreground">{currentBucket.name}</span>
-              </p>
-            ) : null}
-            <select
+  const moreActionsPanel = moreOpen ? (
+    <div className="mb-3 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-white p-3">
+      <div className="mb-3 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setMoreOpen(false)}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground outline-none hover:border-primary/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Close Thing actions"
+          title="Close actions"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {canAssignOutside ? (
+        <AssignOutsideBlock
+          key={thing.id}
+          thingId={thing.id}
+          disabled={busy}
+          onIssued={(fn) => run.mutate(fn)}
+        />
+      ) : null}
+      {caps?.canSetDue ? (
+        <section className="mt-3 space-y-1.5 border-b border-border/70 pb-3">
+          <h3 className="katalist-section-title">Edit Due Date</h3>
+          <div className="flex gap-1.5">
+            <input
+              type="datetime-local"
+              value={due}
               disabled={busy}
-              className="h-8 w-full rounded-lg border border-border bg-white px-2 text-[12px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-              defaultValue=""
-              onChange={(e) => {
-                if (!e.target.value) return;
-                run.mutate(async () => {
-                  if (currentBucket && currentBucket.id !== e.target.value) {
-                    await rpcRemoveFromBucket(currentBucket.id, thing.id);
-                  }
-                  await rpcAddToBucket(e.target.value, thing.id);
-                  toast.success(currentBucket ? "Bucket changed." : "Added to bucket.");
-                });
-                e.target.value = "";
+              onChange={(e) => setDue(e.target.value)}
+              className="h-7 min-w-0 flex-1 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
+            />
+            <button
+              type="button"
+              disabled={busy}
+              className="h-7 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={() => {
+                if (!due) return;
+                const iso = new Date(due).toISOString();
+                run.mutate(
+                  withOptimisticPatch(qc, thing.id, { dueAt: iso, dueHasTime: true }, async () => {
+                    await rpcSetDue(thing.id, iso, true);
+                  }),
+                );
               }}
             >
-              <option value="">
-                {currentBucket ? "Change bucket…" : "Choose a private bucket…"}
-              </option>
-              {buckets.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
-          </section>
-        ) : null}
-
-        <section data-detail-region="controls" className="space-y-1.5">
-          <h3 className="katalist-section-title">Acknowledgement &amp; Status</h3>
-          <div className="flex flex-wrap gap-2">
-            <AcknowledgementBadge value={thing.acknowledgement} />
-            <WorkStatusBadge
-              value={thing.workStatus}
-              className={
-                thing.workStatus === "under_progress"
-                  ? "bg-status-next/10 text-status-next"
-                  : undefined
-              }
-            />
+              Set
+            </button>
           </div>
         </section>
+      ) : null}
+      {caps?.canCatch ||
+      caps?.canNudge ||
+      caps?.canSort ||
+      caps?.canCancel ||
+      caps?.canShred ? (
+        <div className="mt-3 space-y-3">
+          {caps?.canCatch ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                run.mutate(
+                  withOptimisticPatch(
+                    qc,
+                    thing.id,
+                    { acknowledgement: "caught", personalPace: "next", caughtAt: new Date().toISOString() },
+                    async () => {
+                      await rpcCatchThing(thing.id);
+                      toast.success("Caught.");
+                    },
+                  ),
+                )
+              }
+              className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[12px] font-medium text-primary hover:bg-white disabled:opacity-60"
+            >
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Hand className="h-3.5 w-3.5" />
+              )}
+              Caught It
+            </button>
+          ) : null}
 
-        {!terminal ? (
-          <section className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <h3 className="katalist-section-title">Pace</h3>
-              {!caps?.canSetPace ? <Lock className="h-3.5 w-3.5 text-muted-foreground" /> : null}
-            </div>
-            <div className="relative pt-1">
-              <div className="grid grid-cols-3">
-                {paces.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    disabled={busy || !caps?.canSetPace}
-                    onClick={() =>
-                      run.mutate(
-                        withOptimisticPatch(qc, thing.id, { personalPace: p }, async () => {
-                          await rpcSetPersonalPace(thing.id, p);
-                        }),
-                      )
-                    }
-                    className={cn(
-                      "relative z-10 h-7 text-[12px] font-medium uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      paceTone[p],
-                      !caps?.canSetPace && "cursor-not-allowed opacity-65",
-                    )}
-                  >
-                    {p.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              <div className="absolute left-[16.6667%] right-[16.6667%] top-8 h-[3px] rounded-full bg-[#d4d7de]" />
-              <span
-                className={cn(
-                  "absolute top-[25px] h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(88,71,255,0.18)]",
-                  activePace === "now"
-                    ? "bg-status-now"
-                    : activePace === "next"
-                      ? "bg-status-next"
-                      : "bg-status-later",
-                )}
-                style={{
-                  left:
-                    activePace === "now" ? "16.6667%" : activePace === "later" ? "83.3333%" : "50%",
-                }}
-                aria-hidden="true"
-              />
-            </div>
-          </section>
-        ) : null}
-
-        {!terminal ? (
-          <section className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <h3 className="katalist-section-title">Work Status</h3>
-              {!caps?.canSetStatus && !caps?.canSort ? (
-                <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+          {caps?.canNudge || caps?.canSort ? (
+            <div className="grid grid-cols-2 gap-2">
+              {caps?.canNudge ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run.mutate(async () => {
+                      await rpcNudgeThing(thing.id);
+                      toast.success("Just a gentle paw tap on this one.");
+                    })
+                  }
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Bell className="h-3 w-3" />
+                  Nudge
+                </button>
+              ) : null}
+              {caps?.canSort ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleSort}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Check className="h-3 w-3" />
+                  Sort
+                </button>
               ) : null}
             </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {statuses.map((s) => (
+          ) : null}
+
+          {caps?.canCancel || caps?.canShred ? (
+            <div className="grid grid-cols-2 gap-2">
+              {caps?.canCancel ? (
                 <button
-                  key={s}
                   type="button"
-                  disabled={
-                    busy || terminal || (s === "sorted" ? !caps?.canSort : !caps?.canSetStatus)
-                  }
-                  onClick={() =>
-                    run.mutate(
-                      withOptimisticPatch(
-                        qc,
-                        thing.id,
-                        s === "sorted" ? { workStatus: "sorted", sortedAt: new Date().toISOString() } : { workStatus: s },
-                        async () => {
-                          if (s === "sorted") {
-                            await rpcSortThing(thing.id);
+                  disabled={busy}
+                  onClick={() => {
+                    if (window.confirm("Are you sure you want to cancel this thing?")) {
+                      run.mutate(
+                        withOptimisticPatch(
+                          qc,
+                          thing.id,
+                          { workStatus: "cancelled", cancelledAt: new Date().toISOString() },
+                          async () => {
+                            await rpcCancelThing(thing.id);
+                            toast.success("Cancelled.");
                             onAfterTerminalAction?.();
-                          } else if (s === "not_started" || s === "under_progress") {
-                            await rpcSetWorkStatus(thing.id, s);
-                          }
-                        },
-                      ),
-                    )
-                  }
-                  className={cn(
-                    "flex h-8 items-center justify-center rounded-lg border px-2 text-center text-[12px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                    thing.workStatus === s
-                      ? "border-primary/30 bg-primary/5 text-primary"
-                      : "border-border bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                    (terminal || (s === "sorted" ? !caps?.canSort : !caps?.canSetStatus)) &&
-                      "cursor-not-allowed opacity-65",
-                  )}
+                          },
+                        ),
+                      );
+                    }
+                  }}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[12px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                 >
-                  {statusLabel(s)}
-                  {thing.workStatus === s &&
-                  (terminal || (s === "sorted" ? !caps?.canSort : !caps?.canSetStatus)) ? (
-                    <Lock className="ml-1 inline h-3 w-3" />
-                  ) : null}
+                  <Trash2 className="h-3 w-3" />
+                  Cancel Thing
                 </button>
-              ))}
+              ) : null}
+              {caps?.canShred ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run.mutate(async () => {
+                      await rpcShred(thing.id);
+                      toast.success("Shredded from your surfaces.");
+                      onAfterTerminalAction?.();
+                    })
+                  }
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border bg-white text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Shred for me
+                </button>
+              ) : null}
             </div>
-          </section>
-        ) : null}
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+
+  return (
+    <div className="min-h-full">
+      <ThingIdentityHeader
+        variant="default"
+        title={thing.title}
+        headerAction={headerAction}
+        viewOnly={viewOnly}
+        onRetry={() => void live.refetch()}
+        context={thing.context}
+        listName={thing.listName}
+        updatedAt={thing.updatedAt}
+        showCombinedError={Boolean(
+          thing.commentCountsUnavailable ||
+            thing.attachmentsUnavailable ||
+            (thing.detailLevel === "overview" && live.error),
+        )}
+      />
+
+      <div className="grid grid-cols-1 gap-4 px-5 py-4 xl:grid-cols-2">
+        <ThingStatusControls
+          variant="default"
+          thing={thing}
+          caps={caps}
+          busy={busy}
+          activePace={activePace}
+          onSetPace={handleSetPace}
+          currentBucket={currentBucket}
+          buckets={buckets}
+          onSelectBucket={handleSelectBucket}
+          viewOnly={viewOnly}
+          assignableList={assignableList}
+          onReassign={handleReassign}
+          terminal={terminal}
+          onSort={handleSort}
+          onSetWorkStatus={handleSetWorkStatus}
+        />
 
         <div
           data-detail-region="metadata"
@@ -1537,332 +991,38 @@ export function ThingDetailContent({
         </div>
       </div>
 
-      <div className="border-t border-border/70 bg-white px-5 py-4">
-        <div className="flex items-center gap-5">
-          {!caps?.canComment ? <Lock className="h-3.5 w-3.5 text-muted-foreground" /> : null}
-          {(["comments", "activity"] as const).map((id) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={cn(
-                "border-b-2 px-1 pb-2 text-[12px] font-medium capitalize outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                tab === id
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground",
-              )}
-            >
-              {id}
-              {id === "comments" && comments.length > 0 ? (
-                <span className="ml-1 text-[12px] text-primary">{comments.length}{thread.commentsHasMore ? "+" : ""}</span>
-              ) : null}
-            </button>
-          ))}
-          {hasMoreActions ? (
-            <button
-              type="button"
-              onClick={() => setMoreOpen((current) => !current)}
-              className="ml-auto inline-flex h-7 w-8 items-center justify-center rounded-lg border border-border bg-white text-foreground outline-none hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Show more Thing actions"
-              title="More actions"
-              aria-expanded={moreOpen}
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-        </div>
-        {moreOpen ? (
-          <div className="mb-3 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-white p-3">
-            <div className="mb-3 flex items-center justify-end">
-              <button
-                type="button"
-                onClick={() => setMoreOpen(false)}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground outline-none hover:border-primary/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Close Thing actions"
-                title="Close actions"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            {canAssignOutside ? (
-              <AssignOutsideBlock
-                key={thing.id}
-                thingId={thing.id}
-                disabled={busy}
-                onIssued={(fn) => run.mutate(fn)}
-              />
-            ) : null}
-            {caps?.canSetDue ? (
-              <section className="mt-3 space-y-1.5 border-b border-border/70 pb-3">
-                <h3 className="katalist-section-title">Edit Due Date</h3>
-                <div className="flex gap-1.5">
-                  <input
-                    type="datetime-local"
-                    value={due}
-                    disabled={busy}
-                    onChange={(e) => setDue(e.target.value)}
-                    className="h-7 min-w-0 flex-1 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="h-7 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => {
-                      if (!due) return;
-                      const iso = new Date(due).toISOString();
-                      run.mutate(
-                        withOptimisticPatch(qc, thing.id, { dueAt: iso, dueHasTime: true }, async () => {
-                          await rpcSetDue(thing.id, iso, true);
-                        }),
-                      );
-                    }}
-                  >
-                    Set
-                  </button>
-                </div>
-              </section>
-            ) : null}
-            {caps?.canCatch ||
-            caps?.canNudge ||
-            caps?.canSort ||
-            caps?.canCancel ||
-            caps?.canShred ? (
-              <div className="mt-3 space-y-3">
-                {caps?.canCatch ? (
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      run.mutate(
-                        withOptimisticPatch(
-                          qc,
-                          thing.id,
-                          { acknowledgement: "caught", personalPace: "next", caughtAt: new Date().toISOString() },
-                          async () => {
-                            await rpcCatchThing(thing.id);
-                            toast.success("Caught.");
-                          },
-                        ),
-                      )
-                    }
-                    className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[12px] font-medium text-primary hover:bg-white disabled:opacity-60"
-                  >
-                    {busy ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Hand className="h-3.5 w-3.5" />
-                    )}
-                    Caught It
-                  </button>
-                ) : null}
-
-                {caps?.canNudge || caps?.canSort ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {caps?.canNudge ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          run.mutate(async () => {
-                            await rpcNudgeThing(thing.id);
-                            toast.success("Just a gentle paw tap on this one.");
-                          })
-                        }
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <Bell className="h-3 w-3" />
-                        Nudge
-                      </button>
-                    ) : null}
-                    {caps?.canSort ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          run.mutate(
-                            withOptimisticPatch(
-                              qc,
-                              thing.id,
-                              { workStatus: "sorted", sortedAt: new Date().toISOString() },
-                              async () => {
-                                await rpcSortThing(thing.id);
-                                toast.success("Nicely sorted.");
-                                onAfterTerminalAction?.();
-                              },
-                            ),
-                          )
-                        }
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        <Check className="h-3 w-3" />
-                        Sort
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {caps?.canCancel || caps?.canShred ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {caps?.canCancel ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          if (window.confirm("Are you sure you want to cancel this thing?")) {
-                            run.mutate(
-                              withOptimisticPatch(
-                                qc,
-                                thing.id,
-                                { workStatus: "cancelled", cancelledAt: new Date().toISOString() },
-                                async () => {
-                                  await rpcCancelThing(thing.id);
-                                  toast.success("Cancelled.");
-                                  onAfterTerminalAction?.();
-                                },
-                              ),
-                            );
-                          }
-                        }}
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[12px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        Cancel Thing
-                      </button>
-                    ) : null}
-                    {caps?.canShred ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          run.mutate(async () => {
-                            await rpcShred(thing.id);
-                            toast.success("Shredded from your surfaces.");
-                            onAfterTerminalAction?.();
-                          })
-                        }
-                        className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border bg-white text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
-                      >
-                        Shred for me
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-        <section className="pt-4">
-          {tab === "comments" ? (
-            <div className="space-y-2">
-              {thread.commentsHasMore || thread.commentsOlderError ? (
-                <button type="button" disabled={thread.commentsLoadingOlder} onClick={() => void thread.loadOlderComments()} className="w-full rounded-md border border-border px-2 py-1 text-xs text-primary disabled:opacity-50">
-                  {thread.commentsLoadingOlder ? "Loading older comments…" : thread.commentsOlderError ? "Couldn't load older comments. Retry" : "Load older comments"}
-                </button>
-              ) : null}
-              {thread.commentsError && comments.length === 0 ? <p role="alert" className="text-xs text-destructive">Couldn't load comments. Retry by reopening this Thing.</p> : null}
-              {comments.length === 0 ? (
-                <p className="text-[12px] text-muted-foreground">No comments yet.</p>
-              ) : (
-                comments.map((c) => (
-                  <CommentRow
-                    key={c.id}
-                    author={c.author}
-                    avatarUrl={c.avatarUrl}
-                    body={c.body}
-                    at={c.at}
-                    sending={c.sending}
-                    attachments={c.attachments}
-                    onFileSelect={onFileSelect}
-                  />
-                ))
-              )}
-              <form
-                className="flex flex-col gap-2"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  submitComment();
-                }}
-              >
-                {commentAttachments.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {commentAttachments.map((att) => (
-                      <span key={att.id} className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[12px]">
-                        <span className="truncate max-w-[100px]">{att.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => setCommentAttachments((prev) => prev.filter((f) => f.id !== att.id))}
-                          className="flex h-6 w-6 items-center justify-center rounded outline-none hover:bg-slate-200/70 focus-visible:ring-2 focus-visible:ring-ring"
-                          aria-label={`Remove ${att.name}`}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => commentFileInputRef.current?.click()}
-                    className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    title="Attach file"
-                    aria-label="Attach file"
-                  >
-                    <Paperclip className="h-3.5 w-3.5" />
-                  </button>
-                  <input
-                    value={comment}
-                    disabled={!caps?.canComment || thread.post.isPending}
-                    onChange={(e) => setComment(e.target.value)}
-                    placeholder={thread.post.isPending ? "Sending…" : "Write a comment…"}
-                    className="h-7 flex-1 rounded-md border border-border bg-white px-2 text-[12px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                  <button
-                    type="submit"
-                    disabled={!caps?.canComment || (!comment.trim() && commentAttachments.length === 0) || thread.post.isPending}
-                    className="inline-flex items-center gap-1 h-7 rounded-md bg-primary px-2.5 text-[12px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
-                  >
-                  {thread.post.isPending ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Sending…</span>
-                    </>
-                  ) : (
-                    <span>Post</span>
-                  )}
-                </button>
-                </div>
-              </form>
-              {thing.workStatus === "sorted" ? (
-                <p className="text-[12px] text-muted-foreground">
-                  Comments stay open. They don’t reopen Sorted.
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            <ul className="space-y-2">
-              {thread.activityHasMore || thread.activityOlderError ? (
-                <li><button type="button" disabled={thread.activityLoadingOlder} onClick={() => void thread.loadOlderActivity()} className="w-full rounded-md border border-border px-2 py-1 text-xs text-primary disabled:opacity-50">
-                  {thread.activityLoadingOlder ? "Loading older activity…" : thread.activityOlderError ? "Couldn't load older activity. Retry" : "Load older activity"}
-                </button></li>
-              ) : null}
-              {thread.activityError && events.length === 0 ? <li role="alert" className="text-xs text-destructive">Couldn't load activity. Retry by reopening this Thing.</li> : null}
-              {events.length === 0 ? (
-                <p className="text-[12px] text-muted-foreground">Movement will appear here.</p>
-              ) : (
-                events.map((ev) => (
-                  <li key={ev.id} className="text-[12px] text-muted-foreground">
-                    <span className="font-medium text-foreground">
-                      {ev.event.replaceAll("_", " ")}
-                    </span>
-                    <span className="ml-2">{format(new Date(ev.at), "MMM d · h:mm a")}</span>
-                  </li>
-                ))
-              )}
-            </ul>
-          )}
-        </section>
-      </div>
+      <ThingDiscussion
+        variant="default"
+        tab={tab}
+        onTabChange={setTab}
+        comments={comments}
+        commentsHasMore={thread.commentsHasMore}
+        commentsOlderError={Boolean(thread.commentsOlderError)}
+        commentsLoadingOlder={thread.commentsLoadingOlder}
+        onLoadOlderComments={() => void thread.loadOlderComments()}
+        commentsError={Boolean(thread.commentsError)}
+        unreadCommentCount={thing.unreadCommentCount ?? 0}
+        events={events}
+        activityHasMore={thread.activityHasMore}
+        activityOlderError={Boolean(thread.activityOlderError)}
+        activityLoadingOlder={thread.activityLoadingOlder}
+        onLoadOlderActivity={() => void thread.loadOlderActivity()}
+        activityError={Boolean(thread.activityError)}
+        commentAttachments={commentAttachments}
+        onRemoveCommentAttachment={handleRemoveCommentAttachment}
+        comment={comment}
+        onCommentChange={setComment}
+        onSubmitComment={submitComment}
+        postIsPending={thread.post.isPending}
+        onOpenCommentFileDialog={() => commentFileInputRef.current?.click()}
+        commentFileInput={null}
+        onFileSelect={onFileSelect}
+        canComment={caps?.canComment}
+        workStatus={thing.workStatus}
+        hasMoreActions={hasMoreActions}
+        moreActionsButton={moreActionsButton}
+        moreActionsPanel={moreActionsPanel}
+      />
     </div>
   );
 }

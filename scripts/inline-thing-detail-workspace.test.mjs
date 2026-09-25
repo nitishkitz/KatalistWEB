@@ -77,10 +77,17 @@ test("Court stack card and lane implementations remain independent", () => {
 
 test("shared detail content is compact and omits redundant standalone and importance labels", () => {
   const detail = read("src/features/things/ThingDetailContent.tsx");
+  // T09 item 5 moved the default variant's People and Acknowledgement &
+  // Status sections (data-detail-region="people"/"controls") out of
+  // ThingDetailContent.tsx into the shared ThingStatusControls component;
+  // data-detail-region="metadata" (Due Date/Source) has no court-variant
+  // equivalent and stayed inline in ThingDetailContent.tsx.
+  const statusControls = read("src/features/things/components/ThingStatusControls.tsx");
+  const combined = `${detail}\n${statusControls}`;
 
-  assert.match(detail, /data-detail-region="people"/);
-  assert.match(detail, /data-detail-region="controls"/);
+  assert.match(statusControls, /data-detail-region="people"/);
+  assert.match(statusControls, /data-detail-region="controls"/);
   assert.match(detail, /data-detail-region="metadata"/);
-  assert.doesNotMatch(detail, /thing\.listName \?\? "Standalone"/);
-  assert.doesNotMatch(detail, /importanceDisplay|importanceTone/);
+  assert.doesNotMatch(combined, /thing\.listName \?\? "Standalone"/);
+  assert.doesNotMatch(combined, /importanceDisplay|importanceTone/);
 });

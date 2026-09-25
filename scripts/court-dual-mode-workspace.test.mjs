@@ -45,12 +45,19 @@ test("stack cards use real optional metadata and approved actions", () => {
 test("focused Thing detail remains in natural page flow", () => {
   const focus = read("src/features/court/CourtFocusView.tsx");
   const detail = read("src/features/things/ThingDetailContent.tsx");
+  // T09 item 5 moved the default variant's Pace section (and every other
+  // status-control section) out of ThingDetailContent.tsx into the shared
+  // ThingStatusControls component -- read that too so this assertion still
+  // covers the same rendered markup, not just wherever the JSX happens to
+  // physically live now.
+  const statusControls = read("src/features/things/components/ThingStatusControls.tsx");
+  const combined = `${detail}\n${statusControls}`;
 
   assert.doesNotMatch(focus, /ThingDetailSheet|SheetContent|Drawer|Overlay/);
   assert.doesNotMatch(focus, /overflow-y-auto|max-h-\[calc/);
-  assert.doesNotMatch(detail, />My Pace</);
-  assert.doesNotMatch(detail, /Owner Importance/);
-  assert.match(detail, />Pace</);
+  assert.doesNotMatch(combined, />My Pace</);
+  assert.doesNotMatch(combined, /Owner Importance/);
+  assert.match(combined, />Pace</);
 });
 
 test("Court preserves With Others and one desktop Magic Box", () => {
@@ -73,11 +80,19 @@ test("Court preserves With Others and one desktop Magic Box", () => {
 
 test("Court detail uses the approved compact state-driven surface", () => {
   const detail = read("src/features/things/ThingDetailContent.tsx");
+  // T09 item 5 moved the court variant's Catch/Mark Sorted button and
+  // bucket dropdown out of ThingDetailContent.tsx into the shared
+  // ThingStatusControls component -- ThingDetailContent.tsx's own court
+  // branch now just renders <ThingStatusControls variant="court" .../>,
+  // so the actual "Mark Sorted"/"Add to bucket" markup is asserted on in
+  // that component's own court branch instead.
+  const statusControls = read("src/features/things/components/ThingStatusControls.tsx");
 
-  assert.match(detail, /if \(variant === "court"\)[\s\S]*Mark Sorted/);
+  assert.match(detail, /if \(variant === "court"\)[\s\S]*<ThingStatusControls[\s\S]*variant="court"/);
+  assert.match(statusControls, /variant === "court"[\s\S]*Mark Sorted/);
   // "Choose Buckets" / "Details ›" were replaced by the "Add to bucket"
   // dropdown in the bucket-detail redesign; this Thing detail view is
   // itself the details surface, so no separate "Details ›" link exists.
-  assert.match(detail, /if \(variant === "court"\)[\s\S]*Add to bucket/);
+  assert.match(statusControls, /variant === "court"[\s\S]*Add to bucket/);
   assert.match(read("src/features/court/CourtFocusView.tsx"), /variant="court"/);
 });

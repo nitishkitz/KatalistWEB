@@ -10,6 +10,10 @@ const content = readFileSync(
   new URL("../src/features/things/ThingDetailContent.tsx", import.meta.url),
   "utf8",
 );
+const identityHeader = readFileSync(
+  new URL("../src/features/things/components/ThingIdentityHeader.tsx", import.meta.url),
+  "utf8",
+);
 const stackGesture = readFileSync(
   new URL("../src/features/court/use-stack-gesture.ts", import.meta.url),
   "utf8",
@@ -47,9 +51,17 @@ test("E02: both ThingDetailContent variants render the shared ThingViewOnlyBanne
   // render genuinely different UIs (different layouts, different
   // Comments/Activity implementations), so this is deliberately the only
   // section pulled out in this pass; see KATALIST_D_TO_H_PROGRESS.md.
-  const occurrences = [...content.matchAll(/<ThingViewOnlyBanner\s*\/>/g)];
+  //
+  // T09 item 5 moved both variants' title/subtitle/banner block out of
+  // ThingDetailContent.tsx into the shared ThingIdentityHeader component,
+  // which is where the two <ThingViewOnlyBanner /> call sites (one per
+  // variant branch) now live -- ThingDetailContent.tsx itself only
+  // renders <ThingIdentityHeader variant="..." .../> once per branch.
+  const occurrences = [...identityHeader.matchAll(/<ThingViewOnlyBanner\s*\/>/g)];
   assert.equal(occurrences.length, 2, "one per variant branch");
-  assert.doesNotMatch(content, /View only mode · You can view details and post comments\./);
+  assert.doesNotMatch(identityHeader, /View only mode · You can view details and post comments\./);
+  assert.equal((content.match(/<ThingIdentityHeader\b/g) ?? []).length, 2, "one per variant branch");
+  assert.equal(content.includes("ThingViewOnlyBanner"), false);
 });
 
 test("Thing detail sheet delegates to one shared content implementation", () => {
