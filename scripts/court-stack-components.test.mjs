@@ -96,13 +96,15 @@ test("Court lane stacks render one active Thing over a capped, hidden decorative
 
 test("Court stack actions are capability-gated and route to canonical RPCs", () => {
   assert.match(laneStack, /getThingCapabilities\(activeThing, myActorId\)/);
-  // Pace capability gating and its RPC call live in the lane's
-  // swipe-gesture handler (runAction) only, with no button equivalent
-  // (that's the timed Snooze picker, a separate concept -- see the next
-  // test). Catch and Sort each have their own capability-gated button on
-  // the card itself (E01: Sort's button is new -- it used to be
-  // swipe-right/Thing-detail-only) that calls the same onAction() the
-  // gesture handler already dispatches to, not a second RPC path.
+  // The old (non-timed) "pace = later" RPC path lives in the lane's
+  // swipe-gesture handler (runAction) only, with no button equivalent --
+  // swipe-left itself no longer reaches that path at all (superseded by
+  // the timed Snooze picker below; see the T09 snooze-button test for its
+  // own button/keyboard equivalent). Catch and Sort each have their own
+  // capability-gated button on the card itself (E01: Sort's button is new
+  // -- it used to be swipe-right/Thing-detail-only) that calls the same
+  // onAction() the gesture handler already dispatches to, not a second RPC
+  // path.
   assert.match(stackCard, /capabilities\.canCatch && \(/);
   assert.match(stackCard, />\s*Catch\s*</);
   assert.match(stackCard, /capabilities\.canSort && \(/);
@@ -118,6 +120,15 @@ test("Court stack actions are capability-gated and route to canonical RPCs", () 
 test("Court stacks never use Doorman snooze and LATER cannot move farther left", () => {
   assert.doesNotMatch(`${stackCard}\n${laneStack}`, /snooze_breakthrough|snoozed_until/);
   assert.match(laneStack, /canMoveLater: capabilities\.canSetPace && lane !== "later"/);
+});
+
+test("T09: the timed-Snooze menu (swipe-left) has a button/keyboard equivalent, not swipe-only", () => {
+  // The card's Snooze button opens the exact same menu the swipe gesture
+  // does (CourtLaneStack's snoozeOpen/runSnooze) -- not a second path.
+  assert.match(stackCard, /onSnooze\?:\s*\(\)\s*=>\s*void/);
+  assert.match(stackCard, /onSnooze && \(/);
+  assert.match(stackCard, />\s*Snooze\s*</);
+  assert.match(laneStack, /onSnooze=\{\(\) => setSnoozeOpen\(true\)\}/);
 });
 
 test("Court focus navigator selects stable Thing identities with accessible buttons", () => {

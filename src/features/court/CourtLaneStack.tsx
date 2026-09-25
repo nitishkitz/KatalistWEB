@@ -909,6 +909,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   suppressClickRef={gesture.suppressClickRef}
                   onOpen={onOpen}
                   onAction={(action) => void runAction(action)}
+                  onSnooze={() => setSnoozeOpen(true)}
                 />
               </div>
 

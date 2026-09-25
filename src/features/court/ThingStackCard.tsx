@@ -19,6 +19,12 @@ type ThingStackCardProps = {
   suppressClickRef: MutableRefObject<boolean>;
   onOpen: (thing: Thing, origin: HTMLElement) => void;
   onAction: (action: CourtStackAction) => void;
+  /** T09/E01: swipe-left opens the timed-Snooze interval menu -- this gives
+   *  a button/keyboard equivalent for that exact same menu, rather than a
+   *  second, independent snooze path. Omitted (no button rendered) when
+   *  the caller has no active Thing to snooze, matching the swipe
+   *  gesture's own availability. */
+  onSnooze?: () => void;
 };
 
 const laneTone: Record<CourtLaneId, { text: string }> = {
@@ -90,7 +96,7 @@ const workLabel: Record<Thing["workStatus"], string> = {
 
 export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>(
   function ThingStackCard(
-    { thing, lane, myActorId, pendingAction, suppressClickRef, onOpen, onAction },
+    { thing, lane, myActorId, pendingAction, suppressClickRef, onOpen, onAction, onSnooze },
     ref,
   ) {
     const due = formatCourtDue(thing);
@@ -375,36 +381,52 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
             keyboard/click equivalent in the stack itself -- this button
             calls the exact same onAction("sort") the swipe gesture already
             dispatches (CourtLaneStack's runAction), not a second path. */}
-        {capabilities.canCatch && (
+        {(capabilities.canCatch || capabilities.canSort || onSnooze) && (
           <div
             onPointerDown={(e) => e.stopPropagation()}
             className="flex items-center gap-2 p-3 pt-2.5 border-t border-slate-100"
           >
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={(event) => run(event, "catch")}
-              style={{ backgroundColor: laneFigma[lane].primaryBtn }}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-            >
-              <span>Catch</span>
-            </button>
-          </div>
-        )}
-        {capabilities.canSort && (
-          <div
-            onPointerDown={(e) => e.stopPropagation()}
-            className="flex items-center gap-2 p-3 pt-2.5 border-t border-slate-100"
-          >
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={(event) => run(event, "sort")}
-              style={{ backgroundColor: laneFigma[lane].primaryBtn }}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-            >
-              <span>Mark Sorted</span>
-            </button>
+            {capabilities.canCatch && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={(event) => run(event, "catch")}
+                style={{ backgroundColor: laneFigma[lane].primaryBtn }}
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              >
+                <span>Catch</span>
+              </button>
+            )}
+            {capabilities.canSort && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={(event) => run(event, "sort")}
+                style={{ backgroundColor: laneFigma[lane].primaryBtn }}
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              >
+                <span>Mark Sorted</span>
+              </button>
+            )}
+            {/* T09/E01: swipe-left used to be the ONLY way to reach the
+                timed-Snooze menu -- no button/keyboard equivalent existed.
+                This opens the exact same menu (CourtLaneStack's
+                snoozeOpen/runSnooze), not a second snooze path. */}
+            {onSnooze && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSnooze();
+                }}
+                aria-label="Snooze"
+                title="Snooze"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] border border-slate-200 px-3 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              >
+                <span>Snooze</span>
+              </button>
+            )}
           </div>
         )}
       </article>
