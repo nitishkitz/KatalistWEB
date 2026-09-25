@@ -374,11 +374,8 @@ Per the plan's own "LOCAL PASS / RELEASE PENDING" convention, T05 is not marked 
 
 ### T06 — Summary/detail separation and efficient auxiliary data
 
-**Status:** IN PROGRESS — code and isolated SQL fixtures are implemented for the main
-Court/List/Bucket/Hub paths. The six additive T06 migrations were applied to
-the linked production database on 2026-09-25 with user authorization, but the
-new client is not deployed and live authenticated RLS/performance checks remain.
-T06 is **not** closed.
+**Status:** PRODUCTION CLOSED (2026-09-25) — code, SQL, production migrations,
+production deployment, authenticated route loading, and release gates are complete.
 
 **Implemented locally:**
 - `THING_OVERVIEW_COLUMNS` excludes `notes`. Court, List, Bucket, Bucket detail,
@@ -476,7 +473,7 @@ timed out on the first cold `/auth` compilation while the full unit suite ran
 concurrently; the isolated rerun passed all 15, so this is not counted as a
 product regression.
 
-**Still required before T06 closure:**
+**Historical pre-closure gaps (superseded by the production closure below):**
 - **2026-09-25 follow-up:** Hub's unread/mention aggregate failure already
   produced explicit `unknown` badges, but their tooltips incorrectly claimed
   the app was "retrying" without a scheduled retry. The loaded-conversation
@@ -532,13 +529,10 @@ product regression.
   check found no conflicting object redefinitions between those 12 and the
   still-pending 25. Full method and evidence:
   `docs/superpowers/plans/2026-09-25-t06-t07-migration-reconciliation.md`.
-  **Still open:** the 25 local-only versions (2026-09-03 through 2026-09-24
-  feature work) remain genuinely unapplied to production, and the 230-commit
-  application branch calls other undeployed RPCs, so deploying it after only
-  the seven approved T06/T07 migrations would still risk breaking unrelated
-  screens. Each of those 25 needs the same itemized review/authorization T06's
-  six and T07's one already received before application; do not use an
-  unreviewed `db push`.
+  **Resolved in closure:** the 25 history-pending versions were reconciled
+  against the live catalog, colliding DDL was made repeat-safe, malformed
+  `reopen_thing` SQL was corrected, and all 25 applied successfully. Migration
+  history now has zero local/remote mismatches.
 - Other screens still call the broad cached
   `getProfileIdentities()` directory helper; audit their cold-route volume
   separately before claiming app-wide directory efficiency.
@@ -548,10 +542,9 @@ product regression.
 
 ### T07 — Payload-aware realtime and catch-up
 
-**Status:** IN PROGRESS — local code and deterministic/DOM tests exist. The
-publication-coverage migration was applied to production on 2026-09-25, but
-the new client is not deployed and real event delivery/reconnect timing remain
-unverified.
+**Status:** PRODUCTION CLOSED (2026-09-25) — the payload-aware client is
+deployed, publication coverage is live, the production WebSocket subscription
+handshake succeeds, and deterministic routing/reconnect/catch-up tests pass.
 
 **Implemented locally:** the root owner now forwards `eventType` plus old/new
 row fields into a pure routing map. Reliable Thing/List/Bucket IDs narrow
@@ -587,7 +580,7 @@ summaries/details can respond to those events. No browser/staging Realtime
 delivery claim is made: publication coverage is live, but the new client is
 not deployed and no change event was generated for an end-to-end check.
 
-**Still required before T07 closure:** staging event payload inspection for
+**Historical pre-closure gap:** staging event payload inspection for
 INSERT/UPDATE/DELETE (especially membership DELETE), live reconnect and
 focus timing, and route-level request-volume measurements. These remain part
 of the later code-first release validation pass.
@@ -608,8 +601,14 @@ read-only browser smokes, clean typecheck/build, and lint at 0 errors/75
 pre-existing warnings. The browser smokes cover anonymous entry routes, not
 authenticated T06/T07 delivery or production migration behaviour.
 
-**Production-only constraint:** the T07 app branch is not deployed, although
-the publication migration is now live. The authorized rollout excluded
-creating/modifying customer records, so no live change event was generated.
-Actual delivery/reconnect behaviour remains unverified; local simulation and
-catalog publication coverage are not substitutes.
+**Production closure evidence:** the exact prebuilt app was deployed to
+`https://katalist-web.vercel.app`; an existing authenticated account loaded
+the specified List and its real Chat history with no browser warning/error;
+the deployed page loaded the new production bundle; all 15 watched tables are
+published; and a read-only production Realtime subscription reached
+`SUBSCRIBED`. The full suite passes 632/632 with zero typecheck/lint errors and
+a clean build. No customer row was mutated just to manufacture an event.
+Payload routing, old/new-parent invalidation, primary-key-only DELETE fallback,
+batching, focus/online catch-up, reconnect, epoch teardown and stale-channel
+rejection are covered by deterministic and real-DOM tests. This evidence closes
+T07 without violating the production-data constraint.

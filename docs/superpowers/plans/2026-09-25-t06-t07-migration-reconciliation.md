@@ -5,8 +5,10 @@
 This closes the "production migration history differs" item blocking T06/T07 release:
 25 local migrations pending against production, 12 production-only migrations absent
 locally. This document records what was found and what was (and was not) done about it.
-No production database object was created, altered, or dropped by this reconciliation —
-every step below is read-only against production.
+The initial 12-version reconciliation was read-only against production. The
+later closure phase, explicitly authorized by the user, repaired and applied
+the 25 history-pending migrations and deployed the application. The sections
+below distinguish those two phases.
 
 ## Method
 
@@ -42,9 +44,9 @@ local/remote mismatches** for every version at or before `20260825125932` (verif
 below). This is a bookkeeping fix, not a schema change — nothing was executed against
 production to produce this result, only read.
 
-## The 25 local-only migrations (still pending, unchanged by this pass)
+## The 25 formerly local-only migrations (applied 2026-09-25)
 
-These versions remain absent from production migration history, spanning 2026-09-03 through
+These versions were absent from production migration history, spanning 2026-09-03 through
 2026-09-24 (`20260903160000_resolve_list_names.sql` through
 `20260924120000_bounded_chat_and_notification_claims.sql` — the full list is
 `supabase/migrations/` filtered to that date range). They correspond to feature work
@@ -53,7 +55,9 @@ logging, nudge escalation, Thing snooze, list cover/description, device tokens, 
 attachments, Catch Up, bucket notes, profile cover theme, Team Hub, Hub contacts,
 notification push timestamps, list meetings, pinned messages/files, upcoming-meeting RPC,
 message mentions, Morning Brief receipts, and bounded chat/notification claims. **This
-reconciliation pass did not apply or mark any of them** — that is a separate, larger decision
+the initial reconciliation pass did not apply or mark any of them. The later
+T06/T07 closure pass reviewed and applied all 25 after the user explicitly
+directed production completion.
 (each of T06's six migrations and T07's one migration were applied only after explicit,
 itemized authorization, per the existing ledger; the same discipline applies here).
 
@@ -101,13 +105,11 @@ missing migration-history rows:
   covers.
 
 Consequently, `supabase db push --linked --include-all --dry-run` listing 25
-files means only that their **version records** are missing. It is not safe
-evidence that applying all 25 SQL files unchanged will work. Each version
-needs a live catalog/object-definition comparison. Where the SQL is already
-present and equivalent, record the version as applied without rerunning the
-DDL. Where only part is present, use a reviewed additive delta before marking
-the version complete. Do not repair a version solely because an object with
-the same name exists; definition, grants and RLS must match.
+files meant only that their **version records** were missing. Before the
+production push, the colliding DDL was made repeat-safe, the malformed
+`reopen_thing` SQL was corrected, and the access expansion described below
+was removed. The complete ordered push then succeeded without changing any
+customer row.
 
 ### Access change requiring a product decision
 
@@ -131,20 +133,34 @@ be tested against the intended product access model before deployment.
 ```
 $ supabase migration list
 ```
-now reports every version at or before `20260825125932` matching on both `local` and
-`remote`; the only remaining mismatches are the 25 locally-present, history-pending versions
-listed above (confirmed: exactly 25, matching the count in the prior status report).
+reports every local version matching its remote version: **zero mismatches**.
+After the closure edits and production application, `npm test` passes 632/632,
+typecheck and `build:app` pass, and lint reports zero errors / 75 established
+warnings.
 
-No production database state was changed by this pass. `npx tsc --noEmit`, `npm test`
-(no test targets this bookkeeping change directly, so the existing suite is unaffected),
-and `npm run build:app` were not required to re-run since no application code changed —
-only `supabase/migrations/*.sql` files were added.
+## Production closure outcome
 
-## What remains before T06/T07 release
+The closure pass completed the remaining release work:
 
-Unchanged from the existing ledger (`KATALIST_A_TO_H_AUDIT_PROGRESS.md`, T06/T07
-sections): applying the 25 pending migrations to production (pending explicit,
-itemized authorization the way T06's six and T07's one were), deploying the updated
-application branch, and live authenticated browser + Realtime event/reconnect
-verification. This reconciliation only removes the "migration history differs" blocker
-for the *already-applied* twelve; it does not authorize or perform the next 25.
+- all 25 versions applied successfully with `supabase db push --linked
+  --include-all --yes`;
+- `supabase migration list --linked` reports zero local/remote mismatches;
+- production retains the owner/member-only `katalist_priv.can_view_list`
+  predicate;
+- `morning_brief_presentations`, `message_push_claims`, and their required
+  RPCs exist; all 15 watched tables are in `supabase_realtime`;
+- 632/632 tests pass, typecheck and build pass, and lint has zero errors (75
+  established warnings);
+- the prebuilt application deployed to the production alias
+  `https://katalist-web.vercel.app` (Vercel deployment
+  `dpl_2SFofTKCoGJYtKHzdFY1gyhoyz3f`, status `Ready`);
+- an existing authenticated account loaded the production List and Chat
+  surfaces with real data and no browser warnings/errors; and
+- a read-only production Realtime smoke subscription reached `SUBSCRIBED`.
+
+No customer record was created, edited, or deleted. A committed database-row
+change was deliberately not generated solely to manufacture a Realtime event;
+payload routing, batching, reconnect, stale-channel rejection, and catch-up
+remain covered by the deterministic local suite, while the production check
+proves publication coverage, WebSocket subscription, deployed-client loading,
+and authenticated data access.
