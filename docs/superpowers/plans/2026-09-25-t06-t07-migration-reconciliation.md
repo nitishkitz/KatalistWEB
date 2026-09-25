@@ -68,6 +68,47 @@ project's migration history, not a conflict. No pending migration redefines an o
 reconciled migration owns, and no reconciled migration reverses or is incompatible with
 anything a pending migration will add.
 
+### Live catalog preflight after reconciliation
+
+The collision check above compared migration *files*; it did not establish that
+the 25 pending versions are absent from the **live schema**. A subsequent
+read-only production catalog check found substantial schema drift despite the
+missing migration-history rows:
+
+- `public.create_list(text, context_kind, text, text)` already exists, as do
+  all four `list covers ...` policies on `storage.objects`. Applying
+  `20260916130000_list_cover_and_description.sql` unchanged would attempt to
+  create those policies again and fail.
+- Eleven of the twelve queried new feature tables already exist, including
+  `thing_snooze`, `catchup_receipts`, `bucket_notes`, `hub_files`,
+  `contact_requests`, `invitations`, and `list_meetings`. The two queried
+  tables that are genuinely absent are `morning_brief_presentations` and
+  `message_push_claims`.
+- Many functions from the pending migrations already exist, including
+  `snooze_thing`, `get_or_create_dm`, contact-request functions, meeting
+  functions and `run_nudge_escalation`. Other functions are absent, including
+  `resolve_list_names`, `reopen_thing`, `claim_morning_brief`,
+  `dismiss_morning_brief` and `claim_list_message_push`.
+- Columns added by several pending files are also already present:
+  `lists.description`, `lists.cover_storage_path`, `lists.kind`,
+  `profiles.cover_theme`, `list_messages.attachment`,
+  `list_messages.mentioned_profile_ids`, `list_messages.pinned_at`,
+  `hub_files.pinned_at`, and `notifications.pushed_at`.
+- Production also already has the `list chat ...` and `hub files ...` storage
+  policies and feature-table RLS policies for Bucket notes, Catch Up receipts,
+  List meetings, contacts and invitations. Several pending SQL files use
+  unconditional `CREATE POLICY`, so the collision is not confined to List
+  covers.
+
+Consequently, `supabase db push --linked --include-all --dry-run` listing 25
+files means only that their **version records** are missing. It is not safe
+evidence that applying all 25 SQL files unchanged will work. Each version
+needs a live catalog/object-definition comparison. Where the SQL is already
+present and equivalent, record the version as applied without rerunning the
+DDL. Where only part is present, use a reviewed additive delta before marking
+the version complete. Do not repair a version solely because an object with
+the same name exists; definition, grants and RLS must match.
+
 ## Verification
 
 ```
