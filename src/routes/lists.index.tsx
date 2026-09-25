@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Search,
   Plus,
@@ -116,11 +116,45 @@ function MemberStack({ members, count }: { members: ListRow["members"]; count: n
 }
 
 function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow) => void }) {
-  const navigate = useNavigate();
   if (rows.length === 0) return null;
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#ebedf1] bg-white" style={{ boxShadow: "0 1px 2px rgba(11,12,41,0.04)" }}>
+    <>
+      <div className="space-y-3 md:hidden">
+        {rows.map((row) => (
+          <article key={row.id} className="rounded-2xl border border-[#ebedf1] bg-white p-4 katalist-elevation-card">
+            <div className="flex items-start gap-3">
+              {row.coverUrl ? (
+                <img src={row.coverUrl} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" />
+              ) : (
+                <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white", getListColor(row.name, row.color))}>
+                  {row.name.trim().slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <Link to="/lists/$listId" params={{ listId: row.id }} viewTransition className="block truncate text-sm font-bold text-foreground">
+                  {row.name}
+                </Link>
+                <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{row.description || row.ownerLine}</p>
+              </div>
+              {row.unread > 0 ? <span className="rounded-full bg-primary px-2 py-0.5 text-xs font-bold text-primary-foreground">{row.unread}</span> : null}
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+              <div><span className="block font-semibold text-foreground">{row.memberCount}</span><span className="text-muted-foreground">Members</span></div>
+              <div><span className="block font-semibold text-foreground">{row.thingCount}</span><span className="text-muted-foreground">Things</span></div>
+              <div><span className="block font-semibold text-foreground">{row.doneCount}</span><span className="text-muted-foreground">Done</span></div>
+            </div>
+            <div className="mt-3 flex items-end justify-between gap-3 border-t border-border/60 pt-3">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium text-foreground">{row.latestActivity}</p>
+                <time dateTime={row.updatedAtIso ?? undefined} title={row.updatedAtIso ? new Date(row.updatedAtIso).toLocaleString() : "Update time unavailable"} className="text-xs text-muted-foreground">{row.updatedAt}</time>
+              </div>
+              <Link to="/lists/$listId" params={{ listId: row.id }} className="inline-flex min-h-9 shrink-0 items-center rounded-lg border border-border px-3 text-xs font-semibold text-primary">Open</Link>
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="hidden overflow-hidden rounded-2xl border border-[#ebedf1] bg-white md:block" style={{ boxShadow: "0 1px 2px rgba(11,12,41,0.04)" }}>
       <div className="overflow-x-auto">
         <table className="w-full table-fixed text-left">
           <thead>
@@ -138,22 +172,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
             {rows.map((row) => {
               const colorClass = getListColor(row.name, row.color);
               return (
-                <tr
-                  key={row.id}
-                  className="group cursor-pointer outline-none transition-colors hover:bg-muted/35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                  onClick={(e) => {
-                    if ((e.target as HTMLElement).closest("[data-stop-nav]")) return;
-                    void navigate({ to: "/lists/$listId", params: { listId: row.id }, viewTransition: true });
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      void navigate({ to: "/lists/$listId", params: { listId: row.id }, viewTransition: true });
-                    }
-                  }}
-                  role="link"
-                  tabIndex={0}
-                >
+                <tr key={row.id} className="group transition-colors hover:bg-muted/35">
                   {/* List Info */}
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-3">
@@ -177,12 +196,15 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span
+                          <Link
+                            to="/lists/$listId"
+                            params={{ listId: row.id }}
+                            viewTransition
                             className="truncate text-[13.5px] font-bold text-foreground"
                             style={{ viewTransitionName: `list-title-${row.id}` }}
                           >
                             {row.name}
-                          </span>
+                          </Link>
                         </div>
                         {row.description ? (
                           <p className="truncate text-[12px] text-muted-foreground">{row.description}</p>
@@ -226,7 +248,14 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                     <p className="truncate text-[12px] font-medium text-foreground">
                       {row.latestActivity}
                     </p>
-                    <p className="text-[12px] text-muted-foreground">{row.updatedAt}</p>
+                    <time
+                      dateTime={row.updatedAtIso ?? undefined}
+                      title={row.updatedAtIso ? new Date(row.updatedAtIso).toLocaleString() : "Update time unavailable"}
+                      tabIndex={0}
+                      className="text-[12px] text-muted-foreground"
+                    >
+                      {row.updatedAt}
+                    </time>
                   </td>
 
                   {/* Row Actions Menu */}
@@ -245,15 +274,11 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44 bg-white">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void navigate({ to: "/lists/$listId", params: { listId: row.id }, viewTransition: true });
-                            }}
-                            className="text-[12.5px] cursor-pointer"
-                          >
-                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                            Open List
+                          <DropdownMenuItem asChild className="text-[12.5px] cursor-pointer">
+                            <Link to="/lists/$listId" params={{ listId: row.id }} viewTransition>
+                              <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                              Open List
+                            </Link>
                           </DropdownMenuItem>
                           {row.role === "owner" && onEdit ? (
                             <DropdownMenuItem
@@ -270,10 +295,9 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
-                              void navigator.clipboard.writeText(
-                                `${window.location.origin}/lists/${row.id}`,
-                              );
-                              toast.success("List link copied to clipboard");
+                              void navigator.clipboard.writeText(`${window.location.origin}/lists/${row.id}`)
+                                .then(() => toast.success("List link copied to clipboard"))
+                                .catch(() => toast.error("Couldn’t copy the List link."));
                             }}
                             className="text-[12.5px] cursor-pointer"
                           >
@@ -290,7 +314,8 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
           </tbody>
         </table>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -474,7 +499,10 @@ function ListsPage() {
         return pctB - pctA;
       }
       // Default: recent activity
-      return b.updatedAt.localeCompare(a.updatedAt);
+      const aMs = a.updatedAtIso ? Date.parse(a.updatedAtIso) : Number.NEGATIVE_INFINITY;
+      const bMs = b.updatedAtIso ? Date.parse(b.updatedAtIso) : Number.NEGATIVE_INFINITY;
+      return (Number.isFinite(bMs) ? bMs : Number.NEGATIVE_INFINITY) -
+        (Number.isFinite(aMs) ? aMs : Number.NEGATIVE_INFINITY);
     });
   }, [lists, query, roleFilter, contextFilter, selectedMember, sortOption]);
 
@@ -497,6 +525,7 @@ function ListsPage() {
           <label className="flex h-9 w-full items-center gap-2 rounded-xl border border-border/80 bg-white px-3  focus-within:border-primary focus-within:ring-2 focus-within:ring-ring sm:w-56">
             <Search className="h-4 w-4 text-muted-foreground" />
             <input
+              aria-label="Search Lists"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search lists..."

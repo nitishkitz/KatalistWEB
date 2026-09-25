@@ -239,6 +239,7 @@ export async function mapDbListRows(_qc: QueryClient, profileId: string, lists: 
       unread: 0,
       latestActivity: "Updated",
       updatedAt: new Date(l.updated_at).toLocaleString(),
+      updatedAtIso: l.updated_at,
       color: COLORS[i % COLORS.length]!,
     } satisfies ListRow;
   });

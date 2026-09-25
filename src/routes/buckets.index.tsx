@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Plus,
   Search,
@@ -63,33 +63,20 @@ function CollaboratorStack({ bucket }: { bucket: BucketCard }) {
 }
 
 function BucketTableRow({ bucket }: { bucket: BucketCard }) {
-  const navigate = useNavigate();
-  const open = () => void navigate({ to: "/buckets/$bucketId", params: { bucketId: bucket.id } });
   const accent = bucketAccent(bucket.name);
   const progressTotal = bucket.progressTotal ?? 0;
   const progressCompleted = Math.min(bucket.progressCompleted ?? 0, progressTotal);
   const progressPercent = progressTotal ? Math.round((progressCompleted / progressTotal) * 100) : 0;
   return (
-    <tr
-      role="link"
-      tabIndex={0}
-      onClick={open}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          open();
-        }
-      }}
-      className="group cursor-pointer border-b border-[#f2f3f9] outline-none last:border-0 hover:bg-[#faf9fe] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-    >
+    <tr className="group border-b border-[#f2f3f9] last:border-0 hover:bg-[#faf9fe]">
       <td className="px-3 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <span className={cn("h-8 w-1 shrink-0 rounded-full", accent.line)} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="truncate text-[13px] font-semibold text-[#000533] group-hover:text-[#975ee2]">
+              <Link to="/buckets/$bucketId" params={{ bucketId: bucket.id }} className="truncate text-[13px] font-semibold text-[#000533] group-hover:text-[#975ee2]">
                 {bucket.name}
-              </span>
+              </Link>
             </div>
           </div>
         </div>
@@ -177,8 +164,14 @@ function BucketsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search buckets..."
+            aria-label="Search Buckets"
             className="w-full bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#8487a7]"
           />
+          {query ? (
+            <button type="button" onClick={() => setQuery("")} aria-label="Clear Bucket search" className="rounded p-1 text-muted-foreground hover:text-foreground">
+              <span aria-hidden="true">×</span>
+            </button>
+          ) : null}
         </label>
 
         {people.length > 0 ? (
@@ -242,7 +235,10 @@ function BucketsPage() {
         >
           {() =>
             filtered.length === 0 ? (
-              <p className="py-12 text-center text-[13px] text-[#6a769c]">No buckets found.</p>
+              <div className="py-12 text-center text-[13px] text-[#6a769c]">
+                <p>No Buckets match the current search or people filter.</p>
+                <button type="button" onClick={() => { setQuery(""); setPersonFilter(null); }} className="mt-3 rounded-lg border border-border px-3 py-2 font-semibold text-primary">Clear filters</button>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[880px] text-left">

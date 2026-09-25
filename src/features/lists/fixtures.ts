@@ -27,6 +27,8 @@ export type ListRow = {
   unread: number;
   latestActivity: string;
   updatedAt: string;
+  /** Machine-readable source used for ordering and <time dateTime>. */
+  updatedAtIso?: string | null;
   color: string;
 };
 
@@ -46,7 +48,7 @@ export const listFixtures: ListRow[] = [
     ],
     memberCount: 4, thingCount: 18, doneCount: 7, inProgressCount: 4, unread: 3,
     latestActivity: "Sai caught \"Prepare release notes\"",
-    updatedAt: "12m ago", color: "bg-violet-500",
+    updatedAt: "12m ago", updatedAtIso: "2026-09-25T00:48:00.000Z", color: "bg-violet-500",
   },
   {
     id: "l2", name: "Mobile App Launch", context: "work", role: "owner",
@@ -58,7 +60,7 @@ export const listFixtures: ListRow[] = [
       { actorId: "p-arjun", role: "view_only", initials: "AM", name: "Arjun Mehta" },
     ],
     memberCount: 4, thingCount: 12, doneCount: 3, inProgressCount: 5, unread: 1,
-    latestActivity: "Arjun waiting on QA coordination", updatedAt: "1h ago", color: "bg-sky-500",
+    latestActivity: "Arjun waiting on QA coordination", updatedAt: "1h ago", updatedAtIso: "2026-09-25T00:00:00.000Z", color: "bg-sky-500",
   },
   {
     id: "l3", name: "Website Launch", context: "work", role: "collaborator",
@@ -69,7 +71,7 @@ export const listFixtures: ListRow[] = [
       { actorId: "p-sarah", role: "view_only", initials: "SK", name: "Sarah Kapoor" },
     ],
     memberCount: 3, thingCount: 22, doneCount: 9, inProgressCount: 6, unread: 0,
-    latestActivity: "Priya updated launch copy", updatedAt: "3h ago", color: "bg-emerald-500",
+    latestActivity: "Priya updated launch copy", updatedAt: "3h ago", updatedAtIso: "2026-09-24T22:00:00.000Z", color: "bg-emerald-500",
   },
   {
     id: "l4", name: "Q3 Marketing Plan", context: "work", role: "collaborator",
@@ -80,7 +82,7 @@ export const listFixtures: ListRow[] = [
       { actorId: "p-priya", role: "view_only", initials: "PS", name: "Priya Sharma" },
     ],
     memberCount: 3, thingCount: 9, doneCount: 2, inProgressCount: 2, unread: 2,
-    latestActivity: "Sarah added campaign brief", updatedAt: "Yesterday", color: "bg-amber-500",
+    latestActivity: "Sarah added campaign brief", updatedAt: "Yesterday", updatedAtIso: "2026-09-24T12:00:00.000Z", color: "bg-amber-500",
   },
   {
     id: "l5", name: "Office Move Checklist", context: "home", role: "view_only",
@@ -90,6 +92,6 @@ export const listFixtures: ListRow[] = [
       { actorId: "p-priya", role: "view_only", initials: "PS", name: "Priya Sharma" },
     ],
     memberCount: 2, thingCount: 14, doneCount: 8, inProgressCount: 1, unread: 0,
-    latestActivity: "Neha marked 2 items Sorted", updatedAt: "2d ago", color: "bg-rose-500",
+    latestActivity: "Neha marked 2 items Sorted", updatedAt: "2d ago", updatedAtIso: "2026-09-23T12:00:00.000Z", color: "bg-rose-500",
   },
 ];
