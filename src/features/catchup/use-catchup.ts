@@ -365,7 +365,17 @@ export function useCatchup(): UseCatchup {
     isLoading: liveAuth && query.isLoading,
     error: preview ? null : query.error,
     branch,
-    isEmpty: preview ? true : hasFetchedOnce && isEmpty,
+    // T10-06 fix (found via a real Playwright run: the banner showed "37
+    // moments" while the overlay simultaneously reported "you're all caught
+    // up"): this previously hardcoded `true` for every preview session
+    // regardless of `moments.length`, which was dormant while nothing
+    // actually consumed `isEmpty` for preview (CatchUpOverlay used to check
+    // `moments.length > 0` directly) but became actively wrong the moment
+    // T10-06 wired the overlay through the shared `AsyncState` component.
+    // Preview derivation is synchronous and always current, so its isEmpty
+    // is just the real computed value, with no "has it settled yet" gate
+    // needed (there is no async settling to wait for).
+    isEmpty: preview ? isEmpty : hasFetchedOnce && isEmpty,
     /** T10-06: the raw "has this query ever settled" fact, exposed
      *  directly so consumers can hand it to the shared `AsyncState`
      *  component (katalist/AsyncState.tsx) instead of re-deriving it from

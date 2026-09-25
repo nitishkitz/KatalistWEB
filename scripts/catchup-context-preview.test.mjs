@@ -122,3 +122,17 @@ test("D02: a ghost breakthrough legitimately surfaces a Thing from the OTHER con
   cleanup();
   qc.clear();
 });
+
+test("T10-06 regression: preview isEmpty reflects the actual moment count, not a hardcoded true", async () => {
+  // Found via a real Playwright run: CatchUpBanner (moments.length-based)
+  // showed a real count while CatchUpOverlay's shared AsyncState (isEmpty-
+  // based) simultaneously reported "you're all caught up" -- isEmpty was
+  // hardcoded `true` for every preview session regardless of moments.length.
+  currentContext = "work";
+  const { getLatest } = await mountAndSettle();
+  const latest = getLatest();
+  assert.ok(latest.moments.length > 0, "precondition: this fixture's work context has at least one moment");
+  assert.equal(latest.isEmpty, false, "isEmpty must be false when preview moments are actually present");
+
+  cleanup();
+});
