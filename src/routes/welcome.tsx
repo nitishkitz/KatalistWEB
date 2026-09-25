@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/hooks/useSession";
 import { Logo } from "@/components/katalist/Logo";
+import { demoEnabled } from "@/lib/session-mode";
 
 export const Route = createFileRoute("/welcome")({
   head: () => ({
@@ -359,9 +360,11 @@ function WelcomePage() {
                 {index === 0 ? "Get Started" : isLast ? "Create your account" : "Next"}
                 <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
-              <Button variant="outline" size="lg" onClick={() => navigate({ to: "/auth" })}>
-                Enter with a demo account
-              </Button>
+              {demoEnabled() && (
+                <Button variant="outline" size="lg" onClick={() => navigate({ to: "/auth" })}>
+                  Enter with a demo account
+                </Button>
+              )}
               {!isLast && (
                 <Button variant="ghost" size="lg" onClick={() => navigate({ to: "/auth" })}>
                   Skip

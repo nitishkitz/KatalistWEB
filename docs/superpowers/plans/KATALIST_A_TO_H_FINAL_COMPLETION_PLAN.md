@@ -58,7 +58,7 @@ Each checkbox below closes only after its numbered acceptance conditions pass or
 - [ ] **T09 — Complete Court, shared detail, and Magic Box.**
 - [x] **T10 — Complete Morning Brief behavior, actions, and responsive layout.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T10 section and `KATALIST_T10_FINAL_HANDOFF.md`. Live RLS/concurrent-devices/staging Playwright remain RELEASE-02/03; one pre-existing mobile-entry-point defect is named and unfixed.)
 - [x] **T11 — Complete Lists and Buckets.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T11 section and `KATALIST_T11_FINAL_HANDOFF.md`. All eight acceptance bullets closed and tested. One out-of-scope, pre-existing `AppShell.tsx` bottom-nav accessibility finding (not a Lists/Buckets defect) is named and unfixed.)
-- [ ] **T12 — Complete welcome, authentication, and three-step onboarding.**
+- [x] **T12 — Complete welcome, authentication, and three-step onboarding.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T12 section. Both G-01 and G-02 closed, plus an out-of-scope-but-blocking fixed-OTP production-security defect found and fixed. A pre-existing, unrelated dead "local user" profile-setup code path in `auth.tsx` is named and left as-is.)
 - [ ] **T13 — Complete Nudges, Me, preferences, and public-profile checks.**
 - [ ] **T14 — Complete file preview, calls, meetings, and Bridge local coverage.**
 - [ ] **T15 — Run integrated acceptance, fix failures, and reconcile all audit IDs.**

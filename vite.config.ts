@@ -9,6 +9,7 @@ import { getSupabaseAdmin } from "./server/lib/supabase-admin.ts";
 import { resolvePersonToProfileId } from "./server/lib/resolve-person.ts";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { extractErrorMessage } from "./src/lib/domain-error.ts";
+import { serverFixedOtp } from "./server/lib/fixed-otp.ts";
 
 /**
  * Dev-middleware equivalent of server/lib/require-user.ts. Vite middleware
@@ -179,11 +180,23 @@ function phoneAuthPlugin(): Plugin {
             body += chunk;
           }
 
+          const fixedOtp = serverFixedOtp();
+          if (!fixedOtp) {
+            res.statusCode = 404;
+            res.setHeader("content-type", "application/json");
+            res.end(
+              JSON.stringify({
+                error: "Phone sign-in is not available in this deployment. Use email instead.",
+              }),
+            );
+            return;
+          }
+
           const { phone, otp } = JSON.parse(body || "{}");
-          if (!phone || otp !== "111111") {
+          if (!phone || otp !== fixedOtp) {
             res.statusCode = 400;
             res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: "Invalid phone number or OTP. Enter OTP: 111111." }));
+            res.end(JSON.stringify({ error: "Invalid or expired code." }));
             return;
           }
 

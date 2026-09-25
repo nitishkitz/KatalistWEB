@@ -1,13 +1,22 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { getSupabaseAdmin } from "../../lib/supabase-admin";
+import { serverFixedOtp } from "../../lib/fixed-otp";
 
 export default defineEventHandler(async (event) => {
+  const fixedOtp = serverFixedOtp();
+  if (!fixedOtp) {
+    throw createError({
+      statusCode: 404,
+      message: "Phone sign-in is not available in this deployment. Use email instead.",
+    });
+  }
+
   const body = (await readBody(event)) as { phone?: string; otp?: string } | null;
   const phone = body?.phone;
   const otp = body?.otp;
 
-  if (!phone || otp !== "111111") {
-    throw createError({ statusCode: 400, message: "Invalid phone number or OTP. Enter OTP: 111111." });
+  if (!phone || otp !== fixedOtp) {
+    throw createError({ statusCode: 400, message: "Invalid or expired code." });
   }
 
   const admin = getSupabaseAdmin();

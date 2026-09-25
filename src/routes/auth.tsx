@@ -36,14 +36,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession, DEMO_PERSONAS, signInAsDemo, DemoPersona } from "@/hooks/useSession";
 import { Logo } from "@/components/katalist/Logo";
 import { demoEnabled } from "@/lib/session-mode";
-import { localFixedOtp } from "@/lib/fixed-otp";
+import { localFixedOtp, localFixedOtpEnabled } from "@/lib/fixed-otp";
 import { extractErrorMessage } from "@/lib/domain-error";
-import {
-  createLocalUser,
-  resolveFixedOtpOutcome,
-  type LocalProfileErrors,
-} from "@/lib/auth/local-user";
+import { createLocalUser, type LocalProfileErrors } from "@/lib/auth/local-user";
 import { useAvatarUrl } from "@/features/people/directory";
+import { sanitizeRedirectTarget } from "@/lib/validate-redirect";
 
 /**
  * verifyOtp() can resolve before the client's own getSession()/getUser()
@@ -60,6 +57,8 @@ async function waitForSessionReady(expectedAccessToken: string | undefined, time
     await new Promise((resolve) => setTimeout(resolve, 40));
   }
 }
+
+type AuthSearch = { redirect?: string };
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -79,6 +78,14 @@ export const Route = createFileRoute("/auth")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
+  // G01/G02: an unauthenticated direct link into a gated destination (e.g.
+  // onboarding's "Find people" step, or a future deep link) is sent here
+  // with its intended destination, so a successful sign-in returns the user
+  // there instead of always landing on Court. `redirect` is re-validated on
+  // read (sanitizeRedirectTarget), never trusted as-is.
+  validateSearch: (search: Record<string, unknown>): AuthSearch => ({
+    redirect: typeof search.redirect === "string" ? search.redirect : undefined,
+  }),
   component: AuthPage,
 });
 
@@ -92,6 +99,12 @@ const COUNTRY_CODES = [
 ];
 
 type Channel = "phone" | "email";
+
+// G02: a resend must not be spammable, and a sent code must not remain
+// verifiable forever -- both are part of "finish auth acceptance", not only
+// the happy path.
+const RESEND_COOLDOWN_MS = 30_000;
+const OTP_TTL_MS = 5 * 60_000;
 
 function DemoPersonaButton({ persona, onEnter }: { persona: DemoPersona; onEnter: () => void }) {
   const src = useAvatarUrl(persona.name, persona.email);
@@ -130,16 +143,21 @@ function DemoPersonaButton({ persona, onEnter }: { persona: DemoPersona; onEnter
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { redirect } = Route.useSearch();
+  const returnTo = sanitizeRedirectTarget(redirect, "/");
   const { session, loading } = useSession();
+  const phoneAvailable = localFixedOtpEnabled();
 
   const [tab, setTab] = useState<"otp" | "qr" | "preview">(demoEnabled() ? "preview" : "otp");
-  const [channel, setChannel] = useState<Channel>("phone");
+  const [channel, setChannel] = useState<Channel>(phoneAvailable ? "phone" : "email");
   const [dialCode, setDialCode] = useState("+91");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const [profilePhone, setProfilePhone] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [age, setAge] = useState("");
@@ -149,9 +167,21 @@ function AuthPage() {
 
   useEffect(() => {
     if (!loading && session) {
-      navigate({ to: "/", replace: true });
+      navigate({ to: returnTo, replace: true });
     }
-  }, [loading, session, navigate]);
+  }, [loading, session, navigate, returnTo]);
+
+  // Ticks once a code has been sent so the resend cooldown and expiry
+  // countdowns are actually live, not just computed once at send time.
+  useEffect(() => {
+    if (!sent || otpSentAt == null) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [sent, otpSentAt]);
+
+  const secondsUntilResend =
+    otpSentAt == null ? 0 : Math.max(0, Math.ceil((otpSentAt + RESEND_COOLDOWN_MS - now) / 1000));
+  const otpExpired = otpSentAt != null && now - otpSentAt > OTP_TTL_MS;
 
   const destination =
     channel === "phone" ? `${dialCode}${phone.replace(/\D/g, "")}` : email.trim();
@@ -160,10 +190,14 @@ function AuthPage() {
     if (!demoEnabled()) return;
     signInAsDemo(persona);
     toast.success(`Welcome, ${persona.name}!`);
-    navigate({ to: "/", replace: true });
+    navigate({ to: returnTo, replace: true });
   }
 
   async function sendOtp() {
+    if (channel === "phone" && !phoneAvailable) {
+      toast.error("Phone sign-in is not available in this deployment. Use email instead.");
+      return;
+    }
     if (channel === "phone" && phone.replace(/\D/g, "").length < 6) {
       toast.error("Enter a valid phone number");
       return;
@@ -179,7 +213,9 @@ function AuthPage() {
       setBusy(false);
       setSent(true);
       setOtp("");
-      toast.success("Use verification code: 111111");
+      setOtpSentAt(Date.now());
+      setNow(Date.now());
+      toast.success(`Use verification code: ${localFixedOtp()}`);
       return;
     }
 
@@ -195,16 +231,25 @@ function AuthPage() {
     }
     setSent(true);
     setOtp("");
+    setOtpSentAt(Date.now());
+    setNow(Date.now());
     toast.success(`We sent a one-time password to ${destination}`);
   }
 
   async function verifyOtp(code: string) {
+    if (otpSentAt != null && Date.now() - otpSentAt > OTP_TTL_MS) {
+      toast.error("This code has expired. Send a new one.");
+      setOtp("");
+      return;
+    }
+
     setBusy(true);
 
     if (channel === "phone") {
-      if (code !== "111111") {
+      const fixedCode = localFixedOtp();
+      if (!fixedCode || code !== fixedCode) {
         setBusy(false);
-        toast.error("Please enter the 6-digit test code: 111111");
+        toast.error(fixedCode ? `Please enter the 6-digit test code: ${fixedCode}` : "Phone sign-in is not available in this deployment.");
         setOtp("");
         return;
       }
@@ -238,7 +283,7 @@ function AuthPage() {
 
         setBusy(false);
         toast.success(`Welcome back${authData.user?.user_metadata?.full_name ? `, ${authData.user.user_metadata.full_name}` : ""}!`);
-        navigate({ to: "/", replace: true });
+        navigate({ to: returnTo, replace: true });
         return;
       } catch (err: unknown) {
         setBusy(false);
@@ -263,7 +308,7 @@ function AuthPage() {
 
     await waitForSessionReady(authData.session?.access_token);
     setBusy(false);
-    navigate({ to: "/", replace: true });
+    navigate({ to: returnTo, replace: true });
   }
 
   function completeLocalProfile() {
@@ -280,7 +325,7 @@ function AuthPage() {
     }
     signInAsDemo(result.persona);
     toast.success(`Welcome, ${result.persona.name}!`);
-    navigate({ to: "/", replace: true });
+    navigate({ to: returnTo, replace: true });
   }
 
   return (
@@ -514,10 +559,17 @@ function AuthPage() {
                       <span className="font-medium text-foreground">{destination}</span>
                     </p>
 
+                    {otpExpired ? (
+                      <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                        This code has expired. Send a new one to continue.
+                      </p>
+                    ) : null}
+
                     <div className="mt-6 flex justify-center">
                       <InputOTP
                         maxLength={6}
                         value={otp}
+                        disabled={otpExpired}
                         onChange={(value) => {
                           setOtp(value);
                           if (value.length === 6) void verifyOtp(value);
@@ -534,7 +586,7 @@ function AuthPage() {
                     <Button
                       className="mt-6 w-full"
                       size="lg"
-                      disabled={busy || otp.length !== 6}
+                      disabled={busy || otp.length !== 6 || otpExpired}
                       onClick={() => void verifyOtp(otp)}
                     >
                       Verify & continue
@@ -547,16 +599,17 @@ function AuthPage() {
                         onClick={() => {
                           setSent(false);
                           setOtp("");
+                          setOtpSentAt(null);
                         }}
                       >
                         Change {channel === "phone" ? "number" : "email"}
                       </button>
                       <button
                         className="font-medium text-primary hover:underline disabled:opacity-50"
-                        disabled={busy}
+                        disabled={busy || secondsUntilResend > 0}
                         onClick={() => void sendOtp()}
                       >
-                        Resend code
+                        {secondsUntilResend > 0 ? `Resend code (${secondsUntilResend}s)` : "Resend code"}
                       </button>
                     </div>
                   </div>
@@ -573,18 +626,26 @@ function AuthPage() {
 
                     {channel === "phone" ? (
                       <div className="mt-5 flex gap-2">
-                        <Select value={dialCode} onValueChange={setDialCode}>
-                          <SelectTrigger className="w-28">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {COUNTRY_CODES.map((c) => (
-                              <SelectItem key={c.code} value={c.code}>
-                                {c.code}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <div>
+                          <Label htmlFor="dial-code" className="sr-only">
+                            Country
+                          </Label>
+                          <Select value={dialCode} onValueChange={setDialCode}>
+                            <SelectTrigger id="dial-code" className="w-36" aria-label="Country">
+                              <SelectValue>
+                                {COUNTRY_CODES.find((c) => c.code === dialCode)?.label ?? "Country"}{" "}
+                                {dialCode}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {COUNTRY_CODES.map((c) => (
+                                <SelectItem key={c.code} value={c.code}>
+                                  {c.label} ({c.code})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <Input
                           type="tel"
                           inputMode="tel"
@@ -623,20 +684,22 @@ function AuthPage() {
                       <ArrowRight className="ml-1 h-4 w-4" />
                     </Button>
 
-                    <button
-                      className="mt-3 flex w-full items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-                      onClick={() => setChannel(channel === "phone" ? "email" : "phone")}
-                    >
-                      {channel === "phone" ? (
-                        <>
-                          <Mail className="h-4 w-4" /> Use email instead
-                        </>
-                      ) : (
-                        <>
-                          <Smartphone className="h-4 w-4" /> Use phone instead
-                        </>
-                      )}
-                    </button>
+                    {phoneAvailable ? (
+                      <button
+                        className="mt-3 flex w-full items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                        onClick={() => setChannel(channel === "phone" ? "email" : "phone")}
+                      >
+                        {channel === "phone" ? (
+                          <>
+                            <Mail className="h-4 w-4" /> Use email instead
+                          </>
+                        ) : (
+                          <>
+                            <Smartphone className="h-4 w-4" /> Use phone instead
+                          </>
+                        )}
+                      </button>
+                    ) : null}
                   </div>
                 )
               ) : (
@@ -657,9 +720,11 @@ function AuthPage() {
               )}
             </div>
 
-            <div className="border-t border-border px-6 py-3 text-center text-xs text-muted-foreground">
-              Demo is for testing. Phone / OTP and QR stay for live accounts.
-            </div>
+            {demoEnabled() ? (
+              <div className="border-t border-border px-6 py-3 text-center text-xs text-muted-foreground">
+                Demo is for testing. Phone / OTP and QR stay for live accounts.
+              </div>
+            ) : null}
 
             <div className="border-t border-border px-6 py-4 text-center text-sm text-muted-foreground">
               New to Katalist?{" "}

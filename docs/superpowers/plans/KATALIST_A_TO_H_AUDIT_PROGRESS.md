@@ -1516,3 +1516,90 @@ List-detail Things-tab mobile-layout gap found during this investigation
 handoff doc's §6. No live-staging/production RLS verification was performed
 or claimed; this is local-only evidence per this plan's own repeated
 caveat.
+
+### T12 — Entry flow and three-step onboarding
+
+**Status:** LOCAL PASS. **Owns:** G-01, G-02.
+
+Tested tree: on top of `1e2a7f2` (T11's own baseline). Reconciled against the audit report's
+own verbatim G-01/G-02 text before starting (six-step onboarding plus a bonus contacts screen;
+"Connect" already routed to the real `ContactsDialog` from a prior partial pass but its copy
+still implied an address-book import; no skip/resume persistence existed at all; no
+unauthenticated-entry guard existed for `/onboarding`; the fixed phone OTP was a hardcoded
+`"111111"` in three separate places -- `vite.config.ts`'s dev middleware, `server/api/auth/phone-login.post.ts`'s
+production handler, and `auth.tsx`'s own client check -- none of which consulted
+`src/lib/fixed-otp.ts`'s own documented "only active when a deployment explicitly configures a
+valid six-digit value" contract at all).
+
+**Found and fixed, not originally scoped by G-01/G-02's own text but a direct blocker to
+"preserve fixed-OTP production restrictions" [P1, security]:** the phone-OTP code `"111111"` was
+accepted unconditionally in production (`server/api/auth/phone-login.post.ts`) and dev
+(`vite.config.ts`'s `phoneAuthPlugin`) regardless of whether `VITE_KATALIST_FIXED_OTP` was ever
+configured for the deployment -- a universal, undocumented backdoor phone login (auto-creating a
+real Supabase user via `admin.auth.admin.createUser` for any phone number) in every deployment,
+configured or not. Added `server/lib/fixed-otp.ts` (`serverFixedOtp()`, mirroring
+`src/lib/fixed-otp.ts`'s exact validation) and wired it into both server entry points: the
+endpoint now 404s ("Phone sign-in is not available in this deployment") when unconfigured, and
+otherwise requires the actually-configured code, never a hardcoded literal. `auth.tsx`'s client
+now reads `localFixedOtp()`/`localFixedOtpEnabled()` (previously imported but never called --
+dead code) instead of comparing against a hardcoded string, and hides the Phone/OTP channel
+entirely (forcing email, which already goes through real Supabase `signInWithOtp`) when
+unconfigured.
+
+**Closed (G-01):** `src/routes/onboarding.tsx` reduced from six mandatory tour steps plus a
+bonus contacts screen to exactly three: capture, Catch-in-Court, and an optional discovery step.
+New `src/features/onboarding/onboarding-state.ts` persists `{step, completed, skipped}`
+per-identity (`session.user.id`, stable across real/demo/local-fixed-OTP accounts) in
+`localStorage`, with a pure `resolveOnboardingEntry()` decision function (completed -> redirect
+home, never replay; otherwise resume at the saved step, clamping the discovery step correctly)
+kept separate from the component so it is unit-testable without rendering. The route's own
+top-level effect now redirects an unauthenticated visit to `/auth?redirect=/onboarding` before
+any step (including the discovery step's contact action) ever renders, replacing the previous
+per-button `session ? ... : ...` check. `/auth` gained a validated `redirect` search param
+(`sanitizeRedirectTarget()` in new `src/lib/validate-redirect.ts`, rejecting anything not a
+same-app path -- protocol-relative, absolute, or `://`-bearing values fall back to `/`) threaded
+through every one of `auth.tsx`'s four successful-sign-in exits (session-already-present effect,
+demo login, phone/email OTP verify, local-profile completion) instead of all four hardcoding
+`"/"`.
+
+**Closed (G-02):** the discovery step's copy no longer says "I need your contacts to find your
+team" (which implies an address-book import); it now reads "Find people you already work with"
+and explicitly states "This does not read or import your phone or email address book" --
+accurate to what the button actually does (opens the real in-app `ContactsDialog` via `/team`).
+Demo entry/copy (`welcome.tsx`'s "Enter with a demo account" button; `auth.tsx`'s "Demo is for
+testing..." footer) is now gated behind `demoEnabled()` -- both previously rendered unconditionally
+regardless of deployment configuration. The country-code `Select` in `auth.tsx` now shows the
+country name alongside the dial code in both the trigger and each option (previously only the
+bare code, e.g. "+91" with no indication it means India), has a `Label`/`aria-label`, and keeps
+its existing working default (+91/India). Added a 30-second resend cooldown (countdown shown on
+the Resend button, both channels) and a 5-minute sent-code expiry (an expired code shows a
+recovery message and blocks Verify until a fresh Resend) -- neither existed before; the OTP
+input had no age limit at all.
+
+**New:** `scripts/onboarding-state.test.mjs` (11 tests: per-identity isolation, corrupted/out-of-range
+storage falls back safely, and `resolveOnboardingEntry()`'s five decision branches -- fresh
+identity, mid-tour resume, discovery-step resume, skip-then-resume, out-of-range clamp).
+`scripts/validate-redirect.test.mjs` (5 tests: internal paths pass through, non-string/empty/missing
+input and protocol-relative/absolute/`://`-bearing values all fall back to the default). Updated
+`scripts/onboarding-page.test.mjs`'s pre-existing source-assertion tests to match the new
+three-step/redirect-gated/"Find people"-labeled behavior instead of the old six-step/"Connect"
+text they asserted before (kept as source assertions per T00's own classification instruction --
+converted, not deleted, since the underlying behavior they check genuinely changed). 785/785
+total tests (11 new, 5 new, plus the 4 updated in place), 0 typecheck errors, 0 lint errors (36
+warnings -- down from the 80-warning snapshot recorded in T00, from cumulative unused-import
+cleanup across T00/T08-T12; not independently re-triaged rule-by-rule in this pass), clean
+`build:app`.
+
+**Remaining:** the pre-existing, unrelated dual "local user" profile-setup path in `auth.tsx`
+(`profilePhone`/`createLocalUser`/the "Create your profile" card) is still never actually reached
+-- `resolveFixedOtpOutcome` (which would route a fixed-OTP phone sign-in into either that local
+path or the real Supabase-admin-created-user path) was imported but never called before this
+pass and remains uncalled after it; the phone-login flow always goes through
+`server/api/auth/phone-login.post.ts`'s real Supabase admin user creation, never the
+`localStorage`-only "local user" persona. This is a pre-existing dead-code path, not a G-01/G-02
+defect (G-01/G-02's own "Where" lists do not name `local-user.ts`), and unifying or removing it
+was judged out of scope for this pass -- named rather than silently left. QR-login remains an
+explicitly-labeled integration boundary (unchanged, not in G-01/G-02's scope). Live email-OTP
+deliverability, a real deployed `VITE_KATALIST_FIXED_OTP` rollout, and cross-device resume
+(same identity, second browser) are external gates this session cannot verify without a live
+deployment and credentials -- unchanged from every other task's standing caveat in this plan.
