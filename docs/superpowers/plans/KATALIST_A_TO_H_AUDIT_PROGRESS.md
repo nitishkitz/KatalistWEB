@@ -894,17 +894,21 @@ findings above were both in items 2-4 (Magic Box), not item 5.
 
 **Status:** LOCAL PASS, ALL SEVEN PACKAGES IMPLEMENTED, GATE-VERIFIED, AND
 BROWSER-VERIFIED (T10-01 through T10-07 of
-`docs/superpowers/plans/KATALIST_T10_DETAILED_EXECUTION_PLAN.md`). The
-plan's five-viewport Playwright pass (section 7) was run for real, using a
-Demo Persona sign-in (`VITE_KATALIST_DEMO_MODE=true`, a synthetic
-localStorage-only session that makes zero real Supabase calls -- confirmed
-by a network-assertion test, not just by architecture reading) rather than
-`tests/e2e/staging/` credentials, none of which are configured in this
-environment. That run found and this pass fixed one real bug
-(`use-catchup.ts`'s preview `isEmpty` hardcoded `true`) and precisely
-documented one real, reproducible, PRE-EXISTING product gap it did not fix
-(Morning Brief has no reachable entry point below the 1024px `lg`
-breakpoint) -- see the T10-07 section below for both. The one remaining
+`docs/superpowers/plans/KATALIST_T10_DETAILED_EXECUTION_PLAN.md`), PLUS a
+later gap-closure pass (see "T10 gap closure" near the end of this section)
+that closed both of the two items the original pass had left open as local
+(not release-only) gaps: the mobile Morning Brief entry point, and
+fake-`setTimeout` coverage for S02/S04/S10/S11. The plan's five-viewport
+Playwright pass (section 7) was run for real, using a Demo Persona sign-in
+(`VITE_KATALIST_DEMO_MODE=true`, a synthetic localStorage-only session that
+makes zero real Supabase calls -- confirmed by a network-assertion test, not
+just by architecture reading) rather than `tests/e2e/staging/` credentials,
+none of which are configured in this environment. The original pass found
+and fixed one real bug (`use-catchup.ts`'s preview `isEmpty` hardcoded
+`true`) and precisely documented one real, reproducible, PRE-EXISTING
+product gap it did not fix at the time (Morning Brief had no reachable entry
+point below the 1024px `lg` breakpoint) -- see the T10-07 section below for
+both, and "T10 gap closure" for that gap's later fix. The one remaining
 RELEASE-02/03-class item is a true live-backend/staging check (real Supabase
 RLS, a real signed-in account, concurrent devices), which this demo-mode run
 cannot and does not claim to substitute for.
@@ -914,7 +918,9 @@ cannot and does not claim to substitute for.
 `2ed1cc8` (T10-04 run-thing-action module), `83a9498` (T10-05 stable queue +
 action-outcome wiring), `af39cdf` (T10-06 responsive overlay/banner states),
 `2be7de9` (T10-06 queue+detail layout), `fd03bd2` (T08 typography-floor fix
-surfaced by the full suite).
+surfaced by the full suite); then, in the gap-closure pass, `b0578a6`
+(mobile entry point + shared controller + DOM test) and `04171d2`
+(fake-timer S02/S04/S10/S11 coverage).
 
 **Done (T10-01 only -- context and readiness contract):**
 1. `fetchCatchupMoments()` (`src/features/catchup/use-catchup.ts`) now takes
@@ -1199,6 +1205,17 @@ errors/69 warnings (unchanged baseline); `npm run build:app` clean.
    CSS-hidden/shown by breakpoint rather than mounting a second instance --
    this was already true before T10 and remains true now (confirmed
    directly, not assumed).
+   **Correction (T10 gap-closure pass, below):** "one hook call site" was
+   accurate, but this bullet's framing ("renders the same `CourtDesktop`
+   component... by breakpoint") was read too broadly by a later in-code
+   comment as "one rendered UI" -- the mobile route in fact rendered a
+   COMPLETELY SEPARATE `lg:hidden` lane-list UI alongside `CourtDesktop`,
+   with no Catch Up wiring of its own, which is exactly this same file's
+   own T10-07 finding two paragraphs below. The single-call-site property
+   itself was real and is preserved (now via lifting the call to the shared
+   `CourtPage` ancestor instead of leaving it inside `CourtDesktop`); see
+   "T10 gap closure" at the end of this section for the fix and its DOM-
+   level proof.
 3. SQL/notification/daily-maintenance compatibility: no RPC signatures
    changed (`dismissMorningBriefLive`'s new third argument is the ADDITIVE
    `dismiss_morning_brief(text, text, date)` overload from T10-02's own
@@ -1273,3 +1290,155 @@ directly above:**
 - `docs/superpowers/plans/KATALIST_T10_FINAL_HANDOFF.md` has now been
   created (see that file) reconciling all seven T10 packages against
   evidence, including the one RELEASE-gated item above named precisely.
+
+**T10 gap closure (post-handoff pass): mobile Morning Brief entry point +
+fake-timer controller coverage -- both former "still open, local" items now
+DONE, with evidence.** Commits: `b0578a6` (mobile entry point + shared
+controller + DOM test), `04171d2` (fake-timer S02/S04/S10/S11 coverage).
+
+1. **Mobile entry point.** The handoff above (and this file's own item 2 in
+   the T10-07 done-list) said the mobile Court route reused `CourtDesktop`
+   "CSS-hidden/shown by breakpoint rather than mounting a second instance" --
+   re-reading `src/routes/index.tsx` in full for this pass found that claim
+   HALF right and half stale: `CourtDesktop` genuinely is always mounted at
+   every breakpoint (only its OWN rendered output is CSS-hidden via `hidden
+   lg:block`), so there was indeed only one `useCatchup()`/`useMorningBrief()`
+   call site -- but the `lg:hidden` mobile lane-list block right below it in
+   the SAME file was a completely separate JSX tree with no Catch Up wiring
+   of its own, exactly as this file's own T10-07 finding (and the handoff's
+   section 6) already said. The stale in-code comment in `CourtDesktop.tsx`
+   ("mobile Court reuses this same component... already 'one owner per
+   active Court surface'") conflated "one hook call site" with "one rendered
+   UI," which was true for the hook but false for the UI Morning Brief
+   actually needs (a reachable banner + dialog) -- that comment has been
+   corrected in place.
+   - Fix: `useCatchup()`/`useMorningBrief()` are now called exactly ONCE, in
+     `CourtPage` (the shared ancestor of both the desktop and mobile
+     branches, `src/routes/index.tsx`), and the resulting objects are passed
+     as props into `CourtDesktop` (now a pure consumer, no hooks of its own
+     for these) and used directly by a new `CatchUpBanner`/`CatchUpOverlay`
+     pair rendered in the mobile `lg:hidden` block. This keeps "exactly one
+     automatic controller" true structurally (proven, not assumed -- see
+     below), matching the safer of the two options the reopened task named.
+   - A Catch Up moment's Thing is not guaranteed to already be one of
+     Court's own currently-loaded `now`/`next`/`later`/`theirs`/`all` Things
+     (a ghost breakthrough deliberately surfaces one from the OTHER context
+     by design) -- the mobile branch's existing ID-based selection lookup
+     (`selected = all.find(...) ?? ... ?? null`) gained a third fallback,
+     `catchup.moments.map((m) => m.thing).find(...)`, found necessary by the
+     new DOM test below actually failing without it (opening a moment's
+     Thing on mobile silently showed nothing).
+   - **Real DOM-level proof, not a regex/source check**
+     (`scripts/court-mobile-morning-brief.test.mjs`, 7 new tests): mounts
+     the ACTUAL `CourtPage` component (only genuinely unrelated heavy
+     subtrees stubbed at their own module boundary -- `AppShell`,
+     `CourtDesktop`'s own internals, the lane-list row components, the
+     generic Thing-detail workspace UI -- the same convention
+     `catchup-stack.test.mjs` already uses for `run-thing-action`/
+     `useDoorman`) and asserts: `useMorningBrief()`/`useCatchup()` are each
+     called exactly once per render regardless of breakpoint, with the
+     SAME object instance (`===`) threaded to both the desktop stub and the
+     mobile branch; the mobile Review banner is reachable and opens the real
+     `CatchUpOverlay` dialog; Escape performs a real `dismiss()` (not just a
+     visual close); opening a Thing from the mobile overlay dismisses the
+     brief and opens the Thing inline; and manual Review stays reachable
+     with zero moments and with a settled fetch error (not gated on
+     `count > 0`), matching the existing desktop contract.
+   - Two small, narrowly-scoped test-infrastructure fixes were needed to
+     make this DOM test possible at all (both real, both now used only by
+     this suite's own tests): `scripts/alias-loader.mjs`'s `.tsx` interception
+     compared the raw URL including `node:test`'s `--experimental-test-
+     module-mocks` cache-busting query string, so mocking any `.tsx` module
+     (never previously attempted in this codebase's tests, which only ever
+     mocked `.ts` files) fell through to Node's default loader and crashed
+     with `ERR_UNKNOWN_FILE_EXTENSION`; and the same loader gained a small
+     `.json`-as-ES-module shim (`src/assets/*.asset.json` imports, used
+     transitively via `AsyncState` → `EmptyState`, otherwise hit Node's
+     `ERR_IMPORT_ATTRIBUTE_MISSING` for a plain unattributed JSON import,
+     something Vite's own real JSON handling never required). `scripts/
+     dom-test-setup.mjs` also gained `MutationObserver`/`NodeFilter`/
+     `HTMLInputElement`/`HTMLSelectElement`/`HTMLTextAreaElement`/
+     `HTMLButtonElement` globals, needed the first time any test in this
+     suite actually mounted a real Radix `Dialog` (`@radix-ui/react-focus-
+     scope`'s focus trap uses all of these, which jsdom implements on its
+     own `window` but Node doesn't expose as bare globals).
+   - `tests/e2e/preview/morning-brief.spec.ts`'s previously-skipping-by-
+     necessity below-`lg` test (skipped because there was genuinely no
+     mobile entry point to test) now asserts the same full flow the `>=lg`
+     test already did (banner reachable, dialog opens, no horizontal
+     overflow, Escape closes and restores focus) -- **run for real** across
+     all five viewport projects: 10 passed, 5 skipped (only the legitimate
+     `>=lg`-vs-`<lg` test-selection skips, one direction per project), 0
+     failed. Screenshots confirm a real mobile Morning Brief dialog
+     (`test-results/morning-brief-*-preview-{mobile,tablet-portrait}/
+     mobile-morning-brief-open.png`).
+
+2. **Fake-timer controller coverage (S02/S04/S10/S11).** This repo's only
+   existing timer-mocking mechanism is `node:test`'s built-in `mock.timers`
+   (grep-confirmed -- no other fake-timer library is present anywhere in
+   this codebase), already used by `use-morning-brief.test.mjs` and
+   `morning-brief-schedule.test.mjs`, but only ever with `apis: ["Date"]`
+   (that file's own comment explains why: most of its scenarios don't need
+   a real multi-hour/day timer to fire). New file
+   `scripts/use-morning-brief-timers.test.mjs` (5 tests) instead enables
+   `apis: ["Date", "setTimeout", "setInterval"]`, so `mock.timers.tick(ms)`
+   both advances the fake clock AND synchronously fires any of
+   `use-morning-brief.ts`'s OWN scheduled `setTimeout`s whose delay has
+   elapsed -- no manual invocation of what a timer "would have" called, no
+   restructuring of the controller beyond what T10-03 already did (no new
+   injectable-clock seam was needed; the hook already reads `Date`/
+   `setTimeout` directly, which `mock.timers` intercepts transparently).
+   - **S02** (06:59→07:00): asserts zero claim calls at mount, zero after an
+     unrelated rerender, then exactly one claim call -- and `open` flipping
+     true -- immediately after `mock.timers.tick(60_000)` crosses
+     `07:00:00.000Z`, proving the scheduled threshold timer itself fires the
+     claim.
+   - **S04** (duplicate/Strict-Mode/multiple mounts): two variants. The
+     first mounts two fully independent `useMorningBrief()` instances (the
+     scenario Task A's single-controller fix exists to prevent in
+     production) against a claim mock modeling the real server's atomic
+     per-`(context, localDate)` claim semantics -- confirms `use-morning-
+     brief.ts`'s own doc comment is accurate (both instances DO each
+     attempt a claim; its attempt-token system explicitly only dedupes
+     within one instance) AND that the atomic claim is the actual backstop:
+     exactly one of the two calls wins `claimed: true`, and exactly one
+     instance ends up `open: true` (never zero, never both). The second
+     variant wraps a SINGLE instance in a real `<StrictMode>` and confirms
+     its mount→cleanup→mount double-invoked effects still produce exactly
+     one claim call, proving the within-instance token guard for real
+     rather than by code inspection.
+   - **S10** (midnight while open): claims and opens for June 15 at the real
+     07:00 timer, then `mock.timers.tick()`s exactly to `2026-06-16T00:00:00.000Z`
+     -- the real scheduled midnight timer fires, `open` flips back to
+     `false` (the old scope retires), and `alreadyPresentedToday` flips back
+     to `false` (June 15's receipt does not carry over to June 16).
+   - **S11** (tomorrow's 07:00 with the tab already open): continuing past
+     S10's midnight rollover, ticks forward to the real, already-armed
+     `2026-06-16T07:00:00.000Z` threshold timer and confirms a SECOND real
+     claim call fires (not a reuse of yesterday's settled attempt), wins
+     `claimed: true` for the fresh local date, and actually reopens the
+     brief.
+   - All 5 pass; combined with the existing full suite this brings the
+     total from 745 to 757 (`scripts/court-mobile-morning-brief.test.mjs`
+     +7, `scripts/use-morning-brief-timers.test.mjs` +5, one existing
+     `court-stack-components.test.mjs` assertion updated in place to match
+     the new one-call-site architecture rather than removed).
+
+**Verification (this gap-closure pass):** `npx tsc --noEmit` 0 errors;
+`npm run lint` 0 errors / 69 warnings (unchanged baseline); `npm test`
+757/757 passing; `npm run build:app` clean; the five-viewport Playwright
+pass above (10 passed / 5 skipped / 0 failed, mobile scenarios now actually
+executed rather than skipped).
+
+**Still open (unchanged from before this pass, both explicitly RELEASE-gated,
+not local):**
+- A true live-backend/staging Playwright run (`tests/e2e/staging/`) --
+  credentials still not configured in this environment.
+- Live deployment/RLS verification of the Morning Brief receipt migrations
+  against a real Postgres instance, and real cross-device/cross-tab claim
+  atomicity under actual concurrent connections (the S04 test above proves
+  the ATTEMPT-TOKEN and claim-consumption logic against a mock server that
+  models atomic-claim semantics faithfully, which is real and load-bearing
+  evidence for the client-side contract, but is not itself a substitute for
+  a real Postgres `ON CONFLICT` constraint under genuine concurrent
+  connections).
