@@ -233,6 +233,28 @@ export function CourtDesktop({
     [now, next, later, theirs, filters, query, sort],
   );
 
+  // T09/E-04: "nothing to show" used to render the same per-lane "No
+  // Things match this view." regardless of WHY -- a genuinely empty Court
+  // (nothing tossed yet) and a Court with plenty of Things that a search/
+  // filter happens to have narrowed to zero looked identical, with no way
+  // to tell which one you were looking at or a single action to recover.
+  const rawMyLaneTotal = now.length + next.length + later.length;
+  const visibleMyLaneTotal = view.now.length + view.next.length + view.later.length;
+  const isCourtGenuinelyEmpty = rawMyLaneTotal === 0;
+  const isFilteredToZero = !isCourtGenuinelyEmpty && visibleMyLaneTotal === 0;
+  const hasActiveSearchOrFilters =
+    Boolean(query.trim()) ||
+    Boolean(filters.personId) ||
+    filters.due !== "any" ||
+    filters.acknowledgement !== "any" ||
+    filters.workStatus !== "any" ||
+    filters.starredOnly ||
+    filters.quick !== DEFAULT_COURT_FILTERS.quick;
+  const clearAllFilters = () => {
+    setFilters(DEFAULT_COURT_FILTERS);
+    setQuery("");
+  };
+
   const collaborators = useMemo(() => {
     const allThings = [...now, ...next, ...later, ...theirs];
     const map = new Map<string, Thing["assignee"]>();
@@ -699,6 +721,34 @@ export function CourtDesktop({
 
       {!focusSelection && catchup.count > 0 ? (
         <CatchUpBanner moments={catchup.moments} onReview={morningBrief.reopen} />
+      ) : null}
+
+      {/* T09/E-04: distinguishes a genuinely empty Court (nothing tossed
+          yet -- Magic Box right below is the capture action) from a Court
+          with Things that a search/filter has narrowed to zero (Clear
+          filters is the recovery action), and states the visible/total
+          count so filtering to zero is never mistaken for "there's
+          nothing here". */}
+      {!focusSelection && isCourtGenuinelyEmpty ? (
+        <div className="mb-3 rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-center text-[13px] text-muted-foreground">
+          Your Court is clear. Toss something below to get started.
+        </div>
+      ) : null}
+      {!focusSelection && isFilteredToZero ? (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+          <p className="text-[13px] text-muted-foreground">
+            No Things match your current search/filters ({rawMyLaneTotal} in Court overall).
+          </p>
+          {hasActiveSearchOrFilters && (
+            <button
+              type="button"
+              onClick={clearAllFilters}
+              className="shrink-0 rounded-lg border border-border bg-white px-3 py-1.5 text-[12px] font-medium text-foreground outline-none transition hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
       ) : null}
 
       <div className="flex w-full min-w-0 items-start gap-4">
