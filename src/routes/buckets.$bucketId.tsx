@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { format, formatDistanceToNowStrict, isToday } from "date-fns";
 import {
@@ -23,7 +23,8 @@ import {
 } from "@/features/buckets/use-bucket-items";
 import { bucketItemsSurface } from "@/features/buckets/bucket-items-surface";
 import { useBucketNoteEditor } from "@/features/buckets/use-bucket-note-editor";
-import { CourtDetailModal } from "@/features/court/CourtDetailModal";
+import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
+import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
 import { ListDetailSkeleton, Shimmer } from "@/components/katalist/ScreenSkeletons";
 import { useThing } from "@/features/things/use-thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -51,6 +52,16 @@ import {
 export const Route = createFileRoute("/buckets/$bucketId")({
   component: BucketDetailPage,
 });
+
+const narrowQuery = "(max-width: 1023px)";
+function subscribeNarrow(listener: () => void) {
+  const query = window.matchMedia(narrowQuery);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
+function useNarrowViewport() {
+  return useSyncExternalStore(subscribeNarrow, () => window.matchMedia(narrowQuery).matches, () => true);
+}
 
 /** Status label + colour for a Thing, matching the bucket-detail table design. */
 function thingStatusMeta(t: Thing): { label: string; color: string } {
@@ -165,7 +176,7 @@ function BucketDetailPage() {
   const { bucketId } = Route.useParams();
   const navigate = useNavigate();
   const { bucket, isLoading, error, rename, remove: deleteBucket, refetch: refetchBucket } = useBucket(bucketId);
-  const { items, add, remove, isLoading: itemsLoading, error: itemsError } = useBucketItems(bucketId);
+  const { items, add, remove, isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useBucketItems(bucketId);
   const things = useAccessibleThings();
   const lists = useAccessibleLists();
 
@@ -178,6 +189,20 @@ function BucketDetailPage() {
   const [addTab, setAddTab] = useState<"things" | "lists">("things");
   const [addQ, setAddQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const narrowViewport = useNarrowViewport();
+  const selectionOriginRef = useRef<HTMLElement | null>(null);
+  const openThing = (thingId: string, origin?: HTMLElement | null) => {
+    selectionOriginRef.current = origin ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    setSelectedId(thingId);
+  };
+  const closeThing = () => {
+    setSelectedId(null);
+    const origin = selectionOriginRef.current;
+    selectionOriginRef.current = null;
+    requestAnimationFrame(() => {
+      if (origin?.isConnected && document.activeElement === document.body) origin.focus();
+    });
+  };
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -201,8 +226,14 @@ function BucketDetailPage() {
   } = noteEditor;
 
   const liveThing = useThing(selectedId);
-  const thingItemsAll = items.filter((i): i is Extract<BucketItem, { kind: "thing" }> => i.kind === "thing");
-  const listItemsAll = items.filter((i): i is Extract<BucketItem, { kind: "list" }> => i.kind === "list");
+  const thingItemsAll = items.filter(
+    (i): i is Extract<BucketItem, { kind: "thing"; availability: "available" }> =>
+      i.kind === "thing" && i.availability === "available",
+  );
+  const listItemsAll = items.filter(
+    (i): i is Extract<BucketItem, { kind: "list"; availability: "available" }> =>
+      i.kind === "list" && i.availability === "available",
+  );
   const selectedThing =
     liveThing.thing ?? thingItemsAll.find((i) => i.thingId === selectedId)?.thing ?? null;
 
@@ -230,6 +261,9 @@ function BucketDetailPage() {
   const visible = useMemo(() => {
     return items.filter((item) => {
       if (item.kind === "thing") {
+        if (item.availability === "unavailable") {
+          return !assigneeFilter && !statusFilter && (!q || "unavailable thing".includes(q.toLowerCase()));
+        }
         if (!matchesQuery(q, item.thing)) return false;
         if (assigneeFilter) {
           if (!item.thing.assignee || item.thing.assignee.name.toLowerCase() !== assigneeFilter.toLowerCase())
@@ -246,6 +280,7 @@ function BucketDetailPage() {
       }
       if (item.kind === "list") {
         if (statusFilter) return false;
+        if (item.availability === "unavailable") return !q || "unavailable list".includes(q.toLowerCase());
         return matchesQuery(q, undefined, item.list);
       }
       return true;
@@ -312,12 +347,16 @@ function BucketDetailPage() {
       .join("")
       .toUpperCase() || "B";
 
-  const sortedThingItems = [...thingItems].sort(
-    (a, b) => new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime(),
-  );
+  const sortedThingItems = [...thingItems].sort((a, b) => {
+    if (a.availability !== b.availability) return a.availability === "available" ? -1 : 1;
+    if (a.availability === "unavailable" || b.availability === "unavailable") {
+      return a.thingId.localeCompare(b.thingId);
+    }
+    return new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime();
+  });
 
-  // "New Thing" adds a reference to an existing Thing/List (Buckets never own or
-  // create Things — they are private reference groupings).
+  // Buckets are private reference groupings; this picker never creates or
+  // changes the source Thing/List's permissions.
   const addReference = (
     <Popover open={addOpen} onOpenChange={setAddOpen}>
       <PopoverTrigger asChild>
@@ -326,7 +365,7 @@ function BucketDetailPage() {
           className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-[#975ee2] px-4 text-[14px] font-medium text-white transition hover:brightness-95"
         >
           <Plus className="h-4 w-4" />
-          <span>New Thing</span>
+          <span>Add existing reference</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 rounded-2xl border border-border/80 bg-white p-3">
@@ -445,6 +484,26 @@ function BucketDetailPage() {
         </h3>
         <div className="divide-y divide-[#f2f3f9]">
           {listItems.map((item) => {
+            if (item.availability === "unavailable") {
+              return (
+                <div key={item.listId} className="flex items-center justify-between gap-3 py-4">
+                  <div>
+                    <p className="text-[13px] font-semibold text-[#000533]">Unavailable List</p>
+                    <p className="text-[12px] text-[#6a769c]">This reference is retained, but its source is no longer accessible.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void remove.mutateAsync({ listId: item.listId }).then(
+                      () => toast.success("Reference removed. The source List is unchanged."),
+                      (err) => toast.error(domainErrorMessage(err)),
+                    )}
+                    className="text-[12px] font-semibold text-destructive hover:underline"
+                  >
+                    Remove reference
+                  </button>
+                </div>
+              );
+            }
             const l = item.list;
             const open = Math.max(0, l.thingCount - l.doneCount);
             const pct = l.thingCount ? Math.round((l.doneCount / l.thingCount) * 100) : 0;
@@ -536,6 +595,28 @@ function BucketDetailPage() {
             </thead>
             <tbody>
               {sortedThingItems.map((item) => {
+                if (item.availability === "unavailable") {
+                  return (
+                    <tr key={item.thingId} className="border-b border-[#f2f3f9] last:border-0">
+                      <td className="px-3 py-3" colSpan={7}>
+                        <p className="text-[13px] font-semibold text-[#000533]">Unavailable Thing</p>
+                        <p className="text-[12px] text-[#6a769c]">This reference is retained, but its source is no longer accessible.</p>
+                      </td>
+                      <td className="py-3 pr-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => void remove.mutateAsync({ thingId: item.thingId }).then(
+                            () => toast.success("Reference removed. The source Thing is unchanged."),
+                            (err) => toast.error(domainErrorMessage(err)),
+                          )}
+                          className="text-[12px] font-semibold text-destructive hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                }
                 const t = item.thing;
                 const st = thingStatusMeta(t);
                 const comments = t.commentCount ?? t.unreadCommentCount ?? 0;
@@ -545,7 +626,7 @@ function BucketDetailPage() {
                     <td className="px-3 py-1.5">
                       <button
                         type="button"
-                        onClick={() => setSelectedId(item.thingId)}
+                        onClick={(event) => openThing(item.thingId, event.currentTarget)}
                         title={t.title}
                         className="flex max-w-[420px] items-center gap-2 text-left"
                       >
@@ -598,7 +679,7 @@ function BucketDetailPage() {
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44 bg-white">
-                          <DropdownMenuItem className="text-[12.5px] cursor-pointer" onSelect={() => setSelectedId(item.thingId)}>
+                          <DropdownMenuItem className="text-[12.5px] cursor-pointer" onSelect={() => openThing(item.thingId)}>
                             Open
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -627,6 +708,12 @@ function BucketDetailPage() {
 
   return (
     <AppShell noPadding>
+      <InlineThingDetailWorkspace
+        thing={narrowViewport ? null : selectedThing}
+        onClose={closeThing}
+        backLabel={bucket.name}
+        flatPanel
+      >
       <div className="min-h-screen space-y-3 bg-[#edf2fe] px-4 py-3 pb-20">
         {/* Sub-header + tabs card */}
         <div className="rounded-[10px] bg-white">
@@ -650,7 +737,7 @@ function BucketDetailPage() {
                   </div>
                   <div className="flex items-center gap-1 text-[12px] text-[#6a769c]">
                     <Lock className="h-3 w-3" />
-                    Private Bucket • Only visible to you
+                    Private collection. Shared items keep their existing permissions.
                   </div>
                 </div>
               </div>
@@ -752,7 +839,12 @@ function BucketDetailPage() {
           {itemsSurface === "loading" ? (
               <BucketItemsShimmer view={detailTab === "lists" ? "lists" : "things"} />
             ) : itemsSurface === "error" ? (
-              <p className="text-sm text-muted-foreground">{domainErrorMessage(itemsError)}</p>
+              <div role="alert" className="rounded-xl border border-destructive/30 p-5 text-center">
+                <p className="text-sm text-muted-foreground">{domainErrorMessage(itemsError)}</p>
+                <button type="button" onClick={() => void refetchItems()} className="mt-3 rounded-lg border px-3 py-2 text-[12px] font-semibold">
+                  Retry
+                </button>
+              </div>
             ) : detailTab === "notes" ? (
               <div>
                 <div className="mb-4 flex items-center justify-between">
@@ -837,13 +929,12 @@ function BucketDetailPage() {
             )}
         </div>
       </div>
+      </InlineThingDetailWorkspace>
 
-      <CourtDetailModal
+      <ThingDetailSheet
         thing={selectedThing}
-        lane="theirs"
-        isOpen={Boolean(selectedThing)}
-        onClose={() => setSelectedId(null)}
-        onOpenFullView={() => undefined}
+        open={narrowViewport && Boolean(selectedThing)}
+        onOpenChange={(open) => { if (!open) closeThing(); }}
       />
 
       {/* Note editor dialog */}

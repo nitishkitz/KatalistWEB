@@ -4,32 +4,23 @@ import { readFileSync } from "node:fs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("Lists open Thing detail in an inline workspace; Buckets use the tracked CourtDetailModal variant", () => {
+test("Lists keep Thing detail inline; desktop Buckets use the workspace and retain a mobile sheet", () => {
   const lists = read("src/routes/lists.$listId.tsx");
   const buckets = read("src/routes/buckets.$bucketId.tsx");
 
-  assert.match(lists, /InlineThingDetailWorkspace/);
+  assert.match(lists, /<ThingDetailContent/);
   assert.doesNotMatch(lists, /<ThingDetailSheet/);
 
-  // KNOWN GAP (tracked for Batch E2, "shared detail behavior with
-  // controlled variants"): the Bucket-detail redesign opens Thing detail
-  // via CourtDetailModal instead of InlineThingDetailWorkspace, so Court/
-  // List/Nudges and Buckets do not yet share one detail surface. This is
-  // not the deprecated ThingDetailSheet, so it does not regress that
-  // legacy-sheet removal — but it is a real, open inconsistency, not a
-  // false test failure. Do not silently "fix" this by swapping in
-  // InlineThingDetailWorkspace here; that component owns a two-pane
-  // list+detail layout (it takes `children`), while CourtDetailModal is a
-  // standalone dialog — reconciling them is the E2 redesign, not a
-  // one-line source-string change.
-  assert.match(buckets, /<CourtDetailModal/);
-  assert.doesNotMatch(buckets, /<ThingDetailSheet/);
+  assert.match(buckets, /<InlineThingDetailWorkspace/);
+  assert.match(buckets, /<ThingDetailSheet/);
+  assert.doesNotMatch(buckets, /<CourtDetailModal/);
+  assert.match(buckets, /narrowViewport \? null : selectedThing/);
+  assert.match(buckets, /open=\{narrowViewport && Boolean\(selectedThing\)\}/);
 });
 
 test("route-level Thing detail never falls back to the legacy sheet", () => {
   const routes = [
     "src/routes/index.tsx",
-    "src/routes/lists.$listId.tsx",
     "src/routes/nudges.tsx",
   ];
 
@@ -39,13 +30,15 @@ test("route-level Thing detail never falls back to the legacy sheet", () => {
     assert.doesNotMatch(source, /ThingDetailSheet/, `${route} should not use the legacy sheet`);
   }
 
-  // Buckets: see the CourtDetailModal note above — tracked gap, not a
-  // legacy-sheet regression.
-  assert.doesNotMatch(
-    read("src/routes/buckets.$bucketId.tsx"),
-    /ThingDetailSheet/,
-    "buckets.$bucketId.tsx should not use the legacy sheet",
-  );
+  const lists = read("src/routes/lists.$listId.tsx");
+  assert.match(lists, /<ThingDetailContent/);
+  assert.doesNotMatch(lists, /ThingDetailSheet/);
+
+  // Buckets intentionally use the accessible sheet below 1024px while
+  // desktop keeps the inline workspace, with only one detail tree active.
+  const buckets = read("src/routes/buckets.$bucketId.tsx");
+  assert.match(buckets, /ThingDetailSheet/);
+  assert.match(buckets, /narrowViewport \? null : selectedThing/);
 });
 
 test("WITH OTHERS keeps its existing groups and opens detail inside its own section", () => {

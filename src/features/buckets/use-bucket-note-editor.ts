@@ -167,9 +167,11 @@ export function useBucketNoteEditor(bucketId: string, notesApi: ReturnType<typeo
           clearDraft(qc, "bucket-note", savedKey);
           setEditingNoteId(createdId);
         }
+        toast.success("Saved. Your newer edits are still here.");
         return;
       }
       clearDraft(qc, "bucket-note", savedKey);
+      toast.success("Note saved.");
       setNoteOpen(false);
     };
     const fail = (err: unknown) => {
