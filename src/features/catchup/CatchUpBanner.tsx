@@ -39,7 +39,7 @@ export function CatchUpBanner({ moments, onReview }: Props) {
           <div className="leading-tight">
             {/* F03: internal name (CatchUpBanner) stays -- only the user-visible label changes. */}
             <p className="text-[14px] font-bold text-slate-900">Morning Brief</p>
-            <p className="text-[11.5px] text-slate-500">
+            <p className="text-[12px] text-slate-500">
               {moments.length} {moments.length === 1 ? "moment needs" : "moments need"} you
             </p>
           </div>
@@ -48,7 +48,7 @@ export function CatchUpBanner({ moments, onReview }: Props) {
           {chips.map((c) => (
             <span
               key={c.key}
-              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11.5px] font-medium text-slate-600"
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-600"
             >
               <span className={cn("h-2 w-2 rounded-full", c.dot)} />
               {c.label}

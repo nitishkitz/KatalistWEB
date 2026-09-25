@@ -186,7 +186,7 @@ function CollaborateVisual() {
           ["Arjun", "Updated the copy."],
         ].map(([who = "", msg]) => (
           <div key={msg} className="flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-secondary text-[12px] font-semibold text-foreground">
               {who.charAt(0)}
             </span>
             <span className="font-medium text-foreground">{who}</span>
@@ -210,7 +210,7 @@ function CelebrateVisual() {
         <Trophy className="h-8 w-8" />
       </div>
       <p className="mt-4 mb-2 text-xs font-semibold text-foreground">Recent unlocks</p>
-      <div className="grid grid-cols-3 gap-2 text-center text-[11px] text-muted-foreground">
+      <div className="grid grid-cols-3 gap-2 text-center text-[12px] text-muted-foreground">
         {["Early Bird", "Planner", "Team Player"].map((t) => (
           <div key={t} className="rounded-lg border border-border px-2 py-3">
             <Star className="mx-auto mb-1 h-4 w-4 text-primary" />

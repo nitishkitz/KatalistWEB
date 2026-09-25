@@ -54,7 +54,7 @@ function CollaboratorStack({ bucket }: { bucket: BucketCard }) {
         />
       ))}
       {people.length > 3 ? (
-        <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[9.5px] font-semibold text-muted-foreground ring-2 ring-white">
+        <span className="flex h-[22px] w-[22px] items-center justify-center rounded-full bg-muted text-[12px] font-semibold text-muted-foreground ring-2 ring-white">
           +{people.length - 3}
         </span>
       ) : null}
@@ -111,12 +111,12 @@ function BucketTableRow({ bucket }: { bucket: BucketCard }) {
           >
             <span className={cn("block h-full rounded-full", accent.line)} style={{ width: `${progressPercent}%` }} />
           </div>
-          <span className="w-8 text-right text-[11px] tabular-nums text-[#777489]">
+          <span className="w-8 text-right text-[12px] tabular-nums text-[#777489]">
             {progressTotal ? `${progressPercent}%` : "—"}
           </span>
         </div>
       </td>
-      <td className="px-3 py-3 whitespace-nowrap text-[11.5px] text-[#a3a9c9]">{bucket.updatedAt}</td>
+      <td className="px-3 py-3 whitespace-nowrap text-[12px] text-[#a3a9c9]">{bucket.updatedAt}</td>
     </tr>
   );
 }
@@ -247,7 +247,7 @@ function BucketsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[880px] text-left">
                   <thead>
-                    <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                    <tr className="border-b border-[#eef0f6] text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
                       <th className="px-3 py-2.5 font-semibold">Bucket</th>
                       <th className="px-3 py-2.5 font-semibold">Members</th>
                       <th className="px-3 py-2.5 font-semibold">Things</th>

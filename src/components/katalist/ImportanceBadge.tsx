@@ -17,7 +17,7 @@ export function ImportanceBadge({
   return (
     <span
       className={cn(
-        "inline-flex h-5 items-center rounded px-1.5 text-[10px] font-semibold uppercase tracking-wide",
+        "inline-flex h-5 items-center rounded px-1.5 text-[12px] font-semibold uppercase tracking-wide",
         map[value],
         className,
       )}

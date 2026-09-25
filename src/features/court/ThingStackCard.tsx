@@ -200,7 +200,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
             </span>
             {dueLabel ? (
               <span
-                className="inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[10.5px] font-medium"
+                className="inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1.5 py-0.5 text-[12px] font-medium"
                 style={{
                   backgroundColor: laneFigma[lane].dueChipBg,
                   color: due.urgent ? "#fd0d0d" : laneFigma[lane].dueChipText,
@@ -217,14 +217,14 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
             {thing.title}
           </span>
           {thing.listName && thing.listName.toLowerCase() !== "standalone" && thing.listName.toLowerCase() !== "list" && (
-            <span className="mt-0.5 block text-[11px] text-muted-foreground font-medium truncate">
+            <span className="mt-0.5 block text-[12px] text-muted-foreground font-medium truncate">
               {thing.listName}
             </span>
           )}
 
           {/* Badges: comments & files */}
           {((thing.commentCount ?? 0) > 0 || fileCount > 0 || thing.overviewStatsUnavailable) && (
-            <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
+            <div className="mt-2 flex items-center gap-3 text-[12px] text-muted-foreground">
               {(thing.commentCount ?? 0) > 0 && (
                 <span
                   className={cn(
@@ -255,7 +255,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
 
           {/* Description */}
           {thing.description ? (
-            <p className="mt-2 text-[11.5px] text-slate-600 leading-relaxed text-left break-words whitespace-pre-wrap">
+            <p className="mt-2 text-[12px] text-slate-600 leading-relaxed text-left break-words whitespace-pre-wrap">
               {thing.description}
             </p>
           ) : null}
@@ -306,19 +306,19 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                       <h4 className={cn("text-[13px] font-bold leading-tight truncate", isDocx ? "text-blue-600" : "text-slate-900")}>
                         {firstFile.name.replace(/\.[^/.]+$/, "")}
                       </h4>
-                      <p className={cn("text-[10px] mt-0.5 font-medium", isDocx ? "text-blue-500" : "text-muted-foreground")}>
+                      <p className={cn("text-[12px] mt-0.5 font-medium", isDocx ? "text-blue-500" : "text-muted-foreground")}>
                         {thing.listName || (isDocx ? "Notes" : "Document")}
                       </p>
-                      <div className="mt-2 text-[10px] text-slate-600 leading-snug space-y-1">
-                        <p className="font-bold text-slate-800 text-[10px]">Overview</p>
-                        <p className="text-slate-600 text-[9.5px] line-clamp-4">
+                      <div className="mt-2 text-[12px] text-slate-600 leading-snug space-y-1">
+                        <p className="font-bold text-slate-800 text-[12px]">Overview</p>
+                        <p className="text-slate-600 text-[12px] line-clamp-4">
                           {thing.description || "No preview available for this file. Open it to view the full attachment."}
                         </p>
                       </div>
                     </div>
                   ) : (
                     <div className="flex-1 min-h-0 overflow-hidden text-left flex items-center gap-2">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-lg text-[10px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-lg text-[12px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
                         {firstFile.type}
                       </span>
                       <div className="min-w-0 flex-1">
@@ -326,7 +326,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                           {firstFile.name}
                         </p>
                         {firstFile.sizeLabel && (
-                          <p className="text-[10px] text-slate-500 font-medium">
+                          <p className="text-[12px] text-slate-500 font-medium">
                             {firstFile.sizeLabel}
                           </p>
                         )}
@@ -344,8 +344,8 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
             (() => {
               const pace = thing.personalPace ?? thing.ownerImportance;
               return (
-                <div className="mt-2.5 flex items-center text-[11px]">
-                  <span className="text-[10.5px] text-[#3b4976]">
+                <div className="mt-2.5 flex items-center text-[12px]">
+                  <span className="text-[12px] text-[#3b4976]">
                     Assigned pace:{" "}
                     <span
                       className="font-medium capitalize"
@@ -385,7 +385,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               disabled={disabled}
               onClick={(event) => run(event, "catch")}
               style={{ backgroundColor: laneFigma[lane].primaryBtn }}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[11.5px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
             >
               <span>Catch</span>
             </button>
@@ -401,7 +401,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               disabled={disabled}
               onClick={(event) => run(event, "sort")}
               style={{ backgroundColor: laneFigma[lane].primaryBtn }}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[11.5px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
             >
               <span>Mark Sorted</span>
             </button>

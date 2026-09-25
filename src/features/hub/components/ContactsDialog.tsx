@@ -189,7 +189,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             >
               {t.label}
               {t.count ? (
-                <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f0e9fb] px-1 text-[10.5px] font-semibold text-[#6638ec]">
+                <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#f0e9fb] px-1 text-[12px] font-semibold text-[#6638ec]">
                   {t.count}
                 </span>
               ) : null}
@@ -219,7 +219,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-[#000533]">{trimmedQuery}</p>
-                    <p className="text-[11.5px] text-[#6a769c]">Not on Katalist yet — invite by email</p>
+                    <p className="text-[12px] text-[#6a769c]">Not on Katalist yet — invite by email</p>
                   </div>
                   <button
                     type="button"
@@ -251,11 +251,11 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                         onCall={() => void openDm(m, true)}
                         trailing={
                           isContact ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#e4fcf0] px-2.5 py-1 text-[11.5px] font-medium text-[#12a15f]">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#e4fcf0] px-2.5 py-1 text-[12px] font-medium text-[#12a15f]">
                               <Check className="h-3 w-3" /> Contact
                             </span>
                           ) : requested ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f2f7] px-2.5 py-1 text-[11.5px] font-medium text-[#8487a7]">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f2f7] px-2.5 py-1 text-[12px] font-medium text-[#8487a7]">
                               <Clock className="h-3 w-3" /> Requested
                             </span>
                           ) : (
@@ -390,7 +390,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     Create invite
                   </button>
                 </div>
-                <p className="mt-1.5 text-[11px] text-[#8487a7]">
+                <p className="mt-1.5 text-[12px] text-[#8487a7]">
                   Creates a shareable invite link (copied to your clipboard). Automatic email delivery is not enabled yet.
                 </p>
               </div>
@@ -492,7 +492,7 @@ function Empty({ icon: Icon, title, hint }: { icon: typeof Users; title: string;
     <div className="flex flex-col items-center justify-center py-14 text-center">
       <Icon className="h-8 w-8 text-[#c5cae0]" />
       <p className="mt-2 text-[13px] font-semibold text-[#000533]">{title}</p>
-      <p className="mt-1 text-[11.5px] text-[#6a769c]">{hint}</p>
+      <p className="mt-1 text-[12px] text-[#6a769c]">{hint}</p>
     </div>
   );
 }

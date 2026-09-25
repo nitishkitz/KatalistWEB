@@ -33,7 +33,7 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
               {content.label}
             </h2>
           </div>
-          <p className="mt-0.5 text-[10.5px] text-muted-foreground">{content.descriptor}</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">{content.descriptor}</p>
         </div>
         <span className={cn("text-[12px] font-bold pt-0.5", content.tone)}>
           {things.length}
@@ -63,7 +63,7 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
               <span className="block line-clamp-2 text-[12px] font-bold leading-snug text-foreground">
                 {thing.title}
               </span>
-              <span className="mt-2 flex items-center gap-1.5 text-[10px]">
+              <span className="mt-2 flex items-center gap-1.5 text-[12px]">
                 <PersonAvatar
                   name={thing.assignee.name}
                   initials={thing.assignee.initials}

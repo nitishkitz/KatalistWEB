@@ -117,7 +117,7 @@ function PeekQueueCard({
       className="group/queue flex flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 shadow-2xs cursor-pointer transition-all hover:border-slate-300 hover:shadow-xs select-none min-h-[58px] h-[58px]"
       title={`Jump to ${thing.title}`}
     >
-      <div className="flex items-center justify-between text-[11px]">
+      <div className="flex items-center justify-between text-[12px]">
         <div className="flex items-center gap-1.5 min-w-0">
           <PersonAvatar
             name={thing.assignee.name}
@@ -125,14 +125,14 @@ function PeekQueueCard({
             src={assigneeAvatar}
             size={20}
           />
-          <span className="font-medium text-slate-800 text-[11.5px] truncate">
+          <span className="font-medium text-slate-800 text-[12px] truncate">
             {thing.assignee.name.split(" ")[0]}
           </span>
         </div>
         {thing.dueAt && (
           <span
             className={cn(
-              "shrink-0 text-[11px] font-bold",
+              "shrink-0 text-[12px] font-bold",
               due.urgent
                 ? "text-red-500"
                 : lane === "now"
@@ -791,7 +791,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   {things.length}
                 </span>
               </div>
-              <p className="mt-1 text-[11px] font-normal leading-none text-black/75">
+              <p className="mt-1 text-[12px] font-normal leading-none text-black/75">
                 {content.descriptor}
               </p>
             </div>
@@ -861,7 +861,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                           className="h-4 w-4"
                         />
                       </span>
-                      <span className="text-[11px] font-bold tracking-tight">
+                      <span className="text-[12px] font-bold tracking-tight">
                         {swipeDirection === "sort"
                           ? capabilities.canSort
                             ? swipeCommitted
@@ -991,7 +991,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
 
             {/* Deck indicator — pinned, always visible */}
             {things.length > 1 ? (
-              <div className="shrink-0 flex items-center justify-between px-3 pt-3 pb-1 text-[11.5px] text-slate-500 font-medium">
+              <div className="shrink-0 flex items-center justify-between px-3 pt-3 pb-1 text-[12px] text-slate-500 font-medium">
                 <button
                   type="button"
                   onClick={() => startNavigation(-1)}
@@ -1013,7 +1013,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             ) : null}
           </div>
         ) : (
-          <div className="flex min-h-[160px] flex-1 items-center justify-center px-3 text-center text-[11px] text-muted-foreground">
+          <div className="flex min-h-[160px] flex-1 items-center justify-center px-3 text-center text-[12px] text-muted-foreground">
             No Things match this view.
           </div>
         )}

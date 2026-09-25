@@ -91,30 +91,30 @@ function ConversationRow({
             {mentions === "unknown" ? (
               <span
                 title="Mention count unavailable"
-                className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-[#fdb412] px-1 text-[9px] font-bold text-white"
+                className="inline-flex h-[18px] shrink-0 items-center gap-0.5 rounded-full bg-[#fdb412] px-1 text-[12px] font-bold text-white"
               >
                 <AtSign className="h-2.5 w-2.5" />?
               </span>
             ) : mentions > 0 ? (
               <span
                 title={`${mentions} mention${mentions === 1 ? "" : "s"}`}
-                className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full bg-[#fdb412] px-1 text-[9px] font-bold text-white"
+                className="inline-flex h-[18px] shrink-0 items-center gap-0.5 rounded-full bg-[#fdb412] px-1 text-[12px] font-bold text-white"
               >
                 <AtSign className="h-2.5 w-2.5" />
                 {mentions > 9 ? "9+" : mentions}
               </span>
             ) : null}
           </span>
-          <span className="shrink-0 text-[10.5px] text-[#8487a7]">{relativeTime(c.lastAt)}</span>
+          <span className="shrink-0 text-[12px] text-[#8487a7]">{relativeTime(c.lastAt)}</span>
         </span>
         <span className="flex items-center justify-between gap-2">
-          <span className={cn("block truncate text-[11.5px]", hasUnread ? "font-medium text-[#000533]" : "text-[#6a769c]")}>
+          <span className={cn("block truncate text-[12px]", hasUnread ? "font-medium text-[#000533]" : "text-[#6a769c]")}>
             {c.lastMessage || (c.kind === "group" ? `${c.memberCount} members` : "Say hello")}
           </span>
           {unread === "unknown" ? (
-            <span title="Unread count unavailable" className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-semibold text-white">?</span>
+            <span title="Unread count unavailable" className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[12px] font-semibold text-white">?</span>
           ) : unread > 0 ? (
-            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#fc404d] px-1 text-[10px] font-semibold text-white">
+            <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#fc404d] px-1 text-[12px] font-semibold text-white">
               {unread > 99 ? "99+" : unread}
             </span>
           ) : null}
@@ -234,7 +234,7 @@ export function HubSidebar() {
         {/* People search results (message anyone) */}
         {q && peopleResults.length > 0 && (
           <div className="pb-2">
-            <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">People</p>
+            <p className="px-2 pb-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">People</p>
             {peopleResults.map((m) => (
               <button
                 key={m.id}
@@ -251,7 +251,7 @@ export function HubSidebar() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-semibold text-[#000533]">{m.name}</span>
-                  <span className="block truncate text-[11.5px] text-[#6a769c]">{m.role ?? "Message"}</span>
+                  <span className="block truncate text-[12px] text-[#6a769c]">{m.role ?? "Message"}</span>
                 </span>
                 <MessageCircle className="h-4 w-4 shrink-0 text-[#975ee2]" />
               </button>
@@ -262,9 +262,9 @@ export function HubSidebar() {
         {/* Conversations view */}
         {view === "conversations" && (
           <>
-            <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Conversations</p>
+            <p className="px-2 pb-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">Conversations</p>
             {countsUnavailable && (
-              <p role="status" className="mx-2 mb-2 rounded-lg bg-amber-50 px-2 py-2 text-[11px] text-amber-800">
+              <p role="status" className="mx-2 mb-2 rounded-lg bg-amber-50 px-2 py-2 text-[12px] text-amber-800">
                 Some unread counts are unavailable.
                 <button type="button" className="ml-1 font-semibold underline" onClick={refetchConversations}>Retry counts</button>
               </p>
@@ -295,9 +295,9 @@ export function HubSidebar() {
                 );
               })
             )}
-            {q && hasMore && <p className="px-2 py-1 text-[11px] text-[#8487a7]">Search covers loaded conversations. Load more to include older ones.</p>}
+            {q && hasMore && <p className="px-2 py-1 text-[12px] text-[#8487a7]">Search covers loaded conversations. Load more to include older ones.</p>}
             {conversationsError && conversations.length > 0 && (
-              <p role="alert" className="px-2 py-1 text-[11px] text-amber-700">The conversation list could not refresh. Your loaded conversations remain visible.</p>
+              <p role="alert" className="px-2 py-1 text-[12px] text-amber-700">The conversation list could not refresh. Your loaded conversations remain visible.</p>
             )}
             {hasMore && (
               <button type="button" disabled={isLoadingMore} onClick={loadMore}
@@ -311,7 +311,7 @@ export function HubSidebar() {
         {/* Lists view */}
         {view === "lists" && (
           <>
-            <p className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Lists</p>
+            <p className="px-2 pb-1 pt-2 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">Lists</p>
             {listsLoading ? (
               <ConversationListSkeleton />
             ) : filteredLists.length === 0 ? (
@@ -332,7 +332,7 @@ export function HubSidebar() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-semibold text-[#000533]">{l.name}</span>
-                    <span className="block truncate text-[11.5px] text-[#6a769c]">
+                    <span className="block truncate text-[12px] text-[#6a769c]">
                       {l.memberCount} {l.memberCount === 1 ? "member" : "members"}
                     </span>
                   </span>

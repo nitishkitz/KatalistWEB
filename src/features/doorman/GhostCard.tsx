@@ -12,7 +12,7 @@ export function GhostCard() {
 
   return (
     <aside className="pointer-events-auto fixed bottom-20 right-4 z-50 w-[320px] rounded-xl border border-border bg-card p-3 md:bottom-6">
-      <p className="text-[10px] font-semibold tracking-wide text-muted-foreground">{from}</p>
+      <p className="text-[12px] font-semibold tracking-wide text-muted-foreground">{from}</p>
       <p className="mt-1 text-[13px] font-medium text-foreground">{ghost.title}</p>
       <p className="mt-1 text-[12px] text-muted-foreground">
         Time-sensitive in {ghost.context}. Same Thing — not a copy.

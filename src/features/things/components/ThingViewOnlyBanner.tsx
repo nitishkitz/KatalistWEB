@@ -13,7 +13,7 @@ import { Eye } from "lucide-react";
  */
 export function ThingViewOnlyBanner() {
   return (
-    <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[11.5px] font-semibold text-emerald-800">
+    <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-emerald-200/70 bg-emerald-50/80 px-3 py-2 text-[12px] font-semibold text-emerald-800">
       <Eye className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
       <span>View only mode · You can view details and post comments.</span>
     </div>

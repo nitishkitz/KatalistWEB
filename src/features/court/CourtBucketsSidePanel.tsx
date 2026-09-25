@@ -89,7 +89,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
         <button
           type="button"
           onClick={() => setIsNewBucketOpen(true)}
-          className="inline-flex items-center gap-1 text-[11.5px] font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1 text-[12px] font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer"
         >
           <Plus className="h-3.5 w-3.5" />
           New Bucket
@@ -99,11 +99,11 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
       {/* Buckets List / Drop Targets */}
       <div className="flex-1 space-y-2 overflow-y-auto py-1 max-h-[480px] pr-0.5">
         {isLoading ? (
-          <div className="py-8 text-center text-[11.5px] text-slate-400">
+          <div className="py-8 text-center text-[12px] text-slate-400">
             Loading buckets...
           </div>
         ) : buckets.length === 0 ? (
-          <div className="py-8 text-center text-[11.5px] text-slate-400">
+          <div className="py-8 text-center text-[12px] text-slate-400">
             No active buckets in this context.
           </div>
         ) : (
@@ -185,7 +185,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
                     <span className="block truncate text-[13px] font-bold text-slate-900 group-hover:text-primary transition-colors">
                       {b.name}
                     </span>
-                    <span className="block text-[11px] text-slate-500 font-medium">
+                    <span className="block text-[12px] text-slate-500 font-medium">
                       {b.thingCount} {b.thingCount === 1 ? "Thing" : "Things"}
                     </span>
                   </div>
@@ -193,7 +193,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
 
                 <div className="shrink-0 pl-1.5">
                   {isTarget ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary text-white px-2 py-0.5 text-[10px] font-bold shadow-xs animate-pulse">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary text-white px-2 py-0.5 text-[12px] font-bold shadow-xs animate-pulse">
                       <Check className="h-3 w-3" />
                       Drop here to add
                     </span>
@@ -211,7 +211,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
       <div className="pt-3 border-t border-border/60 text-center mt-2">
         <Link
           to="/buckets"
-          className="inline-flex items-center justify-center text-[11.5px] font-bold text-slate-600 hover:text-foreground transition-colors"
+          className="inline-flex items-center justify-center text-[12px] font-bold text-slate-600 hover:text-foreground transition-colors"
         >
           View all buckets <ChevronRight className="h-3.5 w-3.5 ml-0.5" />
         </Link>

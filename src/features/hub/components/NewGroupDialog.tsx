@@ -140,7 +140,7 @@ export function NewGroupDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={34} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium text-[#000533]">{m.name}</span>
-                      {m.role ? <span className="block truncate text-[11.5px] text-[#6a769c]">{m.role}</span> : null}
+                      {m.role ? <span className="block truncate text-[12px] text-[#6a769c]">{m.role}</span> : null}
                     </span>
                     <span
                       className={cn(

@@ -187,7 +187,7 @@ export function AsyncState<T>({
       return (
         <div className="relative">
           {loadingContent}
-          <p className="pointer-events-none absolute inset-x-0 top-0 pt-1 text-center text-[11.5px] text-muted-foreground">
+          <p className="pointer-events-none absolute inset-x-0 top-0 pt-1 text-center text-[12px] text-muted-foreground">
             Taking longer than usual…
           </p>
         </div>

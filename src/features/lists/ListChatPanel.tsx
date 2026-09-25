@@ -84,7 +84,7 @@ function ChatAttachmentView({ attachment }: { attachment: ChatAttachment }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[12px] font-medium text-[#000533]">{attachment.name}</span>
-        {sizeLabel ? <span className="block text-[10.5px] text-[#8487a7]">{sizeLabel}</span> : null}
+        {sizeLabel ? <span className="block text-[12px] text-[#8487a7]">{sizeLabel}</span> : null}
       </span>
       <Download className="h-3.5 w-3.5 shrink-0 text-[#8487a7]" />
     </a>
@@ -346,7 +346,7 @@ export const ListChatPanel = forwardRef<
             />
           </div>
           {debouncedSearch.length >= 2 ? (
-            <p className="pt-1 text-[11px] text-[#8487a7]">
+            <p className="pt-1 text-[12px] text-[#8487a7]">
               {searchQuery.isFetching ? "Searching all messages…" : searchQuery.error ? "Search failed. Edit the query to retry." : "Search covers the full conversation history."}
             </p>
           ) : null}
@@ -367,7 +367,7 @@ export const ListChatPanel = forwardRef<
               <button
                 type="button"
                 onClick={() => { if (chat.messages.some((row) => row.id === m.id)) scrollToMessage(m.id); else setFocusedResult(m); }}
-                className="min-w-0 flex-1 truncate text-left text-[11.5px] text-[#3d3f74] hover:text-[#000533]"
+                className="min-w-0 flex-1 truncate text-left text-[12px] text-[#3d3f74] hover:text-[#000533]"
               >
                 <span className="font-medium">{m.author}:</span> {m.body || "📎 attachment"}
               </button>
@@ -383,7 +383,7 @@ export const ListChatPanel = forwardRef<
               ) : null}
             </div>
           ))}
-          {pinned.hasMore ? <button type="button" disabled={pinned.isLoadingMore} onClick={() => void pinned.loadMore()} className="w-full text-left text-[11px] text-[#6638ec] disabled:opacity-50">{pinned.isLoadingMore ? "Loading pinned…" : "More pinned messages"}</button> : null}
+          {pinned.hasMore ? <button type="button" disabled={pinned.isLoadingMore} onClick={() => void pinned.loadMore()} className="w-full text-left text-[12px] text-[#6638ec] disabled:opacity-50">{pinned.isLoadingMore ? "Loading pinned…" : "More pinned messages"}</button> : null}
         </div>
       )}
 
@@ -401,7 +401,7 @@ export const ListChatPanel = forwardRef<
           <div className="py-12 text-center">
             <MessageSquare className="mx-auto mb-1.5 h-7 w-7 text-[#c5cae0]" />
             <p className="text-[12.5px] font-medium text-[#000533]">No messages yet</p>
-            <p className="mt-0.5 text-[11px] text-[#6a769c]">
+            <p className="mt-0.5 text-[12px] text-[#6a769c]">
               {viewOnly ? "There are no messages here." : "Start the conversation below."}
             </p>
           </div>
@@ -409,7 +409,7 @@ export const ListChatPanel = forwardRef<
           filtered.map((m) =>
             m.kind === "system" ? (
               <div key={m.id} className="flex items-center justify-center gap-2 py-1">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5fb] px-3 py-1 text-[11px] text-[#6a769c]">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5fb] px-3 py-1 text-[12px] text-[#6a769c]">
                   <Phone className="h-3 w-3 text-[#12a15f]" />
                   <span className="font-medium text-[#000533]">{m.author}</span>
                   {m.body}
@@ -417,7 +417,7 @@ export const ListChatPanel = forwardRef<
                     · {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </span>
-                {m.delivery === "failed" ? <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="text-[11px] text-red-600 underline">Retry entry</button> : null}
+                {m.delivery === "failed" ? <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="text-[12px] text-red-600 underline">Retry entry</button> : null}
               </div>
             ) : (
               <div
@@ -435,16 +435,16 @@ export const ListChatPanel = forwardRef<
                 <div className="min-w-0 flex-1">
                   <div className="flex items-baseline gap-2">
                     <span className="text-[12.5px] font-medium text-[#000533]">{m.author}</span>
-                    <span className="text-[11px] text-[#757b9e]">
+                    <span className="text-[12px] text-[#757b9e]">
                       {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
                     {m.pinnedAt ? <Pin className="h-3 w-3 shrink-0 text-[#975ee2]" /> : null}
                   </div>
                   {m.body ? <MessageBody body={m.body} people={mentionable} myId={user?.id} /> : null}
                   {m.attachment ? <ChatAttachmentView attachment={m.attachment} /> : null}
-                  {m.delivery === "pending" ? <p className="text-[11px] text-[#8487a7]">Sending…</p> : null}
+                  {m.delivery === "pending" ? <p className="text-[12px] text-[#8487a7]">Sending…</p> : null}
                   {m.delivery === "failed" ? (
-                    <div className="mt-1 flex items-center gap-2 text-[11px] text-red-600">
+                    <div className="mt-1 flex items-center gap-2 text-[12px] text-red-600">
                       <span>Couldn't send.</span>
                       <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="font-semibold underline">Retry</button>
                       <button type="button" onClick={() => chat.removeFailed(m.id)} className="underline">Remove</button>
@@ -475,7 +475,7 @@ export const ListChatPanel = forwardRef<
         <button
           type="button"
           onClick={scrollToBottom}
-          className="absolute bottom-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#975ee2] px-3 py-1.5 text-[11.5px] font-medium text-white shadow-lg transition hover:brightness-95"
+          className="absolute bottom-2 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-[#975ee2] px-3 py-1.5 text-[12px] font-medium text-white shadow-lg transition hover:brightness-95"
         >
           New messages
           <ArrowDown className="h-3.5 w-3.5" />
@@ -484,7 +484,7 @@ export const ListChatPanel = forwardRef<
       </div>
 
       {viewOnly ? (
-        <p className="mx-5 mb-4 rounded-[8px] bg-[#f6f8fd] p-2.5 text-center text-[11.5px] text-[#6a769c]">
+        <p className="mx-5 mb-4 rounded-[8px] bg-[#f6f8fd] p-2.5 text-center text-[12px] text-[#6a769c]">
           View-only members can observe the conversation.
         </p>
       ) : (
@@ -507,7 +507,7 @@ export const ListChatPanel = forwardRef<
                 >
                   <PersonAvatar name={p.name} initials={p.initials} src={p.avatarUrl} size={22} />
                   <span className="truncate text-[12px] font-medium text-[#000533]">{p.name}</span>
-                  <span className="ml-auto text-[10px] text-[#8487a7]">{p.id.slice(-6)}</span>
+                  <span className="ml-auto text-[12px] text-[#8487a7]">{p.id.slice(-6)}</span>
                 </button>
               ))}
             </div>

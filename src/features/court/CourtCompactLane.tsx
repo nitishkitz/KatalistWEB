@@ -41,7 +41,7 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
           </div>
           <span
             className={cn(
-              "flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[10.5px] font-black bg-white shadow-2xs border border-border/50",
+              "flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-[12px] font-black bg-white shadow-2xs border border-border/50",
               content.tone,
             )}
           >
@@ -54,7 +54,7 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
             <span
               key={index}
               className={cn(
-                "text-[10.5px] font-black uppercase tracking-widest leading-none select-none",
+                "text-[12px] font-black uppercase tracking-widest leading-none select-none",
                 content.tone,
               )}
             >
@@ -87,11 +87,11 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
           <h2 className={cn("text-[12px] font-bold tracking-[0.08em]", content.tone)}>
             {content.label}
           </h2>
-          <span className={cn("ml-1 text-[11px] font-bold", content.tone)}>
+          <span className={cn("ml-1 text-[12px] font-bold", content.tone)}>
             {things.length}
           </span>
         </div>
-        <p className="mt-0.5 text-[10.5px] text-muted-foreground">{content.descriptor}</p>
+        <p className="mt-0.5 text-[12px] text-muted-foreground">{content.descriptor}</p>
       </div>
 
       <div className="space-y-2">
@@ -109,7 +109,7 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
               <span className="block line-clamp-2 text-[12px] font-bold leading-snug text-foreground">
                 {thing.title}
               </span>
-              <span className="mt-2 flex items-center gap-1.5 text-[10px]">
+              <span className="mt-2 flex items-center gap-1.5 text-[12px]">
                 <PersonAvatar
                   name={thing.assignee.name}
                   initials={thing.assignee.initials}
@@ -133,7 +133,7 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
           );
         })}
         {things.length > 3 ? (
-          <p className="pt-1 text-center text-[10.5px] font-medium text-muted-foreground">
+          <p className="pt-1 text-center text-[12px] font-medium text-muted-foreground">
             + {things.length - 3} more ∨
           </p>
         ) : null}

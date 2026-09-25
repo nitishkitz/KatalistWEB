@@ -405,7 +405,7 @@ function MePage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block text-[13px] font-medium text-black">{s.title}</span>
-                    <span className="block text-[11px] text-[#6a769c]">{s.body}</span>
+                    <span className="block text-[12px] text-[#6a769c]">{s.body}</span>
                   </span>
                   <ChevronRight className="h-4 w-4 text-[#6a769c]" />
                 </button>
@@ -541,7 +541,7 @@ function MePage() {
                   <label className="mt-4 flex items-center justify-between gap-3 text-[13px]">
                     <span>
                       Doorman breakthroughs
-                      <span className="mt-0.5 block text-[11.5px] text-muted-foreground">
+                      <span className="mt-0.5 block text-[12px] text-muted-foreground">
                         Let genuinely urgent Things from your other context surface as a Ghost Card.
                       </span>
                     </span>
@@ -564,7 +564,7 @@ function MePage() {
                     <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 p-3">
                       <div>
                         <p className="text-[13px] font-medium text-foreground">Push notifications</p>
-                        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                        <p className="mt-0.5 text-[12px] text-muted-foreground">
                           {pushPermission === "granted"
                             ? "Enabled on this device."
                             : pushPermission === "denied"

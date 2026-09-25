@@ -109,7 +109,7 @@ export function CourtWithOthersSidebar({
             <h2 className="text-[20px] font-medium uppercase leading-none tracking-tight text-[#050d33]">
               With Others
             </h2>
-            <p className="mt-1 text-[11px] font-normal leading-none text-[#46557d]">
+            <p className="mt-1 text-[12px] font-normal leading-none text-[#46557d]">
               Collaborating with the team
             </p>
           </div>
@@ -130,7 +130,7 @@ export function CourtWithOthersSidebar({
                 type="button"
                 onClick={() => setTheirFocus(id)}
                 className={cn(
-                  "pb-2 text-[11px] whitespace-nowrap transition-colors relative cursor-pointer outline-none",
+                  "pb-2 text-[12px] whitespace-nowrap transition-colors relative cursor-pointer outline-none",
                   isActive ? "text-black font-medium" : "text-black/80 hover:text-black font-normal",
                 )}
               >
@@ -195,7 +195,7 @@ export function CourtWithOthersSidebar({
                     <p className="text-[13px] font-normal text-slate-900 leading-snug line-clamp-3 break-words">
                       {thing.title}
                     </p>
-                    <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
                       <span className="font-medium text-slate-700">{thing.assignee.name.split(" ")[0]}</span>
                       <span>·</span>
                       {dueInfo ? (
@@ -213,7 +213,7 @@ export function CourtWithOthersSidebar({
 
                     {/* Badges line: comments and files */}
                     {((thing.commentCount ?? 0) > 0 || (thing.files?.length ?? 0) > 0 || (thing.attachmentCount ?? 0) > 0 || thing.overviewStatsUnavailable) && (
-                      <div className="mt-1.5 flex items-center gap-2.5 text-[11px] text-muted-foreground">
+                      <div className="mt-1.5 flex items-center gap-2.5 text-[12px] text-muted-foreground">
                         {(thing.commentCount ?? 0) > 0 && (
                           <span
                             className={cn(
@@ -251,7 +251,7 @@ export function CourtWithOthersSidebar({
                               handleNudge(thing);
                             }}
                             className={cn(
-                              "group/nudge inline-flex items-center gap-1.5 rounded-[7px] border px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer disabled:cursor-default",
+                              "group/nudge inline-flex items-center gap-1.5 rounded-[7px] border px-2.5 py-1 text-[12px] font-medium transition-colors cursor-pointer disabled:cursor-default",
                               isNudged
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                                 : "border-[#eaeffa] bg-[#eff1fc] font-normal text-[#1d1d1d] hover:bg-[#e6eafb]",

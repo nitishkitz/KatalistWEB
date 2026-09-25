@@ -231,7 +231,7 @@ export function CourtFocusView({
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to stacks</span>
-            <kbd className="rounded border border-[#e2e4f5] bg-white px-1.5 py-0.5 text-[10px] font-medium text-[#8487a7]">
+            <kbd className="rounded border border-[#e2e4f5] bg-white px-1.5 py-0.5 text-[12px] font-medium text-[#8487a7]">
               Esc
             </kbd>
           </button>
@@ -243,7 +243,7 @@ export function CourtFocusView({
 
         <div className="flex items-center gap-2">
           <PersonAvatar name="Nithesh" size={22} initials="N" />
-          <span className="text-[11.5px] font-medium text-[#5f5f90]">Involving Nithesh</span>
+          <span className="text-[12px] font-medium text-[#5f5f90]">Involving Nithesh</span>
         </div>
       </div>
 
@@ -303,7 +303,7 @@ export function CourtFocusView({
           </div>
 
           {/* Meta row: count and sort */}
-          <div className="flex items-center justify-between px-4 py-2 text-[11.5px] border-b border-[#eef0f6]">
+          <div className="flex items-center justify-between px-4 py-2 text-[12px] border-b border-[#eef0f6]">
             <div className="flex items-center gap-1.5 font-medium text-[#8487a7]">
               <List className="h-3.5 w-3.5 text-[#5f5f90]" />
               <span>{currentLaneThings.length} Things</span>
@@ -366,7 +366,7 @@ export function CourtFocusView({
                       >
                         {thing.title}
                       </p>
-                      <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
+                      <div className="mt-1 flex flex-col gap-0.5 text-[12px]">
                         {due.label && due.label !== "No due date" ? (
                           <span
                             className="font-medium"
@@ -395,7 +395,7 @@ export function CourtFocusView({
                   </div>
 
                   <div className="shrink-0 pt-0.5">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] text-[#8186a5]">
+                    <span className="inline-flex items-center gap-1.5 text-[12px] text-[#8186a5]">
                       <span
                         className="h-3 w-3 rounded-full border-2 bg-white"
                         style={{
@@ -412,7 +412,7 @@ export function CourtFocusView({
             })}
 
             {currentLaneThings.length === 0 && (
-              <div className="py-8 text-center text-[11px] text-muted-foreground">
+              <div className="py-8 text-center text-[12px] text-muted-foreground">
                 No Things in this lane.
               </div>
             )}
@@ -454,7 +454,7 @@ export function CourtFocusView({
                     onFileSelect={(file) => setSelectedFile(file)}
                   />
                 ) : (
-                  <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 px-6 text-center text-[11px] text-muted-foreground">
+                  <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 px-6 text-center text-[12px] text-muted-foreground">
                     This Thing is no longer in the selected lane.
                   </div>
                 )}
@@ -534,7 +534,7 @@ export function CourtFocusView({
               <p className="text-[12.5px] font-bold leading-snug text-foreground line-clamp-2">
                 {selectedThing.title}
               </p>
-              <div className="mt-1 flex items-center justify-between gap-1.5 text-[10.5px]">
+              <div className="mt-1 flex items-center justify-between gap-1.5 text-[12px]">
                 <span className="font-medium text-muted-foreground">
                   {thingStatusLabel(selectedThing)}
                 </span>

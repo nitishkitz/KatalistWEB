@@ -69,7 +69,7 @@ function StatusMark({ thing }: { thing: Thing }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+        "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[12px] font-medium",
         statusTone,
       )}
     >
@@ -109,10 +109,10 @@ export function CourtThingCard({
       >
         <span className={cn("h-5 w-0.5 shrink-0 rounded-full", tone.edge)} aria-hidden="true" />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[11.5px] font-medium text-foreground">
+          <span className="block truncate text-[12px] font-medium text-foreground">
             {thing.title}
           </span>
-          <span className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+          <span className="mt-1 flex items-center gap-1 text-[12px] text-muted-foreground">
             <KatalistIcon name={workIcon[thing.workStatus]} className="h-3 w-3" />
             <span className="truncate">{workLabel[thing.workStatus]}</span>
             <span aria-hidden="true">·</span>
@@ -139,7 +139,7 @@ export function CourtThingCard({
           {thing.title}
         </span>
 
-        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[10.5px]">
+        <span className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px]">
           <span className="inline-flex min-w-0 items-center gap-1.5">
             <PersonAvatar
               name={thing.assignee.name}
@@ -166,7 +166,7 @@ export function CourtThingCard({
         </span>
 
         {density === "focused" ? (
-          <span className="mt-1.5 block text-[10px] text-muted-foreground">
+          <span className="mt-1.5 block text-[12px] text-muted-foreground">
             {movementLabel(thing)} · {thing.context === "work" ? "Work" : "Home"} update
           </span>
         ) : null}
@@ -175,22 +175,22 @@ export function CourtThingCard({
       <span className="absolute right-1.5 top-2 flex items-center gap-1">
         <span className="hidden min-w-[44px] text-right sm:block">
           <span
-            className={cn("block text-[10px] font-semibold", importanceTone[thing.ownerImportance])}
+            className={cn("block text-[12px] font-semibold", importanceTone[thing.ownerImportance])}
           >
             {importanceLabel[thing.ownerImportance]}
           </span>
-          <span className="block text-[8px] text-muted-foreground">Owner</span>
+          <span className="block text-[12px] text-muted-foreground">Owner</span>
         </span>
         <span className="hidden min-w-[44px] text-right sm:block">
           <span
             className={cn(
-              "block text-[10px] font-semibold",
+              "block text-[12px] font-semibold",
               laneTone[lane ?? thing.personalPace ?? "next"].text,
             )}
           >
             {(lane ?? thing.personalPace ?? "next").toUpperCase()}
           </span>
-          <span className="block text-[8px] text-muted-foreground">My Pace</span>
+          <span className="block text-[12px] text-muted-foreground">My Pace</span>
         </span>
         {thing.starred ? (
           <span className="text-status-waiting" title="Starred">

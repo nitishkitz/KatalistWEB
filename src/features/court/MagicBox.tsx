@@ -413,7 +413,7 @@ export function MagicBox({
       {/* Autocomplete Popover for @ People — appears immediately on typing @ */}
       {trigger?.type === "person" && (
         <div className="absolute bottom-full mb-2 left-0 z-50 w-full max-w-sm rounded-2xl border border-border/80 bg-white p-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 mb-1">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 mb-1">
             <AtSign className="h-3 w-3 text-primary" />
             Assign to Person
             {trigger.query && (
@@ -462,7 +462,7 @@ export function MagicBox({
       {/* Autocomplete Popover for # Lists — appears immediately on typing # */}
       {trigger?.type === "list" && (
         <div className="absolute bottom-full mb-2 left-0 z-50 w-full max-w-sm rounded-2xl border border-border/80 bg-white p-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 mb-1">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 mb-1">
             <Hash className="h-3 w-3 text-primary" />
             Add to List
             {trigger.query && (
@@ -508,7 +508,7 @@ export function MagicBox({
       {/* Autocomplete Popover for / Buckets — appears immediately on typing / */}
       {trigger?.type === "bucket" && (
         <div className="absolute bottom-full mb-2 left-0 z-50 w-full max-w-sm rounded-2xl border border-border/80 bg-white p-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 mb-1">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/50 mb-1">
             <Layers className="h-3 w-3 text-primary" />
             Add to Bucket
             {trigger.query && (
@@ -566,14 +566,14 @@ export function MagicBox({
           {attachedFiles.map((file) => (
             <div
               key={file.id}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[11.5px] font-medium text-slate-800 shadow-2xs"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-800 shadow-2xs"
             >
               {file.type === "image" && file.url ? (
                 <img src={file.url} alt={file.name} className="h-4 w-4 rounded object-cover" />
               ) : (
                 <span
                   className={cn(
-                    "flex h-4 px-1 items-center justify-center rounded text-[8.5px] font-bold uppercase",
+                    "flex h-[18px] px-1 items-center justify-center rounded text-[12px] font-bold uppercase",
                     file.type === "pdf"
                       ? "bg-red-50 text-red-600 border border-red-200"
                       : file.type === "excel"
@@ -590,7 +590,7 @@ export function MagicBox({
               )}
               <span className="max-w-[140px] truncate">{file.name}</span>
               {file.sizeLabel && (
-                <span className="text-[10px] text-muted-foreground font-normal">({file.sizeLabel})</span>
+                <span className="text-[12px] text-muted-foreground font-normal">({file.sizeLabel})</span>
               )}
               <button
                 type="button"
@@ -776,7 +776,7 @@ export function MagicBox({
                 inputRef.current?.select();
               }}
               title={isMac ? "Press ⌘K to activate" : "Press Ctrl+K to activate"}
-              className="hidden sm:inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10.5px] font-medium text-slate-500 cursor-pointer select-none hover:bg-slate-100 transition-colors"
+              className="hidden sm:inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[12px] font-medium text-slate-500 cursor-pointer select-none hover:bg-slate-100 transition-colors"
             >
               {isMac ? "⌘ K" : "Ctrl K"}
             </kbd>
@@ -864,7 +864,7 @@ export function MagicBox({
               <button
                 type="button"
                 onClick={() => setDismissedSuggestionId(parsed.suggestedPerson!.person.id)}
-                className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-all cursor-pointer"
+                className="rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-all cursor-pointer"
               >
                 No, skip
               </button>
@@ -877,7 +877,7 @@ export function MagicBox({
                   );
                   setDismissedSuggestionId(null);
                 }}
-                className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[11px] font-semibold text-white shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
+                className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[12px] font-semibold text-white shadow-sm hover:bg-primary/90 transition-all cursor-pointer"
               >
                 <Sparkles className="h-3 w-3" />
                 Yes, assign to {parsed.suggestedPerson.person.name.split(" ")[0]}
@@ -904,7 +904,7 @@ export function MagicBox({
                   }
                 }}
                 className={cn(
-                  "rounded-full border px-2 py-0.5 text-[11px] font-medium transition-all text-left",
+                  "rounded-full border px-2 py-0.5 text-[12px] font-medium transition-all text-left",
                   desktop && "inline-flex items-center gap-1 bg-white",
                   isSuggestion &&
                     "border-primary/40 bg-primary/5 text-primary hover:bg-primary hover:text-white cursor-pointer shadow-xs",

@@ -48,12 +48,12 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
             <span className="block text-[12.5px] font-bold text-foreground leading-tight">
               File into Bucket
             </span>
-            <span className="block text-[10px] text-muted-foreground">
+            <span className="block text-[12px] text-muted-foreground">
               Drop card on a bucket to organize
             </span>
           </div>
         </div>
-        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[12px] font-bold text-primary">
           {buckets.length} Buckets
         </span>
       </div>
@@ -61,11 +61,11 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
       {/* Bucket List */}
       <div className="max-h-[360px] space-y-1.5 overflow-y-auto pr-0.5">
         {isLoading ? (
-          <div className="py-6 text-center text-[11.5px] text-muted-foreground">
+          <div className="py-6 text-center text-[12px] text-muted-foreground">
             Loading buckets...
           </div>
         ) : buckets.length === 0 ? (
-          <div className="py-6 text-center text-[11.5px] text-muted-foreground">
+          <div className="py-6 text-center text-[12px] text-muted-foreground">
             No active buckets found.
           </div>
         ) : (
@@ -124,7 +124,7 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                   <div
                     className={cn(
-                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white font-bold text-[11px] shadow-2xs",
+                      "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white font-bold text-[12px] shadow-2xs",
                       b.color || "bg-violet-500",
                     )}
                   >
@@ -134,7 +134,7 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
                     <span className="block truncate text-[12.5px] font-bold text-foreground group-hover:text-primary transition-colors">
                       {b.name}
                     </span>
-                    <span className="block text-[10.5px] text-muted-foreground">
+                    <span className="block text-[12px] text-muted-foreground">
                       {b.thingCount} {b.thingCount === 1 ? "Thing" : "Things"}
                     </span>
                   </div>
@@ -142,7 +142,7 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
 
                 <div className="shrink-0 pl-2">
                   {isTarget ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary text-white px-2 py-0.5 text-[10px] font-bold shadow-xs animate-pulse">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-primary text-white px-2 py-0.5 text-[12px] font-bold shadow-xs animate-pulse">
                       <Check className="h-3 w-3" />
                       Drop here
                     </span>

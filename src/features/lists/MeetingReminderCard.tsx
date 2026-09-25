@@ -45,7 +45,7 @@ export function MeetingReminderCard() {
     // never overlap on the rare occasion both are visible at once.
     <aside className="pointer-events-auto fixed bottom-40 right-4 z-50 w-[320px] rounded-xl border border-border bg-card p-3 shadow-lg md:bottom-24">
       <div className="flex items-start justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
+        <p className="flex items-center gap-1.5 text-[12px] font-semibold tracking-wide text-muted-foreground">
           <PhoneCall className="h-3 w-3 text-[#12a15f]" />
           {inProgress ? "MEETING IN PROGRESS" : `STARTING IN ${formatCountdown(msUntilStart).toUpperCase()}`}
         </p>

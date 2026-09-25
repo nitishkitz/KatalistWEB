@@ -82,7 +82,7 @@ function ProgressBar({ done, total }: { done: number; total: number }) {
           style={{ width: `${pct}%` }}
         />
       </div>
-      <span className="text-[11px] font-medium text-[#1d1d1d]">
+      <span className="text-[12px] font-medium text-[#1d1d1d]">
         {done} done • {Math.max(0, total - done)} open
       </span>
     </div>
@@ -107,7 +107,7 @@ function MemberStack({ members, count }: { members: ListRow["members"]; count: n
         ))}
       </div>
       {extra > 0 ? (
-        <span className="ml-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-[10px] font-semibold text-muted-foreground">
+        <span className="ml-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-[12px] font-semibold text-muted-foreground">
           +{extra}
         </span>
       ) : null}
@@ -124,7 +124,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
       <div className="overflow-x-auto">
         <table className="w-full table-fixed text-left">
           <thead>
-            <tr className="border-b border-[#ebedf1] bg-[#fafbfd] text-[11px] font-semibold tracking-wider text-[#6f7d94] uppercase">
+            <tr className="border-b border-[#ebedf1] bg-[#fafbfd] text-[12px] font-semibold tracking-wider text-[#6f7d94] uppercase">
               <th className="w-[32%] px-5 py-3 font-semibold">LIST</th>
               <th className="w-[18%] px-3 py-3 font-semibold">MEMBERS</th>
               <th className="w-[10%] px-3 py-3 font-semibold">THINGS</th>
@@ -185,11 +185,11 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                           </span>
                         </div>
                         {row.description ? (
-                          <p className="truncate text-[11.5px] text-muted-foreground">{row.description}</p>
+                          <p className="truncate text-[12px] text-muted-foreground">{row.description}</p>
                         ) : row.role !== "owner" ? (
                           // For lists you own, the "Owned by Me" group already
                           // conveys ownership, so the redundant owner line is hidden.
-                          <p className="text-[11.5px] text-muted-foreground">{row.ownerLine}</p>
+                          <p className="text-[12px] text-muted-foreground">{row.ownerLine}</p>
                         ) : null}
                       </div>
                     </div>
@@ -213,7 +213,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                   {/* Unread */}
                   <td className="px-3 py-3.5">
                     {row.unread > 0 ? (
-                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[12px] font-bold text-primary-foreground">
                         {row.unread}
                       </span>
                     ) : (
@@ -226,7 +226,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                     <p className="truncate text-[12px] font-medium text-foreground">
                       {row.latestActivity}
                     </p>
-                    <p className="text-[11px] text-muted-foreground">{row.updatedAt}</p>
+                    <p className="text-[12px] text-muted-foreground">{row.updatedAt}</p>
                   </td>
 
                   {/* Row Actions Menu */}
@@ -519,7 +519,7 @@ function ListsPage() {
               type="button"
               onClick={() => setRoleFilter("all")}
               className={cn(
-                "inline-flex h-8 items-center rounded-full border px-3.5 text-[11.5px] font-medium transition-all duration-200",
+                "inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-all duration-200",
                 roleFilter === "all"
                   ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
                   : "border-border/80 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground",
@@ -531,7 +531,7 @@ function ListsPage() {
               type="button"
               onClick={() => setRoleFilter(roleFilter === "owner" ? "all" : "owner")}
               className={cn(
-                "inline-flex h-8 items-center rounded-full border px-3.5 text-[11.5px] font-medium transition-all duration-200",
+                "inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-all duration-200",
                 roleFilter === "owner"
                   ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
                   : "border-border/80 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground",
@@ -543,7 +543,7 @@ function ListsPage() {
               type="button"
               onClick={() => setRoleFilter(roleFilter === "collaborator" ? "all" : "collaborator")}
               className={cn(
-                "inline-flex h-8 items-center rounded-full border px-3.5 text-[11.5px] font-medium transition-all duration-200",
+                "inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-all duration-200",
                 roleFilter === "collaborator"
                   ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
                   : "border-border/80 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground",
@@ -555,7 +555,7 @@ function ListsPage() {
               type="button"
               onClick={() => setRoleFilter(roleFilter === "view_only" ? "all" : "view_only")}
               className={cn(
-                "inline-flex h-8 items-center rounded-full border px-3.5 text-[11.5px] font-medium transition-all duration-200",
+                "inline-flex h-8 items-center rounded-full border px-3.5 text-[12px] font-medium transition-all duration-200",
                 roleFilter === "view_only"
                   ? "border-primary bg-primary/10 font-semibold text-primary shadow-2xs"
                   : "border-border/80 bg-white text-muted-foreground hover:border-primary/50 hover:text-foreground",
@@ -569,7 +569,7 @@ function ListsPage() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-8 items-center gap-2 rounded-xl border border-border/80 bg-white px-3 text-[11.5px] font-medium text-foreground shadow-2xs hover:bg-muted/40"
+                className="inline-flex h-8 items-center gap-2 rounded-xl border border-border/80 bg-white px-3 text-[12px] font-medium text-foreground shadow-2xs hover:bg-muted/40"
               >
                 <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                 <span>{sortLabels[sortOption]}</span>
@@ -577,7 +577,7 @@ function ListsPage() {
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-white">
-              <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+              <DropdownMenuLabel className="text-[12px] text-muted-foreground">
                 Sort lists by
               </DropdownMenuLabel>
               <DropdownMenuRadioGroup
@@ -679,7 +679,7 @@ function ListsPage() {
               </p>
             </div>
             {!isEditing ? (
-              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[12px] font-medium text-primary">
                 {appContext === "home" ? <Home className="h-3.5 w-3.5" /> : <Briefcase className="h-3.5 w-3.5" />}
                 Creating in {appContext === "home" ? "Home" : "Work"} mode
               </div>
@@ -733,7 +733,7 @@ function ListsPage() {
                   <label className="flex h-28 w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-border bg-muted/30 text-muted-foreground transition-colors hover:border-primary hover:text-primary">
                     <ImagePlus className="h-5 w-5" />
                     <span className="text-[12px] font-medium">Upload an image</span>
-                    <span className="text-[10.5px]">PNG or JPG, up to 5 MB</span>
+                    <span className="text-[12px]">PNG or JPG, up to 5 MB</span>
                     <input
                       type="file"
                       accept="image/*"

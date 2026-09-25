@@ -157,7 +157,7 @@ export function InlineThingDetailWorkspace({
                     {navTitle || backLabel || "Things"}
                   </h2>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary shrink-0">
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[12px] font-bold text-primary shrink-0">
                   {items!.length}
                 </span>
               </div>
@@ -213,7 +213,7 @@ export function InlineThingDetailWorkspace({
                             <p className="text-[12.5px] font-bold leading-snug text-foreground line-clamp-2">
                               {item.title}
                             </p>
-                            <div className="mt-1 flex items-center justify-between gap-1.5 text-[10.5px]">
+                            <div className="mt-1 flex items-center justify-between gap-1.5 text-[12px]">
                               <span className="font-medium text-muted-foreground">
                                 {statusText}
                               </span>
@@ -252,7 +252,7 @@ export function InlineThingDetailWorkspace({
                         <p className="text-[12.5px] font-semibold leading-snug text-foreground line-clamp-2">
                           {item.title}
                         </p>
-                        <div className="mt-1 flex items-center justify-between gap-1.5 text-[10.5px]">
+                        <div className="mt-1 flex items-center justify-between gap-1.5 text-[12px]">
                           <span className="font-medium text-muted-foreground">
                             {statusText}
                           </span>
@@ -273,7 +273,7 @@ export function InlineThingDetailWorkspace({
                 })}
 
                 {filteredItems.length === 0 && (
-                  <div className="py-8 text-center text-[11px] text-muted-foreground">
+                  <div className="py-8 text-center text-[12px] text-muted-foreground">
                     No Things match search.
                   </div>
                 )}

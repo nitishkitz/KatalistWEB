@@ -143,7 +143,7 @@ function OnboardingPage() {
             </div>
             <div className="flex items-center justify-between">
               <PersonCell person={PREVIEW_PERSON} />
-              <span className="text-[11px] text-muted-foreground">Q3 Planning</span>
+              <span className="text-[12px] text-muted-foreground">Q3 Planning</span>
             </div>
           </div>
         </div>

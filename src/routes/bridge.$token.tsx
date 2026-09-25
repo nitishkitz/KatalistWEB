@@ -139,7 +139,7 @@ function BridgePage() {
     <div className="min-h-screen bg-background px-4 py-10">
       <div className="mx-auto max-w-lg rounded-2xl border border-border bg-card p-6">
         <Logo />
-        <p className="mt-4 text-[11px] font-semibold tracking-wide text-muted-foreground">BRIDGE · THING ONLY</p>
+        <p className="mt-4 text-[12px] font-semibold tracking-wide text-muted-foreground">BRIDGE · THING ONLY</p>
         <h1 className="mt-2 text-xl font-semibold">{thing.title}</h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
           From {thing.owner_name}. You can Catch, update status, comment, and Sort this one Thing.

@@ -74,7 +74,7 @@ export function ScheduleMeetingDialog({
 
         <div className="space-y-3 py-1">
           <div>
-            <label htmlFor="meeting-title" className="text-[11.5px] font-medium text-[#6a769c]">
+            <label htmlFor="meeting-title" className="text-[12px] font-medium text-[#6a769c]">
               Title
             </label>
             <input
@@ -86,7 +86,7 @@ export function ScheduleMeetingDialog({
             />
           </div>
           <div>
-            <label htmlFor="meeting-starts" className="text-[11.5px] font-medium text-[#6a769c]">
+            <label htmlFor="meeting-starts" className="text-[12px] font-medium text-[#6a769c]">
               Starts
             </label>
             <input
@@ -98,7 +98,7 @@ export function ScheduleMeetingDialog({
             />
           </div>
           <div>
-            <label htmlFor="meeting-duration" className="text-[11.5px] font-medium text-[#6a769c]">
+            <label htmlFor="meeting-duration" className="text-[12px] font-medium text-[#6a769c]">
               Duration
             </label>
             <select

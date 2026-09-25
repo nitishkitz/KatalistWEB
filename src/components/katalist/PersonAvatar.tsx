@@ -75,7 +75,12 @@ export function PersonAvatar({
       ) : (
         <span
           className="flex h-full w-full items-center justify-center font-bold tracking-tight"
-          style={{ fontSize: Math.max(10, Math.round(size * 0.36)) }}
+          // D-01/T08: initials are meaningful content (the only thing
+          // rendered when there's no photo), not decoration -- floored at
+          // the 12px metadata minimum even for the smallest avatar sizes
+          // used in this app (20px), matching every other avatar system
+          // that shows initials inside a small circle.
+          style={{ fontSize: Math.max(12, Math.round(size * 0.36)) }}
         >
           {displayInitials}
         </span>

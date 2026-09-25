@@ -440,7 +440,7 @@ function BucketDetailPage() {
   const linkedListsSection =
     listItems.length > 0 ? (
       <section>
-        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+        <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
           Linked Lists - {listItems.length}
         </h3>
         <div className="divide-y divide-[#f2f3f9]">
@@ -469,7 +469,7 @@ function BucketDetailPage() {
                   <div className="min-w-0">
                     <div className="truncate text-[13px] font-semibold text-[#000533]">{l.name}</div>
                     {l.description ? (
-                      <div className="truncate text-[11.5px] text-[#6a769c]">{l.description}</div>
+                      <div className="truncate text-[12px] text-[#6a769c]">{l.description}</div>
                     ) : null}
                   </div>
                 </div>
@@ -479,7 +479,7 @@ function BucketDetailPage() {
                   ) : null}
                   <div className="leading-tight">
                     <div className="text-[12px] font-medium text-[#000533]">{owner?.name ?? l.ownerLine}</div>
-                    <div className="text-[11px] text-[#8487a7]">Owner</div>
+                    <div className="text-[12px] text-[#8487a7]">Owner</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 text-[12px] text-[#3d3f74]">
@@ -490,7 +490,7 @@ function BucketDetailPage() {
                   <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#eef0f6]">
                     <div className="h-full rounded-full bg-[#7c33fd]" style={{ width: `${pct}%` }} />
                   </div>
-                  <span className="whitespace-nowrap text-[11.5px] text-[#6a769c]">
+                  <span className="whitespace-nowrap text-[12px] text-[#6a769c]">
                     {l.doneCount} done • {open} open
                   </span>
                 </div>
@@ -512,7 +512,7 @@ function BucketDetailPage() {
 
   const thingsSection = (
     <section>
-      <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+      <h3 className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
         Things - {sortedThingItems.length}
       </h3>
       {sortedThingItems.length === 0 ? (
@@ -523,7 +523,7 @@ function BucketDetailPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-left">
             <thead>
-              <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+              <tr className="border-b border-[#eef0f6] text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
                 <th className="px-3 py-1.5 font-semibold">Thing</th>
                 <th className="px-3 py-1.5 font-semibold">Assignee</th>
                 <th className="px-3 py-1.5 font-semibold">Status</th>
@@ -756,7 +756,7 @@ function BucketDetailPage() {
             ) : detailTab === "notes" ? (
               <div>
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                  <h3 className="text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
                     Notes - {notesApi.notes.length}
                   </h3>
                   <button
@@ -776,7 +776,7 @@ function BucketDetailPage() {
                   // indistinguishable from a genuinely empty Bucket.
                   <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-destructive/40 text-center">
                     <p className="text-[13px] font-semibold text-destructive">Couldn’t load notes</p>
-                    <p className="mt-1 text-[11.5px] text-[#6a769c]">{domainErrorMessage(notesApi.error)}</p>
+                    <p className="mt-1 text-[12px] text-[#6a769c]">{domainErrorMessage(notesApi.error)}</p>
                     <button
                       type="button"
                       onClick={() => void notesApi.refetch()}
@@ -789,7 +789,7 @@ function BucketDetailPage() {
                   <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-[#e3e5ef] text-center">
                     <FileText className="h-8 w-8 text-[#c5cae0]" />
                     <p className="mt-2 text-[13px] font-semibold text-[#000533]">No notes yet</p>
-                    <p className="mt-1 text-[11.5px] text-[#6a769c]">
+                    <p className="mt-1 text-[12px] text-[#6a769c]">
                       Use “New Note” above to jot down anything for this bucket.
                     </p>
                   </div>
@@ -808,7 +808,7 @@ function BucketDetailPage() {
                         <p className="mt-1.5 flex-1 overflow-hidden text-[12px] leading-relaxed text-[#6a769c] whitespace-pre-wrap">
                           {n.body || "No additional text"}
                         </p>
-                        <div className="mt-2 text-[11px] text-[#a3a9c9]">
+                        <div className="mt-2 text-[12px] text-[#a3a9c9]">
                           {format(new Date(n.updatedAt), "d MMM yyyy, h:mm a")}
                         </div>
                       </button>

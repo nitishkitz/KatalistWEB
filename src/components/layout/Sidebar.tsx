@@ -74,7 +74,7 @@ export function AppSidebar() {
               onDragOver={isBucketItem ? handleBucketDragOver : undefined}
               onDragLeave={isBucketItem ? handleBucketDragLeave : undefined}
               className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 py-1 text-[10px] font-medium transition-colors",
+                "flex flex-1 flex-col items-center gap-0.5 py-1 text-[12px] font-medium transition-colors",
                 isActive ? "text-primary" : "text-muted-foreground",
                 isBucketItem && isBucketFlyoutOpen && "text-primary font-bold animate-pulse",
               )}

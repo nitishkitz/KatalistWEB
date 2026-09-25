@@ -105,7 +105,7 @@ export function PdfCanvas({ url, page = 1, className, onNumPages }: PdfCanvasPro
         </div>
       )}
       {status === "error" && (
-        <div className="flex h-full min-h-[120px] w-full items-center justify-center p-4 text-center text-[11px] text-muted-foreground">
+        <div className="flex h-full min-h-[120px] w-full items-center justify-center p-4 text-center text-[12px] text-muted-foreground">
           Preview unavailable. Use Download to open this file.
         </div>
       )}

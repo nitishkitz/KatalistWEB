@@ -421,7 +421,7 @@ function CourtPage() {
                   />
                   <TheirCard
                     icon={
-                      <span className="flex h-4 w-4 items-center justify-center rounded-full border border-status-next text-[9px] text-status-next">
+                      <span className="flex h-[18px] w-[18px] items-center justify-center rounded-full border border-status-next text-[12px] text-status-next">
                         ○
                       </span>
                     }

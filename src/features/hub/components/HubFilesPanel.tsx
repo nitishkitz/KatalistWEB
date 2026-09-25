@@ -271,7 +271,7 @@ export function HubFilesPanel({
       <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
         {files.some((f) => f.pinnedAt) && (
           <div className="mb-4">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Pinned</p>
+            <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">Pinned</p>
             <div className="space-y-2">
               {files
                 .filter((f) => f.pinnedAt)
@@ -302,7 +302,7 @@ export function HubFilesPanel({
         )}
         {path.length === 0 && (allChatAttachments.length > 0 || chatFileHistory.error) && (
           <div className="mb-4">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Shared in chat</p>
+            <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">Shared in chat</p>
             {chatFileHistory.error ? <p role="alert" className="mb-2 text-xs text-red-600">Couldn't load chat files.</p> : null}
             <div className="space-y-2">
               {allChatAttachments.map((entry) => {
@@ -326,7 +326,7 @@ export function HubFilesPanel({
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[12.5px] font-medium text-[#000533]">{a.name}</span>
-                        <span className="block text-[11px] text-[#8487a7]">
+                        <span className="block text-[12px] text-[#8487a7]">
                           {entry.author} · {new Date(entry.at).toLocaleDateString([], { day: "numeric", month: "short" })}
                           {a.size ? ` · ${formatFileSize(a.size)}` : ""}
                         </span>
@@ -345,7 +345,7 @@ export function HubFilesPanel({
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Folder className="h-9 w-9 text-[#c5cae0]" />
             <p className="mt-2 text-[13px] font-semibold text-[#000533]">This folder is empty</p>
-            <p className="mt-1 text-[11.5px] text-[#6a769c]">Upload a file or create a folder to get started.</p>
+            <p className="mt-1 text-[12px] text-[#6a769c]">Upload a file or create a folder to get started.</p>
           </div>
         ) : view === "grid" ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -361,7 +361,7 @@ export function HubFilesPanel({
                 >
                   <v.Icon className={cn("h-9 w-9", v.tint)} />
                   <span className="w-full truncate text-[12.5px] font-medium text-[#000533]">{f.name}</span>
-                  <span className="text-[11px] text-[#8487a7]">{f.isFolder ? "Folder" : f.size ? formatFileSize(f.size) : ""}</span>
+                  <span className="text-[12px] text-[#8487a7]">{f.isFolder ? "Folder" : f.size ? formatFileSize(f.size) : ""}</span>
                 </button>
               );
             })}
@@ -369,7 +369,7 @@ export function HubFilesPanel({
         ) : (
           <table className="w-full min-w-[640px] text-left">
             <thead>
-              <tr className="border-b border-[#eef0f6] text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+              <tr className="border-b border-[#eef0f6] text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
                 <th className="px-3 py-2.5">Name</th>
                 <th className="px-3 py-2.5">Type</th>
                 <th className="px-3 py-2.5">Owner</th>
@@ -463,13 +463,13 @@ export function HubFilesPanel({
                   {preview.name}
                 </DialogTitle>
                 <div className="flex shrink-0 items-center gap-3">
-                  {preview.sizeLabel ? <span className="text-[11px] text-[#8487a7]">{preview.sizeLabel}</span> : null}
+                  {preview.sizeLabel ? <span className="text-[12px] text-[#8487a7]">{preview.sizeLabel}</span> : null}
                   <a
                     href={preview.url}
                     download={preview.name}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-[11.5px] font-medium text-[#975ee2] hover:opacity-80"
+                    className="inline-flex items-center gap-1 text-[12px] font-medium text-[#975ee2] hover:opacity-80"
                   >
                     <Download className="h-3.5 w-3.5" />
                     Download

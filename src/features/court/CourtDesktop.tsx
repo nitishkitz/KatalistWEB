@@ -95,7 +95,7 @@ function FilterRadioSection<T extends string>({
 }) {
   return (
     <>
-      <DropdownMenuLabel className="px-2 pb-1 pt-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+      <DropdownMenuLabel className="px-2 pb-1 pt-2 text-[12px] uppercase tracking-[0.12em] text-muted-foreground">
         {label}
       </DropdownMenuLabel>
       <DropdownMenuRadioGroup value={value} onValueChange={(next) => onChange(next as T)}>
@@ -158,10 +158,10 @@ function TheirSummaryCard({
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <span className="text-[11.5px] font-bold text-foreground">{label}</span>
-          <span className="text-[11.5px] font-bold text-foreground ml-1">{count}</span>
+          <span className="text-[12px] font-bold text-foreground">{label}</span>
+          <span className="text-[12px] font-bold text-foreground ml-1">{count}</span>
         </div>
-        <span className="mt-0.5 block truncate text-[10px] text-muted-foreground">
+        <span className="mt-0.5 block truncate text-[12px] text-muted-foreground">
           {description}
         </span>
       </div>
@@ -468,7 +468,7 @@ export function CourtDesktop({
   return (
     <div className="hidden lg:block w-full min-w-0 px-6 py-3">
       {isLoading ? (
-        <p className="mb-2 text-[11px] text-muted-foreground" aria-live="polite">
+        <p className="mb-2 text-[12px] text-muted-foreground" aria-live="polite">
           Loading your Court…
         </p>
       ) : null}
@@ -527,7 +527,7 @@ export function CourtDesktop({
                       src={person.avatarUrl}
                       size={20}
                     />
-                    <span className="text-[11px] font-medium pr-0.5">{person.name.split(' ')[0]}</span>
+                    <span className="text-[12px] font-medium pr-0.5">{person.name.split(' ')[0]}</span>
                     {isActive ? (
                       <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-white hidden" />
                     ) : null}
@@ -538,7 +538,7 @@ export function CourtDesktop({
                 <button
                   type="button"
                   onClick={() => setFilters((current) => ({ ...current, personId: null }))}
-                  className="ml-1 inline-flex h-5 items-center rounded-full bg-primary/10 px-1.5 text-[9.5px] font-semibold text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+                  className="ml-1 inline-flex h-5 items-center rounded-full bg-primary/10 px-1.5 text-[12px] font-semibold text-primary hover:bg-primary/20 transition-colors cursor-pointer"
                   title="Clear person filter"
                 >
                   ✕ Clear
@@ -556,10 +556,10 @@ export function CourtDesktop({
             type="button"
             onClick={() => setWithOthersOpenNarrow((open) => !open)}
             aria-pressed={withOthersOpenNarrow}
-            className="hidden lg:inline-flex xl:hidden h-8 items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 text-[11px] font-medium text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
+            className="hidden lg:inline-flex xl:hidden h-8 items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 text-[12px] font-medium text-foreground outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
           >
             With Others
-            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[12px] text-muted-foreground">
               {theirGroups.waiting_for_catch.length + theirGroups.moving.length + theirGroups.needs_attention.length}
             </span>
           </button>
@@ -570,7 +570,7 @@ export function CourtDesktop({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search Court"
-              className="min-w-0 flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground"
+              className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
               aria-label="Search Court"
             />
             {query ? (
@@ -590,7 +590,7 @@ export function CourtDesktop({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="inline-flex h-8 min-w-[150px] items-center gap-2 rounded-lg border border-border bg-white px-2.5 text-[11px] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-8 min-w-[150px] items-center gap-2 rounded-lg border border-border bg-white px-2.5 text-[12px] outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Sort Court: ${sortLabels[sort]}`}
               >
                 <KatalistIcon name="sort" className="h-3.5 w-3.5 text-muted-foreground" />
@@ -602,7 +602,7 @@ export function CourtDesktop({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52 bg-white">
-              <DropdownMenuLabel className="text-[11px] text-muted-foreground">
+              <DropdownMenuLabel className="text-[12px] text-muted-foreground">
                 Sort within each lane
               </DropdownMenuLabel>
               <DropdownMenuRadioGroup
@@ -627,7 +627,7 @@ export function CourtDesktop({
               <button
                 type="button"
                 className={cn(
-                  "inline-flex h-8 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[11px] outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "inline-flex h-8 items-center gap-1.5 rounded-lg border bg-white px-2.5 text-[12px] outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   detailedFilterCount ? "border-primary text-primary" : "border-border",
                 )}
                 aria-label={

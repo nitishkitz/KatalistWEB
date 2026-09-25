@@ -110,7 +110,7 @@ const VideoTile = forwardRef<
         </span>
       ) : null}
       <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5">
-        <span className={cn("truncate font-medium text-white", compact ? "text-[9.5px]" : "text-[11px]")}>
+        <span className="truncate text-[12px] font-medium text-white">
           {name}
           {self ? " (You)" : ""}
         </span>
@@ -137,7 +137,7 @@ function ParticipantRow({
       <PersonAvatar name={name} initials={name.slice(0, 2).toUpperCase()} size={30} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[12.5px] font-medium text-[#000128]">{name}</p>
-        {roleLabel ? <p className="text-[10.5px] text-black/60">{roleLabel}</p> : null}
+        {roleLabel ? <p className="text-[12px] text-black/60">{roleLabel}</p> : null}
       </div>
       {raisedHand ? <Hand className="h-3.5 w-3.5 shrink-0 text-[#fdb412]" /> : null}
       {muted ? (
@@ -490,7 +490,7 @@ export function ListCallPanel({
       <div className="flex items-center justify-between gap-3 border-b border-[#eef0f6] bg-[#f6f6fa]/80 px-4 py-2.5">
         <div className="min-w-0">
           <p className="truncate text-[13.5px] font-semibold text-[#000533]">{title ?? "Call"}</p>
-          <p className="flex items-center gap-1.5 text-[11px] text-[#6a769c]">
+          <p className="flex items-center gap-1.5 text-[12px] text-[#6a769c]">
             {count} {count === 1 ? "in call" : "in call"}
             {call.connecting ? (
               <span>· connecting…</span>
@@ -557,7 +557,7 @@ export function ListCallPanel({
               return (
                 <span
                   key={r.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[11px] text-white animate-in fade-in slide-in-from-bottom-2"
+                  className="inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[12px] text-white animate-in fade-in slide-in-from-bottom-2"
                 >
                   <Icon className="h-3.5 w-3.5" />
                   {r.from}
@@ -570,7 +570,7 @@ export function ListCallPanel({
               carries its own raised-hand badge, and this corner is taken by
               the "Live" indicator. */}
           {!presenterTile && call.raisedHandQueue.length > 0 ? (
-            <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[11px] text-white">
+            <div className="pointer-events-none absolute left-2 top-2 z-10 flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[12px] text-white">
               <Hand className="h-3.5 w-3.5 text-[#fdb412]" />
               {call.raisedHandQueue.map((p) => p.name).join(", ")}
             </div>
@@ -625,7 +625,7 @@ export function ListCallPanel({
                   onUploadImage={handleUploadImage}
                   page={presenterTile.kind === "doc" ? call.docPage : undefined}
                 />
-                <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex max-w-[70%] items-center gap-1.5 truncate rounded-full bg-black/60 px-2.5 py-1 text-[11px] font-medium text-white">
+                <div className="pointer-events-none absolute left-2 top-2 z-10 inline-flex max-w-[70%] items-center gap-1.5 truncate rounded-full bg-black/60 px-2.5 py-1 text-[12px] font-medium text-white">
                   {presenterTile.kind === "whiteboard" ? (
                     "Whiteboard"
                   ) : presenterTile.kind === "doc" ? (
@@ -638,7 +638,7 @@ export function ListCallPanel({
                   )}
                 </div>
                 {presenterTile.kind === "doc" && call.docKind === "pdf" && docNumPages > 1 ? (
-                  <div className="pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/60 px-1.5 py-1 text-[11px] text-white">
+                  <div className="pointer-events-auto absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/60 px-1.5 py-1 text-[12px] text-white">
                     <button
                       type="button"
                       onClick={() => call.setDocPage(call.docPage - 1)}
@@ -750,11 +750,11 @@ export function ListCallPanel({
             }} className="flex-1 space-y-2 overflow-y-auto px-3 py-2" style={{ maxHeight: 220 }}>
               {chat.hasMore || chat.olderError ? <button type="button" disabled={chat.isLoadingOlder} onClick={() => void loadOlderChat()} className="w-full rounded-md border border-border px-2 py-1 text-xs text-primary disabled:opacity-50">{chat.isLoadingOlder ? "Loading older…" : chat.olderError ? "Couldn't load older. Retry" : "Load older messages"}</button> : null}
               {chat.messages.length === 0 ? (
-                <p role={chat.error ? "alert" : undefined} className={chat.error ? "text-[11px] text-destructive" : "text-[11px] text-muted-foreground"}>{chat.error ? "Couldn't load messages. Reopen the conversation to retry." : "No messages yet."}</p>
+                <p role={chat.error ? "alert" : undefined} className={chat.error ? "text-[12px] text-destructive" : "text-[12px] text-muted-foreground"}>{chat.error ? "Couldn't load messages. Reopen the conversation to retry." : "No messages yet."}</p>
               ) : (
                 chat.messages.map((m) =>
                   m.kind === "system" ? (
-                    <div key={m.id} className="flex items-center justify-center gap-1 py-0.5 text-center text-[10.5px] text-[#6a769c]">
+                    <div key={m.id} className="flex items-center justify-center gap-1 py-0.5 text-center text-[12px] text-[#6a769c]">
                       <Phone className="h-2.5 w-2.5 text-[#12a15f]" />
                       <span className="font-medium text-[#000533]">{m.author}</span> {m.body}
                       {m.delivery === "failed" ? <button type="button" onClick={() => void chat.retry(m.id).catch(() => {})} className="text-red-600 underline">Retry</button> : null}
@@ -771,23 +771,23 @@ export function ListCallPanel({
                               <img src={m.attachment.url} alt={m.attachment.name} className="max-h-24 max-w-full rounded-md border border-[#eef0f6] object-cover" />
                             </a>
                           ) : (
-                            <a href={m.attachment.url} target="_blank" rel="noreferrer" className="mt-1 flex items-center gap-1.5 rounded-md border border-[#eef0f6] bg-[#f9f9fe] px-2 py-1 text-[11px] text-[#000533] hover:border-[#975ee2]">
+                            <a href={m.attachment.url} target="_blank" rel="noreferrer" className="mt-1 flex items-center gap-1.5 rounded-md border border-[#eef0f6] bg-[#f9f9fe] px-2 py-1 text-[12px] text-[#000533] hover:border-[#975ee2]">
                               <FileText className="h-3 w-3 shrink-0 text-[#6a769c]" />
                               <span className="truncate">{m.attachment.name}</span>
                             </a>
                           )
                         ) : null}
-                        {m.delivery === "pending" ? <p className="text-[10px] text-muted-foreground">Sending…</p> : null}
-                        {m.delivery === "failed" ? <div className="flex gap-2 text-[10px] text-destructive"><span>Couldn't send.</span><button type="button" onClick={() => void chat.retry(m.id).catch(() => {})} className="underline">Retry</button><button type="button" onClick={() => chat.removeFailed(m.id)} className="underline">Remove</button></div> : null}
+                        {m.delivery === "pending" ? <p className="text-[12px] text-muted-foreground">Sending…</p> : null}
+                        {m.delivery === "failed" ? <div className="flex gap-2 text-[12px] text-destructive"><span>Couldn't send.</span><button type="button" onClick={() => void chat.retry(m.id).catch(() => {})} className="underline">Retry</button><button type="button" onClick={() => chat.removeFailed(m.id)} className="underline">Remove</button></div> : null}
                       </div>
                     </div>
                   ),
                 )
               )}
             </div>
-            {newChatMessages ? <button type="button" onClick={() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; nearBottomRef.current = true; setNewChatMessages(false); }} className="mx-2 my-1 rounded-md bg-primary px-2 py-1 text-[10px] text-primary-foreground">New messages</button> : null}
+            {newChatMessages ? <button type="button" onClick={() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; nearBottomRef.current = true; setNewChatMessages(false); }} className="mx-2 my-1 rounded-md bg-primary px-2 py-1 text-[12px] text-primary-foreground">New messages</button> : null}
             {stagedChatAttachment ? (
-              <div className="mx-2 flex items-center gap-2 rounded-md border border-[#eef0f6] px-2 py-1 text-[10px]">
+              <div className="mx-2 flex items-center gap-2 rounded-md border border-[#eef0f6] px-2 py-1 text-[12px]">
                 <FileText className="h-3 w-3 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{stagedChatAttachment.name} ready to send</span>
                 <button type="button" onClick={() => chatDraft.write(draft, [])} className="text-destructive underline">Remove</button>

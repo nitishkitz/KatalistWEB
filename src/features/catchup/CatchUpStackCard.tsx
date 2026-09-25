@@ -72,7 +72,7 @@ export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
         <span className="text-[13px] font-semibold text-slate-800">{facePerson.name}</span>
         <span
           className={cn(
-            "ml-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold",
+            "ml-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold",
             chip.bg,
             chip.text,
           )}

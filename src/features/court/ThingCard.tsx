@@ -20,7 +20,7 @@ export function ThingCard({ thing, onSelect }: { thing: Thing; onSelect?: (t: Th
       </div>
       <div className="flex items-center justify-between">
         <PersonCell person={thing.assignee} />
-        <span className="text-[11px] text-muted-foreground">{thing.listName ?? "Standalone"}</span>
+        <span className="text-[12px] text-muted-foreground">{thing.listName ?? "Standalone"}</span>
       </div>
     </button>
   );

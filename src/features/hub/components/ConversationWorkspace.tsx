@@ -407,15 +407,15 @@ export function ConversationWorkspace({
           {debouncedQuery.length >= 2 ? (
             <div className="mt-3 max-h-72 space-y-3 overflow-y-auto">
               <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
                   Messages {messageResults.length > 0 ? `(${messageResults.length})` : ""}
                 </p>
                 {messageSearch.isFetching ? (
-                  <p className="text-[11.5px] text-[#8487a7]">Searching all messages…</p>
+                  <p className="text-[12px] text-[#8487a7]">Searching all messages…</p>
                 ) : messageSearch.error ? (
-                  <p role="alert" className="text-[11.5px] text-red-600">Message search failed. Edit your search to retry.</p>
+                  <p role="alert" className="text-[12px] text-red-600">Message search failed. Edit your search to retry.</p>
                 ) : messageResults.length === 0 ? (
-                  <p className="text-[11.5px] text-[#8487a7]">No matching messages.</p>
+                  <p className="text-[12px] text-[#8487a7]">No matching messages.</p>
                 ) : (
                   <div className="space-y-1">
                     {messageResults.map((m) => (
@@ -440,13 +440,13 @@ export function ConversationWorkspace({
                 )}
               </div>
               <div>
-                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">
+                <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
                   Files {visibleFileResults.length > 0 ? `(${visibleFileResults.length})` : ""}
                 </p>
                 {filesSearching ? (
-                  <p className="text-[11.5px] text-[#8487a7]">Searching…</p>
+                  <p className="text-[12px] text-[#8487a7]">Searching…</p>
                 ) : visibleFileResults.length === 0 ? (
-                  <p className="text-[11.5px] text-[#8487a7]">No matching files.</p>
+                  <p className="text-[12px] text-[#8487a7]">No matching files.</p>
                 ) : (
                   <div className="space-y-1">
                     {visibleFileResults.map((f) => (
@@ -511,7 +511,7 @@ export function ConversationWorkspace({
             </div>
             {callHistory.length > 0 && (
               <div className="border-t border-[#eef0f6] px-5 py-4">
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-[#8487a7]">Call history</p>
+                <p className="mb-3 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">Call history</p>
                 <div className="space-y-2">
                   {callHistory
                     .map((m) => (
@@ -523,7 +523,7 @@ export function ConversationWorkspace({
                           <p className="truncate text-[12.5px] text-[#000533]">
                             <span className="font-medium">{m.author}</span> {m.body}
                           </p>
-                          <p className="text-[11px] text-[#8487a7]">
+                          <p className="text-[12px] text-[#8487a7]">
                             {new Date(m.at).toLocaleString([], {
                               month: "short",
                               day: "numeric",

@@ -89,9 +89,9 @@ function SwitcherBubble({
     >
       <PersonAvatar name={conversation.title} src={conversation.avatarUrl} size={36} />
       {count === "unknown" ? (
-        <span title="Unread count unavailable — retrying" className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-amber-500 px-0.5 text-[9px] font-semibold text-white">?</span>
+        <span title="Unread count unavailable — retrying" className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-amber-500 px-0.5 text-[12px] font-semibold text-white">?</span>
       ) : count > 0 ? (
-        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-[#fc404d] px-0.5 text-[9px] font-semibold text-white">
+        <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-[#fc404d] px-0.5 text-[12px] font-semibold text-white">
           {count > 99 ? "99+" : count}
         </span>
       ) : null}
@@ -311,7 +311,7 @@ export function ChatHeadsDock() {
           >
             <img src={katalistMark.url} alt="" className="h-7 w-7" />
             {totalUnread > 0 || hasUnknownUnread ? (
-              <span className={cn("absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background px-1 text-[10px] font-semibold text-white", hasUnknownUnread ? "bg-amber-500" : "bg-[#fc404d]")}>
+              <span className={cn("absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background px-1 text-[12px] font-semibold text-white", hasUnknownUnread ? "bg-amber-500" : "bg-[#fc404d]")}>
                 {hasUnknownUnread ? "?" : totalUnread > 99 ? "99+" : totalUnread}
               </span>
             ) : null}

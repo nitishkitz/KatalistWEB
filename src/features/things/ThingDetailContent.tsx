@@ -163,8 +163,8 @@ function CommentRow({
       <PersonAvatar name={author} initials={initialsForName(author)} src={avatarUrl} size={24} />
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <p className="truncate text-[11px] font-semibold text-foreground">{author}</p>
-          <time className="shrink-0 text-[10px] text-muted-foreground flex items-center gap-1">
+          <p className="truncate text-[12px] font-semibold text-foreground">{author}</p>
+          <time className="shrink-0 text-[12px] text-muted-foreground flex items-center gap-1">
             {sending ? (
               <>
                 <Loader2 className="h-2.5 w-2.5 animate-spin text-primary" />
@@ -197,7 +197,7 @@ function CommentRow({
                   ) : (
                     <span
                       className={cn(
-                        "flex h-7 px-1.5 items-center justify-center rounded text-[9px] font-bold uppercase",
+                        "flex h-7 px-1.5 items-center justify-center rounded text-[12px] font-bold uppercase",
                         att.type === "pdf"
                           ? "bg-red-50 text-red-600 border border-red-200"
                           : att.type === "excel"
@@ -211,11 +211,11 @@ function CommentRow({
                     </span>
                   )}
                   <div className="min-w-0 pr-1">
-                    <p className="text-[11px] font-semibold text-slate-900 group-hover/att:text-primary truncate max-w-[130px]">
+                    <p className="text-[12px] font-semibold text-slate-900 group-hover/att:text-primary truncate max-w-[130px]">
                       {att.name}
                     </p>
                     {att.sizeLabel && (
-                      <p className="text-[9px] text-muted-foreground font-medium">
+                      <p className="text-[12px] text-muted-foreground font-medium">
                         {att.sizeLabel}
                       </p>
                     )}
@@ -264,13 +264,13 @@ function AssignOutsideBlock({
         type="button"
         disabled={disabled}
         onClick={() => setExpanded((current) => !current)}
-        className="flex h-8 w-full items-center gap-2 px-3 text-left text-[11px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex h-8 w-full items-center gap-2 px-3 text-left text-[12px] font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
         aria-expanded={expanded}
       >
         <span>Assign outside Katalist</span>
         {disabled ? <Lock className="ml-auto h-3.5 w-3.5 text-muted-foreground" /> : null}
         {!disabled ? (
-          <span className="ml-auto text-[10px] text-muted-foreground">
+          <span className="ml-auto text-[12px] text-muted-foreground">
             {expanded ? "Hide" : "Open"}
           </span>
         ) : null}
@@ -315,7 +315,7 @@ function AssignOutsideBlock({
           </button>
           {bridgePath ? (
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 truncate text-[11px] text-foreground">
+              <code className="min-w-0 flex-1 truncate text-[12px] text-foreground">
                 {bridgePath}
               </code>
               <button
@@ -739,7 +739,7 @@ export function ThingDetailContent({
         </div>
 
         {/* Subtitle */}
-        <p className="mt-1 text-[11.5px] text-[#6a769c] font-medium">
+        <p className="mt-1 text-[12px] text-[#6a769c] font-medium">
           Created by {thing.creator.name}
           {thing.updatedAt ? ` • Updated ${format(new Date(thing.updatedAt), "MMM d, h:mm a")}` : ""}
         </p>
@@ -770,10 +770,10 @@ export function ThingDetailContent({
                   size={30}
                 />
                 <div>
-                  <span className="block text-[11.5px] font-medium text-black leading-tight">
+                  <span className="block text-[12px] font-medium text-black leading-tight">
                     {thing.owner.name}
                   </span>
-                  <span className="block text-[10px] text-[#3a4675] mt-0.5">Owner</span>
+                  <span className="block text-[12px] text-[#3a4675] mt-0.5">Owner</span>
                 </div>
               </div>
 
@@ -785,10 +785,10 @@ export function ThingDetailContent({
                   size={30}
                 />
                 <div>
-                  <span className="block text-[11.5px] font-medium text-black leading-tight">
+                  <span className="block text-[12px] font-medium text-black leading-tight">
                     {thing.assignee.name}
                   </span>
-                  <span className="block text-[10px] text-[#3a4675] mt-0.5">
+                  <span className="block text-[12px] text-[#3a4675] mt-0.5">
                     Assignee{isAssigneeSameAsOwner ? "" : " • You"}
                   </span>
                 </div>
@@ -796,7 +796,7 @@ export function ThingDetailContent({
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-[10.5px] text-[#3a4675]">
+              <span className="text-[12px] text-[#3a4675]">
                 {thing.acknowledgement === "waiting_for_catch" ? "Waiting for Catch" : "Caught"}
               </span>
               {(() => {
@@ -814,7 +814,7 @@ export function ThingDetailContent({
                       ? "Under Progress"
                       : "Not Started";
                 return (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f0f2fe] px-2.5 py-1.5 text-[11px] font-medium text-[#975ee2]">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f0f2fe] px-2.5 py-1.5 text-[12px] font-medium text-[#975ee2]">
                     <span
                       className={cn(
                         "h-2 w-2 rounded-full",
@@ -833,14 +833,14 @@ export function ThingDetailContent({
             <div className="flex items-center gap-2 px-4">
               <Calendar className="h-4 w-4 shrink-0 text-[#3a4675]" />
               <div className="min-w-0">
-                <div className="text-[10px] text-[#3a4675]">Due</div>
-                <div className={cn("text-[11.5px] font-medium", dueLabel ? "text-[#f71a24]" : "text-muted-foreground")}>
+                <div className="text-[12px] text-[#3a4675]">Due</div>
+                <div className={cn("text-[12px] font-medium", dueLabel ? "text-[#f71a24]" : "text-muted-foreground")}>
                   {dueLabel ?? "No due date"}
                 </div>
               </div>
             </div>
             <div className="border-l border-[#f0f1f7] px-4">
-              <div className="mb-1 text-[10px] text-[#3a4675]">Assigned pace</div>
+              <div className="mb-1 text-[12px] text-[#3a4675]">Assigned pace</div>
               <div className="inline-flex rounded-[6px] bg-[#f0f1f9] p-0.5">
                 {(["now", "next", "later"] as const).map((pace) => (
                   <button
@@ -855,7 +855,7 @@ export function ThingDetailContent({
                       )
                     }
                     className={cn(
-                      "h-[22px] min-w-[48px] rounded-[5px] px-2 text-[10px] font-medium capitalize transition-colors cursor-pointer disabled:cursor-not-allowed",
+                      "h-[22px] min-w-[48px] rounded-[5px] px-2 text-[12px] font-medium capitalize transition-colors cursor-pointer disabled:cursor-not-allowed",
                       activePace === pace
                         ? "bg-[#975ee2] text-white"
                         : "text-[#3a4675] hover:text-[#000533]",
@@ -923,7 +923,7 @@ export function ThingDetailContent({
                 <button
                   type="button"
                   disabled={busy}
-                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#3a4675] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-60"
+                  className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#3a4675] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-60"
                   title={currentBucket?.name ? `Bucket: ${currentBucket.name}` : "Add to bucket"}
                 >
                   <Folder className="h-3.5 w-3.5" />
@@ -966,7 +966,7 @@ export function ThingDetailContent({
           {thing.description ? (
             <div className="py-3 border-b border-[#eef0f6]">
               <h3 className="text-[13px] font-medium text-[#000533] mb-1.5">Description</h3>
-              <p className="text-[11px] leading-relaxed text-[#6a769c] whitespace-pre-wrap">
+              <p className="text-[12px] leading-relaxed text-[#6a769c] whitespace-pre-wrap">
                 {thing.description}
               </p>
             </div>
@@ -986,7 +986,7 @@ export function ThingDetailContent({
               <div className="flex items-center gap-2">
                 <span className="text-[13px] font-medium text-[#000533]">Files</span>
                 {displayFiles.length > 0 && (
-                  <span className="inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[#eef0f6] px-1 text-[9px] font-medium text-[#000533]">
+                  <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#eef0f6] px-1 text-[12px] font-medium text-[#000533]">
                     {displayFiles.length}
                   </span>
                 )}
@@ -995,7 +995,7 @@ export function ThingDetailContent({
                 <button
                   type="button"
                   onClick={() => thingFileInputRef.current?.click()}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium text-[#975ee2] hover:opacity-80 transition-opacity cursor-pointer"
+                  className="inline-flex items-center gap-1 text-[12px] font-medium text-[#975ee2] hover:opacity-80 transition-opacity cursor-pointer"
                 >
                   + Add file
                 </button>
@@ -1037,17 +1037,17 @@ export function ThingDetailContent({
                       )}
                     >
                       <span
-                        className="inline-flex h-[22px] items-center justify-center rounded-[6px] border px-2 text-[9.5px] font-medium uppercase"
+                        className="inline-flex h-[22px] items-center justify-center rounded-[6px] border px-2 text-[12px] font-medium uppercase"
                         style={{ backgroundColor: chip.bg, color: chip.text, borderColor: chip.border }}
                       >
                         {chip.label}
                       </span>
-                      <span className="flex-1 truncate text-[10.8px] text-black">{file.name}</span>
+                      <span className="flex-1 truncate text-[12px] text-black">{file.name}</span>
                       {file.sizeLabel && (
-                        <span className="shrink-0 text-[10.8px] text-[#515b8e]">{file.sizeLabel}</span>
+                        <span className="shrink-0 text-[12px] text-[#515b8e]">{file.sizeLabel}</span>
                       )}
                       {file.isNew && (
-                        <span className="shrink-0 rounded bg-[#975ee2] px-1 py-0.5 text-[8px] font-bold text-white">
+                        <span className="shrink-0 rounded bg-[#975ee2] px-1 py-0.5 text-[12px] font-bold text-white">
                           New
                         </span>
                       )}
@@ -1056,7 +1056,7 @@ export function ThingDetailContent({
                 })}
               </div>
             ) : (
-              <p className="text-[11px] text-[#6a769c] italic">No files attached yet</p>
+              <p className="text-[12px] text-[#6a769c] italic">No files attached yet</p>
             )}
           </div>
 
@@ -1077,7 +1077,7 @@ export function ThingDetailContent({
                   <span>Comments</span>
                   <span
                     className={cn(
-                      "inline-flex h-[16px] min-w-[16px] items-center justify-center rounded-full px-1 text-[9px] font-medium",
+                      "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[12px] font-medium",
                       tab === "comments" ? "bg-[#f0eafe] text-[#975ee2]" : "bg-[#eef0f6] text-[#2b2e55]",
                     )}
                   >
@@ -1085,7 +1085,7 @@ export function ThingDetailContent({
                   </span>
                 </button>
                 {(thing.unreadCommentCount ?? 0) > 0 && (
-                  <span className="text-[11.5px] font-medium text-[#975ee2] pb-2 -mb-2">
+                  <span className="text-[12px] font-medium text-[#975ee2] pb-2 -mb-2">
                     {thing.unreadCommentCount} new
                   </span>
                 )}
@@ -1128,7 +1128,7 @@ export function ThingDetailContent({
                               <div className="absolute inset-0 flex items-center">
                                 <div className="w-full border-t border-blue-500" />
                               </div>
-                              <span className="relative bg-white px-3 text-[11px] font-semibold text-blue-600">
+                              <span className="relative bg-white px-3 text-[12px] font-semibold text-blue-600">
                                 New comments
                               </span>
                             </div>
@@ -1154,14 +1154,14 @@ export function ThingDetailContent({
                     {commentAttachments.map((att) => (
                       <div
                         key={att.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-800 shadow-2xs"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 text-[12px] font-medium text-slate-800 shadow-2xs"
                       >
                         {att.type === "image" && att.url ? (
                           <img src={att.url} alt={att.name} className="h-4 w-4 rounded object-cover" />
                         ) : (
                           <span
                             className={cn(
-                              "flex h-4 px-1 items-center justify-center rounded text-[8.5px] font-bold uppercase",
+                              "flex h-[18px] px-1 items-center justify-center rounded text-[12px] font-bold uppercase",
                               att.type === "pdf"
                                 ? "bg-red-50 text-red-600 border border-red-200"
                                 : att.type === "excel"
@@ -1230,7 +1230,7 @@ export function ThingDetailContent({
                   <button
                     type="submit"
                     disabled={(!comment.trim() && commentAttachments.length === 0) || thread.post.isPending}
-                    className="rounded-[6px] bg-[#975ee2] hover:brightness-95 text-white font-medium text-[11.5px] px-3.5 py-1.5 transition disabled:opacity-50 cursor-pointer"
+                    className="rounded-[6px] bg-[#975ee2] hover:brightness-95 text-white font-medium text-[12px] px-3.5 py-1.5 transition disabled:opacity-50 cursor-pointer"
                   >
                     Send
                   </button>
@@ -1245,7 +1245,7 @@ export function ThingDetailContent({
                 ) : null}
                 {thread.activityError && events.length === 0 ? <li role="alert" className="text-xs text-destructive">Couldn't load activity. Retry by reopening this Thing.</li> : null}
                 {events.map((event) => (
-                  <li key={event.id} className="text-[11.5px] text-muted-foreground">
+                  <li key={event.id} className="text-[12px] text-muted-foreground">
                     <span className="font-medium text-foreground">
                       {event.event.replaceAll("_", " ")}
                     </span>
@@ -1267,7 +1267,7 @@ export function ThingDetailContent({
           <h2 className="text-[18px] font-semibold leading-snug text-foreground">{thing.title}</h2>
           {headerAction}
         </div>
-        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+        <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
           <span className="capitalize">{thing.context}</span>
           {thing.listName ? (
             <>
@@ -1292,25 +1292,25 @@ export function ThingDetailContent({
           <h3 className="katalist-section-title">People</h3>
           <div className="grid gap-2 rounded-lg border border-border/70 bg-white p-3 md:grid-cols-3">
             <div className="flex min-h-7 items-center justify-between gap-2 md:block">
-              <span className="text-[11px] text-muted-foreground">Creator</span>
+              <span className="text-[12px] text-muted-foreground">Creator</span>
               <PersonCell person={thing.creator} />
             </div>
             <div className="flex min-h-7 items-center justify-between gap-2 md:block">
-              <span className="text-[11px] text-muted-foreground">Owner</span>
+              <span className="text-[12px] text-muted-foreground">Owner</span>
               <PersonCell person={thing.owner} />
             </div>
             <div className="flex min-h-7 items-center justify-between gap-2 md:block">
-              <span className="text-[11px] text-muted-foreground">Current Assignee</span>
+              <span className="text-[12px] text-muted-foreground">Current Assignee</span>
               <PersonCell person={thing.assignee} />
             </div>
           </div>
           {!viewOnly && (
-            <label className="flex h-9 items-center gap-2 px-1 text-[11px] text-muted-foreground">
+            <label className="flex h-9 items-center gap-2 px-1 text-[12px] text-muted-foreground">
               <UserPlus className="h-3.5 w-3.5 text-primary" />
               <span className="font-medium text-foreground">Reassign</span>
               <select
                 disabled={busy || !caps?.canReassign}
-                className="ml-auto h-8 max-w-[170px] rounded-lg border border-border bg-white px-2 text-[11px] text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                className="ml-auto h-8 max-w-[170px] rounded-lg border border-border bg-white px-2 text-[12px] text-foreground outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 id="thing-detail-reassign"
                 value={thing.assignee.id}
                 onChange={(e) => {
@@ -1347,7 +1347,7 @@ export function ThingDetailContent({
           currentBucket ? (
             <section className="space-y-1.5 xl:col-span-2">
               <h3 className="katalist-section-title">Bucket</h3>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[12px] text-muted-foreground">
                 In <span className="font-medium text-foreground">{currentBucket.name}</span>
               </p>
             </section>
@@ -1356,13 +1356,13 @@ export function ThingDetailContent({
           <section className="space-y-1.5 xl:col-span-2">
             <h3 className="katalist-section-title">Add to Bucket</h3>
             {currentBucket ? (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[12px] text-muted-foreground">
                 In <span className="font-medium text-foreground">{currentBucket.name}</span>
               </p>
             ) : null}
             <select
               disabled={busy}
-              className="h-8 w-full rounded-lg border border-border bg-white px-2 text-[11px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-8 w-full rounded-lg border border-border bg-white px-2 text-[12px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
               defaultValue=""
               onChange={(e) => {
                 if (!e.target.value) return;
@@ -1424,7 +1424,7 @@ export function ThingDetailContent({
                       )
                     }
                     className={cn(
-                      "relative z-10 h-7 text-[11px] font-medium uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "relative z-10 h-7 text-[12px] font-medium uppercase outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       paceTone[p],
                       !caps?.canSetPace && "cursor-not-allowed opacity-65",
                     )}
@@ -1487,7 +1487,7 @@ export function ThingDetailContent({
                     )
                   }
                   className={cn(
-                    "flex h-8 items-center justify-center rounded-lg border px-2 text-center text-[10px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                    "flex h-8 items-center justify-center rounded-lg border px-2 text-center text-[12px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                     thing.workStatus === s
                       ? "border-primary/30 bg-primary/5 text-primary"
                       : "border-border bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground",
@@ -1515,11 +1515,11 @@ export function ThingDetailContent({
               <div className="flex items-center justify-between">
                 <h3 className="katalist-section-title">Due Date</h3>
               </div>
-              <p className="flex items-start gap-1.5 text-[11px] text-foreground">
+              <p className="flex items-start gap-1.5 text-[12px] text-foreground">
                 <Calendar className="mt-0.5 h-3.5 w-3.5 text-primary" />
                 <span>
                   {dueLabel}
-                  <span className="block text-[10px] text-muted-foreground">
+                  <span className="block text-[12px] text-muted-foreground">
                     {format(new Date(thing.dueAt), "dd MMM yyyy")}
                   </span>
                 </span>
@@ -1530,11 +1530,11 @@ export function ThingDetailContent({
           {thing.listName ? (
             <section className="space-y-2">
               <h3 className="katalist-section-title">Source</h3>
-              <p className="flex items-start gap-1.5 text-[11px] text-foreground">
+              <p className="flex items-start gap-1.5 text-[12px] text-foreground">
                 <ListIcon className="mt-0.5 h-3.5 w-3.5 text-primary" />
                 <span>
                   {thing.listName}
-                  <span className="block text-[10px] text-muted-foreground">List</span>
+                  <span className="block text-[12px] text-muted-foreground">List</span>
                 </span>
               </p>
             </section>
@@ -1551,7 +1551,7 @@ export function ThingDetailContent({
               type="button"
               onClick={() => setTab(id)}
               className={cn(
-                "border-b-2 px-1 pb-2 text-[11px] font-medium capitalize outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "border-b-2 px-1 pb-2 text-[12px] font-medium capitalize outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab === id
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground",
@@ -1559,7 +1559,7 @@ export function ThingDetailContent({
             >
               {id}
               {id === "comments" && comments.length > 0 ? (
-                <span className="ml-1 text-[10px] text-primary">{comments.length}{thread.commentsHasMore ? "+" : ""}</span>
+                <span className="ml-1 text-[12px] text-primary">{comments.length}{thread.commentsHasMore ? "+" : ""}</span>
               ) : null}
             </button>
           ))}
@@ -1606,12 +1606,12 @@ export function ThingDetailContent({
                     value={due}
                     disabled={busy}
                     onChange={(e) => setDue(e.target.value)}
-                    className="h-7 min-w-0 flex-1 rounded-md border border-border bg-white px-2 text-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-7 min-w-0 flex-1 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
                   />
                   <button
                     type="button"
                     disabled={busy}
-                    className="h-7 rounded-md border border-border bg-white px-2 text-[10px] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-7 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
                     onClick={() => {
                       if (!due) return;
                       const iso = new Date(due).toISOString();
@@ -1650,7 +1650,7 @@ export function ThingDetailContent({
                         ),
                       )
                     }
-                    className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[11px] font-medium text-primary hover:bg-white disabled:opacity-60"
+                    className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[12px] font-medium text-primary hover:bg-white disabled:opacity-60"
                   >
                     {busy ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1673,7 +1673,7 @@ export function ThingDetailContent({
                             toast.success("Just a gentle paw tap on this one.");
                           })
                         }
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Bell className="h-3 w-3" />
                         Nudge
@@ -1697,7 +1697,7 @@ export function ThingDetailContent({
                             ),
                           )
                         }
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <Check className="h-3 w-3" />
                         Sort
@@ -1728,7 +1728,7 @@ export function ThingDetailContent({
                             );
                           }
                         }}
-                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[11px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                        className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[12px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                       >
                         <Trash2 className="h-3 w-3" />
                         Cancel Thing
@@ -1745,7 +1745,7 @@ export function ThingDetailContent({
                             onAfterTerminalAction?.();
                           })
                         }
-                        className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border bg-white text-[11px] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border bg-white text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         Shred for me
                       </button>
@@ -1791,7 +1791,7 @@ export function ThingDetailContent({
                 {commentAttachments.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {commentAttachments.map((att) => (
-                      <span key={att.id} className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9.5px]">
+                      <span key={att.id} className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[12px]">
                         <span className="truncate max-w-[100px]">{att.name}</span>
                         <button type="button" onClick={() => setCommentAttachments((prev) => prev.filter((f) => f.id !== att.id))}>
                           <X className="h-2.5 w-2.5" />
@@ -1814,12 +1814,12 @@ export function ThingDetailContent({
                     disabled={!caps?.canComment || thread.post.isPending}
                     onChange={(e) => setComment(e.target.value)}
                     placeholder={thread.post.isPending ? "Sending…" : "Write a comment…"}
-                    className="h-7 flex-1 rounded-md border border-border bg-white px-2 text-[10px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                    className="h-7 flex-1 rounded-md border border-border bg-white px-2 text-[12px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                   />
                   <button
                     type="submit"
                     disabled={!caps?.canComment || (!comment.trim() && commentAttachments.length === 0) || thread.post.isPending}
-                    className="inline-flex items-center gap-1 h-7 rounded-md bg-primary px-2.5 text-[10px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                    className="inline-flex items-center gap-1 h-7 rounded-md bg-primary px-2.5 text-[12px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                   >
                   {thread.post.isPending ? (
                     <>
@@ -1833,7 +1833,7 @@ export function ThingDetailContent({
                 </div>
               </form>
               {thing.workStatus === "sorted" ? (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-[12px] text-muted-foreground">
                   Comments stay open. They don’t reopen Sorted.
                 </p>
               ) : null}

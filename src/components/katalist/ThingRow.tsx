@@ -138,7 +138,7 @@ export function ThingRow({
 export function ThingTableHeader() {
   return (
     <thead>
-      <tr className="text-left text-[11px] font-medium text-muted-foreground">
+      <tr className="text-left text-[12px] font-medium text-muted-foreground">
         <th className="pb-2 pl-3 font-medium">Thing</th>
         <th className="px-2 pb-2 font-medium">Owner Importance</th>
         <th className="px-2 pb-2 font-medium">My Pace</th>

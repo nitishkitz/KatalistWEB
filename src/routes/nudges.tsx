@@ -276,7 +276,7 @@ function NudgesPage() {
                     {g.label}
                     <span
                       className={cn(
-                        "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10.5px] font-semibold",
+                        "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[12px] font-semibold",
                         active === g.id ? "bg-[#ece5fb] text-[#6638ec]" : "bg-[#eef0f6] text-[#6a769c]",
                       )}
                     >
@@ -292,7 +292,7 @@ function NudgesPage() {
                     <div className="overflow-x-auto rounded-[5px] border border-black/[0.04]">
                       <table className="w-full min-w-[760px] text-left">
                         <thead>
-                          <tr className="bg-[#f4f6fd] text-[11.5px] font-medium text-[#000533]">
+                          <tr className="bg-[#f4f6fd] text-[12px] font-medium text-[#000533]">
                             <th className="px-4 py-2.5 font-medium">Thing</th>
                             <th className="px-2 py-2.5 font-medium">List</th>
                             <th className="px-2 py-2.5 font-medium">Involves</th>
@@ -325,20 +325,20 @@ function NudgesPage() {
                                     />
                                     <span className="min-w-0">
                                       <span className="block text-[12px] font-medium text-[#000533]">{row.title}</span>
-                                      <span className="block text-[10px] text-[#6a769c]">#{row.id.slice(0, 6)}</span>
+                                      <span className="block text-[12px] text-[#6a769c]">#{row.id.slice(0, 6)}</span>
                                     </span>
                                   </button>
                                 </td>
                                 <td className="px-2">
                                   {thing?.listName ? (
-                                    <span className="inline-flex items-center gap-1.5 text-[10px] text-[#6a769c]">
-                                      <span className="flex h-6 w-6 items-center justify-center rounded-[5px] bg-[#ede9ff] text-[10px] font-medium text-[#975ee2]">
+                                    <span className="inline-flex items-center gap-1.5 text-[12px] text-[#6a769c]">
+                                      <span className="flex h-6 w-6 items-center justify-center rounded-[5px] bg-[#ede9ff] text-[12px] font-medium text-[#975ee2]">
                                         {thing.listName.slice(0, 2).toUpperCase()}
                                       </span>
                                       {thing.listName}
                                     </span>
                                   ) : (
-                                    <span className="text-[11px] text-[#9aa3bd]">—</span>
+                                    <span className="text-[12px] text-[#9aa3bd]">—</span>
                                   )}
                                 </td>
                                 <td className="px-2">
@@ -349,9 +349,9 @@ function NudgesPage() {
                                     size={30}
                                   />
                                 </td>
-                                <td className="px-2 text-[10.5px] text-[#3d3f74]">{reasonText}</td>
+                                <td className="px-2 text-[12px] text-[#3d3f74]">{reasonText}</td>
                                 <td className="px-2">
-                                  <span className={cn("inline-flex items-center rounded-[5px] px-2 py-1 text-[10.5px]", pill.cls)}>
+                                  <span className={cn("inline-flex items-center rounded-[5px] px-2 py-1 text-[12px]", pill.cls)}>
                                     {pill.label}
                                   </span>
                                 </td>
@@ -454,9 +454,9 @@ function NudgesPage() {
                             <p className="text-[14px] leading-snug text-[#000533]">
                               <span className="font-semibold">{r.person}</span> · {r.state}
                             </p>
-                            <p className="truncate text-[10px] text-[#6a769c]">{r.title}</p>
+                            <p className="truncate text-[12px] text-[#6a769c]">{r.title}</p>
                           </div>
-                          <span className="shrink-0 text-[10px] text-[#6a769c]">{r.when}</span>
+                          <span className="shrink-0 text-[12px] text-[#6a769c]">{r.when}</span>
                         </li>
                       );
                     })}

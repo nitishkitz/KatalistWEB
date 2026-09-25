@@ -138,7 +138,7 @@ function ChatAttachmentView({ attachment }: { attachment: ChatAttachment }) {
       </span>
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[12px] font-medium text-[#000533]">{attachment.name}</span>
-        {sizeLabel ? <span className="block text-[10.5px] text-[#8487a7]">{sizeLabel}</span> : null}
+        {sizeLabel ? <span className="block text-[12px] text-[#8487a7]">{sizeLabel}</span> : null}
       </span>
       <Download className="h-3.5 w-3.5 shrink-0 text-[#8487a7]" />
     </a>
@@ -867,7 +867,7 @@ function ListDetailPage() {
                           aria-selected={thingsFilter === id}
                           onClick={() => setThingsFilter(id)}
                           className={cn(
-                            "flex-1 rounded-[7px] py-1.5 text-[11.5px] font-medium transition-colors",
+                            "flex-1 rounded-[7px] py-1.5 text-[12px] font-medium transition-colors",
                             thingsFilter === id
                               ? "bg-white text-[#000533] shadow-2xs"
                               : "text-[#6a769c] hover:text-[#000533]",
@@ -879,7 +879,7 @@ function ListDetailPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between border-b border-[#eef0f6] px-4 py-2 text-[11.5px]">
+                  <div className="flex items-center justify-between border-b border-[#eef0f6] px-4 py-2 text-[12px]">
                     <div className="flex items-center gap-1.5 font-medium text-[#8487a7]">
                       <List className="h-3.5 w-3.5 text-[#5f5f90]" />
                       <span>{laneThings.length} Things</span>
@@ -936,7 +936,7 @@ function ListDetailPage() {
                               >
                                 {thing.title}
                               </p>
-                              <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
+                              <div className="mt-1 flex flex-col gap-0.5 text-[12px]">
                                 {due.label && due.label !== "No due date" ? (
                                   <span
                                     className="font-medium"
@@ -960,7 +960,7 @@ function ListDetailPage() {
                             </div>
                           </div>
                           <div className="shrink-0 pt-0.5">
-                            <span className="inline-flex items-center gap-1.5 text-[10px] text-[#8186a5]">
+                            <span className="inline-flex items-center gap-1.5 text-[12px] text-[#8186a5]">
                               <span
                                 className="h-3 w-3 rounded-full border-2 bg-white"
                                 style={{
@@ -988,7 +988,7 @@ function ListDetailPage() {
                       );
                     })}
                     {laneThings.length === 0 && (
-                      <div className="py-8 text-center text-[11px] text-muted-foreground">
+                      <div className="py-8 text-center text-[12px] text-muted-foreground">
                         No Things in this lane.
                       </div>
                     )}
@@ -1108,7 +1108,7 @@ function ListDetailPage() {
                       className="h-[38px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
                     />
                   </div>
-                  {debouncedChatSearch.length >= 2 ? <p className="mt-1 text-[11px] text-[#8487a7]">{chatSearchQuery.isFetching ? "Searching all messages…" : chatSearchQuery.error ? "Search failed. Edit the query to retry." : "Search covers the full conversation history."}</p> : null}
+                  {debouncedChatSearch.length >= 2 ? <p className="mt-1 text-[12px] text-[#8487a7]">{chatSearchQuery.isFetching ? "Searching all messages…" : chatSearchQuery.error ? "Search failed. Edit the query to retry." : "Search covers the full conversation history."}</p> : null}
                 </div>
               )}
 
@@ -1130,7 +1130,7 @@ function ListDetailPage() {
                   <div className="py-12 text-center">
                     <MessageSquare className="mx-auto mb-1.5 h-7 w-7 text-[#c5cae0]" />
                     <p className="text-[12.5px] font-medium text-[#000533]">No messages yet</p>
-                    <p className="mt-0.5 text-[11px] text-[#6a769c]">
+                    <p className="mt-0.5 text-[12px] text-[#6a769c]">
                       {viewOnly ? "There are no messages in this room." : "Start the conversation below."}
                     </p>
                   </div>
@@ -1138,7 +1138,7 @@ function ListDetailPage() {
                   filteredChatMessages.map((m) =>
                     m.kind === "system" ? (
                       <div key={m.id} className="flex items-center justify-center gap-2 py-1">
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5fb] px-3 py-1 text-[11px] text-[#6a769c]">
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f4f5fb] px-3 py-1 text-[12px] text-[#6a769c]">
                           <Phone className="h-3 w-3 text-[#12a15f]" />
                           <span className="font-medium text-[#000533]">{m.author}</span>
                           {m.body}
@@ -1147,7 +1147,7 @@ function ListDetailPage() {
                             {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
                           </span>
                         </span>
-                        {m.delivery === "failed" ? <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="text-[11px] text-red-600 underline">Retry entry</button> : null}
+                        {m.delivery === "failed" ? <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="text-[12px] text-red-600 underline">Retry entry</button> : null}
                       </div>
                     ) : (
                       <div key={m.id} className="flex items-start gap-3">
@@ -1160,15 +1160,15 @@ function ListDetailPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline gap-2">
                             <span className="text-[12.5px] font-medium text-[#000533]">{m.author}</span>
-                            <span className="text-[11px] text-[#757b9e]">
+                            <span className="text-[12px] text-[#757b9e]">
                               {new Date(m.at).toLocaleString([], { hour: "2-digit", minute: "2-digit" })}
                             </span>
                           </div>
                           {m.body ? <p className="mt-0.5 text-[12px] text-[#1a2345]">{m.body}</p> : null}
                           {m.attachment ? <ChatAttachmentView attachment={m.attachment} /> : null}
-                          {m.delivery === "pending" ? <p className="text-[11px] text-[#8487a7]">Sending…</p> : null}
+                          {m.delivery === "pending" ? <p className="text-[12px] text-[#8487a7]">Sending…</p> : null}
                           {m.delivery === "failed" ? (
-                            <div className="mt-1 flex gap-2 text-[11px] text-red-600">
+                            <div className="mt-1 flex gap-2 text-[12px] text-red-600">
                               <span>Couldn't send.</span>
                               <button type="button" onClick={() => void chat.retry(m.id).catch((err: unknown) => toast.error(domainErrorMessage(err)))} className="font-semibold underline">Retry</button>
                               <button type="button" onClick={() => chat.removeFailed(m.id)} className="underline">Remove</button>
@@ -1189,7 +1189,7 @@ function ListDetailPage() {
               }} className="mt-1 rounded-md bg-primary px-3 py-1 text-xs text-primary-foreground">New messages</button> : null}
 
               {viewOnly ? (
-                <p className="mt-3 rounded-[8px] bg-[#f6f8fd] p-2.5 text-center text-[11.5px] text-[#6a769c]">
+                <p className="mt-3 rounded-[8px] bg-[#f6f8fd] p-2.5 text-center text-[12px] text-[#6a769c]">
                   View-only members can observe the conversation and comment on Things.
                 </p>
               ) : (
@@ -1261,11 +1261,11 @@ function ListDetailPage() {
               <div className="mt-4 flex items-stretch">
                 <div className="flex-1 pr-4">
                   <div className="text-[22px] font-medium text-[#000533]">{list.members.length}</div>
-                  <div className="text-[11.5px] text-[#6a769c]">members</div>
+                  <div className="text-[12px] text-[#6a769c]">members</div>
                 </div>
                 <div className="flex-1 border-l border-[#eef0f6] pl-4">
                   <div className="text-[22px] font-medium text-[#000533]">{listThings.length}</div>
-                  <div className="text-[11.5px] text-[#6a769c]">Things</div>
+                  <div className="text-[12px] text-[#6a769c]">Things</div>
                 </div>
               </div>
 
@@ -1333,7 +1333,7 @@ function ListDetailPage() {
                     <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
                       <Phone className="h-4 w-4" />
                     </span>
-                    <span className="text-[10.5px] font-medium text-[#000533]">Start Audio Call</span>
+                    <span className="text-[12px] font-medium text-[#000533]">Start Audio Call</span>
                   </button>
                   <button
                     type="button"
@@ -1344,7 +1344,7 @@ function ListDetailPage() {
                     <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
                       <Video className="h-4 w-4" />
                     </span>
-                    <span className="text-[10.5px] font-medium text-[#000533]">Start Video Call</span>
+                    <span className="text-[12px] font-medium text-[#000533]">Start Video Call</span>
                   </button>
                   <button
                     type="button"
@@ -1354,7 +1354,7 @@ function ListDetailPage() {
                     <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
                       <Calendar className="h-4 w-4" />
                     </span>
-                    <span className="text-[10.5px] font-medium text-[#000533]">Schedule Meeting</span>
+                    <span className="text-[12px] font-medium text-[#000533]">Schedule Meeting</span>
                   </button>
                 </div>
               </div>
@@ -1399,7 +1399,7 @@ function ListDetailPage() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className="truncate text-[13px] font-medium text-[#00011b]">{meeting.title}</p>
-                            <p className="text-[10.5px] text-black/60">
+                            <p className="text-[12px] text-black/60">
                               {dayLabel}, {format(starts, "h:mm a")} - {format(ends, "h:mm a")}
                             </p>
                           </div>
@@ -1407,7 +1407,7 @@ function ListDetailPage() {
                             <button
                               type="button"
                               onClick={() => void startOrJoinCall(true, meeting.title)}
-                              className="inline-flex h-7 shrink-0 items-center rounded-[8px] bg-[#975ee2] px-3 text-[11.5px] font-medium text-white hover:brightness-95 cursor-pointer"
+                              className="inline-flex h-7 shrink-0 items-center rounded-[8px] bg-[#975ee2] px-3 text-[12px] font-medium text-white hover:brightness-95 cursor-pointer"
                             >
                               Join now
                             </button>
@@ -1624,10 +1624,10 @@ function ListDetailPage() {
                               <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={40} />
                               <div className="min-w-0 flex-1">
                                 <div className="text-[12.5px] font-medium text-[#000533]">{m.name}</div>
-                                <div className="text-[11.4px] text-[#686c8d]">{capability}</div>
+                                <div className="text-[12px] text-[#686c8d]">{capability}</div>
                               </div>
                               <span
-                                className="hidden shrink-0 rounded-[9px] px-3 py-1.5 text-[11.4px] sm:inline-block"
+                                className="hidden shrink-0 rounded-[9px] px-3 py-1.5 text-[12px] sm:inline-block"
                                 style={{ backgroundColor: badge.bg, color: badge.text }}
                               >
                                 {badge.label}
@@ -1637,7 +1637,7 @@ function ListDetailPage() {
                                   <DropdownMenuTrigger asChild>
                                     <button
                                       type="button"
-                                      className="inline-flex h-[38px] w-[124px] shrink-0 items-center justify-between rounded-[6px] border border-[#e8e9f7] bg-[#fdfdfe] px-3 text-[11.4px] text-[#686c8d] cursor-pointer"
+                                      className="inline-flex h-[38px] w-[124px] shrink-0 items-center justify-between rounded-[6px] border border-[#e8e9f7] bg-[#fdfdfe] px-3 text-[12px] text-[#686c8d] cursor-pointer"
                                     >
                                       {role === "collaborator" ? "Collaborator" : "View only"}
                                       <ChevronDown className="h-3.5 w-3.5" />
@@ -1698,7 +1698,7 @@ function ListDetailPage() {
                                   </DropdownMenuContent>
                                 </DropdownMenu>
                               ) : (
-                                <span className="inline-flex h-[38px] w-[124px] shrink-0 items-center gap-1.5 rounded-[6px] border border-[#eeeffb] bg-[#f6f6fd] px-3 text-[11.4px] text-[#686c8d]">
+                                <span className="inline-flex h-[38px] w-[124px] shrink-0 items-center gap-1.5 rounded-[6px] border border-[#eeeffb] bg-[#f6f6fd] px-3 text-[12px] text-[#686c8d]">
                                   <Crown className="h-3.5 w-3.5 text-[#d9a441]" />
                                   {badge.label}
                                 </span>
@@ -1751,7 +1751,7 @@ function ListDetailPage() {
                         </span>
                         <div className="min-w-0">
                           <div className="text-[14px] font-medium text-[#000533]">{g.label}</div>
-                          <div className="text-[11px] text-[#6a769c]">{g.desc}</div>
+                          <div className="text-[12px] text-[#6a769c]">{g.desc}</div>
                         </div>
                       </div>
                     ))}
@@ -1783,7 +1783,7 @@ function ListDetailPage() {
 
                   {/* Role Selector */}
                   <div className="mt-4">
-                    <label className="block text-[11.5px] font-semibold text-foreground mb-1.5">
+                    <label className="block text-[12px] font-semibold text-foreground mb-1.5">
                       Permission Role to Grant
                     </label>
                     <div className="grid grid-cols-2 gap-2">
@@ -1819,10 +1819,10 @@ function ListDetailPage() {
                   {/* Search Your Team */}
                   <div className="mt-4 flex-1 flex flex-col min-h-0">
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11.5px] font-semibold text-foreground">
+                      <label className="text-[12px] font-semibold text-foreground">
                         Your Team Members
                       </label>
-                      <span className="text-[11px] text-muted-foreground font-medium">
+                      <span className="text-[12px] text-muted-foreground font-medium">
                         {assignablePeople.length} contacts
                       </span>
                     </div>
@@ -1879,14 +1879,14 @@ function ListDetailPage() {
                                   <span className="block truncate text-[12.5px] font-bold text-foreground">
                                     {person.name}
                                   </span>
-                                  <span className="block text-[10.5px] text-muted-foreground">
+                                  <span className="block text-[12px] text-muted-foreground">
                                     Connected teammate
                                   </span>
                                 </div>
                               </div>
 
                               {isAlreadyMember ? (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-600 border border-emerald-200/60">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[12px] font-semibold text-emerald-600 border border-emerald-200/60">
                                   <Check className="h-3 w-3" />
                                   In List
                                 </span>
@@ -1912,7 +1912,7 @@ function ListDetailPage() {
                                       setAddingPersonId(null);
                                     }
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-primary/10 hover:bg-primary hover:text-white px-2.5 py-1 text-[11.5px] font-semibold text-primary transition-all disabled:opacity-50 cursor-pointer"
+                                  className="inline-flex items-center gap-1 rounded-lg bg-primary/10 hover:bg-primary hover:text-white px-2.5 py-1 text-[12px] font-semibold text-primary transition-all disabled:opacity-50 cursor-pointer"
                                 >
                                   <Plus className="h-3 w-3" />
                                   {isAdding ? "Adding..." : "Add"}
@@ -1940,7 +1940,7 @@ function ListDetailPage() {
                       setInviteEmail("");
                     }}
                   >
-                    <label className="block text-[11.5px] font-semibold text-foreground mb-1">
+                    <label className="block text-[12px] font-semibold text-foreground mb-1">
                       Or invite by email address
                     </label>
                     <div className="flex gap-2">
