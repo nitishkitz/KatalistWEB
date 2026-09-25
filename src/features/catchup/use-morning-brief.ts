@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
@@ -12,6 +12,7 @@ import {
   isEligibleToAutoOpen,
   isPastMorningThreshold,
   localDateKey,
+  nextLocalMidnight,
   nextMorningThreshold,
   resolveEffectiveTimezone,
 } from "./morning-brief-schedule";
@@ -20,36 +21,98 @@ import {
   claimMorningBriefPreview,
   dismissMorningBriefLive,
   dismissMorningBriefPreview,
+  MorningBriefClaimRejected,
+  type MorningBriefClaimResult,
 } from "./morning-brief-receipts";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 /**
- * F01/F04: wires the pure schedule model (morning-brief-schedule.ts), the
- * presentation receipt (morning-brief-receipts.ts), Catch Up's own
+ * F01/F04/T10-03: wires the pure schedule model (morning-brief-schedule.ts),
+ * the presentation receipt (morning-brief-receipts.ts), Catch Up's own
  * moments (use-catchup.ts), and the interaction-blocker registry (D03)
  * into one "should Morning Brief be open right now, and why" contract.
  *
  * One presentation controller per mounted instance is the caller's
  * responsibility (F04 wires exactly one into each active Court surface) --
  * this hook itself does not deduplicate multiple simultaneous mounts.
+ *
+ * T10-03 rewrite: replaces the previous collection of independent booleans
+ * (`open`, `alreadyPresentedToday`, a single `attemptedKeyRef`) with an
+ * explicit `BriefScope` -- identity + context + resolved timezone + local
+ * calendar date -- and per-scope attempt ownership tokens. A scope change
+ * (identity, context, timezone, or local date rolling over) retires any
+ * open presentation and any in-flight/pending attempt for the OLD scope;
+ * a stale attempt's continuation can never mark a NEWER scope as
+ * already-presented or paint stale content for it.
  */
 export type UseMorningBrief = {
-  /** True while the brief should be showing -- either auto-opened or manually reopened. */
+  /** True while the brief should be showing -- either auto-opened or manually reopened.
+   *  Gated by the CURRENT scope matching the scope it was opened for; a scope
+   *  change (context/identity/zone/local-date) closes this immediately. */
   open: boolean;
   /** Explicit dismissal (Escape/X/backdrop/finish-review/opening a Thing).
-   *  Records the receipt's dismissal (best-effort) and suppresses further
-   *  automatic opens for the remainder of this local day; does not affect
-   *  a LATER manual reopen today. */
+   *  Records the receipt's dismissal (best-effort), targeting the exact
+   *  receipt this review owns, and suppresses further automatic opens for
+   *  the remainder of this local day; does not affect a LATER manual
+   *  reopen today. */
   dismiss: () => void;
   /** Manual banner reopening -- works at any time, never touches the
    *  receipt (a manual open must not consume or reset the daily claim). */
   reopen: () => void;
-  /** True once this session has confirmed an automatic open already
-   *  happened today (via either this session's own claim or a prior
-   *  claim discovered as "already shown") -- callers can use this to
-   *  decide whether a manual "Review" affordance is still worth showing
-   *  even though the automatic moment has passed. */
+  /** True once the CURRENT scope (identity/context/local-date) has a
+   *  confirmed presented receipt -- either from this session's own claim
+   *  or a prior claim discovered as "already shown". An old receipt kept
+   *  for a RETIRED scope (e.g. yesterday's) never marks a newer scope as
+   *  already presented. */
   alreadyPresentedToday: boolean;
+};
+
+type BriefScope = {
+  epoch: number;
+  identityKind: "live" | "preview";
+  identityId: string;
+  context: "work" | "home";
+  timezone: string;
+  localDate: string;
+};
+
+function scopeKey(s: BriefScope): string {
+  return `${s.identityKind}:${s.identityId}:${s.context}:${s.timezone}:${s.localDate}`;
+}
+
+function scopePresentationMatches(receipt: BriefScope | null, scope: BriefScope): boolean {
+  if (!receipt) return false;
+  return (
+    receipt.identityKind === scope.identityKind &&
+    receipt.identityId === scope.identityId &&
+    receipt.context === scope.context &&
+    receipt.localDate === scope.localDate
+  );
+}
+
+/** Profile timezone readiness, classified explicitly rather than inferred
+ *  from `isLoading` alone (T10-03 gap: "a successful no-profile result must
+ *  be explicitly classified; undefined data is not a resolved unset
+ *  timezone"). `pending` covers first load AND a paused/offline fetch with
+ *  no cached data yet -- neither is a resolved fact about the timezone. */
+type ProfileReadiness =
+  | { kind: "pending" }
+  | { kind: "error" }
+  | { kind: "resolved"; timezone: string | null };
+
+// T10-03: at most two bounded retries for a server-confirmed "premature"
+// (before-threshold) rejection, at 30s then 120s, per scope -- never after
+// the scope itself has retired. The adapter's claim result carries no
+// server-provided retry instant today (see morning-brief-receipts.ts's
+// `MorningBriefClaimResult`), so this fallback schedule is used; revisit if
+// the RPC contract ever adds one.
+const PREMATURE_RETRY_DELAYS_MS = [30_000, 120_000];
+
+type AttemptEntry = {
+  token: number;
+  status: "idle" | "in-flight" | "settled";
+  retryCount: number;
+  retryTimer: ReturnType<typeof setTimeout> | null;
 };
 
 export function useMorningBrief(): UseMorningBrief {
@@ -61,41 +124,23 @@ export function useMorningBrief(): UseMorningBrief {
   const { isBlocked: hasBlockingInteraction } = useInteractionBlocker();
   const profileQuery = useProfile();
 
-  const [open, setOpen] = useState(false);
-  const [alreadyPresentedToday, setAlreadyPresentedToday] = useState(false);
+  // The scope this review is currently visibly open/presented for -- `open`
+  // in the returned contract is gated by this matching the CURRENT scope at
+  // render time, so stale content can never paint while an effect is still
+  // catching up to close it (T10-03: "gate visible `open` by matching scope
+  // in render").
+  const [openForScope, setOpenForScope] = useState<BriefScope | null>(null);
+  const [presentedReceiptScope, setPresentedReceiptScope] = useState<BriefScope | null>(null);
+  // T10-03: `currentScope` below is memoized on real dependencies (not
+  // recomputed unconditionally every render) so its identity is stable
+  // across unrelated renders -- but its `localDate` must still refresh
+  // exactly at the local midnight rollover even if NOTHING else changed.
+  // The scheduled midnight timer bumps this to force that one recompute.
+  const [scopeTick, setScopeTick] = useState(0);
   const [isTabHidden, setIsTabHidden] = useState(
     typeof document === "undefined" ? false : document.visibilityState === "hidden",
   );
 
-  // Guards against attempting a claim more than once for the same
-  // identity+context+local-date in this mount, and against retrying
-  // forever after a service-unavailable error (no infinite retry loop).
-  const attemptedKeyRef = useRef<string | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // F-03: attemptClaim's own closure only sees the values current at the
-  // moment it was CALLED -- if context/tab-visibility/blocker/moments
-  // change while its claim RPC is still in flight, the continuation must
-  // not open stale UI (e.g. a claim made for Work, now shown as Home's
-  // brief because context switched mid-await). These refs are updated on
-  // every render (not just via an effect) so the continuation can read
-  // the LATEST truth after its await, not what was true when it started.
-  const contextRef = useRef(context);
-  contextRef.current = context;
-  const isTabHiddenRef = useRef(isTabHidden);
-  isTabHiddenRef.current = isTabHidden;
-  const hasBlockingInteractionRef = useRef(hasBlockingInteraction);
-  hasBlockingInteractionRef.current = hasBlockingInteraction;
-  const catchupCountRef = useRef(catchup.count);
-  catchupCountRef.current = catchup.count;
-  const catchupErrorRef = useRef(catchup.error);
-  catchupErrorRef.current = catchup.error;
-  // R-04: the effective timezone/profile-readiness current when the claim
-  // was CALLED can be stale by the time it resolves -- a profile timezone
-  // edit, or the fetch itself only settling mid-await, must not let a
-  // now-outdated "past threshold" verdict decide whether to open.
-  const timeZoneRef = useRef<string>("UTC");
-  const profileLoadingRef = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -116,154 +161,322 @@ export function useMorningBrief(): UseMorningBrief {
   }, []);
 
   const identityId = preview ? currentDemoActorId() : user?.id;
-  // R-04: `profileQuery.data` is `undefined` both while the profile is
-  // still loading AND once it has settled with no `timezone` column set --
-  // those are NOT the same fact. Using the browser-zone fallback before
-  // the fetch has settled can evaluate the 07:00 threshold against the
-  // wrong zone entirely. `profileLoading` gates eligibility on this below;
-  // the fallback itself is only reached once the query has actually
-  // settled (success or error), matching "wait for it to settle before
-  // trusting a fallback" rather than eagerly guessing.
-  const profileLoading = !preview && Boolean(identityId) && profileQuery.isLoading;
-  const profileTimezone = preview ? null : profileQuery.data?.timezone ?? null;
-  const timeZone = resolveEffectiveTimezone(profileTimezone);
+
+  const profileReadiness: ProfileReadiness = preview
+    ? { kind: "resolved", timezone: null } // preview has no profile row; browser-zone fallback applies below.
+    : profileQuery.isError
+      ? { kind: "error" }
+      : profileQuery.isPending
+        ? { kind: "pending" }
+        : { kind: "resolved", timezone: profileQuery.data?.timezone ?? null };
+
+  const timeZone = resolveEffectiveTimezone(profileReadiness.kind === "resolved" ? profileReadiness.timezone : null);
+
+  // Latest-truth refs: every value a pending async continuation (a claim
+  // await, or a bounded retry timer firing later) must re-read AFTER its
+  // await/delay, never the value captured when it started. Updated on every
+  // render, not just via an effect.
+  const contextRef = useRef(context);
+  contextRef.current = context;
+  const timeZoneRef = useRef(timeZone);
   timeZoneRef.current = timeZone;
-  profileLoadingRef.current = profileLoading;
+  const isTabHiddenRef = useRef(isTabHidden);
+  isTabHiddenRef.current = isTabHidden;
+  const hasBlockingInteractionRef = useRef(hasBlockingInteraction);
+  hasBlockingInteractionRef.current = hasBlockingInteraction;
+  const catchupCountRef = useRef(catchup.count);
+  catchupCountRef.current = catchup.count;
+  const catchupErrorRef = useRef(catchup.error);
+  catchupErrorRef.current = catchup.error;
+  const catchupLoadingRef = useRef(catchup.isLoading);
+  catchupLoadingRef.current = catchup.isLoading;
+  const profileReadinessRef = useRef(profileReadiness);
+  profileReadinessRef.current = profileReadiness;
+  const identityIdRef = useRef(identityId);
+  identityIdRef.current = identityId;
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
 
-  const attemptClaim = useCallback(async () => {
+  // Per-scope attempt ownership. Keyed by scopeKey(scope); an entry's
+  // `token` is the sole owner allowed to complete/clear/retry that attempt
+  // -- a stale continuation whose entry has since been replaced (superseded
+  // by a newer attempt for the same key, which cannot happen since scope
+  // keys are date-stamped, but also guards a retried entry moving on) is a
+  // no-op, never able to erase a newer attempt's state.
+  const attemptsRef = useRef(new Map<string, AttemptEntry>());
+  const tokenCounterRef = useRef(0);
+
+  // Clear every pending bounded-retry timer on true unmount -- a real OS
+  // timer set via setTimeout is not implicitly cancelled by React unmount,
+  // and left uncleared would fire later against a torn-down instance (each
+  // guarded no-op via mountedRef, but still an unnecessary dangling timer).
+  useEffect(() => {
+    const attempts = attemptsRef.current;
+    return () => {
+      for (const entry of attempts.values()) {
+        if (entry.retryTimer) clearTimeout(entry.retryTimer);
+      }
+    };
+  }, []);
+
+  const computeScope = useCallback((now: Date): BriefScope | null => {
+    const id = identityIdRef.current;
+    if (!id) return null;
+    const tz = timeZoneRef.current;
+    return {
+      epoch: getIdentityEpoch(qc).epoch,
+      identityKind: previewRef.current ? "preview" : "live",
+      identityId: id,
+      context: contextRef.current,
+      timezone: tz,
+      localDate: localDateKey(now, tz),
+    };
+  }, [qc]);
+
+  const currentScope = useMemo<BriefScope | null>(() => {
+    if (!identityId) return null;
+    return {
+      epoch: getIdentityEpoch(qc).epoch,
+      identityKind: preview ? ("preview" as const) : ("live" as const),
+      identityId,
+      context,
+      timezone: timeZone,
+      localDate: localDateKey(new Date(), timeZone),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scopeTick deliberately forces a recompute at the local-midnight boundary with no other dependency change
+  }, [identityId, preview, context, timeZone, qc, scopeTick]);
+  const currentScopeKey = currentScope ? scopeKey(currentScope) : null;
+
+  // T10-03: close/retire on context, identity, zone, or local-date change --
+  // capture dismissal ownership (the scope the open review was FOR) before
+  // clearing, so a real receipt is targeted rather than whatever the new
+  // scope happens to be.
+  const prevScopeKeyRef = useRef<string | null>(currentScopeKey);
+  useEffect(() => {
+    if (prevScopeKeyRef.current !== currentScopeKey) {
+      // T10-03: no retry after scope retirement -- clear any pending bounded
+      // retry timer for the OLD scope's attempt and mark it settled so a
+      // late-firing (already-cleared, but defensive) callback is also a
+      // guaranteed no-op via its own ownership check.
+      const oldEntry = prevScopeKeyRef.current ? attemptsRef.current.get(prevScopeKeyRef.current) : undefined;
+      if (oldEntry?.retryTimer) {
+        clearTimeout(oldEntry.retryTimer);
+        oldEntry.retryTimer = null;
+      }
+      if (oldEntry && oldEntry.status !== "in-flight") oldEntry.status = "settled";
+
+      const retiredFor = openForScope && scopeKey(openForScope) === prevScopeKeyRef.current ? openForScope : null;
+      if (retiredFor) {
+        setOpenForScope(null);
+        if (retiredFor.identityKind === "preview") {
+          dismissMorningBriefPreview(retiredFor.identityId, retiredFor.context, retiredFor.localDate);
+        }
+        // Live dismissal on a silent scope retirement is deliberately NOT
+        // sent here -- the receipt itself remains valid (a claim is not
+        // "undone" by the viewer's scope changing), only the VISIBLE open
+        // state retires. An explicit dismiss() call is what records a real
+        // dismissal (see below).
+      }
+      prevScopeKeyRef.current = currentScopeKey;
+    }
+  }, [currentScopeKey, openForScope]);
+
+  // Visible `open`: gated by the presented scope matching the CURRENT scope
+  // at render time (T10-03: stale content cannot paint while an effect
+  // waits to close it).
+  const open = Boolean(openForScope && currentScopeKey && scopeKey(openForScope) === currentScopeKey);
+  const alreadyPresentedToday = Boolean(
+    currentScope && scopePresentationMatches(presentedReceiptScope, currentScope),
+  );
+
+  const recordPresented = useCallback((scope: BriefScope) => {
+    setPresentedReceiptScope(scope);
+  }, []);
+
+  const attemptClaim = useCallback(
+    async (scope: BriefScope, entry: AttemptEntry) => {
+      const key = scopeKey(scope);
+      const myToken = entry.token;
+      const isOwner = () => attemptsRef.current.get(key) === entry && entry.token === myToken;
+
+      entry.status = "in-flight";
+      try {
+        const result: MorningBriefClaimResult =
+          scope.identityKind === "preview"
+            ? await claimMorningBriefPreview(scope.identityId, scope.context, scope.localDate, scope.timezone)
+            : await claimMorningBriefLive(scope.context, scope.timezone);
+
+        // T10-03: fresh snapshot after the async boundary -- every
+        // downstream check below re-reads current truth, not what was true
+        // when this attempt started.
+        if (!mountedRef.current || !isOwner()) return;
+        if (!isEpochCurrent(qc, scope.epoch)) {
+          entry.status = "settled";
+          return;
+        }
+        const freshNow = new Date();
+        const nowScope = computeScope(freshNow);
+        entry.status = "settled";
+        if (!nowScope || scopeKey(nowScope) !== key) {
+          // Scope retired mid-flight (context/identity/zone/date changed).
+          // The claim itself is still recorded against the scope it was
+          // actually made for; only the automatic OPEN is skipped.
+          if (result.claimed || result.localDate === scope.localDate) recordPresented(scope);
+          return;
+        }
+        recordPresented(scope);
+        const stillEligible =
+          !hasBlockingInteractionRef.current &&
+          !isTabHiddenRef.current &&
+          catchupErrorRef.current == null &&
+          !catchupLoadingRef.current &&
+          catchupCountRef.current > 0 &&
+          profileReadinessRef.current.kind === "resolved" &&
+          isPastMorningThreshold(freshNow, scope.timezone) &&
+          result.localDate === scope.localDate;
+        if (result.claimed && stillEligible) {
+          setOpenForScope(scope);
+        }
+      } catch (err) {
+        if (!mountedRef.current || !isOwner()) return;
+        if (err instanceof MorningBriefClaimRejected && err.reason === "before-threshold") {
+          // R-04/T10-03: the server is authoritative for the 07:00 gate.
+          // A premature rejection must not consume the day's attempt
+          // permanently -- schedule a bounded retry (recomputing scope
+          // fresh when it fires), and give up silently (no retry storm)
+          // once the retry budget for THIS scope is exhausted; the
+          // already-scheduled next-threshold timer remains a further
+          // backstop.
+          entry.status = "idle";
+          if (entry.retryCount < PREMATURE_RETRY_DELAYS_MS.length) {
+            const delay = PREMATURE_RETRY_DELAYS_MS[entry.retryCount];
+            entry.retryCount += 1;
+            entry.retryTimer = setTimeout(() => {
+              if (!mountedRef.current || !isOwner()) return;
+              const retryNow = new Date();
+              const retryScope = computeScope(retryNow);
+              // A newer scope (context/identity/zone/date changed) is left
+              // completely untouched -- this timer only ever re-attempts
+              // the ORIGINAL scope it was scheduled for.
+              if (!retryScope || scopeKey(retryScope) !== key) return;
+              void attemptClaim(retryScope, entry);
+            }, delay);
+          }
+          return;
+        }
+        // Ordinary service error (network failure, RPC not deployed, an
+        // unauthorized rejection): logged, left `idle` so a legitimate
+        // later trigger (context/moments change, the next-threshold timer,
+        // or a manual retry surface) can re-attempt -- but nothing here
+        // schedules its own automatic retry, so this can never retry-storm.
+        entry.status = "idle";
+        console.error("Morning Brief claim failed", err);
+      }
+    },
+    [computeScope, qc, recordPresented],
+  );
+
+  const maybeAttempt = useCallback(() => {
     if (!morningBriefAutoOpenEnabled()) return;
-    if (!identityId) return;
-
     const now = new Date();
-    const dateKey = localDateKey(now, timeZone);
-    const attemptKey = `${identityId}:${context}:${dateKey}`;
-    if (attemptedKeyRef.current === attemptKey) return; // already attempted this identity/context/day this mount
+    const scope = computeScope(now);
+    if (!scope) return;
+    const key = scopeKey(scope);
+
+    let entry = attemptsRef.current.get(key);
+    if (!entry) {
+      entry = { token: ++tokenCounterRef.current, status: "idle", retryCount: 0, retryTimer: null };
+      attemptsRef.current.set(key, entry);
+    }
+    if (entry.status !== "idle") return; // already in-flight, or already settled for this scope
 
     const decision = isEligibleToAutoOpen({
       now,
-      timeZone,
+      timeZone: scope.timezone,
       hasActionableMoments: catchup.count > 0,
       hasMomentsError: catchup.error != null,
       isTabHidden,
       authPending: !preview && !session,
-      profileLoading,
+      profileLoading: profileReadiness.kind === "pending",
       momentsLoading: catchup.isLoading,
       hasBlockingInteraction,
     });
-    if (!decision.eligible) return;
+    if (!decision.eligible) return; // entry stays idle -- reattempted whenever a dependency actually changes
 
-    attemptedKeyRef.current = attemptKey;
-    const epoch = getIdentityEpoch(qc).epoch;
-    try {
-      const result = preview
-        ? await claimMorningBriefPreview(identityId, context, dateKey, timeZone)
-        : await claimMorningBriefLive(context, timeZone);
-      if (!isEpochCurrent(qc, epoch)) return; // identity switched while the claim was in flight
-      if (!mountedRef.current) return; // unmounted while the claim was in flight
-      // F-03/R-04: the claim itself succeeded (or was already claimed) for
-      // the SCOPE captured above (identity/context/date) -- but showing it
-      // now requires that scope to still be the live one. A context switch
-      // mid-await means this claim's context no longer matches what's
-      // displayed; a blocker/hidden-tab appearing meanwhile means the
-      // moment to interrupt is no longer right; moments emptying meanwhile
-      // means there's nothing left to show. A profile timezone resolving
-      // (or changing) meanwhile, or the real clock crossing back before
-      // the threshold in the NOW-current zone, means "past threshold" is
-      // no longer actually true for this viewer -- re-verified against the
-      // LATEST timezone/profile-readiness/clock, not what was true when
-      // this call started. In every one of these cases the receipt itself
-      // is still recorded/valid -- only the automatic OPEN is skipped, so
-      // manual review remains available and the day's slot is not
-      // reattempted (attemptedKeyRef already marks it done).
-      // Follow-up review of R-04: isPastMorningThreshold alone re-verifies
-      // the CURRENT clock/zone is past 07:00, but says nothing about
-      // whether that's still the SAME local date the receipt was actually
-      // claimed for. A sufficiently delayed claim, or a timezone change
-      // mid-await, can leave "past 07:00" true in the new zone/day while
-      // `result.localDate` (the date the receipt just claimed) is already
-      // yesterday's -- opening would show a stale day's brief under
-      // today's date. Comparing the receipt's own returned date against
-      // freshly-recomputed "today" closes that gap directly, without
-      // needing to separately reason about every path that could produce
-      // the mismatch.
-      const stillEligibleToShow =
-        contextRef.current === context &&
-        !hasBlockingInteractionRef.current &&
-        !isTabHiddenRef.current &&
-        catchupErrorRef.current == null &&
-        catchupCountRef.current > 0 &&
-        !profileLoadingRef.current &&
-        isPastMorningThreshold(new Date(), timeZoneRef.current) &&
-        result.localDate === localDateKey(new Date(), timeZoneRef.current);
-      if (result.claimed && stillEligibleToShow) {
-        setOpen(true);
-      }
-      setAlreadyPresentedToday(true);
-    } catch (err) {
-      // R-04: the server is authoritative for the 07:00 threshold too
-      // (see claim_morning_brief's own check) and rejects a genuinely
-      // premature claim with this specific message rather than inserting
-      // a row. That is a "not yet, try again later today" outcome, not a
-      // permanent failure -- unlike every other error here (most likely:
-      // the migration isn't deployed yet), it must NOT consume today's
-      // one attempt, or the legitimate later claim could never succeed
-      // today. The already-scheduled next-threshold timer (below) will
-      // retry; nothing here needs to reschedule directly.
-      if (err instanceof Error && err.message.toLowerCase().includes("before morning threshold")) {
-        attemptedKeyRef.current = null;
-        return;
-      }
-      console.error("Morning Brief claim failed", err);
-    }
+    void attemptClaim(scope, entry);
   }, [
-    identityId,
-    context,
-    timeZone,
+    computeScope,
+    attemptClaim,
     catchup.count,
-    catchup.isLoading,
     catchup.error,
+    catchup.isLoading,
     isTabHidden,
-    hasBlockingInteraction,
     preview,
     session,
-    profileLoading,
-    qc,
+    profileReadiness.kind,
+    hasBlockingInteraction,
   ]);
 
   // Re-evaluate whenever any input that could flip eligibility changes.
   useEffect(() => {
-    void attemptClaim();
-  }, [attemptClaim]);
+    maybeAttempt();
+  }, [maybeAttempt]);
 
-  // Schedule a re-check at the next local 07:00 threshold, so a tab left
-  // open overnight (or across a blocker clearing later) still gets a
-  // chance without needing a reload. Re-armed whenever the identity,
-  // context, or timezone changes (all of which can shift the threshold).
+  // Schedule a re-check at the next local 07:00 threshold AND at the next
+  // local midnight rollover (which retires the current scope's identity
+  // even if 07:00 was already reached) -- so a tab left open overnight
+  // still gets a chance without a reload, and yesterday's scope closes
+  // exactly at the local date boundary rather than waiting for a render.
+  // Re-armed whenever identity/context/timezone change, and recomputed
+  // (not replayed from an expired timer's captured scope) on focus/
+  // visibility return.
   useEffect(() => {
     if (!identityId) return;
     const epoch = getIdentityEpoch(qc).epoch;
-    const scheduleNext = () => {
+    let thresholdTimer: ReturnType<typeof setTimeout> | null = null;
+    let midnightTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleThreshold = () => {
       const delayMs = Math.max(1000, nextMorningThreshold(new Date(), timeZone).getTime() - Date.now());
-      timerRef.current = setTimeout(() => {
+      thresholdTimer = setTimeout(() => {
         if (!isEpochCurrent(qc, epoch)) return;
-        void attemptClaim();
-        scheduleNext();
+        maybeAttempt();
+        scheduleThreshold();
       }, delayMs);
     };
-    scheduleNext();
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+    const scheduleMidnight = () => {
+      const delayMs = Math.max(1000, nextLocalMidnight(new Date(), timeZone).getTime() - Date.now());
+      midnightTimer = setTimeout(() => {
+        if (!isEpochCurrent(qc, epoch)) return;
+        // Recompute fresh -- do not act on the scope this timer was
+        // originally armed for; the retirement effect above (driven by
+        // currentScopeKey changing on re-render) does the actual closing.
+        // This timer's only job is to force a render/recheck at the exact
+        // rollover instant, and to give today's fresh scope a chance to
+        // auto-open immediately if it's already past 07:00 elsewhere.
+        setScopeTick((t) => t + 1);
+        maybeAttempt();
+        scheduleMidnight();
+      }, delayMs);
     };
-  }, [identityId, context, timeZone, qc, attemptClaim]);
+    scheduleThreshold();
+    scheduleMidnight();
+    return () => {
+      if (thresholdTimer) clearTimeout(thresholdTimer);
+      if (midnightTimer) clearTimeout(midnightTimer);
+    };
+  }, [identityId, context, timeZone, qc, maybeAttempt]);
 
   const dismiss = useCallback(() => {
-    setOpen(false);
-    if (!identityId) return;
-    const dateKey = localDateKey(new Date(), timeZone);
-    if (preview) {
-      dismissMorningBriefPreview(identityId, context, dateKey);
+    const scope = openForScope ?? currentScope;
+    setOpenForScope(null);
+    if (!scope) return;
+    if (scope.identityKind === "preview") {
+      dismissMorningBriefPreview(scope.identityId, scope.context, scope.localDate);
     } else {
-      void dismissMorningBriefLive(context, timeZone).catch((err) => {
+      void dismissMorningBriefLive(scope.context, scope.timezone, scope.localDate).catch((err) => {
         // Best-effort: a failed dismissal must not resurrect "not yet
         // shown today" (it never un-claims), and must not repeat an
         // already-successful Thing action -- there is none here, this
@@ -271,13 +484,13 @@ export function useMorningBrief(): UseMorningBrief {
         console.error("Morning Brief dismiss failed", err);
       });
     }
-  }, [identityId, context, timeZone, preview]);
+  }, [openForScope, currentScope]);
 
   const reopen = useCallback(() => {
-    // Deliberately does not touch the receipt at all -- see the type's
-    // own doc comment on `reopen`.
-    setOpen(true);
-  }, []);
+    // Deliberately does not touch the receipt at all -- see the type's own
+    // doc comment on `reopen`. Only opens for a real, current scope.
+    if (currentScope) setOpenForScope(currentScope);
+  }, [currentScope]);
 
   return { open, dismiss, reopen, alreadyPresentedToday };
 }

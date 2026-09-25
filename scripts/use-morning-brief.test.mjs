@@ -41,7 +41,18 @@ mock.module("@/hooks/useSession", { namedExports: { useSession: () => testSessio
 mock.module("@/lib/session-mode", { namedExports: { isPreviewSession: () => testPreview } });
 mock.module("@/features/context/use-app-context", { namedExports: { useAppContext: () => ({ context: testContext }) } });
 mock.module("@/features/me/use-profile", {
-  namedExports: { useProfile: () => ({ data: { timezone: profileTimezone }, isLoading: profileLoading }) },
+  namedExports: {
+    useProfile: () => ({
+      data: { timezone: profileTimezone },
+      isLoading: profileLoading,
+      // T10-03: use-morning-brief.ts now classifies profile readiness from
+      // `isPending`/`isError` explicitly (see ProfileReadiness), not just
+      // `isLoading` -- the mock mirrors react-query v5's real contract so
+      // the hook under test exercises its actual classification logic.
+      isPending: profileLoading,
+      isError: false,
+    }),
+  },
 });
 mock.module("@/features/demo/identities", { namedExports: { currentDemoActorId: () => "demo-actor-1" } });
 mock.module("@/features/catchup/use-catchup", {
@@ -70,8 +81,20 @@ let dismissCalls = [];
 // when it was first called.
 let claimGate = null;
 let claimRejection = null;
+// T10-03: use-morning-brief.ts now recognizes a premature-claim rejection
+// via `instanceof MorningBriefClaimRejected` with `reason === "before-threshold"`
+// (the T10-02 adapter's own normalized error type), not by pattern-matching
+// a raw Error's message -- this mock class mirrors that real contract.
+class MorningBriefClaimRejected extends Error {
+  constructor(reason, message) {
+    super(message);
+    this.name = "MorningBriefClaimRejected";
+    this.reason = reason;
+  }
+}
 mock.module("@/features/catchup/morning-brief-receipts", {
   namedExports: {
+    MorningBriefClaimRejected,
     claimMorningBriefLive: async (context, tz) => {
       claimCalls.push({ context, tz });
       if (claimGate) await claimGate;
@@ -420,7 +443,18 @@ test("F-03: a context switch while the claim is still in flight must not open th
   });
 
   assert.equal(latest.open, false, "must not auto-open using a claim that was for the context no longer displayed");
-  assert.equal(latest.alreadyPresentedToday, true, "the claim itself still succeeded and is recorded");
+  // T10-03 correction: this previously asserted `true` on the reasoning
+  // that "the claim itself still succeeded and is recorded" -- true of the
+  // claim's OWN (now-retired "work") scope, but `alreadyPresentedToday` is
+  // scoped to the CURRENT viewer's scope (now "home"), which has no
+  // receipt of its own. A "work" receipt must not report "home" as
+  // already presented, or a legitimate "home" auto-open/Review affordance
+  // would wrongly disappear after an in-flight context switch.
+  assert.equal(
+    latest.alreadyPresentedToday,
+    false,
+    "the recorded receipt is for the retired 'work' scope -- it must not mark the current 'home' scope as already presented",
+  );
 
   cleanup();
   qc.clear();
@@ -600,7 +634,7 @@ test("R-04: while the profile timezone is still loading, never attempts a claim 
 test("R-04: a claim rejected as premature by the server does not consume today's attempt -- a later attempt still succeeds", async () => {
   resetShared();
   flagEnabled = true;
-  claimRejection = new Error("before morning threshold");
+  claimRejection = new MorningBriefClaimRejected("before-threshold", "before morning threshold");
   const qc = newClient();
   let latest = null;
   let rerender;
@@ -650,13 +684,23 @@ test("R-04: a claim rejected as premature by the server does not consume today's
   qc.clear();
 });
 
-test("follow-up review of R-04: a claim delayed across a date change must not open a stale day's brief, even though the clock still reads past threshold", async () => {
+test("T10-03 (corrects a prior wrong expectation): a claim delayed across a date change must not open a stale day's brief, AND must not mark the new day already-presented", async () => {
   // Independent re-review finding: the post-await recheck re-verified the
   // CURRENT clock/zone is past 07:00, but never compared that against the
   // LOCAL DATE the receipt was actually claimed for (result.localDate). A
   // sufficiently delayed claim can resolve on a day AFTER the one it
   // claimed, with the new day's own 07:00 already passed too -- opening
   // would show yesterday's already-claimed brief under today's date.
+  //
+  // T10-03 correction: this test previously also asserted
+  // `alreadyPresentedToday === true` after the date rolled over, reasoning
+  // only that "the claim itself still succeeded and is recorded". That is
+  // true of the OLD scope (yesterday's), but wrong for what this flag
+  // means to the CURRENT viewer: `alreadyPresentedToday` is scoped to
+  // TODAY's identity/context/local-date, and today has no receipt of its
+  // own yet. The old receipt is retained (for its own, now-retired scope)
+  // but must not mark today -- a NEWER scope -- as already presented, or a
+  // legitimate "Review" affordance for today would wrongly disappear.
   resetShared();
   flagEnabled = true;
   let gateResolve;
@@ -693,7 +737,11 @@ test("follow-up review of R-04: a claim delayed across a date change must not op
     false,
     "a claim resolving on a date after the one it actually claimed must not auto-open -- it would show a stale day's brief",
   );
-  assert.equal(latest.alreadyPresentedToday, true, "the claim itself still succeeded and is recorded");
+  assert.equal(
+    latest.alreadyPresentedToday,
+    false,
+    "the old receipt is for YESTERDAY's (retired) scope -- it must not mark TODAY's newer scope as already presented",
+  );
 
   cleanup();
   qc.clear();
