@@ -725,7 +725,24 @@ export function CourtDesktop({
           {!focusSelection && (
             <div className="z-30 flex shrink-0 justify-center w-full mt-3 pt-1">
               <div className="w-full max-w-2xl">
-                <MagicBox desktop extraPeople={collaborators} />
+                <MagicBox
+                  desktop
+                  extraPeople={collaborators}
+                  // T09/E05: looked up in `view` at CLICK time (this
+                  // closure is re-created every render), not when the
+                  // toast was created -- the invalidation MagicBox already
+                  // triggers on success needs time to actually refetch
+                  // before the newly created Thing shows up here. Reuses
+                  // the same no-hero-animation open path as
+                  // openCatchUpThing (the origin card doesn't exist for a
+                  // toast-triggered open).
+                  onThingCreated={(thingId) => {
+                    const created = [...view.now, ...view.next, ...view.later, ...view.theirs].find(
+                      (candidate) => candidate.id === thingId,
+                    );
+                    if (created) openCatchUpThing(created);
+                  }}
+                />
               </div>
             </div>
           )}

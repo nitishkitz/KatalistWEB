@@ -23,6 +23,7 @@ export function MagicBox({
   listName,
   desktop = false,
   extraPeople,
+  onThingCreated,
 }: {
   listId?: string;
   listName?: string;
@@ -30,6 +31,14 @@ export function MagicBox({
   /** Extra @-mention candidates (e.g. the current list's members) merged with
    *  the globally assignable people so mentions like @Rohit resolve. */
   extraPeople?: Person[];
+  /** T09/E05: lets the caller offer an "Open" action on a successful
+   *  single-Thing capture -- the caller looks the Thing up in whatever
+   *  view/selection state it already owns at click time (not capture
+   *  time), the same no-hero-animation pattern CourtDesktop already uses
+   *  for opening a Thing from the Morning Brief overlay. Optional: a
+   *  caller with no such mechanism (e.g. a bare mobile composer) can omit
+   *  it and the success toast just identifies the Thing by title instead. */
+  onThingCreated?: (thingId: string, title: string) => void;
 }) {
   const [value, setValue] = useState("");
   const [tossed, setTossed] = useState(false);
@@ -335,6 +344,7 @@ export function MagicBox({
           count: succeeded.length,
           createdIds,
           failedAssigneeIds: failed.map((r) => r.assigneeActorId),
+          title: titleToUse,
         };
       }
 
@@ -358,7 +368,12 @@ export function MagicBox({
           // ignore bucket link error
         }
       }
-      return { count: 1, createdIds: created?.id ? [created.id] : [], failedAssigneeIds: [] };
+      return {
+        count: 1,
+        createdIds: created?.id ? [created.id] : [],
+        failedAssigneeIds: [],
+        title: titleToUse,
+      };
     },
     onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
     onSuccess: async (result, _vars, mutationContext) => {
@@ -391,8 +406,20 @@ export function MagicBox({
         toast.error(
           `${count} tossed, ${failedAssigneeIds.length} failed — press Toss again to retry just the failed ${failedAssigneeIds.length > 1 ? "ones" : "one"}.`,
         );
+      } else if (count === 1 && result?.createdIds.length === 1) {
+        // T09/E05: identify the created Thing by title (not just a bare
+        // "Tossed."), and offer Open when the caller can act on it -- the
+        // callback looks the Thing up in its own current state at click
+        // time, not here at toast-creation time.
+        const thingId = result.createdIds[0];
+        const title = result.title ?? "New Thing";
+        toast.success(`"${title}" tossed ✓`, {
+          action: onThingCreated
+            ? { label: "Open", onClick: () => onThingCreated(thingId, title) }
+            : undefined,
+        });
       } else {
-        toast.success(count > 1 ? `${count} things tossed ✓` : "Tossed.");
+        toast.success(`${count} things tossed ✓`);
       }
       window.setTimeout(() => setTossed(false), 240);
     },
@@ -760,6 +787,16 @@ export function MagicBox({
             if (e.key === "Enter" && (value.trim() || attachedFiles.length > 0) && !blocked && !mutation.isPending) {
               e.preventDefault();
               void mutation.mutate();
+              return;
+            }
+
+            // T09/E05: with no autocomplete popover open (those already
+            // handle their own Escape above and return early), Escape
+            // returns focus away from the composer -- it does NOT clear
+            // `value`/`attachedFiles`, so the draft survives exactly like
+            // dismissing any other unsaved composer.
+            if (e.key === "Escape" && !trigger) {
+              e.currentTarget.blur();
             }
           }}
           placeholder={listName ? `Toss into ${listName}…` : "Toss a thought..."}

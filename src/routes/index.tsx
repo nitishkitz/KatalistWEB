@@ -271,7 +271,14 @@ function CourtPage() {
           className="px-4 py-4 pb-12"
         >
           <div>
-            <MagicBox />
+            {/* T09/E05: mobile selection is already just an ID lookup
+                (`selected` above resolves it against the current lists),
+                so unlike CourtDesktop's hero-flight-animated open, this
+                needs no Thing-object lookup at all -- setSelectedId
+                tolerates the id not being in cache yet and simply shows
+                nothing until the invalidation MagicBox already triggers
+                finishes refetching. */}
+            <MagicBox onThingCreated={(thingId) => setSelectedId(thingId)} />
 
             <p className="mb-3 flex items-center gap-2 text-[13px] text-muted-foreground">
               <img src="/katalist-mark-app.png" alt="" className="h-4 w-4 opacity-70" />

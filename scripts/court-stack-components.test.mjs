@@ -189,7 +189,7 @@ test("F04: Court desktop's Morning Brief is owned by useMorningBrief(), not its 
 });
 
 test("Court desktop retains Magic Box, controls, quick filters, and With Others", () => {
-  assert.match(courtDesktop, /<MagicBox desktop/);
+  assert.match(courtDesktop, /<MagicBox\s*\n\s*desktop/);
   for (const label of ["All", "Due", "Waiting", "In Progress"]) {
     assert.ok(courtDesktop.includes(`"${label}"`), `missing ${label} quick filter`);
   }

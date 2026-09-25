@@ -61,7 +61,7 @@ test("Court preserves With Others and one desktop Magic Box", () => {
   assert.match(court, /Waiting for Catch/);
   assert.match(court, /Moving/);
   assert.match(court, /Needs Attention/);
-  assert.equal((court.match(/<MagicBox desktop/g) ?? []).length, 1);
+  assert.equal((court.match(/<MagicBox\s*\n\s*desktop/g) ?? []).length, 1);
   // The mobile branch now shows a dedicated retry state when Court's query
   // has failed (previously falsely rendered as "Your Court is clear" on a
   // fetch failure), so InlineThingDetailWorkspace is the *fallback* branch
