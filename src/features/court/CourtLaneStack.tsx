@@ -47,7 +47,8 @@ import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
-import { getEffectiveReducedMotion, MOTION_PREFERENCE_BROADCAST_EVENT } from "@/hooks/use-motion-preference";
+import { getEffectiveReducedMotion, subscribeToMotionPreference } from "@/hooks/use-motion-preference";
+import { motionDurationSeconds } from "@/lib/motion-tokens";
 
 gsap.registerPlugin(Observer);
 
@@ -243,14 +244,9 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         animatingRef.current = false;
         setAnim(null);
       };
-      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-      const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-      mediaQuery.addEventListener("change", snapIfAnimating);
-      window.addEventListener(MOTION_PREFERENCE_BROADCAST_EVENT, snapIfAnimating);
-      return () => {
-        mediaQuery.removeEventListener("change", snapIfAnimating);
-        window.removeEventListener(MOTION_PREFERENCE_BROADCAST_EVENT, snapIfAnimating);
-      };
+      // D08: shares the hook's own OS-media-query/storage/broadcast wiring
+      // instead of re-deriving a second `matchMedia` listener here.
+      return subscribeToMotionPreference(snapIfAnimating);
     }, []);
 
     const content = courtLaneContent[lane];
@@ -384,6 +380,11 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       if (!activeNode) return;
 
       const forward = anim.direction === 1;
+      // D02: this effect only ever runs once `anim` is set, which both
+      // navigation callbacks above only do on the non-reduced-motion path
+      // (the reduced branch returns early without touching `anim`) -- so
+      // the workspace band applies unconditionally here.
+      const workspaceDuration = motionDurationSeconds("workspace", false);
       const context = gsap.context(() => {
         if (outgoingNode) {
           gsap.fromTo(
@@ -393,7 +394,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               y: forward ? -140 : 140,
               opacity: 0,
               scale: 0.96,
-              duration: 0.28,
+              duration: workspaceDuration,
               ease: "power2.in",
             },
           );
@@ -410,7 +411,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             y: 0,
             opacity: 1,
             scale: 1,
-            duration: 0.36,
+            duration: workspaceDuration,
             ease: "power3.out",
             onComplete: () => {
               animatingRef.current = false;
@@ -886,7 +887,11 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   "relative z-20 touch-pan-y select-none will-change-transform motion-reduce:!transform-none motion-reduce:transition-none",
                   !gesture.dragging &&
                     !anim &&
-                    "transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    // D02: 260ms mirrors motion-tokens.ts's "workspace" band
+                    // (<=280ms) -- a Tailwind arbitrary-duration class can't
+                    // import the JS constant, so this must be kept in sync
+                    // with MOTION_DURATIONS_MS.workspace by hand.
+                    "transition-transform duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
                 )}
                 style={{
                   transformOrigin: "50% 50%",

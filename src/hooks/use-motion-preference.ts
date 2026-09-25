@@ -62,6 +62,14 @@ export function setStoredMotionPreference(reduceMotion: boolean): void {
   window.dispatchEvent(new CustomEvent(BROADCAST_EVENT));
 }
 
+/** D08: exported so an imperative (non-React-state) consumer -- e.g. a
+ *  GSAP tween that must snap to its end state the instant motion becomes
+ *  reduced -- can share the exact same OS/storage/broadcast wiring the
+ *  hooks below use, instead of re-deriving its own `matchMedia` listener. */
+export function subscribeToMotionPreference(callback: () => void): () => void {
+  return subscribe(callback);
+}
+
 function subscribe(callback: () => void): () => void {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
     return () => {};

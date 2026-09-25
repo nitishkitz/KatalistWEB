@@ -22,6 +22,7 @@ import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { MagicBox } from "./MagicBox";
 import { cn } from "@/lib/utils";
 import { getEffectiveReducedMotion } from "@/hooks/use-motion-preference";
+import { motionDurationSeconds } from "@/lib/motion-tokens";
 
 export type { CourtFocusSelection, FocusViewTabId } from "./court-stack-model";
 
@@ -158,7 +159,9 @@ export function CourtFocusView({
       left: destRect.left,
       width: destRect.width,
       height: destRect.height,
-      duration: 0.26,
+      // D02: reduceMotion is already handled by the early return above, so
+      // this always runs in the non-reduced branch.
+      duration: motionDurationSeconds("workspace", false),
       ease: "power3.out",
       boxShadow: "0 2px 8px -1px rgba(0, 0, 0, 0.06)",
       onComplete: () => {

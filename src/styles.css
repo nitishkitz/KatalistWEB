@@ -235,6 +235,25 @@
   box-shadow: none;
 }
 
+/* D01: elevation for the four overlay surface types, sourced from the
+   --elevation-* tokens above. Deliberately a plain `box-shadow` property
+   rather than Tailwind's `shadow-*` utilities -- those compose through the
+   `--tw-shadow`/`--tw-shadow-colored` variables, which the global
+   suppression below zeroes with `!important`; a direct box-shadow bypasses
+   that entirely, so these three surfaces get visible elevation today
+   without waiting on (or being affected by) that suppression's removal. */
+@utility katalist-elevation-card {
+  box-shadow: var(--elevation-card);
+}
+
+@utility katalist-elevation-popover {
+  box-shadow: var(--elevation-popover);
+}
+
+@utility katalist-elevation-dialog {
+  box-shadow: var(--elevation-dialog);
+}
+
 /* Keep borders and focus rings, but remove elevation shadows from every surface. */
 @layer utilities {
   * {
