@@ -4,6 +4,8 @@ Computed directly from `src/styles.css`'s OKLCH token values (converted OKLCH ->
 
 **Scope note:** this app's `.dark {}` block in `styles.css` currently duplicates every `:root` value verbatim (confirmed by direct comparison) — there is exactly one shipped palette today, so only `:root` is measured.
 
+**Boundary scope note:** `--border` (decorative dividers/panel outlines) is measured separately from `--input`/`--control-border` (meaningful control boundaries WCAG 1.4.11 actually applies to) -- see "Decorative boundaries" below. `--border` is intentionally left light; darkening it globally would affect dozens of purely visual separators for no accessibility benefit.
+
 ## Text pairs (WCAG AA normal text, >=4.5:1)
 
 | Usage | Tokens | Ratio | Required | Verdict |
@@ -15,7 +17,7 @@ Computed directly from `src/styles.css`'s OKLCH token values (converted OKLCH ->
 | Primary button label | `--primary-foreground` / `--primary` | 5.28:1 | 4.5:1 | PASS |
 | Secondary button label | `--secondary-foreground` / `--secondary` | 17.31:1 | 4.5:1 | PASS |
 | Accent surface label | `--accent-foreground` / `--accent` | 17.31:1 | 4.5:1 | PASS |
-| Destructive button label | `--destructive-foreground` / `--destructive` | 3.89:1 | 4.5:1 | FAIL |
+| Destructive button label | `--destructive-foreground` / `--destructive` | 4.59:1 | 4.5:1 | PASS |
 | Sidebar body text | `--sidebar-foreground` / `--sidebar` | 17.31:1 | 4.5:1 | PASS |
 | Sidebar active item label | `--sidebar-primary-foreground` / `--sidebar-primary` | 5.28:1 | 4.5:1 | PASS |
 | Sidebar hover/accent item label | `--sidebar-accent-foreground` / `--sidebar-accent` | 17.31:1 | 4.5:1 | PASS |
@@ -27,7 +29,7 @@ Computed directly from `src/styles.css`'s OKLCH token values (converted OKLCH ->
 | "Now" status label | `--status-now` / `--status-now-bg` | 4.74:1 | 3:1 | PASS |
 | "Next" status label | `--status-next` / `--status-next-bg` | 4.74:1 | 3:1 | PASS |
 | "Later" status label | `--status-later` / `--status-later-bg` | 5.28:1 | 3:1 | PASS |
-| "Waiting" status label | `--status-waiting` / `--status-waiting-bg` | 2.99:1 | 3:1 | FAIL |
+| "Waiting" status label | `--status-waiting` / `--status-waiting-bg` | 3.11:1 | 3:1 | PASS |
 | "Caught" status label | `--status-caught` / `--status-caught-bg` | 4.48:1 | 3:1 | PASS |
 | Neutral status label | `--status-neutral` / `--status-neutral-bg` | 4.85:1 | 3:1 | PASS |
 
@@ -35,15 +37,14 @@ Computed directly from `src/styles.css`'s OKLCH token values (converted OKLCH ->
 
 | Usage | Tokens | Ratio | Required | Verdict |
 |---|---|---|---|---|
-| Default border against the page background | `--border` / `--background` | 1.44:1 | 3:1 | FAIL |
-| Input border against the page background | `--input` / `--background` | 1.44:1 | 3:1 | FAIL |
+| Form control border (Input/Textarea/Select/outline Button/Toggle) against the page background | `--input` / `--background` | 3.64:1 | 3:1 | PASS |
+| Meaningful control/component boundary against the page background | `--control-border` / `--background` | 3.64:1 | 3:1 | PASS |
 
-## Failures requiring a product decision
+## Decorative boundaries (not held to WCAG 1.4.11 -- reported for transparency only)
 
-- **Destructive button label** (`--destructive-foreground` on `--destructive`): 3.89:1, below its 4.5:1 requirement.
-- **"Waiting" status label** (`--status-waiting` on `--status-waiting-bg`): 2.99:1, below its 3:1 requirement.
-- **Default border against the page background** (`--border` on `--background`): 1.44:1, below its 3:1 requirement.
-- **Input border against the page background** (`--input` on `--background`): 1.44:1, below its 3:1 requirement.
+| Usage | Tokens | Ratio |
+|---|---|---|
+| Decorative card/panel divider against the page background | `--border` / `--background` | 1.44:1 |
 
-These are real, measured token failures, not implemented by this pass -- changing brand/status colors is a design decision outside this package's scope. Recorded here so it is not silently missed.
+No measured pair fell below its required ratio.
 

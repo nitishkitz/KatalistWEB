@@ -47,6 +47,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-control-border: var(--control-border);
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
 
@@ -104,13 +105,22 @@
   --accent: oklch(1 0 0);
   --accent-foreground: oklch(0.22 0.02 260);
 
-  /* Destructive / urgent */
-  --destructive: oklch(0.63 0.22 25);
+  /* Destructive / urgent -- 0.59 measured at 4.59:1 against white text
+     (T08/D03 contrast fix; was 0.63 = 3.89:1, below the 4.5:1 normal-text
+     requirement for the destructive button label). */
+  --destructive: oklch(0.59 0.22 25);
   --destructive-foreground: oklch(1 0 0);
 
-  /* Borders and inputs */
+  /* Borders and inputs. --border stays a light, decorative default (card/
+     panel dividers, dozens of purely visual separators) -- WCAG 1.4.11 does
+     not require a 3:1 boundary for those. --input and --control-border are
+     for boundaries a user actually needs to perceive the extent of (form
+     fields, and any other genuinely meaningful control boundary): 0.62
+     measured at 3.64:1 against white (T08/D03 fix; was 0.88 = 1.44:1,
+     below the 3:1 requirement for a meaningful component boundary). */
   --border: oklch(0.88 0 0);
-  --input: oklch(0.88 0 0);
+  --input: oklch(0.62 0 0);
+  --control-border: oklch(0.62 0 0);
   --ring: oklch(0.55 0.21 285 / 40%);
 
   /* Status palette */
@@ -120,7 +130,9 @@
   --status-next-bg: oklch(1 0 0);
   --status-later: oklch(0.55 0.21 285);
   --status-later-bg: oklch(1 0 0);
-  --status-waiting: oklch(0.68 0.16 65);
+  /* 0.67 measured at 3.11:1 against white (T08/D03 fix; was 0.68 = 2.99:1,
+     just below the 3:1 large-text requirement for this status label). */
+  --status-waiting: oklch(0.67 0.16 65);
   --status-waiting-bg: oklch(1 0 0);
   --status-caught: oklch(0.55 0.18 145);
   --status-caught-bg: oklch(1 0 0);
@@ -179,11 +191,14 @@
   --accent: oklch(1 0 0);
   --accent-foreground: oklch(0.22 0.02 260);
 
-  --destructive: oklch(0.63 0.22 25);
+  /* T08/D03: kept identical to :root -- see its own comments for the
+     contrast-fix rationale for each changed value below. */
+  --destructive: oklch(0.59 0.22 25);
   --destructive-foreground: oklch(1 0 0);
 
   --border: oklch(0.88 0 0);
-  --input: oklch(0.88 0 0);
+  --input: oklch(0.62 0 0);
+  --control-border: oklch(0.62 0 0);
   --ring: oklch(0.55 0.21 285 / 40%);
 
   --status-now: oklch(0.58 0.2 25);
@@ -192,7 +207,7 @@
   --status-next-bg: oklch(1 0 0);
   --status-later: oklch(0.55 0.21 285);
   --status-later-bg: oklch(1 0 0);
-  --status-waiting: oklch(0.68 0.16 65);
+  --status-waiting: oklch(0.67 0.16 65);
   --status-waiting-bg: oklch(1 0 0);
   --status-caught: oklch(0.55 0.18 145);
   --status-caught-bg: oklch(1 0 0);

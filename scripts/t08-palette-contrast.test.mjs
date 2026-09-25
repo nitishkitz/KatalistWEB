@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { contrastRatio, oklchLuminance, WCAG_AA_NORMAL_TEXT, WCAG_AA_LARGE_TEXT } from "./lib/color-contrast.mjs";
+import { contrastRatio, oklchLuminance, WCAG_AA_NORMAL_TEXT, WCAG_AA_LARGE_TEXT, WCAG_AA_UI_COMPONENT } from "./lib/color-contrast.mjs";
 import { extractTokens } from "./measure-palette-contrast.mjs";
 
 /**
@@ -11,6 +11,15 @@ import { extractTokens } from "./measure-palette-contrast.mjs";
  * docs/superpowers/plans/2026-09-25-t08-palette-contrast.md), so a future
  * token edit that silently breaks contrast fails the suite instead of only
  * a report file going stale.
+ *
+ * All four previously-measured failures (destructive label, "Waiting"
+ * status label, and the input/control boundary) were fixed by darkening
+ * --destructive, --status-waiting, and introducing --control-border (with
+ * --input pointed at the same passing value) -- see styles.css's own
+ * comments at each token for the exact before/after ratios. --border
+ * itself is deliberately unchanged: it is a decorative divider, not a
+ * WCAG 1.4.11 component boundary, and is asserted separately below as
+ * "reported, not required" rather than folded into the passing set.
  */
 
 const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
@@ -37,17 +46,14 @@ test("primary button label passes WCAG AA normal text", () => {
   assert.ok(ratio >= WCAG_AA_NORMAL_TEXT, `expected >= ${WCAG_AA_NORMAL_TEXT}:1, got ${ratio.toFixed(2)}:1`);
 });
 
-test("known failure: destructive button label is measurably below WCAG AA normal text (recorded, not silently passing)", () => {
+test("FIXED: destructive button label now passes WCAG AA normal text (was 3.89:1)", () => {
   const ratio = contrastRatio(tokens["destructive-foreground"], tokens["destructive"]);
-  assert.ok(
-    ratio < WCAG_AA_NORMAL_TEXT,
-    `this documents a known gap (docs/superpowers/plans/2026-09-25-t08-palette-contrast.md) -- if this now passes, the token was fixed and this assertion (not the report) is stale`,
-  );
+  assert.ok(ratio >= WCAG_AA_NORMAL_TEXT, `expected >= ${WCAG_AA_NORMAL_TEXT}:1, got ${ratio.toFixed(2)}:1`);
 });
 
-test("known failure: the \"Waiting\" status label is measurably below WCAG AA large text (recorded, not silently passing)", () => {
+test("FIXED: the \"Waiting\" status label now passes WCAG AA large text (was 2.99:1)", () => {
   const ratio = contrastRatio(tokens["status-waiting"], tokens["status-waiting-bg"]);
-  assert.ok(ratio < WCAG_AA_LARGE_TEXT, `expected a known-failing ratio below ${WCAG_AA_LARGE_TEXT}:1, got ${ratio.toFixed(2)}:1`);
+  assert.ok(ratio >= WCAG_AA_LARGE_TEXT, `expected >= ${WCAG_AA_LARGE_TEXT}:1, got ${ratio.toFixed(2)}:1`);
 });
 
 test("every other status label passes WCAG AA large text", () => {
@@ -61,6 +67,26 @@ test("every other status label passes WCAG AA large text", () => {
     const ratio = contrastRatio(tokens[fg], tokens[bg]);
     assert.ok(ratio >= WCAG_AA_LARGE_TEXT, `${fg}/${bg}: expected >= ${WCAG_AA_LARGE_TEXT}:1, got ${ratio.toFixed(2)}:1`);
   }
+});
+
+test("FIXED: the form-control boundary (--input) now passes WCAG 1.4.11 (was 1.44:1)", () => {
+  const ratio = contrastRatio(tokens["input"], tokens["background"]);
+  assert.ok(ratio >= WCAG_AA_UI_COMPONENT, `expected >= ${WCAG_AA_UI_COMPONENT}:1, got ${ratio.toFixed(2)}:1`);
+});
+
+test("the new --control-border token passes WCAG 1.4.11 for meaningful (non-form) control boundaries", () => {
+  const ratio = contrastRatio(tokens["control-border"], tokens["background"]);
+  assert.ok(ratio >= WCAG_AA_UI_COMPONENT, `expected >= ${WCAG_AA_UI_COMPONENT}:1, got ${ratio.toFixed(2)}:1`);
+});
+
+test("--border stays a deliberately light decorative divider, not silently promoted to a boundary token", () => {
+  // Documents the design decision, not a WCAG requirement: --border is
+  // used by dozens of purely visual card/panel dividers where 1.4.11
+  // doesn't apply. If this ever climbs to 3:1 on its own that's fine, but
+  // the decorative token must not regress by being confused with, or
+  // silently merged into, --input/--control-border.
+  assert.notEqual(tokens["border"], tokens["input"], "--border and --input must remain independently adjustable");
+  assert.equal(tokens["input"], tokens["control-border"], "--input and --control-border are the same passing value by design");
 });
 
 test("the .dark {} block still duplicates :root verbatim (the report's scope note depends on this)", () => {

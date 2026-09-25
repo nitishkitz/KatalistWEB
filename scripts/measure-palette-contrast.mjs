@@ -46,10 +46,18 @@ const STATUS_PAIRS = [
   ["status-neutral", "status-neutral-bg", "Neutral status label"],
 ];
 
+/** Boundaries a user must be able to perceive the extent of (WCAG 1.4.11
+ *  applies): form-control borders and any other explicitly meaningful
+ *  control boundary. */
 const UI_PAIRS = [
-  ["border", "background", "Default border against the page background"],
-  ["input", "background", "Input border against the page background"],
+  ["input", "background", "Form control border (Input/Textarea/Select/outline Button/Toggle) against the page background"],
+  ["control-border", "background", "Meaningful control/component boundary against the page background"],
 ];
+
+/** Purely decorative dividers/panel outlines -- WCAG 1.4.11 does not apply
+ *  (the boundary isn't the sole way to identify a component or its state),
+ *  so these are reported for transparency but not held to the 3:1 bar. */
+const DECORATIVE_PAIRS = [["border", "background", "Decorative card/panel divider against the page background"]];
 
 function measure(tokens, pairs, requirement) {
   return pairs.map(([fg, bg, label]) => {
@@ -67,6 +75,9 @@ function buildReport(tokens) {
   const textResults = measure(tokens, TEXT_PAIRS, WCAG_AA_NORMAL_TEXT);
   const statusResults = measure(tokens, STATUS_PAIRS, WCAG_AA_LARGE_TEXT); // status labels are bold/badge-style, not body copy
   const uiResults = measure(tokens, UI_PAIRS, WCAG_AA_UI_COMPONENT);
+  // Reported for transparency, not held to WCAG 1.4.11 (see the decorative
+  // boundary scope note above) -- excluded from the pass/fail failure list.
+  const decorativeResults = measure(tokens, DECORATIVE_PAIRS, 0);
 
   const lines = [];
   lines.push("# Palette contrast measurement — 2026-09-25 (T08/D03)");
@@ -81,6 +92,13 @@ function buildReport(tokens) {
   lines.push(
     "**Scope note:** this app's `.dark {}` block in `styles.css` currently duplicates every `:root` value verbatim " +
       "(confirmed by direct comparison) — there is exactly one shipped palette today, so only `:root` is measured.",
+  );
+  lines.push("");
+  lines.push(
+    "**Boundary scope note:** `--border` (decorative dividers/panel outlines) is measured separately from " +
+      "`--input`/`--control-border` (meaningful control boundaries WCAG 1.4.11 actually applies to) -- see " +
+      "\"Decorative boundaries\" below. `--border` is intentionally left light; darkening it globally would affect " +
+      "dozens of purely visual separators for no accessibility benefit.",
   );
   lines.push("");
   lines.push("## Text pairs (WCAG AA normal text, >=4.5:1)");
@@ -100,6 +118,12 @@ function buildReport(tokens) {
   lines.push("| Usage | Tokens | Ratio | Required | Verdict |");
   lines.push("|---|---|---|---|---|");
   for (const r of uiResults) lines.push(row(r, WCAG_AA_UI_COMPONENT));
+  lines.push("");
+  lines.push("## Decorative boundaries (not held to WCAG 1.4.11 -- reported for transparency only)");
+  lines.push("");
+  lines.push("| Usage | Tokens | Ratio |");
+  lines.push("|---|---|---|");
+  for (const r of decorativeResults) lines.push(`| ${r.label} | \`--${r.fg}\` / \`--${r.bg}\` | ${r.ratio.toFixed(2)}:1 |`);
   lines.push("");
 
   const failures = [...textResults, ...statusResults, ...uiResults].filter((r) => !r.pass);
