@@ -112,21 +112,46 @@ export function isPastMorningThreshold(now: Date, timeZone: string): boolean {
   return true; // hour === threshold: 07:00 itself already qualifies ("after 07:00" is inclusive of the boundary minute).
 }
 
-/** The next local 07:00 instant strictly after `now`, in `timeZone` --
- *  today's if `now` is still before it, otherwise tomorrow's. Used to
- *  schedule a re-check timer, not to decide eligibility directly (that's
- *  `isPastMorningThreshold` + the presentation-receipt check together). */
-export function nextMorningThreshold(now: Date, timeZone: string): Date {
+/** Adds `days` local calendar days to `parts` using pure calendar
+ *  arithmetic (via a UTC-labeled scratch `Date` used only as a calendar
+ *  calculator, never converted through a timezone) -- correct for any
+ *  offset, including UTC+14 and UTC-12, where round-tripping a same-day
+ *  UTC-noon guess through `timeZone` (the previous approach) can itself
+ *  already land on the NEXT local calendar day before the "+1 day" step
+ *  is even applied, silently overshooting by an extra day. See
+ *  T10-03 fix: this replaces that noon-guess round-trip entirely. */
+function addCalendarDays(parts: { year: number; month: number; day: number }, days: number): { year: number; month: number; day: number } {
+  const d = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + days));
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() };
+}
+
+/** The next local `hour:minute` instant strictly after `now`, in
+ *  `timeZone` -- today's if `now` is still before it, otherwise
+ *  tomorrow's (tomorrow computed by stepping the LOCAL calendar date
+ *  forward by one day via `addCalendarDays`, not by adding 24h to the
+ *  instant or by round-tripping a UTC guess through the zone). */
+function nextLocalInstant(now: Date, timeZone: string, hour: number, minute: number): Date {
   const p = localPartsAt(now, timeZone);
-  const todayThreshold = localWallClockToInstant(p.year, p.month, p.day, MORNING_THRESHOLD_HOUR, 0, timeZone);
-  if (todayThreshold.getTime() > now.getTime()) return todayThreshold;
-  // Tomorrow: step the LOCAL calendar date forward by one day (not "add
-  // 24h to the instant", which would land on the wrong wall-clock hour
-  // across a DST transition), then resolve 07:00 on that new local date.
-  const tomorrowNoonGuess = new Date(Date.UTC(p.year, p.month - 1, p.day, 12, 0, 0));
-  tomorrowNoonGuess.setUTCDate(tomorrowNoonGuess.getUTCDate() + 1);
-  const tomorrow = localPartsAt(tomorrowNoonGuess, timeZone);
-  return localWallClockToInstant(tomorrow.year, tomorrow.month, tomorrow.day, MORNING_THRESHOLD_HOUR, 0, timeZone);
+  const todayInstant = localWallClockToInstant(p.year, p.month, p.day, hour, minute, timeZone);
+  if (todayInstant.getTime() > now.getTime()) return todayInstant;
+  const tomorrow = addCalendarDays(p, 1);
+  return localWallClockToInstant(tomorrow.year, tomorrow.month, tomorrow.day, hour, minute, timeZone);
+}
+
+/** The next local 07:00 instant strictly after `now`, in `timeZone` --
+ *  used to schedule a re-check timer, not to decide eligibility directly
+ *  (that's `isPastMorningThreshold` + the presentation-receipt check
+ *  together). */
+export function nextMorningThreshold(now: Date, timeZone: string): Date {
+  return nextLocalInstant(now, timeZone, MORNING_THRESHOLD_HOUR, 0);
+}
+
+/** The next local calendar-date rollover (00:00) strictly after `now`, in
+ *  `timeZone`. Used to retire a stale presentation/attempt scope (whose
+ *  identity includes `localDate`) exactly when the local day actually
+ *  turns over, rather than waiting for the next 07:00 recheck. */
+export function nextLocalMidnight(now: Date, timeZone: string): Date {
+  return nextLocalInstant(now, timeZone, 0, 0);
 }
 
 export type MorningBriefBlocker =

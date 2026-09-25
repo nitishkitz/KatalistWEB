@@ -6,6 +6,7 @@ import {
   localDateKey,
   isPastMorningThreshold,
   nextMorningThreshold,
+  nextLocalMidnight,
   isEligibleToAutoOpen,
   MORNING_THRESHOLD_HOUR,
 } from "@/features/catchup/morning-brief-schedule";
@@ -84,6 +85,52 @@ test("nextMorningThreshold across a DST fall-back (America/New_York, 2026-11-01)
   // once the transition happens overnight.
   const result = nextMorningThreshold(new Date("2026-10-31T23:30:00Z"), NY);
   assert.equal(result.toISOString(), "2026-11-01T12:00:00.000Z");
+});
+
+// T10-03 (gap #11): the previous "tomorrow" derivation round-tripped a
+// UTC-noon guess through `timeZone` and then added a UTC day -- at an
+// extreme offset (UTC+14), that round-trip can ALREADY land on the next
+// local calendar day before the "+1 day" step even runs, silently
+// overshooting by an extra day. These tests exercise UTC+14, UTC-12, a
+// half-hour-offset zone, and the existing DST pair, validating the exact
+// resulting local hour/date rather than assuming a fixed 24h increment.
+test("nextMorningThreshold: UTC+14 (Pacific/Kiritimati) does not overshoot by an extra day", () => {
+  const KIRITIMATI = "Pacific/Kiritimati";
+  // 2026-06-15T20:00:00Z = 2026-06-16T10:00 local (UTC+14) -- past today's
+  // (the 16th's) 7am threshold, so the next one is the 17th's 07:00 local.
+  const result = nextMorningThreshold(new Date("2026-06-15T20:00:00Z"), KIRITIMATI);
+  assert.equal(result.toISOString(), "2026-06-16T17:00:00.000Z", "2026-06-17T07:00 local (UTC+14) = 2026-06-16T17:00Z");
+});
+
+test("nextMorningThreshold: UTC-12 (Etc/GMT+12) resolves the correct next day", () => {
+  const BAKER_ISLAND = "Etc/GMT+12"; // POSIX Etc/GMT signs are inverted: this zone IS UTC-12.
+  // 2026-06-15T10:00:00Z = 2026-06-14T22:00 local (UTC-12) -- already past
+  // the 14th's 7am threshold, so the next one is the 15th's 07:00 local.
+  const result = nextMorningThreshold(new Date("2026-06-15T10:00:00Z"), BAKER_ISLAND);
+  assert.equal(result.toISOString(), "2026-06-15T19:00:00.000Z", "2026-06-15T07:00 local (UTC-12) = 2026-06-15T19:00Z");
+});
+
+test("nextMorningThreshold: a half-hour-offset zone (Asia/Kolkata, UTC+5:30) resolves exactly, not rounded to a whole hour", () => {
+  const KOLKATA = "Asia/Kolkata";
+  // 2026-06-15T10:00:00Z = 15:30 local -- past today's threshold, so the
+  // next one is tomorrow's 07:00 local.
+  const result = nextMorningThreshold(new Date("2026-06-15T10:00:00Z"), KOLKATA);
+  assert.equal(result.toISOString(), "2026-06-16T01:30:00.000Z", "2026-06-16T07:00 local (UTC+5:30) = 2026-06-16T01:30Z");
+});
+
+test("nextLocalMidnight: resolves the next local calendar-date rollover, not a fixed 24h increment", () => {
+  // 2026-06-15T20:00:00Z = 2026-06-16T10:00 local (UTC+14) -- the next
+  // rollover is the start of the 17th, local.
+  const result = nextLocalMidnight(new Date("2026-06-15T20:00:00Z"), "Pacific/Kiritimati");
+  assert.equal(result.toISOString(), "2026-06-16T10:00:00.000Z", "2026-06-17T00:00 local (UTC+14) = 2026-06-16T10:00Z");
+});
+
+test("nextLocalMidnight across a DST spring-forward (America/New_York): correct in EDT, not naively +24h", () => {
+  // 2026-03-07T23:30:00Z = 18:30 local on March 7 (EST) -- next midnight
+  // rollover is the start of March 8, still in EST (transition is at 2am
+  // local on the 8th, after midnight).
+  const result = nextLocalMidnight(new Date("2026-03-07T23:30:00Z"), NY);
+  assert.equal(result.toISOString(), "2026-03-08T05:00:00.000Z");
 });
 
 test("isEligibleToAutoOpen: blockers take precedence over the threshold/moments check, in a defined order", () => {
