@@ -612,3 +612,84 @@ Payload routing, old/new-parent invalidation, primary-key-only DELETE fallback,
 batching, focus/online catch-up, reconnect, epoch teardown and stale-channel
 rejection are covered by deterministic and real-DOM tests. This evidence closes
 T07 without violating the production-data constraint.
+
+### T08 — Shared type, controls, elevation, and motion rollout
+
+**Status:** LOCAL PASS -- partial, remaining items below. **Owns:** D-01 through D-04.
+
+**Commit:** `9e323da`.
+
+**Starting-state audit:** contrary to a greenfield assumption, meaningful token
+scaffolding already existed pre-labeled "D01"/"D02" in `styles.css`/
+`motion-tokens.ts`/`use-motion-preference.ts` -- typography scale, control-height
+and elevation tokens, and motion-duration bands were all defined, but essentially
+unconsumed by real components, with confirmed floor/cap violations. This pass
+closed the elevation, motion, and contrast-measurement gaps with tests; typography
+and hit-target *adoption* across the wider app were audited and found to still need
+a large, visually-reviewed rollout that this pass did not attempt blind.
+
+**Done:**
+- **Elevation:** `Dialog`/`Sheet`/`Popover`/`DropdownMenu` (`Content` and
+  `SubContent`) now use `katalist-elevation-{dialog,popover}` utilities sourced
+  from the existing `--elevation-*` tokens, replacing raw `shadow-lg`/`shadow-md`
+  classes that the global `* { --tw-shadow: 0 0 #0000 !important }` suppression
+  zeroed at runtime -- these four overlay types previously had **no visible
+  elevation at all**. The new utilities set `box-shadow` directly, bypassing
+  Tailwind's `--tw-shadow` variable machinery, so they render correctly without
+  needing (or being blocked by) that global suppression's removal.
+- **Motion:** fixed two Court spatial-motion durations that exceeded the plan's
+  <=280ms workspace cap -- `CourtLaneStack`'s card-swap tween ran at 360ms, its
+  drag-release snap-back at 300ms -- by sourcing both from `motion-tokens.ts`'s
+  `workspace` band. `CourtFocusView`'s hero-flight tween is now sourced the same
+  way. `CourtLaneStack` also duplicated its own
+  `matchMedia("(prefers-reduced-motion: reduce)")` listener instead of sharing
+  `use-motion-preference.ts`'s combined OS/storage/broadcast wiring (exactly the
+  ad hoc check that hook's own header comment says it replaced); now shares it via
+  a newly exported `subscribeToMotionPreference`.
+- **Contrast:** built `scripts/lib/color-contrast.mjs` (OKLCH -> linear sRGB ->
+  WCAG relative luminance -> contrast ratio, verified against the known
+  white/black 21:1 extreme) and `scripts/measure-palette-contrast.mjs`, which
+  measures every meaningful text/status/UI-component pair in `styles.css`'s
+  token palette. Recorded in
+  `docs/superpowers/plans/2026-09-25-t08-palette-contrast.md`: **four real,
+  previously-unmeasured failures** -- destructive button label (3.89:1, needs
+  4.5:1), the "Waiting" status label (2.99:1, needs 3:1), and both border tokens
+  against the page background (1.44:1, needs 3:1). Not fixed here (recoloring
+  the brand/status palette is a product decision), but no longer silently
+  unmeasured.
+
+**Verification:** 650/650 tests (632 baseline + 18 new across 3 files), 0
+typecheck errors, 0 lint errors/75 warnings (unchanged), clean build. The
+elevation and motion tests confirmed to fail against their pre-fix source (via
+`git stash`) and pass post-fix; the contrast tests assert the actual measured
+ratios, including the four known failures, so either a future fix or a further
+regression is caught.
+
+**Remaining (explicit, not started):**
+1. **Typography scale adoption.** `katalist-heading`/`-body`/`-data-dense`/
+   `-meta` utilities exist in `styles.css` but have **zero real consumers**.
+   Ad hoc arbitrary sizing (`text-[10px]`/`text-[11px]`, both below the plan's
+   >=12px metadata floor) appears **192 times across 40+ files** — confirmed by
+   grep, not sampled. This needs a visually-reviewed rollout (the plan explicitly
+   warns against "globally replacing numeric classes" without preserving
+   hierarchy), which was not attempted blind in this pass; it needs either
+   per-component review or a browser-verified pass per T15's screenshot
+   requirement.
+2. **Hit-target adoption.** `Button`'s `touch`/`icon-touch` size variants (44px)
+   exist but have zero real call sites; `size="icon"` (36px) is used in only 2
+   files codebase-wide, meaning the app's icon-only affordances are almost
+   entirely hand-rolled spans/divs, unaudited for hit-target size.
+   `PersonAvatar`'s initials font-size formula (`Math.max(10, size * 0.36)`) can
+   produce a 10px glyph at real call sites using `size={20}`.
+3. **Global shadow suppression removal.** The elevation fix above deliberately
+   did not remove `* { --tw-shadow: 0 0 #0000 !important }` -- 42 other files
+   still use raw `shadow-*` classes it currently suppresses, and removing it
+   would resurrect all of them at once. Plan requires "inspect remaining legacy
+   shadows... base surfaces stay border-led" first, which needs a per-file
+   visual pass, not a blind global removal.
+4. Scrolling/gesture region isolation (Court's wheel-capture/GSAP Observer) has
+   deliberate mitigation code but no dedicated regression test; no known
+   conflict was found, but this was not independently verified in this pass.
+5. Contrast measurement covers `:root` only (the sole shipped palette, verified
+   identical to `.dark`); the four measured failures above still need an
+   explicit product decision.
