@@ -50,6 +50,15 @@ export function MagicBox({
   // switching to Work. A List-scoped composer keys off the List instead,
   // since it never changes context underneath the same instance.
   const draftEntityId = listId ? `list:${listId}` : `court:${context}`;
+  // T09 fix: file processing and Toss are async and can outlive a
+  // destination switch (Work<->Home, or a different List) that happens
+  // while they're in flight -- without this guard, a slow upload or Toss
+  // started for the OLD destination could resolve after the switch and
+  // append a file to, or clear, the NEW destination's draft. Every async
+  // operation below captures `epochRef.current` before its first `await`
+  // and re-checks it afterward; a mismatch means the destination changed
+  // mid-flight, so the stale result is dropped instead of applied.
+  const epochRef = useRef(0);
 
   const [value, setValue] = useState(() => getDraft<string>(qc, "magic-box", draftEntityId)?.value ?? "");
   const [tossed, setTossed] = useState(false);
@@ -118,6 +127,12 @@ export function MagicBox({
   // List, or switching Work/Home context on the bare Court composer) --
   // the lazy initializers above only ever run once, on first mount.
   useEffect(() => {
+    // Bumping the epoch here (before anything else) invalidates every
+    // async operation (file processing, Toss) that was still in flight for
+    // the PREVIOUS destination -- their `finally`/`onSuccess` handlers
+    // check this epoch and drop their result instead of mutating the
+    // draft/attachments state now shown for the new destination.
+    epochRef.current += 1;
     const draft = getDraft<string>(qc, "magic-box", draftEntityId);
     setValue(draft?.value ?? "");
     setAttachedFiles((draft?.attachments as ThingFile[] | undefined) ?? []);
@@ -125,6 +140,7 @@ export function MagicBox({
     // not part of the persisted draft -- a validation failure against one
     // destination has no meaning once switched to a different one.
     setFailedAttachments([]);
+    setProcessingFiles(0);
     setRetryAssigneeIds(null);
     setTrigger(null);
     setDismissedSuggestionId(null);
@@ -155,27 +171,42 @@ export function MagicBox({
     if (cleanName) setValue(cleanName);
   };
 
-  const processOneFile = async (opId: string, file: File) => {
+  const processOneFile = async (opId: string, file: File, opEpoch: number) => {
     setProcessingFiles((n) => n + 1);
     try {
       const processed = await processFileForUpload(file);
+      // The destination may have changed while this awaited -- an old
+      // upload landing here would silently append a file to whatever
+      // List/context the user has since switched to.
+      if (epochRef.current !== opEpoch) return;
       setAttachedFiles((prev) => [...prev, processed]);
       applyFirstAsTitleIfEmpty(processed);
     } catch (err) {
       console.error("Failed to process file:", err);
+      if (epochRef.current !== opEpoch) return;
       const message = err instanceof Error ? err.message : `Could not attach ${file.name}`;
       setFailedAttachments((prev) => [
         ...prev,
         { id: opId, file, name: file.name, sizeLabel: formatFileSize(file.size), error: message },
       ]);
     } finally {
-      setProcessingFiles((n) => Math.max(0, n - 1));
+      // Only decrement the counter that this operation itself incremented
+      // -- if the destination changed, the re-hydrate effect already reset
+      // processingFiles to 0 for the new destination, and this stale
+      // decrement must not touch it.
+      if (epochRef.current === opEpoch) {
+        setProcessingFiles((n) => Math.max(0, n - 1));
+      }
     }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    // Captured once, before any await, so every file from this pick shares
+    // the destination it was picked for, regardless of how long processing
+    // takes or whether the user switches destinations before it resolves.
+    const opEpoch = epochRef.current;
     // Each file gets its own stable operation id and its own
     // validating->ready|failed transition, entirely independent of the
     // others -- one slow/failing file never blocks or drops another that
@@ -185,7 +216,7 @@ export function MagicBox({
       file,
     }));
     if (fileInputRef.current) fileInputRef.current.value = "";
-    await Promise.all(picked.map(({ id, file }) => processOneFile(id, file)));
+    await Promise.all(picked.map(({ id, file }) => processOneFile(id, file, opEpoch)));
   };
 
   const removeAttachedFile = (fileId: string) => {
@@ -199,10 +230,11 @@ export function MagicBox({
   const retryFailedAttachment = async (opId: string) => {
     const entry = failedAttachments.find((f) => f.id === opId);
     if (!entry) return;
+    const opEpoch = epochRef.current;
     setFailedAttachments((prev) => prev.filter((f) => f.id !== opId));
     // Same stable id on retry -- this is the same logical operation
     // continuing, not a new one.
-    await processOneFile(opId, entry.file);
+    await processOneFile(opId, entry.file, opEpoch);
   };
 
   const isMac = typeof navigator !== "undefined" && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent);
@@ -450,23 +482,32 @@ export function MagicBox({
         title: titleToUse,
       };
     },
-    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch, opEpoch: epochRef.current }),
     onSuccess: async (result, _vars, mutationContext) => {
       const failedAssigneeIds = result?.failedAssigneeIds ?? [];
       const hasPartialFailure = failedAssigneeIds.length > 0;
+      // The user may have switched destination (Work/Home, or List) while
+      // this Toss was in flight -- if so, clearing `value`/`attachedFiles`
+      // now would wipe out whatever the NEW destination's draft already
+      // holds, and the retry-only-failed-assignees state belongs to the
+      // old destination too.
+      const stillSameDestination = epochRef.current === mutationContext.opEpoch;
 
-      setTossed(true);
-      // A partial multi-toss failure keeps the input (title/files) so the
-      // retry attempt below reuses the same content -- only a full
-      // success or a fresh edit (see the input's onChange) clears it.
-      if (!hasPartialFailure) {
-        setValue("");
-        setAttachedFiles([]);
-        setFailedAttachments([]);
+      if (stillSameDestination) {
+        setTossed(true);
+        // A partial multi-toss failure keeps the input (title/files) so the
+        // retry attempt below reuses the same content -- only a full
+        // success or a fresh edit (see the input's onChange) clears it.
+        if (!hasPartialFailure) {
+          setValue("");
+          setAttachedFiles([]);
+          setFailedAttachments([]);
+        }
+        setRetryAssigneeIds(hasPartialFailure ? failedAssigneeIds : null);
+        setTrigger(null);
+        setDismissedSuggestionId(null);
+        window.setTimeout(() => setTossed(false), 240);
       }
-      setRetryAssigneeIds(hasPartialFailure ? failedAssigneeIds : null);
-      setTrigger(null);
-      setDismissedSuggestionId(null);
       if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
       await qc.invalidateQueries({ queryKey: ["court"] });
@@ -497,7 +538,6 @@ export function MagicBox({
       } else {
         toast.success(`${count} things tossed ✓`);
       }
-      window.setTimeout(() => setTossed(false), 240);
     },
     onError: (err, _vars, mutationContext) => {
       if (mutationContext && !isEpochCurrent(qc, mutationContext.epoch)) return;

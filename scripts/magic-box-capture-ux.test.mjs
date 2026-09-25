@@ -39,9 +39,19 @@ test("the mutation threads the used title back through both the single- and mult
   assert.match(magicBox, /failedAssigneeIds: \[\],\s*\n\s*title: titleToUse,/);
 });
 
-test("CourtDesktop wires onThingCreated by looking the Thing up in its own current view state (not a stale capture-time snapshot), reusing the existing no-hero-animation open path", () => {
+test("CourtDesktop wires onThingCreated by looking the Thing up in a ref that tracks the current view (not a stale capture-time snapshot), reusing the existing no-hero-animation open path", () => {
+  // The toast can be clicked well after the render that created its
+  // onThingCreated closure -- reading `view` directly there would freeze on
+  // whatever array snapshot existed at that earlier render. viewRef is
+  // written on every render (not via useEffect, which would lag one render
+  // behind) so the click handler always resolves against the latest data.
+  assert.match(courtDesktop, /const viewRef = useRef\(view\);\s*\n\s*viewRef\.current = view;/);
   assert.match(courtDesktop, /onThingCreated=\{\(thingId\) => \{/);
-  assert.match(courtDesktop, /\[\.\.\.view\.now, \.\.\.view\.next, \.\.\.view\.later, \.\.\.view\.theirs\]\.find\(/);
+  assert.match(courtDesktop, /const currentView = viewRef\.current;/);
+  assert.match(
+    courtDesktop,
+    /\[\s*\n\s*\.\.\.currentView\.now,\s*\n\s*\.\.\.currentView\.next,\s*\n\s*\.\.\.currentView\.later,\s*\n\s*\.\.\.currentView\.theirs,\s*\n\s*\]\.find\(/,
+  );
   assert.match(courtDesktop, /if \(created\) openCatchUpThing\(created\);/);
 });
 
