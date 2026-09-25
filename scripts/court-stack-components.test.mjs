@@ -190,8 +190,15 @@ test("Court desktop switches only the three personal lanes between stacks and in
   assert.doesNotMatch(courtDesktop, /focusIndex:\s*number/);
 });
 
-test("F04: Court desktop's Morning Brief is owned by useMorningBrief(), not its own local open/close state", () => {
-  assert.match(courtDesktop, /useMorningBrief\(\)/);
+test("F04/T10-mobile-entry: Court desktop's Morning Brief is owned by useMorningBrief(), lifted to the shared CourtPage ancestor so mobile can share the same instance", () => {
+  // useMorningBrief() itself now lives in the shared ancestor (CourtPage,
+  // src/routes/index.tsx) rather than inside CourtDesktop, so there is
+  // structurally exactly one instance regardless of which breakpoint
+  // branch (desktop or mobile) is visually showing -- see the DOM-level
+  // mount-count test in court-mobile-morning-brief.test.mjs for the actual
+  // proof of that claim, not just this source-shape check.
+  assert.match(courtRoute, /useMorningBrief\(\)/);
+  assert.match(courtDesktop, /morningBrief: UseMorningBrief/);
   assert.match(courtDesktop, /onReview=\{morningBrief\.reopen\}/);
   assert.match(courtDesktop, /onClose=\{morningBrief\.dismiss\}/);
   assert.match(courtDesktop, /open=\{morningBrief\.open\}/);

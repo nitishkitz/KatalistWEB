@@ -11,8 +11,8 @@ import {
 } from "lucide-react";
 import type { Thing } from "@/domain/thing";
 import { laneOf, theirStateFor } from "@/domain/thing";
-import { useCatchup } from "@/features/catchup/use-catchup";
-import { useMorningBrief } from "@/features/catchup/use-morning-brief";
+import type { UseCatchup } from "@/features/catchup/use-catchup";
+import type { UseMorningBrief } from "@/features/catchup/use-morning-brief";
 import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
 import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
 import { cn } from "@/lib/utils";
@@ -65,6 +65,14 @@ type CourtDesktopProps = {
   refetch: () => unknown;
   myActorId: string | null;
   onSelect: (thing: Thing) => void;
+  /** T10/mobile-entry: lifted to the shared `CourtPage` ancestor so there is
+   *  structurally exactly one `useCatchup()`/`useMorningBrief()` instance
+   *  regardless of which breakpoint branch (this desktop surface, or the
+   *  separate mobile lane-list block in `src/routes/index.tsx`) is visually
+   *  showing -- see the comment above `useMorningBrief`'s call site in
+   *  `CourtPage` for why two independent instances would be unsafe. */
+  catchup: UseCatchup;
+  morningBrief: UseMorningBrief;
 };
 
 // Supported quick filter presets: "All", "Due", "Waiting", "In Progress"
@@ -186,6 +194,8 @@ export function CourtDesktop({
   refetch,
   myActorId,
   onSelect,
+  catchup,
+  morningBrief,
 }: CourtDesktopProps) {
   const [filters, setFilters] = useState<CourtFilterState>(DEFAULT_COURT_FILTERS);
   const [query, setQuery] = useState("");
@@ -208,13 +218,18 @@ export function CourtDesktop({
   const [theirFocus, setTheirFocus] = useState<TheirsFocus | null>(null);
   const [theirSelectedId, setTheirSelectedId] = useState<string | null>(null);
   const [heroRect, setHeroRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
-  const catchup = useCatchup();
-  // F04: one presentation controller for this Court surface -- CourtDesktop
-  // is the only place Catch Up/Morning Brief renders (mobile Court reuses
-  // this same component, CSS-hidden rather than a separate mount), so this
-  // is already "one owner per active Court surface" with nothing further
-  // to dedupe.
-  const morningBrief = useMorningBrief();
+  // F04/T10-mobile-entry: `catchup`/`morningBrief` are received as props from
+  // the shared `CourtPage` ancestor rather than called here directly.
+  // CourtDesktop's OWN rendered output is CSS-hidden below `lg` (see the
+  // wrapping `hidden lg:block` below), but the component itself was always
+  // mounted at every breakpoint -- so a second, truly independent mobile
+  // entry point calling these hooks itself would have raced this one for
+  // the same daily claim (see `use-morning-brief.ts`'s attempt-token
+  // system, which owns exactly one attempt per scope but has no
+  // cross-instance coordination). Lifting the single call up to `CourtPage`
+  // and passing the result down here (and to the mobile branch) keeps
+  // "exactly one automatic controller" true structurally, not just by
+  // convention.
   const directory = useProfileDirectory();
   const laneRefs = useRef<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>({});
   const originRef = useRef<{

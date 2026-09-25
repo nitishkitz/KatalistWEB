@@ -28,3 +28,23 @@ if (!globalThis.requestAnimationFrame) {
   globalThis.requestAnimationFrame = (cb) => setTimeout(() => cb(Date.now()), 0);
   globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
 }
+
+// T10/mobile-entry: needed the first time a test in this suite actually
+// mounts a real Radix Dialog (CatchUpOverlay, via the new mobile Morning
+// Brief entry point) -- @radix-ui/react-focus-scope's focus trap uses a
+// real `MutationObserver` in its mount effect, which jsdom implements on
+// `window` but Node doesn't expose as a bare global the way a browser
+// does. No prior test in this suite rendered a Radix Dialog, so this was
+// never needed before.
+globalThis.MutationObserver = dom.window.MutationObserver;
+// Same focus-trap code walks the DOM with `document.createTreeWalker`,
+// which needs the `NodeFilter` constant object (`SHOW_ELEMENT` etc.) --
+// also a real global in a browser/jsdom `window`, not in bare Node.
+globalThis.NodeFilter = dom.window.NodeFilter;
+// ...and does `instanceof HTMLInputElement`/etc checks on the focused
+// element to decide whether to auto-select its text -- these element
+// constructors are likewise only ever exposed on a browser/jsdom `window`.
+globalThis.HTMLInputElement = dom.window.HTMLInputElement;
+globalThis.HTMLSelectElement = dom.window.HTMLSelectElement;
+globalThis.HTMLTextAreaElement = dom.window.HTMLTextAreaElement;
+globalThis.HTMLButtonElement = dom.window.HTMLButtonElement;

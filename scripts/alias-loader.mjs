@@ -51,10 +51,22 @@ export async function resolve(specifier, context, nextResolve) {
  * transforms JSX via the automatic runtime, then hands the emitted JS to
  * Node as a normal ES module. Only .tsx is intercepted; .ts/.mjs keep
  * using Node's own native type-stripping unchanged.
+ *
+ * T10/mobile-entry: `node:test`'s `--experimental-test-module-mocks` loader
+ * sits later in this same hook chain and re-requests a mocked module's real
+ * URL with an appended `?mock=...`-style query string (to bypass Node's own
+ * module cache) -- a plain `url.endsWith(".tsx")` check went false for that
+ * decorated URL and fell through to Node's default loader, which has no
+ * idea what a `.tsx` file is (`ERR_UNKNOWN_FILE_EXTENSION`) regardless of
+ * any query string. Stripping the query/hash before checking the extension
+ * fixes `mock.module()` for `.tsx` specifiers (previously only exercised
+ * for `.ts` ones in this codebase's tests) without changing behavior for
+ * any non-mocked `.tsx` import.
  */
 export async function load(url, context, nextLoad) {
-  if (url.endsWith(".tsx") && url.startsWith("file:")) {
-    const filePath = fileURLToPath(url);
+  const urlPath = url.startsWith("file:") ? url.split("?")[0].split("#")[0] : url;
+  if (urlPath.endsWith(".tsx") && url.startsWith("file:")) {
+    const filePath = fileURLToPath(urlPath);
     const source = readFileSync(filePath, "utf8");
     const { outputText } = ts.transpileModule(source, {
       fileName: filePath,
@@ -66,6 +78,21 @@ export async function load(url, context, nextLoad) {
       },
     });
     return { format: "module", source: outputText, shortCircuit: true };
+  }
+  // T10/mobile-entry: source under src/assets/ imports plain-looking
+  // `*.json` files (e.g. `*.asset.json`) the way Vite always has --
+  // Node's own ESM loader requires an explicit `with { type: "json" }`
+  // import attribute at every call site for that (`ERR_IMPORT_ATTRIBUTE_
+  // MISSING`), which this source doesn't have and shouldn't need to add
+  // just to satisfy a test-only Node loader. Emitting the parsed JSON as a
+  // tiny synthetic ES module (a plain `export default {...}`) sidesteps
+  // the attribute requirement entirely, matching how Vite's real JSON
+  // handling already behaves for these imports in the app itself.
+  if (urlPath.endsWith(".json") && url.startsWith("file:")) {
+    const filePath = fileURLToPath(urlPath);
+    const source = readFileSync(filePath, "utf8");
+    JSON.parse(source); // fail loudly here, not with a cryptic module-eval error, if it's ever not valid JSON
+    return { format: "module", source: `export default ${source};`, shortCircuit: true };
   }
   return nextLoad(url, context);
 }

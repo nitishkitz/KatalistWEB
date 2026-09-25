@@ -72,22 +72,20 @@ test.describe("Morning Brief: real backend isolation", () => {
   });
 });
 
-// T10-07 finding (pre-existing, not introduced by T10): `src/routes/index.tsx`
-// renders `CourtDesktop` (the only component that mounts `useMorningBrief()`/
-// `useCatchup()` and renders `CatchUpBanner`/`CatchUpOverlay`) alongside a
-// SEPARATE, simpler mobile lane-list UI in an `lg:hidden` block. Below the
-// `lg` breakpoint (1024px) that separate mobile block is what's actually
-// visible -- `CourtDesktop`'s own rendered output is hidden via CSS at that
-// width, taking Morning Brief's only entry point with it. This means Morning
-// Brief currently has NO reachable entry point at all on any viewport
-// narrower than 1024px (the "preview-mobile" 390px and "preview-tablet-
-// portrait" 768px projects below both fall in that range) -- T10-06's mobile
-// full-height dialog styling is correct but currently inert there, since
-// there is no way to open it. Fixing this is an architecture decision (where
-// does a mobile entry point live, and how do the `catchup`/`morningBrief`
-// hook results reach both `CourtDesktop` and the separate mobile block)
-// beyond this pass's scope; recorded here as a real, reproducible, named
-// defect rather than fixed under time pressure.
+// T10/mobile-entry: previously, `src/routes/index.tsx` rendered
+// `CourtDesktop` (the only component that mounted `useMorningBrief()`/
+// `useCatchup()` and rendered `CatchUpBanner`/`CatchUpOverlay`) alongside a
+// SEPARATE, simpler mobile lane-list UI in an `lg:hidden` block with no
+// Catch Up wiring of its own -- below the `lg` breakpoint (1024px),
+// `CourtDesktop`'s own rendered output is CSS-hidden, taking Morning
+// Brief's only entry point with it. Morning Brief now has a real, reachable
+// entry point below 1024px too: `useCatchup()`/`useMorningBrief()` are
+// called exactly once in the shared `CourtPage` ancestor (not once per
+// breakpoint branch, which would have raced two independent auto-claim
+// attempts against the same daily scope -- see the DOM-level mount-count
+// proof in `scripts/court-mobile-morning-brief.test.mjs`) and threaded down
+// to both `CourtDesktop` and this mobile block, which now renders its own
+// `CatchUpBanner` + `CatchUpOverlay`.
 const LG_BREAKPOINT_PX = 1024;
 
 test.describe("Morning Brief: responsive Court entry point", () => {
@@ -128,7 +126,7 @@ test.describe("Morning Brief: responsive Court entry point", () => {
     expect(active, "focus was not restored anywhere after Escape").not.toBeNull();
   });
 
-  test("below lg: the mobile Court lane list itself has no horizontal overflow (Morning Brief has no entry point here -- see comment above)", async ({
+  test("below lg: the mobile Court lane list has no horizontal overflow, and Morning Brief (banner + dialog + Escape) now works fully", async ({
     page,
   }, testInfo) => {
     const viewport = page.viewportSize();
@@ -141,9 +139,29 @@ test.describe("Morning Brief: responsive Court entry point", () => {
     expect(overflow, "the mobile Court lane list has horizontal overflow at this viewport").toBe(false);
     await page.screenshot({ path: testInfo.outputPath("mobile-court.png"), fullPage: false });
 
-    // Documents the finding as a real, checked assertion rather than a
-    // silent skip: Review/Morning Brief is confirmed absent here today.
-    await expect(page.getByRole("button", { name: /^Review( \d+)?$/ })).toHaveCount(0);
-    await expect(page.getByRole("dialog", { name: /Morning Brief/i })).toHaveCount(0);
+    // T10/mobile-entry: Morning Brief is now reachable here too -- the
+    // banner is rendered by the same `lg:hidden` mobile block, fed by the
+    // single `useCatchup()`/`useMorningBrief()` instance lifted to the
+    // shared `CourtPage` ancestor (see the comment above this describe
+    // block). Reachable once settled on every branch (T10-06), regardless
+    // of this run's actual seeded data.
+    const reviewButton = page.getByRole("button", { name: /^Review( \d+)?$/ });
+    await expect(reviewButton).toBeVisible({ timeout: 10_000 });
+
+    await reviewButton.click();
+    const dialog = page.getByRole("dialog", { name: /Morning Brief/i });
+    await expect(dialog).toBeVisible();
+
+    const dialogOverflow = await dialog.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
+    expect(dialogOverflow, "Morning Brief dialog clips its own content horizontally on mobile").toBe(false);
+
+    await page.screenshot({ path: testInfo.outputPath("mobile-morning-brief-open.png"), fullPage: false });
+
+    // Escape closes and restores focus to a connected element (U02), same
+    // contract as the >=lg test above.
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    const active = await page.evaluate(() => document.activeElement?.tagName ?? null);
+    expect(active, "focus was not restored anywhere after Escape").not.toBeNull();
   });
 });

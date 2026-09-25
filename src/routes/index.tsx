@@ -19,6 +19,10 @@ import { ThingCard } from "@/features/court/ThingCard";
 import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import type { Thing } from "@/domain/thing";
 import { cn } from "@/lib/utils";
+import { useCatchup } from "@/features/catchup/use-catchup";
+import { useMorningBrief } from "@/features/catchup/use-morning-brief";
+import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
+import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -174,9 +178,33 @@ function CourtPage() {
   const [theirFocus, setTheirFocus] = useState<
     "waiting_for_catch" | "moving" | "needs_attention" | null
   >(null);
+  // T10/mobile-entry: called exactly ONCE here, in the shared ancestor of
+  // both the desktop (`CourtDesktop`, always mounted, CSS-hidden below `lg`)
+  // and mobile (`lg:hidden` block below) branches, and passed down to both.
+  // Two independent `useMorningBrief()` calls (one per branch) would each
+  // run their own auto-claim attempt against the SAME daily scope --
+  // `use-morning-brief.ts`'s attempt-token system only dedupes re-attempts
+  // WITHIN one hook instance, not across two simultaneous instances, so two
+  // calls really would race/duplicate-claim. Lifting to one call here keeps
+  // "exactly one automatic controller" true regardless of viewport.
+  const catchup = useCatchup();
+  const morningBrief = useMorningBrief();
+  // T10/mobile-entry: a Catch Up moment's Thing is not guaranteed to be one
+  // of Court's own currently-loaded now/next/later/theirs/all Things (e.g.
+  // a ghost breakthrough deliberately surfaces a Thing from the OTHER
+  // context by design -- see use-catchup.ts) -- CourtDesktop's own
+  // `openCatchUpThing` sidesteps this entirely by threading the moment's
+  // actual Thing object straight into its detail modal instead of looking
+  // it up by id. This mobile branch's selection model is ID-based instead
+  // (matching the existing MagicBox-created-Thing flow below), so the
+  // currently-open moments' own Things are added as a fallback lookup pool
+  // -- without this, opening a Thing from the mobile Morning Brief overlay
+  // that isn't already part of Court's own lists would silently show
+  // nothing at all.
   const selected =
     all.find((t) => t.id === selectedId) ??
     now.concat(next, later, theirs).find((t) => t.id === selectedId) ??
+    catchup.moments.map((m) => m.thing).find((t) => t.id === selectedId) ??
     null;
 
   const sortThings = useCallback(
@@ -220,6 +248,19 @@ function CourtPage() {
   const emptyCourt = now.length + next.length + later.length + theirs.length === 0;
   const emptyFilter = !emptyCourt && fNow.length + fNext.length + fLater.length === 0;
 
+  // Mobile equivalent of CourtDesktop's `openCatchUpThing`: dismiss the
+  // brief as a real dismissal (same as Escape/X/backdrop) and open the
+  // Thing via the mobile inline detail workspace's own selection state --
+  // there is no hero-flight animation or separate detail modal on this
+  // branch, `selected`/`InlineThingDetailWorkspace` already does this.
+  const openCatchUpThingMobile = useCallback(
+    (thing: Thing) => {
+      morningBrief.dismiss();
+      setSelectedId(thing.id);
+    },
+    [morningBrief],
+  );
+
   if (isLoading) {
     return (
       <AppShell noPadding>
@@ -243,6 +284,8 @@ function CourtPage() {
         refetch={refetch}
         myActorId={myActorId}
         onSelect={(thing) => setSelectedId(thing.id)}
+        catchup={catchup}
+        morningBrief={morningBrief}
       />
 
       <div className="lg:hidden">
@@ -278,6 +321,19 @@ function CourtPage() {
                 tolerates the id not being in cache yet and simply shows
                 nothing until the invalidation MagicBox already triggers
                 finishes refetching. */}
+            {/* T10/mobile-entry: the reachable mobile Morning Brief entry
+                point this route previously lacked entirely below `lg`
+                (1024px) -- same `CatchUpBanner` component CourtDesktop uses,
+                fed by the single lifted `catchup`/`morningBrief` instances
+                above, reachable on every settled branch (loading/error/
+                empty/ready), not gated on a non-zero moment count. */}
+            <CatchUpBanner
+              moments={catchup.moments}
+              onReview={morningBrief.reopen}
+              error={catchup.error}
+              hasFetchedOnce={catchup.hasFetchedOnce}
+            />
+
             <MagicBox onThingCreated={(thingId) => setSelectedId(thingId)} />
 
             <p className="mb-3 flex items-center gap-2 text-[13px] text-muted-foreground">
@@ -465,6 +521,23 @@ function CourtPage() {
           </div>
         </InlineThingDetailWorkspace>
         )}
+
+        <CatchUpOverlay
+          open={morningBrief.open}
+          onClose={morningBrief.dismiss}
+          moments={catchup.moments}
+          myActorId={myActorId}
+          surfaceMoment={catchup.surfaceMoment}
+          onOpenThing={openCatchUpThingMobile}
+          isLoading={catchup.isLoading}
+          error={catchup.error}
+          isEmpty={catchup.isEmpty}
+          hasFetchedOnce={catchup.hasFetchedOnce}
+          onRefresh={() => {
+            refetch();
+            catchup.refresh();
+          }}
+        />
       </div>
     </AppShell>
   );
