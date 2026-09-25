@@ -11,6 +11,7 @@ import { test } from "node:test";
  * Users had no way to ever change it from the "all" default.
  */
 const page = readFileSync(new URL("../src/routes/lists.$listId.tsx", import.meta.url), "utf8");
+const filterHook = readFileSync(new URL("../src/features/lists/use-list-things-filter.ts", import.meta.url), "utf8");
 
 test("an Active/All/Completed control now actually calls setThingsFilter", () => {
   assert.match(page, /onClick=\{\(\) => setThingsFilter\(id\)\}/);
@@ -26,7 +27,16 @@ test("\"active\" means nonterminal (neither sorted nor cancelled), a new filter 
   );
 });
 
-test("the filter choice is persisted per profile + List, with \"all\" as the compatibility default", () => {
-  assert.match(page, /katalist\.lists\.things_filter\.\$\{user\?\.id/);
-  assert.match(page, /return \(stored as QuickFilterType\) \|\| "all"/);
+test("the filter choice is persisted per resolved identity + List, with validated all fallback", () => {
+  assert.match(page, /useListThingsFilter\(filterIdentityId, listId\)/);
+  assert.match(filterHook, /katalist\.lists\.things_filter\.\$\{identityId\}\.\$\{listId\}/);
+  assert.match(filterHook, /LIST_THING_FILTERS\.includes/);
+  assert.match(filterHook, /: "all"/);
+  assert.doesNotMatch(filterHook, /anon/);
+});
+
+test("a reused route re-keys filter state before persistence and only explicit changes write storage", () => {
+  assert.match(filterHook, /if \(owned\.key !== key\) \{\s*setOwned\(\{ key, value: readFilter\(key\) \}\)/);
+  assert.match(filterHook, /const setValue = \(next: ListThingFilter\)/);
+  assert.doesNotMatch(filterHook, /useEffect/);
 });
