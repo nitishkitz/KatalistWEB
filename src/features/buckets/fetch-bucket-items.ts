@@ -8,8 +8,10 @@ import { getActorId } from "@/features/people/actor-query";
 import { withReadDeadline } from "@/lib/read-request";
 
 export type BucketItem =
-  | { kind: "thing"; thingId: string; thing: Thing }
-  | { kind: "list"; listId: string; list: ListRow };
+  | { kind: "thing"; thingId: string; availability: "available"; thing: Thing }
+  | { kind: "thing"; thingId: string; availability: "unavailable" }
+  | { kind: "list"; listId: string; availability: "available"; list: ListRow }
+  | { kind: "list"; listId: string; availability: "unavailable" };
 
 async function fetchListsByIds(
   qc: QueryClient,
@@ -73,10 +75,18 @@ export async function fetchBucketItems(
   for (const r of data ?? []) {
     if (r.thing_id) {
       const thing = thingById.get(r.thing_id);
-      if (thing) items.push({ kind: "thing", thingId: thing.id, thing });
+      items.push(
+        thing
+          ? { kind: "thing", thingId: r.thing_id, availability: "available", thing }
+          : { kind: "thing", thingId: r.thing_id, availability: "unavailable" },
+      );
     } else if (r.list_id) {
       const list = listById.get(r.list_id);
-      if (list) items.push({ kind: "list", listId: list.id, list });
+      items.push(
+        list
+          ? { kind: "list", listId: r.list_id, availability: "available", list }
+          : { kind: "list", listId: r.list_id, availability: "unavailable" },
+      );
     }
   }
   return items;

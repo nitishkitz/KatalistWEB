@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { Folder, FolderPlus, Sparkles, Check, ChevronRight } from "lucide-react";
+import { Folder, FolderPlus, Check, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBuckets } from "./use-buckets";
-import { rpcAddToBucket } from "@/features/things/rpc";
+import { parseThingDropPayload, runBucketReferenceCommand } from "./bucket-reference-commands";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
-import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 
 interface SpringLoadedBucketFlyoutProps {
   isOpen: boolean;
@@ -96,22 +95,18 @@ export function SpringLoadedBucketFlyout({ isOpen, onClose }: SpringLoadedBucket
                   e.preventDefault();
                   setHoveredBucketId(null);
                   onClose();
-                  const dropEpoch = getIdentityEpoch(qc).epoch;
                   try {
                     const raw = e.dataTransfer.getData("application/katalist-thing");
                     if (!raw) return;
-                    const data = JSON.parse(raw) as { thingId: string; title?: string };
-
-                    await rpcAddToBucket(b.id, data.thingId);
-                    if (!isEpochCurrent(qc, dropEpoch)) return;
+                    const data = parseThingDropPayload(raw);
+                    if (!data) return;
+                    const outcome = await runBucketReferenceCommand(qc, "add", b.id, { thingId: data.thingId });
+                    if (outcome !== "performed") return;
                     toast.success(
                       `Filed "${data.title || "Thing"}" into 📁 ${b.name}`,
                     );
-                    await qc.invalidateQueries({ queryKey: ["buckets"] });
-                    await qc.invalidateQueries({ queryKey: ["bucket", b.id] });
-                    await qc.invalidateQueries({ queryKey: ["bucket-items", b.id] });
                   } catch (err: unknown) {
-                    if (isEpochCurrent(qc, dropEpoch)) toast.error(domainErrorMessage(err));
+                    toast.error(domainErrorMessage(err));
                   }
                 }}
                 className={cn(

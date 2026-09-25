@@ -4,14 +4,13 @@ import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { accessibleDemoThings, getBucketRefs, getListById, getThing } from "@/features/things/local-state";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { rpcAddToBucket, rpcRemoveFromBucket } from "@/features/things/rpc";
 import { useAppContext } from "@/features/context/use-app-context";
 import { useLists } from "@/features/lists/use-lists";
 import { keys } from "@/domain/query-keys";
 import type { Thing } from "@/domain/thing";
 import { mapDbThingRows, THING_OVERVIEW_COLUMNS, type DbThingRow } from "@/features/things/map-thing-rows";
 import { getActorId } from "@/features/people/actor-query";
-import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { runBucketReferenceCommand } from "./bucket-reference-commands";
 import {
   excludePersonallyShreddedThings,
   usePersonalShred,
@@ -25,10 +24,18 @@ function resolveDemoItems(bucketId: string): BucketItem[] {
   for (const ref of getBucketRefs(bucketId)) {
     if (ref.kind === "thing" && ref.thingId) {
       const thing = getThing(ref.thingId);
-      if (thing) items.push({ kind: "thing", thingId: thing.id, thing });
+      items.push(
+        thing
+          ? { kind: "thing", thingId: ref.thingId, availability: "available", thing }
+          : { kind: "thing", thingId: ref.thingId, availability: "unavailable" },
+      );
     } else if (ref.kind === "list" && ref.listId) {
       const list = getListById(ref.listId);
-      if (list) items.push({ kind: "list", listId: list.id, list });
+      items.push(
+        list
+          ? { kind: "list", listId: ref.listId, availability: "available", list }
+          : { kind: "list", listId: ref.listId, availability: "unavailable" },
+      );
     }
   }
   return items;
@@ -81,29 +88,26 @@ export function useBucketItems(bucketId: string | undefined) {
     queryFn: ({ signal }) => fetchBucketItems(qc, bucketId!, user!.id, signal),
   });
 
-  const invalidate = (epoch: number) => {
-    if (!isEpochCurrent(qc, epoch)) return;
-    void qc.invalidateQueries({ queryKey: ["bucket-items"] });
-    void qc.invalidateQueries({ queryKey: ["bucket"] });
-    void qc.invalidateQueries({ queryKey: ["buckets"] });
-  };
-
   const add = useMutation({
-    mutationFn: (input: { thingId?: string; listId?: string }) => rpcAddToBucket(bucketId!, input.thingId, input.listId),
-    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
-    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
+    mutationFn: (input: { thingId?: string; listId?: string }) =>
+      runBucketReferenceCommand(qc, "add", bucketId!, input as Parameters<typeof runBucketReferenceCommand>[3]),
   });
 
   const remove = useMutation({
     mutationFn: (input: { thingId?: string; listId?: string }) =>
-      rpcRemoveFromBucket(bucketId!, input.thingId, input.listId),
-    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch }),
-    onSuccess: (_data, _vars, mutationContext) => invalidate(mutationContext.epoch),
+      runBucketReferenceCommand(qc, "remove", bucketId!, input as Parameters<typeof runBucketReferenceCommand>[3]),
   });
 
   const raw: BucketItem[] = preview && bucketId ? resolveDemoItems(bucketId) : (query.data ?? []);
   const items = raw.filter((item) =>
     item.kind === "thing" ? !shred.thingIds.has(item.thingId) : !shred.listIds.has(item.listId),
   );
-  return { items, add, remove, isLoading: !preview && query.isLoading, error: query.error };
+  return {
+    items,
+    add,
+    remove,
+    isLoading: !preview && query.isLoading,
+    error: query.error,
+    refetch: query.refetch,
+  };
 }

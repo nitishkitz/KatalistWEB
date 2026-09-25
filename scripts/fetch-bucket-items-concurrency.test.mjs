@@ -65,7 +65,12 @@ test("fetchBucketItems runs the Things and Lists lookups concurrently", async ()
       supabase: {
         from: (table) => {
           if (table === "bucket_items")
-            return chainable("bucket-items-query", { data: [{ thing_id: "t1", list_id: null }, { thing_id: null, list_id: "l1" }], error: null });
+            return chainable("bucket-items-query", { data: [
+              { thing_id: "t1", list_id: null },
+              { thing_id: "missing-thing", list_id: null },
+              { thing_id: null, list_id: "l1" },
+              { thing_id: null, list_id: "missing-list" },
+            ], error: null });
           if (table === "things") return chainable("things-query", { data: [{ id: "t1" }], error: null });
           if (table === "lists") return chainable("lists-query", { data: [{ id: "l1" }], error: null });
           throw new Error(`unexpected table: ${table}`);
@@ -90,14 +95,22 @@ test("fetchBucketItems runs the Things and Lists lookups concurrently", async ()
     );
 
     // Output assertions.
-    assert.equal(items.length, 2);
+    assert.equal(items.length, 4);
     assert.deepEqual(
       items.find((i) => i.kind === "thing"),
-      { kind: "thing", thingId: "t1", thing: { id: "t1", title: "t" } },
+      { kind: "thing", thingId: "t1", availability: "available", thing: { id: "t1", title: "t" } },
     );
     assert.deepEqual(
       items.find((i) => i.kind === "list"),
-      { kind: "list", listId: "l1", list: { id: "l1", name: "l" } },
+      { kind: "list", listId: "l1", availability: "available", list: { id: "l1", name: "l" } },
+    );
+    assert.deepEqual(
+      items.find((i) => i.kind === "thing" && i.thingId === "missing-thing"),
+      { kind: "thing", thingId: "missing-thing", availability: "unavailable" },
+    );
+    assert.deepEqual(
+      items.find((i) => i.kind === "list" && i.listId === "missing-list"),
+      { kind: "list", listId: "missing-list", availability: "unavailable" },
     );
   } finally {
     mapThingsMock.restore();
