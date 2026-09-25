@@ -8,7 +8,7 @@ type Props = {
   onClose: () => void;
   moments: CatchUpMoment[];
   myActorId: string | null;
-  surfaceMoment: (momentKey: string) => void;
+  surfaceMoment: (momentKey: string) => Promise<void>;
   onOpenThing: (thing: Thing) => void;
   onRefresh: () => void;
 };

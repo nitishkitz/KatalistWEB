@@ -20,7 +20,7 @@ import type { CatchUpMoment } from "./use-catchup";
 type Props = {
   moments: CatchUpMoment[];
   myActorId: string | null;
-  surfaceMoment: (momentKey: string) => void;
+  surfaceMoment: (momentKey: string) => Promise<void>;
   onOpenThing: (thing: Thing) => void;
   onClose: () => void;
   onRefresh: () => void;
@@ -104,7 +104,13 @@ export function CatchUpStack({
             toast.success("Dismissed.");
             break;
         }
-        surfaceMoment(current.momentKey);
+        // T10-01 note: surfaceMoment is now awaitable (live rejects on RPC
+        // failure) so a future receipt-only retry (T10-04) can tell success
+        // from failure. This call site still treats it as best-effort --
+        // full outcome-aware sequencing/retry UI is T10-04/T10-05 scope.
+        surfaceMoment(current.momentKey).catch(() => {
+          // best-effort, matching this call site's pre-existing semantics
+        });
         advance();
       } catch (error) {
         toast.error(domainErrorMessage(error));

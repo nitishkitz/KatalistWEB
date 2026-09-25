@@ -29,6 +29,7 @@ import {
   type RawCatchUpMoment,
 } from "./catchup-logic";
 import { withReadDeadline } from "@/lib/read-request";
+import { classifyAsyncError, resolveAsyncBranch, type AsyncBranch } from "@/lib/query-policy";
 
 export type CatchUpMoment = {
   momentKey: string;
@@ -48,7 +49,11 @@ type RpcRow = {
   reason: string;
 };
 
-async function fetchCatchupMoments(profileId: string | null, querySignal?: AbortSignal): Promise<CatchUpMoment[]> {
+async function fetchCatchupMoments(
+  profileId: string | null,
+  context: "work" | "home",
+  querySignal?: AbortSignal,
+): Promise<CatchUpMoment[]> {
   // T01: bounds the RPC plus its dependent reads (actor, Things) as one
   // logical read operation under a single deadline, wired to React
   // Query's own cancellation signal.
@@ -111,6 +116,15 @@ async function fetchCatchupMoments(profileId: string | null, querySignal?: Abort
       if (r.kind === "ghost" && !doorman) continue;
       const thing = thingById.get(r.thing_id);
       if (!thing) continue; // Not resolvable/visible — skip rather than show an empty card.
+      // T10-01: list_catchup_moments() (supabase/migrations/20260918120000_catchup.sql)
+      // has no notion of Work/Home context -- it returns moments across both,
+      // scoped only by profile/actor. The query key already varies by
+      // `context` (domain/query-keys.ts), but until this filter existed the
+      // returned Things were never actually narrowed to it, so switching
+      // context could show (or count) a moment that belongs to the other
+      // context's Thing. Filter on the resolved, capability-mapped Thing's
+      // own context -- never on the raw row or a notification/RPC label.
+      if (thing.context !== context) continue;
       moments.push({
         momentKey: r.moment_key,
         kind: r.kind as CatchUpMomentKind,
@@ -129,9 +143,21 @@ function derivePreviewMoments(context: "work" | "home"): CatchUpMoment[] {
   const me = currentDemoActorId();
   const raw: RawCatchUpMoment[] = [];
 
+  // T10-01: the current context's own authorized-Thing set -- the same
+  // context+access gate accessibleDemoThings() already applies for Court's
+  // own rows. A moment whose underlying Thing is not in this set (wrong
+  // context, or no longer accessible -- shredded/removed from a shared
+  // list) must not be surfaced, even though getThing() below can still
+  // resolve it by id alone. Ghost breakthroughs are the one deliberate
+  // exception: getGhostCandidate() surfaces a Thing from the OTHER
+  // context by design (a cross-context interruption), so this gate is
+  // never applied to that category.
+  const authorized = new Map(accessibleDemoThings(context).map((t) => [t.id, t] as const));
+
   // Nudges received by me.
   for (const n of getNotifications()) {
     if (n.type !== "NUDGED" || !n.thingId) continue;
+    if (!authorized.has(n.thingId)) continue;
     raw.push({
       momentKey: `nudge:local:${n.id}`,
       kind: "nudge",
@@ -143,6 +169,7 @@ function derivePreviewMoments(context: "work" | "home"): CatchUpMoment[] {
 
   // Personal snoozes that have naturally woken.
   for (const e of getEndedSnoozeEntries()) {
+    if (!authorized.has(e.thingId)) continue;
     raw.push({
       momentKey: `snooze:local:${e.thingId}:${e.untilMs}`,
       kind: "snooze_ended",
@@ -187,7 +214,13 @@ function derivePreviewMoments(context: "work" | "home"): CatchUpMoment[] {
   const resolved = resolveMoments(raw, getCatchupSurfaced());
   const out: CatchUpMoment[] = [];
   for (const m of resolved) {
-    const thing = getThing(m.thingId);
+    // Ghost is deliberately cross-context (see authorized's own comment
+    // above) -- resolve it by id alone. Every other kind was already
+    // gated through `authorized` above, so re-resolving through the same
+    // map (rather than a bare getThing()) keeps this loop from
+    // accidentally re-admitting a Thing that failed the context/access
+    // gate if a future moment kind is added here without updating it.
+    const thing = m.kind === "ghost" ? getThing(m.thingId) : authorized.get(m.thingId);
     if (!thing) continue;
     out.push({
       momentKey: m.momentKey,
@@ -211,7 +244,31 @@ export type UseCatchup = {
    *  consumer deciding whether to auto-interrupt (Morning Brief) must
    *  treat this as "unknown", not "confirmed no moments". */
   error: unknown;
-  surfaceMoment: (momentKey: string) => void;
+  /** T10-01: a real AsyncState-shaped branch (query-policy.ts's own
+   *  contract, reused rather than a parallel invention) -- "pending"
+   *  covers both an initial fetch and a query paused offline before its
+   *  first result, "ready" is a settled result (possibly empty; see
+   *  `isEmpty`), and "error" means the initial load itself never
+   *  produced usable data. A background refetch failure with prior
+   *  cached moments still reports "ready" (stale-but-usable), matching
+   *  resolveAsyncBranch()'s own "ready" fallthrough for a non-empty,
+   *  non-confirmed-loss failure. */
+  branch: AsyncBranch;
+  /** True once this result is a confirmed, settled fact -- zero moments
+   *  because there genuinely are none right now, not because the query
+   *  hasn't resolved yet. Always true in preview (local derivation is
+   *  synchronous and always current). */
+  isEmpty: boolean;
+  /** True when `error` is a confirmed access loss (unauthenticated,
+   *  forbidden, or not-found) rather than an ambiguous/transient failure
+   *  a caller could plausibly retry past. Always false in preview. */
+  confirmedAccessLoss: boolean;
+  /** Awaitable: preview resolves once the local receipt is recorded;
+   *  live resolves on the RPC's own success and rejects on its failure
+   *  (including a mid-flight identity/context switch's own cache
+   *  invalidation being skipped -- that never affects this promise's own
+   *  settlement, only whether a stale caller's later work still runs). */
+  surfaceMoment: (momentKey: string) => Promise<void>;
   refresh: () => void;
 };
 
@@ -225,7 +282,7 @@ export function useCatchup(): UseCatchup {
 
   const query = useQuery({
     queryKey: keys.catchup(user?.id, context),
-    queryFn: ({ signal }) => fetchCatchupMoments(user?.id ?? null, signal),
+    queryFn: ({ signal }) => fetchCatchupMoments(user?.id ?? null, context, signal),
     enabled: liveAuth,
     staleTime: 15_000,
   });
@@ -253,12 +310,15 @@ export function useCatchup(): UseCatchup {
   });
 
   const surfaceMoment = useCallback(
-    (momentKey: string) => {
+    async (momentKey: string) => {
       if (preview) {
+        // Synchronous today, but kept awaitable so a future storage-backed
+        // preview receipt (T10-02) can fail without changing this
+        // contract, and so callers can uniformly await both paths.
         surfaceCatchupLocal(momentKey);
         return;
       }
-      surface.mutate(momentKey);
+      await surface.mutateAsync(momentKey);
     },
     [preview, surface],
   );
@@ -269,12 +329,41 @@ export function useCatchup(): UseCatchup {
   }, [preview, query]);
 
   const moments = preview ? previewMoments : query.data ?? [];
+  const isEmpty = moments.length === 0;
+  // T10-01: `query.data !== undefined` is the "has this query ever settled
+  // successfully" fact resolveAsyncBranch() needs -- `!isLoading` alone
+  // cannot distinguish a genuine confirmed-empty result from a query
+  // that's paused (offline, never fetched) or between renders, both of
+  // which also report `isLoading: false`. Preview has no such ambiguity:
+  // local derivation is synchronous and always current.
+  const hasFetchedOnce = preview || query.data !== undefined;
+  const branch: AsyncBranch = preview
+    ? isEmpty
+      ? "empty"
+      : "ready"
+    : resolveAsyncBranch({
+        online: typeof navigator === "undefined" ? true : navigator.onLine,
+        isLoading: query.isLoading,
+        error: query.error,
+        isEmpty,
+        hasFetchedOnce,
+      });
+  const confirmedAccessLoss =
+    !preview &&
+    query.error != null &&
+    (() => {
+      const kind = classifyAsyncError(query.error);
+      return kind === "unauthenticated" || kind === "forbidden" || kind === "not-found";
+    })();
 
   return {
     moments,
     count: moments.length,
     isLoading: liveAuth && query.isLoading,
     error: preview ? null : query.error,
+    branch,
+    isEmpty: preview ? true : hasFetchedOnce && isEmpty,
+    confirmedAccessLoss,
     surfaceMoment,
     refresh,
   };
