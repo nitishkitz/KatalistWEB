@@ -1442,3 +1442,76 @@ not local):**
   evidence for the client-side contract, but is not itself a substitute for
   a real Postgres `ON CONFLICT` constraint under genuine concurrent
   connections).
+
+### T11 — Lists and Buckets page completion
+
+**Status:** LOCAL PASS, 7 OF 8 ACCEPTANCE BULLETS FULLY CLOSED, 1 PARTIALLY
+CLOSED (see below), GATE-VERIFIED AND BROWSER-VERIFIED. Full detail,
+per-bullet source mapping and test evidence in
+`docs/superpowers/plans/KATALIST_T11_FINAL_HANDOFF.md`; this entry is a
+summary pointer, not a duplicate of it.
+
+Tested tree: `6028efb` (six commits on top of T10's `84feef6`). Continued
+substantial pre-existing in-progress work (the filter-hydration hook, the
+Bucket reference-command module, the Bucket-item availability union, the
+index-page native-link/timestamp rewrites, and the e2e spec scaffold were
+already authored and largely correct when this pass started) rather than a
+from-scratch implementation.
+
+**Closed:** keyed per-identity/per-List filter hydration with no cross-key
+overwrite (T11-01); native index links, real `updatedAtIso` timestamps and
+mobile layout on both Lists and Buckets index (T11-02); `ListInviteDialog`
+and `ListMembersSection` extracted as typed presentational components with
+mutation ownership kept in the route, and the fabricated toast-only email
+send form confirmed already replaced by a real `rpcAddListMember`-backed
+picker (T11-03); the route's inline chat replaced by the shared
+`ListChatPanel`, with `useListMessages` kept only for its one real remaining
+use (call-history system events) (T11-04); a `BucketItem` availability union
+that preserves reference identity when a source is unavailable while still
+surfacing a real fetch/network error as a distinct, retryable state, never
+converting one into the other (T11-05); one shared
+`runBucketReferenceCommand` used by both the picker buttons/keyboard path
+and Bucket-flyout drag/drop, with per-operation dedupe and identity-epoch
+guards (T11-06); and a real desktop `InlineThingDetailWorkspace` two-pane
+integration (confirmed NOT triggering its full-screen navigator branch,
+since `items`/`onSelectThing` are intentionally omitted) plus the existing
+mobile `ThingDetailSheet`, with focus capture/restore across
+selection open/close and the existing note-editor revision/epoch/duplicate-
+save guards left untouched apart from adding truthful save-outcome toasts
+(T11-07).
+
+**Partially closed:** `ListThingsSection.tsx` (the plan's third named new
+List component) was not extracted; the Things tab remains inline in
+`lists.$listId.tsx`. This is a code-organization gap only -- the Things tab's
+actual behavior (search/filter/lane grouping/catch-and-sort) is unchanged
+and untouched by this pass.
+
+**Verification:** `npx tsc --noEmit` 0 errors; `npm run lint` 0 errors / 38
+warnings (unchanged baseline); `npm test` 763/763 passing (up from the
+757/757 baseline recorded at T10 close -- 6 new tests added across
+`list-things-filter-lifecycle.test.mjs` (new), `bucket-reference-
+commands.test.mjs` (new), and extensions to
+`fetch-bucket-items-concurrency.test.mjs`/`list-things-filter.test.mjs`/
+`inline-thing-detail-workspace.test.mjs`); `npm run build:app` clean;
+five-viewport Playwright pass against `tests/e2e/preview/lists-buckets.spec.ts`
+9/10 passing.
+
+**Still open:**
+- The one Playwright failure (`preview-mobile`, "List detail at 200% zoom
+  equivalent has horizontal overflow") was root-caused to a Chromium
+  scrollbar-reservation artifact from calling `setViewportSize()` on a
+  device-emulated context (empty offenders list; `scrollWidth` equals
+  `window.innerWidth` exactly, with the 16px gap to `clientWidth` matching a
+  reserved, non-overlay scrollbar) rather than a genuine content-overflow
+  regression, and reproduces identically against the global, T11-untouched
+  `AppShell.tsx` bottom nav rather than any Lists/Buckets-specific markup.
+  Not silently waived -- full analysis and two concrete next-step options
+  (fix the spec's zoom-equivalent technique, or a separate app-shell
+  sizing pass) are in the handoff doc's §6.
+- `ListThingsSection.tsx` extraction, per above.
+- Selected-but-filtered-out vs revoked-access distinction (plan bullet 3)
+  was inherited from the pre-existing implementation and not given an
+  independent fresh browser reproduction in this pass beyond existing
+  filter-lifecycle test coverage.
+- No live-staging/production RLS verification was performed or claimed;
+  this is local-only evidence per this plan's own repeated caveat.
