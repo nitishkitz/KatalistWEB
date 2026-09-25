@@ -100,7 +100,8 @@ function PeekQueueCard({
   const due = formatCourtDue(thing);
 
   return (
-    <div
+    <button
+      type="button"
       onClick={onOpen}
       draggable={true}
       onDragStart={(e) => {
@@ -114,8 +115,9 @@ function PeekQueueCard({
         );
         e.dataTransfer.effectAllowed = "copyMove";
       }}
-      className="group/queue flex flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 shadow-2xs cursor-pointer transition-all hover:border-slate-300 hover:shadow-xs select-none min-h-[58px] h-[58px]"
+      className="group/queue flex w-full flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 text-left shadow-2xs cursor-pointer transition-all hover:border-slate-300 hover:shadow-xs select-none min-h-[58px] h-[58px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
       title={`Jump to ${thing.title}`}
+      aria-label={`Jump to ${thing.title}`}
     >
       <div className="flex items-center justify-between text-[12px]">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -149,7 +151,7 @@ function PeekQueueCard({
       <p className="mt-0.5 text-[12.5px] font-medium text-slate-900 truncate leading-tight">
         {thing.title}
       </p>
-    </div>
+    </button>
   );
 }
 
@@ -808,7 +810,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                     onViewAll?.(lane);
                   }
                 }}
-                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/60 hover:text-slate-700 cursor-pointer transition-colors"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/60 hover:text-slate-700 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={
                   unreadThings.length > 0
                     ? `${unreadThings.length} with unread comments in ${content.label}`
@@ -930,7 +932,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                           type="button"
                           disabled={pendingAction !== null}
                           onClick={() => void runSnooze(opt.id)}
-                          className="flex cursor-pointer items-center justify-between rounded-[9px] border border-[#eaeffa] bg-[#f6f7fd] px-3 py-2 text-[12.5px] font-medium text-[#1d1d1d] transition-colors hover:bg-[#eef1fc] disabled:opacity-60"
+                          className="flex cursor-pointer items-center justify-between rounded-[9px] border border-[#eaeffa] bg-[#f6f7fd] px-3 py-2 text-[12.5px] font-medium text-[#1d1d1d] transition-colors hover:bg-[#eef1fc] disabled:opacity-60 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <span>{opt.label}</span>
                           <KatalistIcon name="clock-time" className="h-3.5 w-3.5 text-[#503188]" />
@@ -940,7 +942,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                     <button
                       type="button"
                       onClick={() => setSnoozeOpen(false)}
-                      className="mt-2 w-full cursor-pointer rounded-[9px] px-3 py-1.5 text-[12px] font-medium text-[#46557d] transition-colors hover:bg-slate-100"
+                      className="mt-2 w-full cursor-pointer rounded-[9px] px-3 py-1.5 text-[12px] font-medium text-[#46557d] transition-colors hover:bg-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       Cancel
                     </button>
@@ -995,7 +997,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 <button
                   type="button"
                   onClick={() => startNavigation(-1)}
-                  className="p-1 hover:text-slate-800 transition-colors cursor-pointer"
+                  className="flex h-6 w-6 items-center justify-center rounded hover:text-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label="Previous card"
                 >
                   <KatalistIcon name="arrow-left" className="h-3.5 w-3.5" />
@@ -1004,7 +1006,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 <button
                   type="button"
                   onClick={() => startNavigation(1)}
-                  className="p-1 hover:text-slate-800 transition-colors cursor-pointer"
+                  className="flex h-6 w-6 items-center justify-center rounded hover:text-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label="Next card"
                 >
                   <KatalistIcon name="arrow-right" className="h-3.5 w-3.5" />

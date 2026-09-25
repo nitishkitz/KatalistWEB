@@ -595,7 +595,7 @@ export function MagicBox({
               <button
                 type="button"
                 onClick={() => removeAttachedFile(file.id)}
-                className="ml-0.5 rounded p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`Remove ${file.name}`}
               >
                 <X className="h-3 w-3" />
@@ -770,20 +770,22 @@ export function MagicBox({
         </div>
         {desktop ? (
           <div className="flex items-center gap-1.5 shrink-0">
-            <kbd
+            <button
+              type="button"
               onClick={() => {
                 inputRef.current?.focus();
                 inputRef.current?.select();
               }}
               title={isMac ? "Press ⌘K to activate" : "Press Ctrl+K to activate"}
-              className="hidden sm:inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[12px] font-medium text-slate-500 cursor-pointer select-none hover:bg-slate-100 transition-colors"
+              aria-label={isMac ? "Focus Magic Box (⌘K)" : "Focus Magic Box (Ctrl+K)"}
+              className="hidden sm:inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[12px] font-medium text-slate-500 cursor-pointer select-none hover:bg-slate-100 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              {isMac ? "⌘ K" : "Ctrl K"}
-            </kbd>
+              <kbd className="font-medium">{isMac ? "⌘ K" : "Ctrl K"}</kbd>
+            </button>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Attach file"
               title="Attach files (photos, videos, doc, excel, etc.)"
             >
@@ -791,7 +793,7 @@ export function MagicBox({
             </button>
             <button
               type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Voice input"
               title="Voice input"
             >
@@ -815,7 +817,7 @@ export function MagicBox({
               type="button"
               disabled={!canToss}
               onClick={() => void mutation.mutate()}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               aria-label="Toss Thing"
               title="Toss Thing"
             >
@@ -828,7 +830,7 @@ export function MagicBox({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="text-muted-foreground hover:text-foreground p-1 cursor-pointer"
+              className="flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               aria-label="Attach file"
               title="Attach files (photos, videos, doc, excel, etc.)"
             >
@@ -836,7 +838,7 @@ export function MagicBox({
             </button>
             <button
               type="button"
-              className="text-muted-foreground hover:text-foreground p-1"
+              className="flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               aria-label="Voice input"
             >
               <KatalistIcon name="mic" className="h-4 w-4" />

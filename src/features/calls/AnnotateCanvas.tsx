@@ -353,8 +353,10 @@ export const AnnotateCanvas = forwardRef<
             type="button"
             onClick={() => setTool(id)}
             title={label}
+            aria-label={label}
+            aria-pressed={tool === id}
             className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors cursor-pointer",
+              "inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               tool === id ? "bg-[#7b56fd] text-white" : "text-[#3d3f74] hover:bg-muted",
             )}
           >
@@ -368,8 +370,10 @@ export const AnnotateCanvas = forwardRef<
             type="button"
             onClick={() => setColor(c)}
             title={c}
+            aria-label={`Color: ${c}`}
+            aria-pressed={color === c}
             className={cn(
-              "h-5 w-5 shrink-0 rounded-full border-2 transition-transform cursor-pointer",
+              "h-6 w-6 shrink-0 rounded-full border-2 transition-transform cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               color === c ? "scale-110 border-black/50" : "border-transparent",
             )}
             style={{ backgroundColor: c }}
@@ -381,7 +385,8 @@ export const AnnotateCanvas = forwardRef<
           onClick={undoLast}
           disabled={!undoTarget}
           title="Remove the last scribble"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#3d3f74] hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+          aria-label="Remove the last scribble"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#3d3f74] hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Undo2 className="h-4 w-4" />
         </button>
@@ -389,7 +394,8 @@ export const AnnotateCanvas = forwardRef<
           type="button"
           onClick={clearBoard}
           title="Clear board"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#3d3f74] hover:bg-muted cursor-pointer"
+          aria-label="Clear board"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#3d3f74] hover:bg-muted cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <MoreHorizontal className="h-4 w-4" />
         </button>

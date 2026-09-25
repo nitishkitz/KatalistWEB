@@ -447,25 +447,29 @@ export function ListCallPanel({
           type="button"
           onClick={call.toggleMute}
           className={cn(
-            "inline-flex h-8 w-8 items-center justify-center rounded-full",
+            "inline-flex h-8 w-8 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             call.muted ? "bg-[#fc404d] text-white" : "bg-muted text-foreground",
           )}
           title={call.muted ? "Unmute" : "Mute"}
+          aria-label={call.muted ? "Unmute" : "Mute"}
         >
           {call.muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
         </button>
         <button
           type="button"
           onClick={() => setMinimized(false)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title="Expand"
+          aria-label="Expand call"
         >
           <Maximize2 className="h-4 w-4" />
         </button>
         <button
           type="button"
           onClick={call.leave}
-          className="inline-flex h-8 items-center gap-1 rounded-full bg-[#fc404d] px-3 text-[12px] font-semibold text-white"
+          className="inline-flex h-8 items-center gap-1 rounded-full bg-[#fc404d] px-3 text-[12px] font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          title="Leave call"
+          aria-label="Leave call"
         >
           <PhoneOff className="h-3.5 w-3.5" />
         </button>
@@ -523,24 +527,27 @@ export function ListCallPanel({
           <button
             type="button"
             onClick={() => void copyInviteLink()}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title={copied ? "Link copied" : "Copy invite link"}
+            aria-label={copied ? "Link copied" : "Copy invite link"}
           >
             {copied ? <Check className="h-4 w-4 text-[#12a15f]" /> : <Link2 className="h-4 w-4" />}
           </button>
           <button
             type="button"
             onClick={toggleFullscreen}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
             {isFullscreen ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
           </button>
           <button
             type="button"
             onClick={() => setMinimized(true)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title="Minimize"
+            aria-label="Minimize call"
           >
             <Minimize2 className="h-4 w-4" />
           </button>
@@ -643,7 +650,9 @@ export function ListCallPanel({
                       type="button"
                       onClick={() => call.setDocPage(call.docPage - 1)}
                       disabled={call.docPage <= 1}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/20 disabled:opacity-40"
+                      title="Previous page"
+                      aria-label="Previous page"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/20 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <ChevronLeft className="h-3.5 w-3.5" />
                     </button>
@@ -654,7 +663,9 @@ export function ListCallPanel({
                       type="button"
                       onClick={() => call.setDocPage(call.docPage + 1)}
                       disabled={call.docPage >= docNumPages}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/20 disabled:opacity-40"
+                      title="Next page"
+                      aria-label="Next page"
+                      className="inline-flex h-6 w-6 items-center justify-center rounded-full hover:bg-white/20 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <ChevronRight className="h-3.5 w-3.5" />
                     </button>
@@ -665,7 +676,8 @@ export function ListCallPanel({
                     type="button"
                     onClick={() => call.closeDoc()}
                     title="Close document"
-                    className="pointer-events-auto absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75"
+                    aria-label="Close document"
+                    className="pointer-events-auto absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -675,7 +687,8 @@ export function ListCallPanel({
                     onClick={() => void handleSaveScreenshot()}
                     disabled={savingShot}
                     title="Save whiteboard to chat"
-                    className="pointer-events-auto absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75 disabled:opacity-60"
+                    aria-label="Save whiteboard to chat"
+                    className="pointer-events-auto absolute right-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/75 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Camera className="h-3.5 w-3.5" />
                   </button>
@@ -812,7 +825,9 @@ export function ListCallPanel({
               />
               <button
                 type="submit"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground"
+                title="Send message"
+                aria-label="Send message"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Send className="h-3.5 w-3.5" />
               </button>
@@ -827,10 +842,11 @@ export function ListCallPanel({
           type="button"
           onClick={call.toggleMute}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             call.muted ? "bg-[#fc404d] text-white" : "bg-muted text-foreground hover:bg-muted/70",
           )}
           title={call.muted ? "Unmute" : "Mute"}
+          aria-label={call.muted ? "Unmute" : "Mute"}
         >
           {call.muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
         </button>
@@ -838,10 +854,11 @@ export function ListCallPanel({
           type="button"
           onClick={call.toggleCamera}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             call.cameraOff ? "bg-[#fc404d] text-white" : "bg-muted text-foreground hover:bg-muted/70",
           )}
           title={call.cameraOff ? "Turn camera on" : "Turn camera off"}
+          aria-label={call.cameraOff ? "Turn camera on" : "Turn camera off"}
         >
           {call.cameraOff ? <VideoOff className="h-4 w-4" /> : <Video className="h-4 w-4" />}
         </button>
@@ -849,10 +866,11 @@ export function ListCallPanel({
           type="button"
           onClick={() => void call.toggleScreenShare()}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             call.sharing ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
           )}
           title={call.sharing ? "Stop sharing" : "Share screen"}
+          aria-label={call.sharing ? "Stop sharing" : "Share screen"}
         >
           <MonitorUp className="h-4 w-4" />
         </button>
@@ -860,10 +878,11 @@ export function ListCallPanel({
           type="button"
           onClick={call.toggleWhiteboard}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             call.whiteboardOpenerId ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
           )}
           title={call.whiteboardOpenerId ? "Close whiteboard" : "Open whiteboard — no screen share needed"}
+          aria-label={call.whiteboardOpenerId ? "Close whiteboard" : "Open whiteboard"}
         >
           <PenTool className="h-4 w-4" />
         </button>
@@ -879,11 +898,12 @@ export function ListCallPanel({
           onClick={() => docFileInputRef.current?.click()}
           disabled={uploadingDoc}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             call.docOpenerId ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
             uploadingDoc && "opacity-60",
           )}
           title="Present a document (PDF, Word, Excel, or image)"
+          aria-label="Present a document"
         >
           <Upload className="h-4 w-4" />
         </button>
@@ -892,10 +912,11 @@ export function ListCallPanel({
           type="button"
           onClick={call.toggleHand}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             call.handRaised ? "bg-[#fdb412] text-white" : "bg-muted text-foreground hover:bg-muted/70",
           )}
           title={call.handRaised ? "Lower hand" : "Raise hand"}
+          aria-label={call.handRaised ? "Lower hand" : "Raise hand"}
         >
           <Hand className="h-4 w-4" />
         </button>
@@ -907,8 +928,9 @@ export function ListCallPanel({
               key={key}
               type="button"
               onClick={() => call.sendReaction(key)}
-              className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white", tint)}
+              className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", tint)}
               title={`React: ${key}`}
+              aria-label={`React: ${key}`}
             >
               <Icon className="h-4 w-4" />
             </button>
@@ -919,10 +941,11 @@ export function ListCallPanel({
           type="button"
           onClick={() => setDock((d) => (d === "participants" ? "none" : "participants"))}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             dock === "participants" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
           )}
           title="Participants"
+          aria-label="Participants"
         >
           <Users className="h-4 w-4" />
         </button>
@@ -931,10 +954,11 @@ export function ListCallPanel({
           type="button"
           onClick={() => setDock((d) => (d === "chat" ? "none" : "chat"))}
           className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             dock === "chat" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
           )}
           title="Chat"
+          aria-label="Chat"
         >
           <MessageSquare className="h-4 w-4" />
         </button>
@@ -942,7 +966,7 @@ export function ListCallPanel({
         <button
           type="button"
           onClick={call.leave}
-          className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#fc404d] px-4 text-[13px] font-semibold text-white hover:brightness-95"
+          className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#fc404d] px-4 text-[13px] font-semibold text-white hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title="Leave call"
         >
           <PhoneOff className="h-4 w-4" />

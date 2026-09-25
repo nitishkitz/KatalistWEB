@@ -102,8 +102,9 @@ export function StartCallDialog({
               <button
                 type="button"
                 onClick={() => setWithVideo(false)}
+                aria-pressed={!withVideo}
                 className={cn(
-                  "flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors cursor-pointer",
+                  "flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   !withVideo ? "bg-white text-[#000533] shadow-sm" : "text-[#6a769c]",
                 )}
               >
@@ -113,8 +114,9 @@ export function StartCallDialog({
               <button
                 type="button"
                 onClick={() => setWithVideo(true)}
+                aria-pressed={withVideo}
                 className={cn(
-                  "flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors cursor-pointer",
+                  "flex-1 inline-flex h-9 items-center justify-center gap-1.5 rounded-[8px] text-[12.5px] font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   withVideo ? "bg-[#7b56fd] text-white shadow-sm" : "text-[#6a769c]",
                 )}
               >
@@ -149,7 +151,7 @@ export function StartCallDialog({
                       key={p.id}
                       type="button"
                       onClick={() => toggle(p.id)}
-                      className="flex w-full items-center justify-between gap-2.5 rounded-[8px] px-2 py-1.5 text-left hover:bg-muted/50 cursor-pointer"
+                      className="flex w-full items-center justify-between gap-2.5 rounded-[8px] px-2 py-1.5 text-left hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <span className="flex items-center gap-2.5">
                         <PersonAvatar name={p.name} initials={p.initials} src={p.avatarUrl} size={30} />
@@ -168,7 +170,7 @@ export function StartCallDialog({
           <button
             type="button"
             onClick={() => void copyLink()}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-4 text-[13px] font-medium text-foreground hover:bg-muted cursor-pointer"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-4 text-[13px] font-medium text-foreground hover:bg-muted cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {copied ? <Check className="h-3.5 w-3.5 text-[#12a15f]" /> : <Link2 className="h-3.5 w-3.5" />}
             {copied ? "Copied" : "Copy Link"}
@@ -176,7 +178,7 @@ export function StartCallDialog({
           <button
             type="button"
             onClick={submit}
-            className="inline-flex h-9 items-center rounded-lg bg-[#975ee2] px-4 text-[13px] font-semibold text-white hover:brightness-95 cursor-pointer"
+            className="inline-flex h-9 items-center rounded-lg bg-[#975ee2] px-4 text-[13px] font-semibold text-white hover:brightness-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
           >
             {variant === "invite" ? "Send Invite" : "Start Call"}
           </button>

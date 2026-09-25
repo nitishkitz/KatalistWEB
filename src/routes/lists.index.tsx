@@ -140,7 +140,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
               return (
                 <tr
                   key={row.id}
-                  className="group cursor-pointer transition-colors hover:bg-muted/35"
+                  className="group cursor-pointer outline-none transition-colors hover:bg-muted/35 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   onClick={(e) => {
                     if ((e.target as HTMLElement).closest("[data-stop-nav]")) return;
                     void navigate({ to: "/lists/$listId", params: { listId: row.id }, viewTransition: true });
@@ -506,7 +506,7 @@ function ListsPage() {
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Clear search"
               >
                 <X className="h-3.5 w-3.5" />
@@ -666,7 +666,8 @@ function ListsPage() {
               <button
                 type="button"
                 onClick={closeDialog}
-                className="rounded-lg p-1 text-muted-foreground hover:bg-muted"
+                aria-label="Close dialog"
+                className="rounded-lg p-1 text-muted-foreground hover:bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <X className="h-4 w-4" />
               </button>

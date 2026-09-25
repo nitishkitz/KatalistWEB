@@ -781,7 +781,7 @@ function ListDetailPage() {
                   type="button"
                   onClick={() => setTab(id)}
                   className={cn(
-                    "relative py-3 text-[13.5px] transition-colors outline-none cursor-pointer",
+                    "relative py-3 text-[13.5px] transition-colors outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
                     active ? "text-[#000533] font-medium" : "text-[#6a769c] hover:text-[#000533] font-normal",
                   )}
                 >
@@ -914,7 +914,7 @@ function ListDetailPage() {
                               : undefined
                           }
                           className={cn(
-                            "relative flex items-start justify-between gap-2.5 rounded-[10px] p-3 transition-colors cursor-pointer",
+                            "relative flex items-start justify-between gap-2.5 rounded-[10px] p-3 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                             isSelected
                               ? "border-l-[3px]"
                               : "border-l-[3px] border-transparent hover:bg-[#f9f9fe]",
@@ -1216,7 +1216,7 @@ function ListDetailPage() {
                     type="button"
                     onClick={() => chatFileInputRef.current?.click()}
                     disabled={uploadingFile || Boolean(stagedChatAttachment)}
-                    className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-40"
+                    className="flex h-7 w-7 items-center justify-center rounded text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-40 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Attach file"
                     title="Attach a file"
                   >
@@ -1230,14 +1230,14 @@ function ListDetailPage() {
                   />
                   <button
                     type="button"
-                    className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer"
+                    className="flex h-7 w-7 items-center justify-center rounded text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Mention"
                   >
                     <AtSign className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
-                    className="text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer"
+                    className="flex h-7 w-7 items-center justify-center rounded text-[#8487a7] hover:text-[#000533] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label="Emoji"
                   >
                     <Smile className="h-4 w-4" />
@@ -1775,7 +1775,8 @@ function ListDetailPage() {
                     <button
                       type="button"
                       onClick={() => setInviting(false)}
-                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"
+                      aria-label="Close dialog"
+                      className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -1836,7 +1837,12 @@ function ListDetailPage() {
                         className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
                       />
                       {inviteSearch && (
-                        <button type="button" onClick={() => setInviteSearch("")} className="text-muted-foreground hover:text-foreground">
+                        <button
+                          type="button"
+                          onClick={() => setInviteSearch("")}
+                          aria-label="Clear search"
+                          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
                           <X className="h-3 w-3" />
                         </button>
                       )}

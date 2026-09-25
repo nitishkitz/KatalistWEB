@@ -82,8 +82,10 @@ function SwitcherBubble({
       type="button"
       onClick={onSelect}
       title={conversation.title}
+      aria-label={`Open conversation: ${conversation.title}`}
+      aria-pressed={selected}
       className={cn(
-        "relative shrink-0 rounded-full transition-transform hover:-translate-y-0.5",
+        "relative shrink-0 rounded-full transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected && "ring-2 ring-[#7b56fd] ring-offset-2",
       )}
     >
@@ -130,8 +132,9 @@ function MiniChatContent({
           <button
             type="button"
             onClick={onPopOut}
-            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title="Pop out — stays visible when you switch tabs or minimize the browser"
+            aria-label="Pop out chat"
           >
             <PictureInPicture2 className="h-4 w-4" />
           </button>
@@ -139,7 +142,7 @@ function MiniChatContent({
         <button
           type="button"
           onClick={onClose}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Close"
         >
           <X className="h-4 w-4" />
@@ -306,8 +309,9 @@ export function ChatHeadsDock() {
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
             title={hasUnknownUnread ? "Chats — some unread counts unavailable" : "Chats"}
+            aria-label={hasUnknownUnread ? "Chats — some unread counts unavailable" : "Chats"}
             style={{ left: pos.x, top: pos.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE, touchAction: "none" }}
-            className="fixed z-40 flex items-center justify-center rounded-full bg-white shadow-lg outline-none ring-1 ring-black/10 cursor-grab active:cursor-grabbing"
+            className="fixed z-40 flex items-center justify-center rounded-full bg-white shadow-lg outline-none ring-1 ring-black/10 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[#7b56fd]"
           >
             <img src={katalistMark.url} alt="" className="h-7 w-7" />
             {totalUnread > 0 || hasUnknownUnread ? (

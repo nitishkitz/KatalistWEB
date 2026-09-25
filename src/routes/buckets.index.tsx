@@ -80,7 +80,7 @@ function BucketTableRow({ bucket }: { bucket: BucketCard }) {
           open();
         }
       }}
-      className="group cursor-pointer border-b border-[#f2f3f9] last:border-0 hover:bg-[#faf9fe]"
+      className="group cursor-pointer border-b border-[#f2f3f9] outline-none last:border-0 hover:bg-[#faf9fe] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
     >
       <td className="px-3 py-3">
         <div className="flex min-w-0 items-center gap-3">

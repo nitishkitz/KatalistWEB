@@ -75,7 +75,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="flex h-6 w-6 items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Close Buckets panel"
           >
             <X className="h-3.5 w-3.5" />
@@ -89,7 +89,7 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
         <button
           type="button"
           onClick={() => setIsNewBucketOpen(true)}
-          className="inline-flex items-center gap-1 text-[12px] font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1 text-[12px] font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
         >
           <Plus className="h-3.5 w-3.5" />
           New Bucket
@@ -242,14 +242,14 @@ export function CourtBucketsSidePanel({ onClose }: CourtBucketsSidePanelProps) {
               <button
                 type="button"
                 onClick={() => setIsNewBucketOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-slate-600 hover:bg-slate-100"
+                className="px-3 py-1.5 rounded-lg text-[12px] font-medium text-slate-600 hover:bg-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!newBucketName.trim() || isCreating}
-                className="px-3.5 py-1.5 rounded-lg bg-primary text-white text-[12px] font-bold hover:bg-primary/90 disabled:opacity-50"
+                className="px-3.5 py-1.5 rounded-lg bg-primary text-white text-[12px] font-bold hover:bg-primary/90 disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               >
                 {isCreating ? "Creating..." : "Create Bucket"}
               </button>

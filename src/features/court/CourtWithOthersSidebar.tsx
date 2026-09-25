@@ -130,7 +130,7 @@ export function CourtWithOthersSidebar({
                 type="button"
                 onClick={() => setTheirFocus(id)}
                 className={cn(
-                  "pb-2 text-[12px] whitespace-nowrap transition-colors relative cursor-pointer outline-none",
+                  "pb-2 text-[12px] whitespace-nowrap transition-colors relative cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
                   isActive ? "text-black font-medium" : "text-black/80 hover:text-black font-normal",
                 )}
               >
@@ -181,7 +181,7 @@ export function CourtWithOthersSidebar({
                     }
                   }}
                   className={cn(
-                    "flex items-start gap-3 p-3.5 cursor-pointer transition-colors outline-none",
+                    "flex items-start gap-3 p-3.5 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     thing.id === theirSelectedId ? "bg-muted/50" : "hover:bg-muted/20",
                   )}
                 >
@@ -293,7 +293,10 @@ export function CourtWithOthersSidebar({
           <button
             type="button"
             onClick={onViewAllTheirs}
-            className="inline-flex items-center gap-1 text-[12px] font-medium text-black hover:text-[#503188] transition-colors cursor-pointer"
+            // D01/T08: intrinsic content height alone was ~18px, below the
+            // 24px WCAG 2.5.8 absolute minimum -- min-h ensures a real hit
+            // area without changing the icon/text size.
+            className="inline-flex min-h-6 items-center gap-1 text-[12px] font-medium text-black hover:text-[#503188] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
           >
             View all {theirs.length}
             <KatalistIcon name="view-all-arrow" className="h-3 w-3" />

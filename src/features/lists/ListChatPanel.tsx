@@ -318,7 +318,7 @@ export const ListChatPanel = forwardRef<
           aria-label="Search messages"
           aria-pressed={searchOpen}
           className={cn(
-            "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors",
+            "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             searchOpen ? "bg-[#f0e9fb] text-[#975ee2]" : "text-[#8487a7] hover:bg-[#f4f5fb]",
           )}
         >
@@ -376,7 +376,8 @@ export const ListChatPanel = forwardRef<
                   type="button"
                   onClick={() => void togglePin(m.id, false)}
                   title="Unpin"
-                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#975ee2]"
+                  aria-label="Unpin message"
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#975ee2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <PinOff className="h-3 w-3" />
                 </button>
@@ -456,7 +457,8 @@ export const ListChatPanel = forwardRef<
                     type="button"
                     onClick={() => void togglePin(m.id, !m.pinnedAt)}
                     title={m.pinnedAt ? "Unpin" : "Pin"}
-                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#8487a7] opacity-0 transition-opacity hover:bg-[#f0e9fb] hover:text-[#975ee2] group-hover:opacity-100"
+                    aria-label={m.pinnedAt ? "Unpin message" : "Pin message"}
+                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#8487a7] opacity-0 transition-opacity hover:bg-[#f0e9fb] hover:text-[#975ee2] group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {m.pinnedAt ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
                   </button>
@@ -531,7 +533,7 @@ export const ListChatPanel = forwardRef<
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading || Boolean(stagedAttachment)}
-              className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533] disabled:opacity-40"
+              className="cursor-pointer rounded text-[#8487a7] transition-colors hover:text-[#000533] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Attach file"
               title="Attach a file"
             >
@@ -557,13 +559,13 @@ export const ListChatPanel = forwardRef<
                 requestAnimationFrame(() => msgInputRef.current?.focus());
               }}
               disabled={mentionable.length === 0}
-              className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533] disabled:opacity-40"
+              className="cursor-pointer rounded text-[#8487a7] transition-colors hover:text-[#000533] disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Mention someone"
               title="Mention someone"
             >
               <AtSign className="h-4 w-4" />
             </button>
-            <button type="button" className="cursor-pointer text-[#8487a7] transition-colors hover:text-[#000533]" aria-label="Emoji">
+            <button type="button" className="cursor-pointer rounded text-[#8487a7] transition-colors hover:text-[#000533] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Emoji" title="Emoji">
               <Smile className="h-4 w-4" />
             </button>
             <button

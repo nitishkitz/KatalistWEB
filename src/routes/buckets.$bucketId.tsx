@@ -356,7 +356,7 @@ function BucketDetailPage() {
           value={addQ}
           onChange={(e) => setAddQ(e.target.value)}
           placeholder={addTab === "things" ? "Search Things…" : "Search Lists…"}
-          className="mb-2 h-8.5 w-full rounded-lg border border-border bg-background px-2.5 text-[12.5px] outline-none"
+          className="mb-2 h-8.5 w-full rounded-lg border border-border bg-background px-2.5 text-[12.5px] outline-none focus:ring-2 focus:ring-ring"
         />
         <ul className="max-h-56 space-y-1 overflow-y-auto">
           {addTab === "things"
@@ -699,7 +699,7 @@ function BucketDetailPage() {
                   className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#000533] outline-none placeholder:text-[#8487a7]"
                 />
               </label>
-              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] bg-white px-3 text-[12.5px] text-[#3d3f74]">
+              <label className="relative inline-flex h-10 items-center gap-1.5 rounded-[10px] border border-[#ebecf7] bg-white px-3 text-[12.5px] text-[#3d3f74] focus-within:border-[#975ee2] focus-within:ring-2 focus-within:ring-ring">
                 <select
                   value={statusFilter ?? "all"}
                   onChange={(e) => setStatusFilter(e.target.value === "all" ? null : e.target.value)}

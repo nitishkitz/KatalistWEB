@@ -91,7 +91,7 @@ export function CourtFocusView({
     return selectedThing?.files?.[0] ?? null;
   });
   const [isHeroFlying, setIsHeroFlying] = useState(Boolean(heroRect));
-  const selectedCardRef = useRef<HTMLDivElement | null>(null);
+  const selectedCardRef = useRef<HTMLButtonElement | null>(null);
   const heroFlightRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -226,7 +226,7 @@ export function CourtFocusView({
           <button
             type="button"
             onClick={onClose}
-            className="inline-flex items-center gap-2 text-[13px] font-medium text-[#6a769c] hover:text-[#000533] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 rounded text-[13px] font-medium text-[#6a769c] hover:text-[#000533] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Back to Court stacks"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -270,7 +270,7 @@ export function CourtFocusView({
                   onClick={() => handleLaneTabChange(tab.id)}
                   style={{ color }}
                   className={cn(
-                    "pb-2.5 text-[15px] whitespace-nowrap transition-all relative cursor-pointer",
+                    "pb-2.5 text-[15px] whitespace-nowrap transition-all relative cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
                     isActive ? "font-medium" : "font-normal opacity-90 hover:opacity-100",
                   )}
                 >
@@ -308,7 +308,7 @@ export function CourtFocusView({
               <List className="h-3.5 w-3.5 text-[#5f5f90]" />
               <span>{currentLaneThings.length} Things</span>
             </div>
-            <button type="button" className="inline-flex items-center gap-1 font-medium text-[#0f0c2a] hover:opacity-80 cursor-pointer">
+            <button type="button" className="inline-flex items-center gap-1 rounded font-medium text-[#0f0c2a] hover:opacity-80 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <span>Due soon</span>
               <ChevronDown className="h-3 w-3" />
             </button>
@@ -335,7 +335,8 @@ export function CourtFocusView({
                       : { bg: "#fef0f4", border: "#fe0734" };
 
               return (
-                <div
+                <button
+                  type="button"
                   ref={isSelected ? selectedCardRef : null}
                   key={thing.id}
                   onClick={() => handleSelect(thing)}
@@ -345,7 +346,7 @@ export function CourtFocusView({
                       : undefined
                   }
                   className={cn(
-                    "relative rounded-[10px] p-3 transition-colors cursor-pointer text-left flex items-start justify-between gap-2.5",
+                    "relative w-full rounded-[10px] p-3 transition-colors cursor-pointer text-left flex items-start justify-between gap-2.5 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     isSelected ? "border-l-[3px]" : "border-l-[3px] border-transparent hover:bg-[#f9f9fe]",
                     isSelected && isHeroFlying && "opacity-0",
                   )}
@@ -407,7 +408,7 @@ export function CourtFocusView({
                       </span>
                     </span>
                   </div>
-                </div>
+                </button>
               );
             })}
 
@@ -432,7 +433,7 @@ export function CourtFocusView({
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] bg-[#f5f6fa] text-[#5f5f90] hover:text-[#000533] hover:bg-[#eceef5] transition-colors cursor-pointer"
+              className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] bg-[#f5f6fa] text-[#5f5f90] hover:text-[#000533] hover:bg-[#eceef5] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <X className="h-4 w-4" />
             </button>

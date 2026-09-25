@@ -290,7 +290,8 @@ export function HubFilesPanel({
                         type="button"
                         onClick={() => void doPin(f)}
                         title="Unpin"
-                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#975ee2] hover:bg-[#f0e9fb]"
+                        aria-label="Unpin file"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[#975ee2] hover:bg-[#f0e9fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <PinOff className="h-3.5 w-3.5" />
                       </button>
@@ -405,7 +406,7 @@ export function HubFilesPanel({
                         <DropdownMenuTrigger asChild>
                           <button
                             type="button"
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8487a7] hover:bg-muted hover:text-foreground"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8487a7] hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             aria-label="File actions"
                           >
                             <MoreVertical className="h-4 w-4" />

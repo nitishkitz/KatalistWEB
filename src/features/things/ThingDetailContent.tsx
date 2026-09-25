@@ -1015,23 +1015,15 @@ export function ThingDetailContent({
                   const isSelected = file.id === activeFileId;
                   const chip = fileTypeChip(file.type);
                   return (
-                    <div
+                    <button
                       key={file.id}
-                      role="button"
-                      tabIndex={0}
+                      type="button"
                       onClick={() => {
                         setSelectedFileId(file.id);
                         onFileSelect?.(file);
                       }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          setSelectedFileId(file.id);
-                          onFileSelect?.(file);
-                        }
-                      }}
                       className={cn(
-                        "flex items-center gap-2.5 px-3 py-2 cursor-pointer outline-none transition-colors",
+                        "flex w-full items-center gap-2.5 px-3 py-2 text-left cursor-pointer outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         idx > 0 && "border-t border-[#eeeff6]",
                         isSelected ? "bg-[#f3f6ff]" : "hover:bg-[#f6f7fb]",
                       )}
@@ -1051,7 +1043,7 @@ export function ThingDetailContent({
                           New
                         </span>
                       )}
-                    </div>
+                    </button>
                   );
                 })}
               </div>
@@ -1180,7 +1172,7 @@ export function ThingDetailContent({
                         <button
                           type="button"
                           onClick={() => setCommentAttachments((prev) => prev.filter((f) => f.id !== att.id))}
-                          className="ml-0.5 rounded p-0.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                          className="ml-0.5 flex h-6 w-6 items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           aria-label={`Remove ${att.name}`}
                         >
                           <X className="h-3 w-3" />
@@ -1209,8 +1201,9 @@ export function ThingDetailContent({
                   <button
                     type="button"
                     onClick={() => commentFileInputRef.current?.click()}
-                    className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
+                    className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                     title="Attach file (photo, video, doc, excel, etc.)"
+                    aria-label="Attach file"
                   >
                     <Paperclip className="h-4 w-4" />
                   </button>
@@ -1223,7 +1216,9 @@ export function ThingDetailContent({
                   />
                   <button
                     type="button"
-                    className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
+                    className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                    aria-label="Mention someone"
+                    title="Mention someone"
                   >
                     <AtSign className="h-4 w-4" />
                   </button>
@@ -1793,7 +1788,12 @@ export function ThingDetailContent({
                     {commentAttachments.map((att) => (
                       <span key={att.id} className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[12px]">
                         <span className="truncate max-w-[100px]">{att.name}</span>
-                        <button type="button" onClick={() => setCommentAttachments((prev) => prev.filter((f) => f.id !== att.id))}>
+                        <button
+                          type="button"
+                          onClick={() => setCommentAttachments((prev) => prev.filter((f) => f.id !== att.id))}
+                          className="flex h-6 w-6 items-center justify-center rounded outline-none hover:bg-slate-200/70 focus-visible:ring-2 focus-visible:ring-ring"
+                          aria-label={`Remove ${att.name}`}
+                        >
                           <X className="h-2.5 w-2.5" />
                         </button>
                       </span>
@@ -1804,8 +1804,9 @@ export function ThingDetailContent({
                   <button
                     type="button"
                     onClick={() => commentFileInputRef.current?.click()}
-                    className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
+                    className="h-7 w-7 rounded-md border border-border flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     title="Attach file"
+                    aria-label="Attach file"
                   >
                     <Paperclip className="h-3.5 w-3.5" />
                   </button>

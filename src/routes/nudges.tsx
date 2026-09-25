@@ -192,7 +192,7 @@ function NudgesPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex h-9 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-white px-3">
+              <label className="flex h-9 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-white px-3 focus-within:border-[#975ee2] focus-within:ring-2 focus-within:ring-ring">
                 <Search className="h-4 w-4 text-[#8487a7]" />
                 <input
                   value={search}

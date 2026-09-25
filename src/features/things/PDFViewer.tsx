@@ -81,7 +81,7 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-[14px] font-medium text-[#000533] leading-tight">{file.name}</h3>
-          <p className="mt-0.5 text-[11.5px] text-[#434f80]">
+          <p className="mt-0.5 text-[12px] text-[#434f80]">
             {typeLabel[file.type] || "File"}
             {"  •  "}
             {file.sizeLabel || "Attachment"}
@@ -105,21 +105,25 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
         <button
           type="button"
           onClick={() => downloadFile(file)}
-          className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#434f80] hover:text-[#000533] transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#434f80] hover:text-[#000533] transition-colors cursor-pointer"
         >
           <Download className="h-3.5 w-3.5" />
           <span>Download</span>
         </button>
 
         {isPdf ? (
-          <div className="flex items-center gap-2.5 text-[11px] text-[#434f80]">
+          <div className="flex items-center gap-2.5 text-[12px] text-[#434f80]">
             <span className="font-medium">{page} / {totalPages}</span>
             <div className="flex items-center gap-0.5">
               <button
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="h-6 w-6 flex items-center justify-center rounded hover:bg-[#eceef5] disabled:opacity-30 transition-colors cursor-pointer"
+                aria-label="Previous page"
+                // D01/T08: a real 32px desktop hit target (icon artwork
+                // stays h-3.5 w-3.5) -- was h-6 w-6 (24px), below the
+                // desktop minimum, with no accessible name.
+                className="h-8 w-8 flex items-center justify-center rounded hover:bg-[#eceef5] disabled:opacity-30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </button>
@@ -127,7 +131,8 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
                 type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="h-6 w-6 flex items-center justify-center rounded hover:bg-[#eceef5] disabled:opacity-30 transition-colors cursor-pointer"
+                aria-label="Next page"
+                className="h-8 w-8 flex items-center justify-center rounded hover:bg-[#eceef5] disabled:opacity-30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
@@ -223,7 +228,7 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
       </div>
 
       {(addedByName || addedLabel) && (
-        <div className="px-5 py-3 text-[10.5px] text-[#434f80]">
+        <div className="px-5 py-3 text-[12px] text-[#434f80]">
           Added{addedByName ? ` by ${addedByName}` : ""}
           {addedLabel ? ` • ${addedLabel}` : ""}
         </div>

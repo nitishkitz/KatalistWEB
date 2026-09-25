@@ -485,7 +485,7 @@ export function CourtDesktop({
                   aria-pressed={isActive}
                   onClick={() => setDetailedFilter("quick", id)}
                   className={cn(
-                    "rounded-full px-3 py-1 text-[13px] transition-colors outline-none cursor-pointer",
+                    "rounded-full px-3 py-1 text-[13px] transition-colors outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
                     isActive
                       ? "bg-[#ece7fe] text-[#503188] font-medium"
                       : "text-[#1d1d1d] hover:text-[#503188] font-normal",
@@ -515,7 +515,7 @@ export function CourtDesktop({
                       }));
                     }}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-full border px-2 py-1 !rounded-full h-7 transition-all duration-200 outline-none cursor-pointer",
+                      "flex items-center gap-1.5 rounded-full border px-2 py-1 !rounded-full h-7 transition-all duration-200 outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
                       isActive
                         ? "border-primary bg-primary/10 ring-2 ring-primary ring-offset-2 scale-110 shadow-xs"
                         : "border-border/80 hover:border-primary/45 opacity-75 hover:opacity-100 hover:scale-105",

@@ -288,7 +288,7 @@ export function ConversationWorkspace({
           <button
             type="button"
             onClick={() => navigate({ to: "/team" })}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8487a7] hover:bg-[#f4f5fb] md:hidden"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[#8487a7] hover:bg-[#f4f5fb] md:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Back"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -332,7 +332,7 @@ export function ConversationWorkspace({
             type="button"
             onClick={() => setSearchOpen((o) => !o)}
             className={cn(
-              "inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+              "inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               searchOpen ? "bg-[#f0e9fb] text-[#975ee2]" : "text-[#3d3f74] hover:bg-[#f4f5fb]",
             )}
             aria-label="Search this conversation"
@@ -343,7 +343,7 @@ export function ConversationWorkspace({
           <button
             type="button"
             onClick={() => (call.joined ? void startOrJoinCall(false) : openStartCall(false))}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#3d3f74] hover:bg-[#f4f5fb]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#3d3f74] hover:bg-[#f4f5fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Audio call"
             title="Audio call"
           >
@@ -352,7 +352,7 @@ export function ConversationWorkspace({
           <button
             type="button"
             onClick={() => (call.joined ? void startOrJoinCall(true) : openStartCall(true))}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#3d3f74] hover:bg-[#f4f5fb]"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#3d3f74] hover:bg-[#f4f5fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label="Video call"
             title="Video call"
           >
@@ -397,7 +397,7 @@ export function ConversationWorkspace({
             <button
               type="button"
               onClick={closeSearch}
-              className="absolute right-2.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#975ee2]"
+              className="absolute right-2.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#975ee2] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Close search"
             >
               <X className="h-3.5 w-3.5" />

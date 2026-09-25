@@ -385,7 +385,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               disabled={disabled}
               onClick={(event) => run(event, "catch")}
               style={{ backgroundColor: laneFigma[lane].primaryBtn }}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
               <span>Catch</span>
             </button>
@@ -401,7 +401,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               disabled={disabled}
               onClick={(event) => run(event, "sort")}
               style={{ backgroundColor: laneFigma[lane].primaryBtn }}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
               <span>Mark Sorted</span>
             </button>
