@@ -615,9 +615,9 @@ T07 without violating the production-data constraint.
 
 ### T08 — Shared type, controls, elevation, and motion rollout
 
-**Status:** LOCAL PASS -- partial, remaining items below. **Owns:** D-01 through D-04.
+**Status:** LOCAL PASS -- complete, pending independent review. **Owns:** D-01 through D-04.
 
-**Commit:** `9e323da`.
+**Commits:** `9e323da`, `356bf06`, `ddc729a`, `0f2ee35`, `88ab6a4`, `64992c5`, `6448253`.
 
 **Starting-state audit:** contrary to a greenfield assumption, meaningful token
 scaffolding already existed pre-labeled "D01"/"D02" in `styles.css`/
@@ -658,38 +658,84 @@ a large, visually-reviewed rollout that this pass did not attempt blind.
   the brand/status palette is a product decision), but no longer silently
   unmeasured.
 
-**Verification:** 650/650 tests (632 baseline + 18 new across 3 files), 0
-typecheck errors, 0 lint errors/75 warnings (unchanged), clean build. The
-elevation and motion tests confirmed to fail against their pre-fix source (via
-`git stash`) and pass post-fix; the contrast tests assert the actual measured
-ratios, including the four known failures, so either a future fix or a further
-regression is caught.
+**Closure pass (2026-09-25, commits `356bf06` through `6448253`):**
+- **Contrast:** all four measured failures fixed at the token level --
+  `--destructive` 0.63->0.59 (3.89:1->4.59:1), `--status-waiting` 0.68->0.67
+  (2.99:1->3.11:1), and a new `--control-border` token (0.62) plus `--input`
+  repointed to it (1.44:1->3.64:1) for meaningful (non-decorative) component
+  boundaries. `--border` itself stays untouched (decorative dividers, not a
+  WCAG 1.4.11 boundary). All 19 measured pairs now pass; report and tests
+  updated from "known failure" to passing-threshold assertions.
+- **Typography:** every exact `text-[10px]`/`text-[11px]` (191 instances) and
+  every decimal sub-12px size found in a follow-up sweep (~130 more --
+  `text-[8px]` through `text-[11.5px]`) bumped to `text-[12px]`, across 50+
+  files. Several small fixed-height badges got a matching container-height
+  bump (e.g. 16px->18px) to avoid clipping. `PersonAvatar`'s initials floor
+  raised 10px->12px. A repo-wide regression test
+  (`scripts/t08-typography-floor.test.mjs`) now fails on any future sub-12px
+  arbitrary text size.
+- **Hit targets:** Dialog/Sheet close buttons and PDFViewer's page-nav
+  buttons given a real >=32px hit target (icon size unchanged); a broad
+  parallel audit across Court/Hub/Lists/Calls/ThingDetailContent/routes
+  added missing `aria-label`s, `focus-visible` rings where `outline-none` had
+  no replacement, bumped several sub-24px icon-only targets to >=24px, and
+  converted a handful of keyboard-inaccessible `<div onClick>` rows to real
+  `<button>` elements. `scripts/t08-hit-targets.test.mjs` covers the shared
+  primitives and Button's existing 44px touch variants.
+- **Shadow suppression removed.** Every remaining `shadow-*` consumer (58 at
+  the last count, growing to ~90 once `shadow-xs`/`shadow-2xs` were included)
+  was individually classified -- dialogs/sheets/alert-dialogs ->
+  `katalist-elevation-dialog`; popovers/menus/select/context-menu/hover-card/
+  chart-tooltip -> `katalist-elevation-popover`; genuinely floating cards/
+  toasts/docks -> `katalist-elevation-card`; base cards/inputs/buttons/
+  tables/panels and selected/focus/drag-state indicators had their
+  decorative shadow removed outright -- before the global
+  `* { --tw-shadow: 0 0 #0000 !important }` rule was deleted from
+  `styles.css`. `scripts/t08-shadow-suppression.test.mjs` guards against its
+  return and against any new unclassified `shadow-*` usage. Two
+  `drop-shadow-sm` uses on welcome/auth hero artwork were deliberately left
+  (illustration, not component elevation).
+- **Motion/gesture:** `scripts/t08-motion-gesture-contracts.test.mjs` adds
+  source-verified coverage (GSAP's Observer plugin isn't faithfully
+  reproducible in jsdom, matching this codebase's existing precedent) for:
+  wheel/Observer scoped to the lane's own node (never window/document); the
+  swipeable card renders no editable input to steal focus/scroll from;
+  rapid navigation blocked while animating, with in-flight tweens reverted
+  on every supersede and on unmount; the GSAP Observer killed on unmount;
+  and reduced-motion snapping an in-flight animation immediately.
+- **Browser verification:** `scripts/t08-browser-verification.mjs` (real
+  Playwright, local demo-mode server, no remote/staging target) captured
+  screenshots and computed-style measurements at all 5 required viewports
+  (390x844, 768x1024, 1024x768, 1440x900, 1920x1080) for Court, Lists index,
+  Buckets index, Team/Hub, and Me, plus a 200% zoom pass and a reduced-motion
+  + keyboard-focus pass on Court. Result: zero sub-12px text found in the
+  live DOM, zero sub-24px hit targets, zero console errors, no horizontal
+  overflow at 200% zoom on Court, and a visibly rendered `focus-visible`
+  ring (via `box-shadow`, confirmed by computed style) after two Tab
+  presses. **One out-of-scope finding surfaced by this pass:** at 200% zoom,
+  Court's three fixed-width NOW/NEXT/LATER lane columns do not reflow --
+  column headers and card text clip/truncate ("NOW" -> "NO", "Additional" ->
+  "Add ition") rather than wrapping or narrowing gracefully. This is a
+  responsive-reflow (WCAG 1.4.10) issue in Court's grid layout, not caused
+  by the 12px floor or any T08 token change, and is outside D01-D04's scope
+  -- recorded here rather than fixed blind.
+- A mechanical trailing-whitespace cleanup script used mid-pass had a regex
+  bug that collapsed indentation in 3 files (caught via `git show --stat`
+  reporting near-total line counts for what should have been single-line
+  edits); fixed in a follow-up commit (`64992c5`) by restoring from the last
+  good commit and re-applying only the intended edits with precise string
+  replacement, verified clean against the same and other files.
 
-**Remaining (explicit, not started):**
-1. **Typography scale adoption.** `katalist-heading`/`-body`/`-data-dense`/
-   `-meta` utilities exist in `styles.css` but have **zero real consumers**.
-   Ad hoc arbitrary sizing (`text-[10px]`/`text-[11px]`, both below the plan's
-   >=12px metadata floor) appears **192 times across 40+ files** — confirmed by
-   grep, not sampled. This needs a visually-reviewed rollout (the plan explicitly
-   warns against "globally replacing numeric classes" without preserving
-   hierarchy), which was not attempted blind in this pass; it needs either
-   per-component review or a browser-verified pass per T15's screenshot
-   requirement.
-2. **Hit-target adoption.** `Button`'s `touch`/`icon-touch` size variants (44px)
-   exist but have zero real call sites; `size="icon"` (36px) is used in only 2
-   files codebase-wide, meaning the app's icon-only affordances are almost
-   entirely hand-rolled spans/divs, unaudited for hit-target size.
-   `PersonAvatar`'s initials font-size formula (`Math.max(10, size * 0.36)`) can
-   produce a 10px glyph at real call sites using `size={20}`.
-3. **Global shadow suppression removal.** The elevation fix above deliberately
-   did not remove `* { --tw-shadow: 0 0 #0000 !important }` -- 42 other files
-   still use raw `shadow-*` classes it currently suppresses, and removing it
-   would resurrect all of them at once. Plan requires "inspect remaining legacy
-   shadows... base surfaces stay border-led" first, which needs a per-file
-   visual pass, not a blind global removal.
-4. Scrolling/gesture region isolation (Court's wheel-capture/GSAP Observer) has
-   deliberate mitigation code but no dedicated regression test; no known
-   conflict was found, but this was not independently verified in this pass.
-5. Contrast measurement covers `:root` only (the sole shipped palette, verified
-   identical to `.dark`); the four measured failures above still need an
-   explicit product decision.
+**Verification:** 669/669 tests (632 baseline + 37 new across 6 files), 0
+typecheck errors, 0 lint errors/75 warnings (unchanged), clean build. `rg
+'text-\[[0-9.]+px\]' src` confirms zero values below 12px; `rg
+'shadow-(sm|md|lg|xl|2xl|xs|2xs)' src` confirms zero unclassified usage
+outside the two reviewed drop-shadow exceptions; the universal shadow
+suppression is absent from `styles.css`.
+
+**Remaining (explicit):**
+1. The 200% zoom column-reflow finding above (Court's NOW/NEXT/LATER grid) --
+   a pre-existing responsive-layout gap, not a T08 token/consumer issue.
+2. Full WCAG conformance and production visual review are not claimed here --
+   this is a local, demo-mode verification pass, not a staging/production
+   audit or an accessibility certification.
