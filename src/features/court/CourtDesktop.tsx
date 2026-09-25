@@ -729,8 +729,16 @@ export function CourtDesktop({
         </div>
       </div>
 
-      {!focusSelection && catchup.count > 0 ? (
-        <CatchUpBanner moments={catchup.moments} onReview={morningBrief.reopen} />
+      {/* T10-06: reachable once settled even on an initial failure or a
+          genuinely empty result -- CatchUpBanner itself decides what to
+          render for each case; this is no longer gated on `count > 0`. */}
+      {!focusSelection ? (
+        <CatchUpBanner
+          moments={catchup.moments}
+          onReview={morningBrief.reopen}
+          error={catchup.error}
+          hasFetchedOnce={catchup.hasFetchedOnce}
+        />
       ) : null}
 
       {/* T09/E-04: distinguishes a genuinely empty Court (nothing tossed
@@ -863,6 +871,10 @@ export function CourtDesktop({
         myActorId={myActorId}
         surfaceMoment={catchup.surfaceMoment}
         onOpenThing={openCatchUpThing}
+        isLoading={catchup.isLoading}
+        error={catchup.error}
+        isEmpty={catchup.isEmpty}
+        hasFetchedOnce={catchup.hasFetchedOnce}
         onRefresh={() => {
           refetch();
           catchup.refresh();

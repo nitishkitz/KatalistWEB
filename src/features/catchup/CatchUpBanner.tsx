@@ -1,4 +1,4 @@
-import { ArrowRight, Layers } from "lucide-react";
+import { AlertTriangle, ArrowRight, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { CatchUpMoment } from "./use-catchup";
 import type { CatchUpMomentKind } from "./catchup-logic";
@@ -15,10 +15,68 @@ const KIND_ORDER: CatchUpMomentKind[] = ["nudge", "snooze_ended", "ghost", "foll
 type Props = {
   moments: CatchUpMoment[];
   onReview: () => void;
+  /** T10-06: the same async facts `useCatchup()` computes, so Manual Review
+   *  stays reachable on an initial failure or a genuinely empty result --
+   *  not gated on `moments.length > 0` (an error or an empty settled
+   *  result must never make the entry point itself disappear). */
+  error?: unknown;
+  hasFetchedOnce?: boolean;
 };
 
-export function CatchUpBanner({ moments, onReview }: Props) {
-  if (!moments.length) return null;
+function ReviewButton({ label, onReview }: { label: string; onReview: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onReview}
+      className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-4 text-[13px] font-semibold text-primary-foreground outline-none transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+    >
+      {label}
+      <ArrowRight className="h-4 w-4" />
+    </button>
+  );
+}
+
+export function CatchUpBanner({ moments, onReview, error, hasFetchedOnce = true }: Props) {
+  // Before anything has ever settled, showing nothing avoids an empty-state
+  // flash on every load -- this is the ONLY case that suppresses the
+  // banner; a settled error or a settled empty result both still render it
+  // (T10-06: "avoid the current count > 0 gate at both banner and Court
+  // level").
+  if (!hasFetchedOnce) return null;
+
+  if (error != null && moments.length === 0) {
+    return (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700">
+            <AlertTriangle className="h-4 w-4" />
+          </span>
+          <div className="leading-tight">
+            <p className="text-[14px] font-bold text-slate-900">Morning Brief</p>
+            <p className="text-[12px] text-amber-800">Couldn’t load just now.</p>
+          </div>
+        </div>
+        <ReviewButton label="Review" onReview={onReview} />
+      </div>
+    );
+  }
+
+  if (moments.length === 0) {
+    return (
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+            <Layers className="h-4 w-4" />
+          </span>
+          <div className="leading-tight">
+            <p className="text-[14px] font-bold text-slate-900">Morning Brief</p>
+            <p className="text-[12px] text-slate-500">You're all caught up.</p>
+          </div>
+        </div>
+        <ReviewButton label="Review" onReview={onReview} />
+      </div>
+    );
+  }
 
   const counts = new Map<CatchUpMomentKind, number>();
   for (const m of moments) counts.set(m.kind, (counts.get(m.kind) ?? 0) + 1);
@@ -56,14 +114,7 @@ export function CatchUpBanner({ moments, onReview }: Props) {
           ))}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onReview}
-        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-4 text-[13px] font-semibold text-primary-foreground outline-none transition hover:brightness-95 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-      >
-        Review {moments.length}
-        <ArrowRight className="h-4 w-4" />
-      </button>
+      <ReviewButton label={`Review ${moments.length}`} onReview={onReview} />
     </div>
   );
 }

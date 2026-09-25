@@ -259,6 +259,9 @@ export type UseCatchup = {
    *  hasn't resolved yet. Always true in preview (local derivation is
    *  synchronous and always current). */
   isEmpty: boolean;
+  /** T10-06: the raw "has this query ever settled" fact -- see the return
+   *  statement below for why this is exposed separately from `isEmpty`. */
+  hasFetchedOnce: boolean;
   /** True when `error` is a confirmed access loss (unauthenticated,
    *  forbidden, or not-found) rather than an ambiguous/transient failure
    *  a caller could plausibly retry past. Always false in preview. */
@@ -363,6 +366,11 @@ export function useCatchup(): UseCatchup {
     error: preview ? null : query.error,
     branch,
     isEmpty: preview ? true : hasFetchedOnce && isEmpty,
+    /** T10-06: the raw "has this query ever settled" fact, exposed
+     *  directly so consumers can hand it to the shared `AsyncState`
+     *  component (katalist/AsyncState.tsx) instead of re-deriving it from
+     *  `!isLoading` (see this file's own note on why that's unsafe). */
+    hasFetchedOnce,
     confirmedAccessLoss,
     surfaceMoment,
     refresh,
