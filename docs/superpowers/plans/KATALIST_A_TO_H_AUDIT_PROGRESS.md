@@ -749,3 +749,98 @@ or database change was made by this package.
 2. Full WCAG conformance and production visual review are not claimed here --
    this is a local, demo-mode verification pass, not a staging/production
    audit or an accessibility certification.
+
+### T09 — Court, common detail sections, and Magic Box
+
+**Status:** LOCAL PASS -- complete, pending independent review. **Owns:** A-02,
+E-01 through E-05.
+
+**Commits:** `c81aba5`, `52bbb37`, `37ce6e5`, `12c0a9a`, `c736118` (items 1-4,
+6-9), plus this pass's item-5 extraction commit(s) below.
+
+**Done (all 9 plan items):**
+1. Queue/navigator click targets converted to native controls, with
+   button/keyboard alternatives for swipe/drag commands including timed
+   Snooze, sharing the same capability/command path as gestures (`c81aba5`).
+2. Magic Box Escape retains the in-progress draft; a successful capture
+   identifies the created Thing(s) and offers Open (`52bbb37`).
+3. Magic Box shows its resolved destination List/Work-Home before submit and
+   persists a real scoped session draft across route changes (`37ce6e5`).
+4. Magic Box shows a per-file failed state with Retry instead of silently
+   dropping a failed upload; successful files/assignee results survive
+   partial failure (`12c0a9a`).
+5. **This pass:** extracted the four shared Thing-detail sections --
+   `ThingIdentityHeader`, `ThingStatusControls`, `ThingAttachments`,
+   `ThingDiscussion` -- out of `ThingDetailContent.tsx` (1868 lines before,
+   ~910 after) into `src/features/things/components/`, following the same
+   presentational-extraction discipline already established by
+   `ThingViewOnlyBanner` (confirmed shared, byte-identical between variants)
+   earlier in T09. `ThingIdentityHeader` and `ThingStatusControls` take a
+   `variant: "default" | "court"` prop and render genuinely different
+   markup per variant, matching pre-extraction behavior exactly (court's
+   compact info-card/single Catch-or-Sort button vs. default's discrete
+   People/Bucket/Acknowledgement/Pace/Work-Status sections) -- no visual
+   unification was attempted where the two variants already diverged.
+   `ThingAttachments` is court-only (the default variant has no Files list
+   of its own, confirmed by grepping the pre-extraction file before
+   assuming a default equivalent existed). `ThingDiscussion` covers the
+   Comments/Activity tab bar, comment/activity lists, and composer for both
+   variants, plus the default variant's "more actions" overflow slot
+   (Catch/Nudge/Sort/Cancel/Shred/Edit-Due-Date/Assign-outside-Katalist),
+   passed in as a `moreActionsPanel` node built and owned by
+   `ThingDetailContent` -- there is no court-variant equivalent of that
+   overflow at all. Every `rpc*` call, `run.mutate`/`withOptimisticPatch`
+   invocation, draft-state read/write, and busy/caps computation stayed in
+   `ThingDetailContent.tsx` unchanged; the four extracted components are
+   purely presentational and only call the `on*` callback props they are
+   given, per the plan's "extract presentation plus its explicit shared
+   contract, not a new independent mutation system."
+6. Real Comments/Activity tabs consuming T04's bounded history/load-more/
+   error states, with nullable transitions (null/A/B/detail-close keeping
+   correct file/avatar/due/comment state) tested against the actual
+   component (`c81aba5`-`c736118` range; retained by item 5's extraction --
+   full suite reverified after the move).
+7. Court layout distinguishes empty Court from filtered-empty on the desktop
+   layout, with capture vs. Clear-filters affordances and understandable
+   visible/total counts (`c736118`).
+8. Readable layouts across the required breakpoints (>=1280px three lanes
+   plus sidebar, 1024-1279px labeled With Others toggle, below 1024px
+   stacked/collapsible lanes) using T06's bounded media (covered by the
+   `c81aba5`-`c736118` range).
+9. Accepted ID-based selection and deferred-focus ownership logic preserved;
+   a failed removal restores selection only when the user has not
+   navigated (covered by the `c81aba5`-`c736118` range).
+
+**Item 5 verification:** full repo `npm test` (688/688 pass, 0 failures),
+`npx tsc --noEmit` (0 errors), `npm run lint` (0 errors; same pre-existing
+warning set on `ThingDetailContent.tsx` -- confirmed by diffing against
+`git stash`-ed lint output before this change, plus two now-removed unused
+imports (`cn`, `ThingViewOnlyBanner`) that the extraction itself made
+newly-unused), and `npm run build:app` (clean Vercel/Nitro build). Four
+source-inspection tests that regex-matched markup moved out of
+`ThingDetailContent.tsx` were updated to also read the new component
+file(s), preserving each test's original intent rather than weakening it:
+`scripts/court-stack-components.test.mjs` (E02, `ThingViewOnlyBanner` now
+asserted against `ThingIdentityHeader.tsx`), `scripts/
+court-dual-mode-workspace.test.mjs` (two tests: the default variant's
+`>Pace<` heading and the court variant's "Mark Sorted"/"Add to bucket" text,
+both now asserted against `ThingStatusControls.tsx`), and `scripts/
+inline-thing-detail-workspace.test.mjs` (the `data-detail-region="people"`/
+`"controls"` markers, now asserted against `ThingStatusControls.tsx`;
+`data-detail-region="metadata"` has no court-variant equivalent and stayed
+inline in `ThingDetailContent.tsx`, so that assertion is unchanged).
+
+**Acceptance (plan text, verified):** keyboard-only Capture->Catch->pace->
+comment/file->Sort passes; swipe and button versions are equivalent;
+null/A/B/detail-close keeps correct file/avatar/due/comment state.
+Court/List/Bucket/Nudge display equivalent permissions for the same Thing
+(shared `getThingCapabilities` unchanged, only its consumers' rendering was
+relocated). Magic Box partial failure and route changes retain text/files
+and do not recreate prior successful work (items 2-4, unaffected by this
+pass's detail-section extraction). T09 is closed locally. No deployment or
+database change was made by this package.
+
+**Remaining (explicit):** independent review of item 5's extraction
+boundaries (in particular the `variant`-branching choice for
+`ThingIdentityHeader`/`ThingStatusControls` and the default-only
+`moreActionsPanel` slot on `ThingDiscussion`) has not yet happened.
