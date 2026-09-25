@@ -727,6 +727,17 @@ test("T10-03 (corrects a prior wrong expectation): a claim delayed across a date
   // than the one the pending claim above was made for.
   mock.timers.tick(24 * 60 * 60 * 1000);
 
+  // T10-03: `currentScope`'s own local date is memoized on identity/
+  // context/timezone -- by design, an unrelated render must not thrash it.
+  // Only Date is mocked in this suite (not setTimeout), so the real
+  // scheduled midnight-rollover timer never actually fires during a test;
+  // a real return-to-foreground (visibilitychange/focus) is what forces
+  // the recompute here, matching the plan's own "on focus/visibility
+  // return, recompute from the current clock" requirement.
+  await act(async () => {
+    window.dispatchEvent(new window.Event("focus"));
+  });
+
   await act(async () => {
     gateResolve();
     await new Promise((r) => setTimeout(r, 10));

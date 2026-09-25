@@ -151,7 +151,19 @@ export function useMorningBrief(): UseMorningBrief {
 
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const onVisibility = () => setIsTabHidden(document.visibilityState === "hidden");
+    const onVisibility = () => {
+      setIsTabHidden(document.visibilityState === "hidden");
+      // T10-03: "on focus/visibility return, recompute from the current
+      // clock; do not replay an expired timer's scope" -- `currentScope`
+      // below is memoized on identity/context/timezone (deliberately, so
+      // an unrelated render doesn't thrash it), so its `localDate` would
+      // otherwise only ever refresh when the scheduled midnight timer
+      // fires. A tab that was hidden/backgrounded across a local midnight
+      // and only THEN returns to the foreground must recompute immediately
+      // on that return, not wait for a real-time timer that may already
+      // be stale relative to how long the tab was actually hidden.
+      setScopeTick((t) => t + 1);
+    };
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onVisibility);
     return () => {
