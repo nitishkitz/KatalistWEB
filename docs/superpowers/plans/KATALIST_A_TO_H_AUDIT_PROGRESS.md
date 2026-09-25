@@ -615,7 +615,7 @@ T07 without violating the production-data constraint.
 
 ### T08 — Shared type, controls, elevation, and motion rollout
 
-**Status:** LOCAL PASS -- complete, pending independent review. **Owns:** D-01 through D-04.
+**Status:** LOCAL PASS -- complete and independently verified. **Owns:** D-01 through D-04.
 
 **Commits:** `9e323da`, `356bf06`, `ddc729a`, `0f2ee35`, `88ab6a4`, `64992c5`, `6448253`.
 
@@ -732,6 +732,16 @@ typecheck errors, 0 lint errors/75 warnings (unchanged), clean build. `rg
 'shadow-(sm|md|lg|xl|2xl|xs|2xs)' src` confirms zero unclassified usage
 outside the two reviewed drop-shadow exceptions; the universal shadow
 suppression is absent from `styles.css`.
+
+**Independent closure review (2026-09-25):** reran all 37 focused T08 tests,
+the complete 669-test suite, typecheck, lint and `build:app`; every gate passed
+with the same 75-warning lint baseline and zero errors. Rechecked the saved
+Playwright evidence (`output/t08-browser-verification/results.json`): 27 total
+entries, including 25 route/viewport checks, with no HTTP, console, sub-12px
+text, sub-24px target or horizontal-overflow failure recorded. The documented
+Court lane clipping at 200% remains assigned to T09's responsive Court layout;
+it does not invalidate D-01 through D-04. T08 is closed locally. No deployment
+or database change was made by this package.
 
 **Remaining (explicit):**
 1. The 200% zoom column-reflow finding above (Court's NOW/NEXT/LATER grid) --

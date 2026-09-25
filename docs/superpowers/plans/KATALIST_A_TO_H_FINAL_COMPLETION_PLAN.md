@@ -54,7 +54,7 @@ Each checkbox below closes only after its numbered acceptance conditions pass or
 - [ ] **T05 — Correct read/unread behavior and Hub presentation.**
 - [ ] **T06 — Separate overview summaries from full detail loading.**
 - [ ] **T07 — Finish precise realtime invalidation and reconnect behavior.**
-- [ ] **T08 — Apply shared typography, controls, elevation, and motion.**
+- [x] **T08 — Apply shared typography, controls, elevation, and motion.**
 - [ ] **T09 — Complete Court, shared detail, and Magic Box.**
 - [ ] **T10 — Complete Morning Brief behavior, actions, and responsive layout.**
 - [ ] **T11 — Complete Lists and Buckets.**
@@ -240,12 +240,12 @@ These are implementation invariants, not optional additional phases:
 
 **Existing files:** `src/styles.css`, `src/components/ui/{button,input,dialog,sheet,popover,dropdown-menu}.tsx`, `src/components/katalist/PersonAvatar.tsx`, status/table primitives, `src/hooks/use-motion-preference.ts`, `src/lib/motion-tokens.ts`, `src/features/court/{use-stack-gesture,CourtLaneStack,CourtFocusView}.ts` / `.tsx`.
 
-- [ ] Map semantic roles to page titles 24–28px, section headings 16–18px, body/actions 14px, compact desktop data 13px, metadata at least 12px, and mobile inputs 16px. Use 1.4–1.6 body line height. Preserve visual hierarchy rather than globally replacing numeric classes.
-- [ ] Use desktop hit regions at least 32px and touch hit regions at least 44px, independently of icon size. Native buttons/links, visible focus, names, disabled semantics, and adequate space between targets are required.
-- [ ] Apply explicit dialog/popover/menu/sheet elevation classes first. Then remove universal shadow suppression and inspect remaining legacy shadows. Base surfaces stay border-led.
-- [ ] Apply existing motion tokens to actual GSAP/CSS consumers: 100–150ms feedback, 180–240ms local motion, workspace at most 280ms. Preserve OS-or-app reduced motion, immediate preference updates, and cleanup on input/route/preference changes.
-- [ ] Keep ordinary document scrolling outside focused gesture regions. Provide an in-memory preference update when storage fails so the current session still follows the selected setting.
-- [ ] Measure palette/role contrast and store results. Do not infer a conformance failure merely from font size, or conformance success merely from a screenshot.
+- [x] Map semantic roles to page titles 24–28px, section headings 16–18px, body/actions 14px, compact desktop data 13px, metadata at least 12px, and mobile inputs 16px. Use 1.4–1.6 body line height. Preserve visual hierarchy rather than globally replacing numeric classes.
+- [x] Use desktop hit regions at least 32px and touch hit regions at least 44px, independently of icon size. Native buttons/links, visible focus, names, disabled semantics, and adequate space between targets are required.
+- [x] Apply explicit dialog/popover/menu/sheet elevation classes first. Then remove universal shadow suppression and inspect remaining legacy shadows. Base surfaces stay border-led.
+- [x] Apply existing motion tokens to actual GSAP/CSS consumers: 100–150ms feedback, 180–240ms local motion, workspace at most 280ms. Preserve OS-or-app reduced motion, immediate preference updates, and cleanup on input/route/preference changes.
+- [x] Keep ordinary document scrolling outside focused gesture regions. Provide an in-memory preference update when storage fails so the current session still follows the selected setting.
+- [x] Measure palette/role contrast and store results. Do not infer a conformance failure merely from font size, or conformance success merely from a screenshot.
 
 **Acceptance:** shared overlays remain distinguishable; no nested controls or invisible focus; representative long-label/error content passes mobile and 200% zoom; reduced motion removes spatial movement; rapid input does not queue animations. T15 collects all page screenshots, keyboard evidence and frame traces.
 
