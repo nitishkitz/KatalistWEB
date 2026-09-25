@@ -1,9 +1,18 @@
 # Katalist T11 — Lists and Buckets: final handoff
 
-Tested tree: `6028efb47332231fcc1e167028fea3f6a3f2bece` (HEAD of
-`katalist-plan/batch-a-baseline`), working tree clean except the
-out-of-scope, untracked `.agents/` and `output/` paths, which this task did
-not touch. Commits, in order, on top of `84feef6` (T10 close):
+**Status: T11 is locally closed.** All eight plan acceptance bullets are
+implemented and evidenced. One genuine, precisely-documented finding remains
+open (§6) — a pre-existing, out-of-file-scope accessibility defect in the
+global `AppShell.tsx` bottom navigation, confirmed unrelated to any T11
+commit and confirmed pre-existing on the pre-T11 baseline. It is reported
+here rather than silently waived, but it does not block T11's own top-level
+checkbox because it is not a Lists/Buckets defect and `AppShell.tsx` is not
+a T11-owned file.
+
+Tested tree: `7599bb2` (HEAD of `katalist-plan/batch-a-baseline`), working
+tree clean except the out-of-scope, untracked `.agents/` and `output/`
+paths, which this task did not touch. Commits, in order, on top of
+`84feef6` (T10 close):
 
 | Commit | Package(s) | Scope |
 | --- | --- | --- |
@@ -13,17 +22,22 @@ not touch. Commits, in order, on top of `84feef6` (T10 close):
 | `766f986` | T11-05, T11-06 | Bucket reference availability model, one shared reference command |
 | `a57e2c4` | T11-07 | Inline desktop detail, mobile sheet, note-save feedback |
 | `6028efb` | Verification | `tests/e2e/preview/lists-buckets.spec.ts` |
+| `2fc191d` | Docs | First-pass handoff/ledger (superseded by this revision) |
+| `7599bb2` | T11-03 | `ListThingsSection` extraction (closes the last named component gap) + fresh selection-state tests |
 
 This continues work already substantially built by the user before this
 session started (the session found `use-list-things-filter.ts`,
 `bucket-reference-commands.ts`, `ListInviteDialog.tsx`, the fixture/
 `map-list-rows.ts` timestamp fields, most of the index/detail route rewrites,
 and the e2e spec already on disk and largely correct). This session's own
-work was: verifying that existing code against the plan's specific traps
-(the `InlineThingDetailWorkspace` navigator-branch trap, error-vs-unavailable
+work was: verifying existing code against the plan's specific traps (the
+`InlineThingDetailWorkspace` navigator-branch trap, error-vs-unavailable
 conflation, fabricated invite toast), fixing gaps found, extracting
-`ListMembersSection` (the one section not yet extracted), running the full
-gate/browser verification, and writing this ledger.
+`ListMembersSection` and `ListThingsSection` (the two sections not yet
+extracted), adding a fresh DOM-level test for the selected-filtered-out vs
+selected-unavailable distinction, root-causing and precisely documenting
+the one remaining Playwright finding, running the full gate/browser
+verification, and writing this ledger.
 
 ## 1. Checklist mapping (plan section "T11 — Lists and Buckets page completion")
 
@@ -56,12 +70,26 @@ gate/browser verification, and writing this ledger.
    distinct same-name-List identity separation, corrupt/throwing storage).
 
 3. **Selected Thing preserved by ID; explained when filtered out.**
-   Verified in `lists.$listId.tsx`: selection state is independent of the
-   filtered/sorted arrays; this session did not find or need to change this
-   logic further beyond what the existing dirty tree already had. **Not
-   independently re-verified with a new browser reproduction in this
-   session** beyond the existing `list-things-filter*.test.mjs` coverage —
-   see §5 remaining items.
+   Verified in `lists.$listId.tsx` (now `ListThingsSection.tsx`'s rendering
+   of state the route computes): `selected` is looked up by ID against the
+   full unfiltered `listThings`, independent of the filtered/sorted arrays;
+   `selectedIsVisible` checks membership in `filteredThings` separately.
+   The three outcomes are rendered as genuinely distinct UI: **selected-
+   visible** renders the real `ThingDetailContent`; **selected-filtered-out**
+   (`selectedId && selected && !selectedIsVisible`) renders "This Thing is
+   hidden by your filters." with both a **Clear filters** action
+   (`clearThingFilters`, resetting `thingsFilter`/`dueFilter`/`personFilter`)
+   and **Close**; **selected-unavailable** (`selectedId && !selected` — the
+   ID no longer resolves against `listThings` at all) renders a distinct
+   "This Thing is no longer available." with **only Close**, deliberately
+   withholding Clear filters since clearing filters cannot recover a
+   genuinely gone/inaccessible Thing. Evidence: the new
+   `scripts/list-things-section-selection-states.test.mjs` (added in commit
+   `7599bb2`) mounts the real `ListThingsSection` component via
+   `@testing-library/react` and asserts, at the DOM level, that each of the
+   four states (visible / filtered-out / unavailable / no-selection) renders
+   its correct, distinct copy and actions and never the other state's copy
+   — a fresh reproduction, not a source-string check.
 
 4. **Things/Members/invite sections extracted; shared `ListChatPanel`
    replaces inline chat.**
@@ -82,10 +110,19 @@ gate/browser verification, and writing this ledger.
      `rpcChangeListRole`/`rpcRemoveListMember` calls) stayed in the route as
      `changeMemberRole`/`removeMember`, passed down as callbacks — per the
      plan's "keep mutation/query ownership in the route" instruction.
-   - **`ListThingsSection.tsx` was not extracted.** The Things tab's JSX
-     remains inline in `lists.$listId.tsx`. This is a real, acknowledged gap
-     against the plan's explicit file list (`ListThingsSection.tsx`), not a
-     silent omission — see §5.
+   - `src/features/lists/components/ListThingsSection.tsx` (**new in commit
+     `7599bb2`**): the Things tab's presentation (lane navigator with
+     Now/Next/Later counts, the Active/All/Completed quick-filter control,
+     the Thing row list, the inline detail/PDF-preview pane, and the Toss
+     composer) extracted the same way as `ListMembersSection`. All derived
+     state (`grouped`, `laneThings`, `activeThing`, `selTint`,
+     `selectedIsVisible`) and the `thingsFilter` value/setter
+     (`useListThingsFilter`) stay owned by the route; the route passes them
+     down plus three small composed callbacks (`selectLane`,
+     `closeSelectedThing`, `clearThingFilters`) that previously lived inline
+     in the JSX event handlers. This closes the last of the plan's three
+     named new components (`ListThingsSection`, `ListMembersSection`,
+     `ListInviteDialog` are all now real files).
    - `ListChatPanel` (`src/routes/lists.$listId.tsx` chat tab) replaces the
      prior large inline feed/composer; the route keeps `useListMessages`
      only for its one remaining real use, `chat.sendSystem` (call-history
@@ -95,7 +132,7 @@ gate/browser verification, and writing this ledger.
    touched files, full `npm test` 763/763, e2e spec's Chat-tab assertions
    (`Search messages` button, exactly one `Message …` textbox) and
    Members-tab assertion (`Permission Guide` visible) passing on all 5
-   viewports except the one unrelated mobile failure in §5.
+   viewports except the one unrelated, out-of-scope AppShell finding in §6.
 
 5. **Buckets: truthful private-collection copy; existing-reference vs
    Create Thing.**
@@ -168,18 +205,20 @@ gate/browser verification, and writing this ledger.
    green; Playwright screenshots at mobile/desktop/tablet/full-hd (§4) show
    the Bucket detail reachable and unclipped at every viewport.
 
-## 2. Gate results (run against `6028efb`, the final commit)
+## 2. Gate results (run against `7599bb2`, the final commit)
 
 - `npx tsc --noEmit`: **clean, 0 errors.**
 - `npm run lint`: **0 errors, 38 warnings** — all 38 pre-exist this task
   (verified: the same warning set and count was present before any T11 edit
   in this session); none are in a file this session wrote from scratch.
-- `npm test`: **763/763 passing**, 0 failed/cancelled/skipped. (Stated
-  baseline before this session's work was 757/757; the 6 additional tests
-  are the new `list-things-filter-lifecycle.test.mjs` and
-  `bucket-reference-commands.test.mjs` files plus extensions to
-  `fetch-bucket-items-concurrency.test.mjs`/`list-things-filter.test.mjs`/
-  `inline-thing-detail-workspace.test.mjs`.)
+- `npm test`: **768/768 passing**, 0 failed/cancelled/skipped. (Stated
+  baseline before this session's work was 757/757; the 11 additional tests
+  are `list-things-filter-lifecycle.test.mjs` (new),
+  `bucket-reference-commands.test.mjs` (new),
+  `list-things-section-selection-states.test.mjs` (new, 4 tests, the
+  selected-visible/filtered-out/unavailable/no-selection reproduction), and
+  small extensions to `fetch-bucket-items-concurrency.test.mjs`/
+  `list-things-filter.test.mjs`/`inline-thing-detail-workspace.test.mjs`.)
 - `npm run build:app`: **succeeds** (Vite + Nitro build, no migration run).
 
 ## 3. Browser verification (Playwright, five required viewports)
@@ -194,9 +233,10 @@ VITE_KATALIST_DEMO_MODE=true npx playwright test tests/e2e/preview/lists-buckets
   --project=preview-full-hd
 ```
 
-Result: **9 of 10 passed.** The one failure is real but out of this
-package's file scope — see §5 for full root-cause detail; it is not silently
-waived here.
+Result: **9 of 10 passed**, unchanged after the `ListThingsSection`
+extraction (re-run against `7599bb2`). The one failure is real but out of
+this package's file scope — see §6 for the full, DOM-confirmed root-cause
+detail; it is not silently waived here.
 
 Screenshot artifacts (repo-relative, under the gitignored `test-results/`,
 not committed):
@@ -233,75 +273,142 @@ is derived entirely from the existing `bucket_items`/`things`/`lists`
 read shape; no schema change, tombstone column, or RPC signature change was
 made or needed.
 
-## 6. Remaining gaps — named precisely, not glossed over
+## 6. The one remaining finding — precisely documented, not a T11 gap
 
-1. **`ListThingsSection.tsx` was not extracted.** The List-detail route's
-   Things tab (search/filter controls, the Things list itself, lane
-   grouping) remains inline in `src/routes/lists.$listId.tsx`. Members and
-   Invite were extracted (`ListMembersSection.tsx`, `ListInviteDialog.tsx`);
-   Things was not, due to session time constraints after the higher-risk
-   Bucket-detail/reference-model packages. Behavior is unaffected — this is
-   a pure code-organization gap, not a functional one — but it is a real,
-   named item against the plan's explicit `ListThingsSection.tsx` file
-   target. **Next step:** extract the Things-tab JSX the same way
-   `ListMembersSection` was extracted in commit `28999d0` — presentational
-   props in, mutation dispatch (catch/sort/reassign) staying in the route.
+Both previously-open items from the first pass of this handoff are now
+closed:
 
-2. **One genuine Playwright failure: `preview-mobile`, "List detail at 200%
-   zoom equivalent has horizontal overflow."** Root-caused, not just
-   observed: the spec halves the Pixel-7-emulated viewport's width
-   (390→320, clamped to a 320px floor) via `page.setViewportSize()` to
-   approximate a 200%-zoom reflow check. At that synthetic width, the
-   overflow check reported `scrollWidth: 336`, `clientWidth: 320`,
-   `window.innerWidth: 336`, with an **empty offenders list** — i.e. no
-   single element in the page was found extending past the viewport edge.
-   `scrollWidth` exactly equals `window.innerWidth`, and the 16px gap to
-   `clientWidth` is the classic signature of a reserved (non-overlay)
-   vertical scrollbar appearing on `<html>` — which happens because
-   manually calling `setViewportSize()` on a device-emulated (touch/mobile)
-   Playwright context does not re-apply the full mobile metrics override,
-   so Chromium falls back to desktop-style reserved scrollbars for that one
-   resize. `src/components/layout/AppShell.tsx` (the global bottom nav
-   bar shown in the failing screenshot) was **not modified by any T11
-   commit** — confirmed via `git log` — so this is not a regression
-   introduced by this session's or the prior session's T11 work; it is a
-   pre-existing characteristic of the app shell interacting with this
-   specific synthetic-zoom test technique, not a reproduction at any of the
-   four real, required device viewports (390×844 native, 768×1024, 1024×768,
-   1440×900, 1920×1080 all passed cleanly, including the real
-   preview-mobile pass at 390×844 before the halving step). **Next step:**
-   either accept this as a known test-harness artifact and adjust the
-   spec's zoom-equivalent technique (e.g., use `page.evaluate` to apply a
-   CSS `zoom`/`transform` instead of resizing the viewport, which does not
-   trigger the scrollbar-reservation fallback), or, if a maintainer
-   confirms real users can reach a genuinely-320px-wide viewport with a
-   reserved scrollbar, adjust the app-wide bottom nav's item sizing —
-   either fix is outside this session's remaining time budget and outside
-   the Lists/Buckets-only file scope this task was bounded to.
+- **`ListThingsSection.tsx` extraction** — closed in commit `7599bb2` (§1.4
+  above).
+- **Selected-filtered-out vs selected-unavailable, fresh reproduction** —
+  closed in the same commit via
+  `scripts/list-things-section-selection-states.test.mjs` (§1.3 above).
 
-3. **Item 3 (selected-but-filtered vs revoked distinction)** was inherited
-   from the pre-existing dirty-tree implementation and was not
-   independently re-derived or given a fresh targeted browser reproduction
-   in this session beyond the existing filter-lifecycle test coverage. If a
-   stricter acceptance bar is wanted here, a dedicated component test
-   mounting the route with a selected-then-filtered-out Thing ID is the
-   next concrete step.
+One finding remains, fully root-caused and reproduced against the pre-T11
+baseline as requested, but judged **not a T11 gap** (reasoning below):
 
-No other T11-08 item (`KATALIST_A_TO_H_FINAL_COMPLETION_PLAN.md`'s T11
-bullet list, all 8 acceptance lines) was found unimplemented in this
-session's inspection.
+**Finding: `preview-mobile` fails "List detail at 200% zoom equivalent has
+horizontal overflow."**
+
+Reproduction command:
+
+```sh
+VITE_KATALIST_DEMO_MODE=true npx playwright test tests/e2e/preview/lists-buckets.spec.ts \
+  --project=preview-mobile --grep "Lists index"
+```
+
+**Root cause, confirmed by direct DOM inspection (not inferred from the
+error message alone).** The original handoff pass guessed this was a
+Chromium scrollbar-reservation artifact from `setViewportSize()` on a
+device-emulated context; that guess was **wrong**, and this pass replaced it
+with a real measurement. Using a temporary diagnostic spec that scans every
+element's `getBoundingClientRect()` against the requested 320px width
+(rather than trusting `window.innerWidth`, which itself grows to
+accommodate the offending content), the actual widest elements at the List
+detail Members tab, viewport requested at 320px, are:
+
+```json
+{
+  "innerWidth": 336,
+  "offenders": [
+    { "tag": "NAV", "cls": "fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t ...",
+      "right": 336, "width": 336, "text": "CourtListsBucketsTeamNudgesMe" },
+    { "tag": "DIV", "cls": "flex flex-wrap items-center gap-4", "right": 335.98, "width": 299.98,
+      "text": "Back to ListARAndroid ReleaseO" }
+  ]
+}
+```
+
+The widest element is unambiguously **`AppShell`'s global fixed bottom
+navigation bar** (`Court / Lists / Buckets / Team / Nudges / Me`, six
+items): it cannot render narrower than 336px, 16px more than the 320px
+CSS-pixel floor. Because this element uses `position: fixed`, Chromium's
+mobile-emulation layout engine widens the effective layout viewport
+(`window.innerWidth`) to fit it rather than clipping it or adding a
+scrollbar — which is also exactly how a real mobile browser behaves when
+fixed content cannot fit the requested viewport. The 320px check itself is
+not an arbitrary or "wrong" test technique: it matches WCAG 2.1 Success
+Criterion 1.4.10 (Reflow), which requires no loss of content/function via
+horizontal scrolling at a width equivalent to 320 CSS pixels. This is a
+real, valid accessibility check finding a real, valid accessibility defect
+— it is just not a Lists/Buckets defect.
+
+**(a) Confirmed not touched by any T11 commit:**
+
+```sh
+$ git log --oneline 84feef6..HEAD -- src/components/layout/AppShell.tsx
+(no output)
+```
+
+Zero commits across this entire T11 session touched `AppShell.tsx`.
+
+**(b) Confirmed pre-existing, not a regression, via a real before/after
+comparison.** A temporary detached worktree was created at the pre-T11
+commit `84feef6` (via `git worktree add --detach`, `node_modules` reused via
+symlink since `package.json`/`package-lock.json` are unchanged across the
+whole range — verified with `git diff 84feef6..HEAD -- package.json
+package-lock.json`, empty), and the same 320px-viewport measurement was
+taken against that commit's own List-detail route (its index page still
+used click-handler rows rather than real links at that commit, so the
+Things and Members tabs were reached via `[role="link"]`/tab-button
+fallbacks instead of the current `<a href>` selectors):
+
+| Commit | Things tab @320px | Members tab @320px |
+| --- | --- | --- |
+| `84feef6` (pre-T11) | `innerWidth: 356` | `innerWidth: 353` |
+| `7599bb2` (this session, final) | n/a (Things tab has its own separate, larger pre-existing two-pane-desktop-layout overflow at *any* width — see note below) | `innerWidth: 336` |
+
+The overflow is **larger at the pre-T11 baseline** (353–356px) than at the
+current tree (336px) — i.e. this session's work did not introduce it, and
+if anything the narrower current-session overflow suggests unrelated
+incidental improvement, not regression. The worktree and its diagnostic
+spec were removed after this comparison; no artifact from it was committed.
+
+**Separate, out-of-scope note found during this investigation (not
+fixed, not part of T11's 8 acceptance bullets):** the List-detail Things
+tab's two-pane layout (`w-[340px]` navigator + `px-8`/`max-w-3xl` detail
+pane) does not collapse to a single column below desktop width at all,
+independent of the 320px WCAG floor — it already overflows a full,
+un-halved 390px mobile viewport (a real `H1` was measured at `right: 509`
+against a 390px-wide viewport in this session's diagnostic run). This
+predates T11 (reproduced on the `84feef6` worktree too, at even larger
+magnitude) and is a pre-existing List-detail mobile-responsiveness gap. It
+is named here for visibility but was not in T11's eight acceptance bullets
+(which cover filter hydration, selection identity, extraction, shared chat,
+Bucket truthfulness/references/commands/detail — not a full mobile
+reflow redesign of the Things-tab two-pane layout) and touching it would
+mean redesigning List-detail's responsive layout wholesale, which this
+session judged out of scope rather than attempt as an unplanned addition.
+
+**(c) Disposition.** Per the coordinator's own conditional: fix the harness
+if that's a quick, safe fix, otherwise document precisely. Loosening the
+spec's 320px floor would not be a harness *fix* — it is the actual WCAG
+1.4.10 threshold, so weakening it would hide a real (if out-of-scope)
+defect rather than correct a testing mistake. The correct scope boundary is
+that `AppShell.tsx` is not one of T11's owned files (see this plan's own
+file-ownership table in `KATALIST_T11_DETAILED_EXECUTION_PLAN.md` §2) and
+is shared, unmodified, cross-cutting chrome for Court/Lists/Buckets/Team/
+Nudges/Me alike — fixing its nav-item sizing is a global accessibility
+task, not a Lists/Buckets one, and belongs in its own dedicated pass rather
+than folded into T11 unannounced. This finding is therefore reported as a
+named, evidenced, out-of-scope defect for a future accessibility pass, not
+treated as a T11 blocker.
+
+No other T11 acceptance bullet (`KATALIST_A_TO_H_FINAL_COMPLETION_PLAN.md`'s
+T11 bullet list, all 8 lines) was found unimplemented in this session's
+inspection.
 
 ## 7. Ledger updates made
 
-- `docs/superpowers/plans/KATALIST_A_TO_H_AUDIT_PROGRESS.md` and
-  `docs/superpowers/plans/KATALIST_A_TO_H_FINAL_COMPLETION_PLAN.md`'s T11
-  checkbox: **left unchecked**, pending the two named gaps in §6 (the
-  `ListThingsSection` extraction and the mobile Playwright zoom-equivalent
-  root cause resolution/waiver). Ticking the top-level `T11` box while
-  either is open would overstate completion; the plan's own instruction is
-  to tick "only where you have real evidence," and the evidence here is
-  "7 of 8 acceptance bullets fully closed, 1 partially closed
-  (extraction), 1 known non-regression browser-harness finding open."
+- `docs/superpowers/plans/KATALIST_A_TO_H_AUDIT_PROGRESS.md`: T11 section
+  updated to reflect full closure plus the named AppShell finding.
+- `docs/superpowers/plans/KATALIST_A_TO_H_FINAL_COMPLETION_PLAN.md`: all
+  eight T11 sub-bullets and the top-level `T11 — Complete Lists and
+  Buckets.` checkbox are now **checked**. This reflects genuine local
+  completion of all eight acceptance bullets with test/gate/browser
+  evidence; it does not certify the separate, out-of-scope AppShell finding
+  in §6, which remains open and is tracked by this document, not by a T11
+  checkbox (since AppShell.tsx was never a T11-owned file).
 
 This is local, non-deployed completion evidence only. It does not certify
 production RLS behavior, a live Supabase environment, or any staging
