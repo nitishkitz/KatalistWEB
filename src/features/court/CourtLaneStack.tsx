@@ -781,19 +781,26 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   ref={headingRef}
                   id={`court-${lane}-title`}
                   tabIndex={-1}
-                  className="text-[20px] font-medium uppercase leading-none tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="min-w-0 truncate text-[20px] font-medium uppercase leading-none tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   style={{ color: content.accent }}
                 >
                   {content.label}
                 </h2>
                 <span
-                  className="text-[13px] font-medium leading-none"
+                  className="shrink-0 text-[13px] font-medium leading-none"
                   style={{ color: content.accent }}
                 >
                   {things.length}
                 </span>
               </div>
-              <p className="mt-1 text-[12px] font-normal leading-none text-black/75">
+              {/* E02: this section's own ancestor has `overflow-hidden`
+                  (for the drag/scroll boundary) -- at 200% zoom the
+                  available column width can shrink below this text's
+                  natural width, and without its own `truncate` the label
+                  was silently cut off mid-character by that ancestor
+                  boundary ("NOW" -> "NO") instead of degrading to an
+                  ellipsis. */}
+              <p className="mt-1 min-w-0 truncate text-[12px] font-normal leading-none text-black/75">
                 {content.descriptor}
               </p>
             </div>
@@ -810,7 +817,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                     onViewAll?.(lane);
                   }
                 }}
-                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/60 hover:text-slate-700 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/60 hover:text-slate-700 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={
                   unreadThings.length > 0
                     ? `${unreadThings.length} with unread comments in ${content.label}`
@@ -998,7 +1005,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 <button
                   type="button"
                   onClick={() => startNavigation(-1)}
-                  className="flex h-6 w-6 items-center justify-center rounded hover:text-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-8 w-8 items-center justify-center rounded hover:text-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label="Previous card"
                 >
                   <KatalistIcon name="arrow-left" className="h-3.5 w-3.5" />
@@ -1007,7 +1014,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 <button
                   type="button"
                   onClick={() => startNavigation(1)}
-                  className="flex h-6 w-6 items-center justify-center rounded hover:text-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-8 w-8 items-center justify-center rounded hover:text-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   aria-label="Next card"
                 >
                   <KatalistIcon name="arrow-right" className="h-3.5 w-3.5" />

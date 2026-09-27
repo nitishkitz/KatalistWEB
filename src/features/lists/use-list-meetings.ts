@@ -118,6 +118,11 @@ export function useListMeetings(listId: string) {
   return {
     meetings,
     isLoading: !preview && !hidden && query.isLoading,
+    // B-03/C-04: previously not exposed -- a failed fetch silently fell
+    // back to `meetings: []`, indistinguishable from "no meetings
+    // scheduled" for every consumer.
+    error: hidden ? null : query.error,
+    refetch: query.refetch,
     schedule,
     cancel,
   };

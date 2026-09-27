@@ -1603,3 +1603,239 @@ explicitly-labeled integration boundary (unchanged, not in G-01/G-02's scope). L
 deliverability, a real deployed `VITE_KATALIST_FIXED_OTP` rollout, and cross-device resume
 (same identity, second browser) are external gates this session cannot verify without a live
 deployment and credentials -- unchanged from every other task's standing caveat in this plan.
+
+### T13 — Nudges, Me, preferences, and public-profile completion
+
+**Status:** LOCAL PASS. **Owns:** G-12, G-13; final B-01 verification.
+
+Tested tree: `c70a62a` (T12's own baseline). Planned in `plan-detailed-t13-what-linked-finch.md`
+after two Explore passes over `nudges.tsx`/`use-nudges.ts`/the escalation SQL and
+`me.tsx`/`use-profile.ts`/`use-trophy.ts`/`PushRegistrar.tsx`/the directory & Bridge serializers,
+plus three explicit user decisions on scope (real server pagination for Nudges' "See all";
+copy-only fix for the quiet-hours/manual-nudge mismatch; copy-only fix for the sorted/caught
+event-vs-Thing-count ambiguity).
+
+**Closed (G-12/B-01, `src/features/nudges/use-nudges.ts`, `src/routes/nudges.tsx`):**
+"Recent nudge activity" turned out, on closer reading, to have no separate "full history" concept
+to paginate into at all -- `recent` is definitionally "still within the 120-minute cooldown
+window," and the `nudges` table fetch backing it was bounded by an arbitrary `.limit(40)` row
+count instead of that same time window. In a busy context (>40 nudges anywhere in the last two
+hours), a still-in-cooldown nudge could be silently dropped from both the "recent" list and the
+eligibility check purely because something else got nudged more recently -- a real correctness
+bug, not just a labeling one. Deviated from the literal "add infinite-scroll pagination" plan
+(which would have let "See all" show nudges *outside* the cooldown window in a panel titled
+"Recent," contradicting the feature's own definition) in favor of the actually-correct fix: the
+history query is now bounded by `Date.now() - COOLDOWN_MS` (one shared constant, used by both the
+fetch and the derived recency check, so they can never disagree), with a generous `.limit(500)`
+as a defensive sanity bound only. "See all" now shows the genuinely complete list, not a
+truncated page of it. Also: the confirmed-ineligible row (no error, `eligibilityLoading` false,
+`row.canNudge` false) previously gave no reason at all, unlike the "unconfirmed" branch right
+next to it -- now shows a specific cooldown reason or an honest generic fallback via `title`,
+mirroring the existing pattern; the `eligibilityLoading` "Checking…" placeholder gained
+`role="status" aria-live="polite"`. The "How nudges work" dialog no longer claims a fictional
+"upgrade nudge" (confirmed via the escalation SQL: `can_send('upgrade', …)` is defined but never
+called by any server path), now discloses the manual 2-hour cooldown it previously omitted
+entirely, and no longer states quiet hours apply universally when the manual `nudge_thing()` RPC
+has no quiet-hour check at all (copy-only, per the user's decision -- no SQL change).
+
+**B-01 final verification:** added real hook-level render-state tests (`useNudges()` itself, not
+source assertions) for the five states the audit names -- Court pending, history-query rejected,
+eligibility-query rejected, truly-empty-after-a-successful-fetch, and a Work/Home context switch
+mid-flight. All five confirm the existing separation (`rowsError` vs `eligibilityError`,
+`rowsHasFetchedOnce`) already holds; this closes the "verify" half of B-01 with actual evidence
+rather than re-asserting what T00-era work already implemented.
+
+**Closed (G-13, `src/routes/me.tsx`):** the four settings panels (Preferences/Notifications/
+Appearance/Privacy) plus "Recently Shredded" were a hand-rolled `fixed inset-0` backdrop + plain
+`<div>` -- no `role="dialog"`, no focus trap, no `aria-labelledby`, no Escape handling -- while
+"Edit profile" right above them already used the real `Dialog` primitive. Migrated all five to
+that same primitive (content/controls unchanged, wrapper swap only). Avatar upload gave a toast
+only, with no lasting pending/failure indicator and no retry without re-selecting the file --
+added local `avatarAttempt` state (keeps the actual `File`) so a failed upload shows a persistent
+retry affordance on the avatar itself and Retry resubmits the exact same file. The
+Things-sorted/Things-caught/Current-streak tiles gave no indication these are activity-event
+counts (sorting the same Thing twice counts twice) or what the streak actually measures -- added
+a short explanatory line under each tile's label (copy-only, per the user's decision -- the
+counting behavior itself was not treated as a bug to fix at the SQL level). Saving an empty name
+showed a toast only; added an inline, field-level error under the Name input (dialog stays open
+either way -- edits were already retained on rejection before this pass).
+
+**Verified-already-correct, no code change (B5):** push-denial recovery already never
+auto-re-prompts (only the explicit "Enable" button, shown only in the `"default"` permission
+state, requests permission). Motion preference is already storage-backed
+(`localStorage["katalist.reduced_motion"]`, read fresh on every `useSyncExternalStore` snapshot)
+-- added one explicit "survives a simulated reload" test (a brand-new component mount with no
+prior React state) as direct evidence, since the existing suite only tested same-session
+reactivity. `bridge_get_thing`'s SQL (`supabase/migrations/20260820140000_...sql`) was read
+directly: its `RETURNS TABLE` projects `id, title, notes, due_at, due_has_time, acknowledgement,
+work_status, owner_name (display_name only), owner_importance` -- no phone/email column anywhere.
+`bridge_act`/`bridge_comment` (`supabase/migrations/20260818161732_...sql`) were also read
+directly: they `RETURN` a bare `work_status` enum and a bare `uuid` respectively -- no row/profile
+data at all. The authenticated `/api/people/directory` endpoint's inclusion of teammate email is
+consistent with the Me privacy panel's own stated policy ("name, email, avatar visible to other
+Katalist accounts; phone never shown"); every client-side `ProfileIdentity` branch either
+hard-codes `email: null` or has no phone field at all.
+
+**New:** `scripts/nudges-history-window.test.mjs` (5 tests: the time-bounded fetch, "See all"
+showing the genuinely complete list, the ineligible-row reason, the eligibility-loading
+`role="status"`, and the corrected dialog copy). `scripts/use-nudges-render-states.test.mjs` (5
+tests, real `useNudges()` mounted via a Probe component, Supabase mocked only at its own RPC/query
+boundary -- the five B-01 states above). `scripts/me-preferences-and-avatar.test.mjs` (3 tests,
+real `MePage` mounted the same way: a settings dialog exposes `role="dialog"` and Escape closes
+it; a failed avatar upload shows Retry and resubmits the same File; an empty-name save shows an
+inline error and never dispatches the mutation). Extended `scripts/me-page-labels.test.mjs` (+1:
+the three stat tiles' explanatory hints) and `scripts/use-motion-preference.test.mjs` (+1: the
+simulated-reload case). 800/800 total tests, 0 typecheck errors, 0 lint errors (36 warnings,
+unchanged), clean `build:app`.
+
+**Remaining:** live email-OTP/push delivery, a real deployed Supabase project (for the escalation
+SQL's actual quiet-hours/`notification_prefs` behavior and the Bridge RPCs' real `auth.uid()`
+integration), and cross-device/multi-browser verification remain external gates this session
+cannot verify without live credentials -- unchanged from every other task's standing caveat in
+this plan. The manual-vs-automated quiet-hours mismatch itself was deliberately left as a
+documentation fix, not a behavior change, per the user's explicit decision -- a manual nudge is
+still not blocked by quiet hours after this pass, by design.
+
+### T14 — PDF, file recovery, calls, meetings, and Bridge
+
+**Status:** LOCAL PASS. **Owns:** H-02 through H-08 (H-01/H-05 verified already closed by earlier
+passes -- see below).
+
+Tested tree: `c70a62a` (T13's own baseline). Planned in `plan-detailed-t13-what-linked-finch.md`
+(repurposed for T14) after three Explore passes (PDF/download/blob-ownership;
+call-lifecycle/recovery/meetings; Bridge authorization/idempotency), plus two explicit user
+decisions on scope (a minimal SQL idempotency fix for `bridge_comment`, and blocking the private-
+file third-party viewer embed rather than leaving it).
+
+**Verified already closed, no new work (H-01, H-05):** T06 already removed `PdfCanvas` from
+`ThingStackCard` (overview cards never mount it); an earlier H-05/R-05 pass already added a
+comprehensive, well-tested join-generation guard in `use-list-call.ts` covering every callback
+(`onState`/`onReaction`/`onDraw`/`onDocPage`) and await continuation (join success/catch/finally,
+unmount). Re-verified directly against the current code rather than assumed from the ledger's own
+prior claim.
+
+**Closed (H-02, `src/features/things/PdfCanvas.tsx`):** the `getDocument(...)` loading task object
+was discarded (only `.promise` awaited), so it couldn't be `.destroy()`'d mid-flight; a single
+boolean `cancelled` flag couldn't distinguish "this exact request" from "a later one"; `renderPage`
+never rechecked ownership after its own `await doc.getPage(...)`, and the pre-`getPage` render-task
+cancel had no matching post-await generation check. Added a retained `loadingTaskRef` (destroyed on
+unmount/URL change, whether still loading or already resolved) and separate `docGenRef`/
+`renderGenRef` counters, checked after every await (`import("pdfjs-dist")`, `getDocument().promise`,
+`getPage()`, `render()`) before any paint/setState. A page change arriving while the document is
+still loading is now honored via a live `pageRef`, not the load effect's stale closure value.
+Failures are classified (`unsupported`/`denied`/`network`) via a new `classifyPdfError()` and
+reported through a new `onError` callback, instead of one generic catch-all.
+
+**Closed (H-03, `PDFViewer.tsx`, `file-utils.ts`):** `downloadFile` was a fire-and-forget anchor
+click with no async failure reporting -- rewritten to `fetch` remote URLs and reject on a non-2xx
+or network failure (local `blob:`/`data:` URLs still go straight to the anchor, since there's
+nothing to fetch). Both call sites now show per-file pending/failed/retry state, keyed by file id
+so a rapid file switch can't show one file's download state on another. Added one-shot signed-URL
+resign-and-retry (`resignThingAttachmentUrl` in `attachments.ts`, using the new `storageKey` field
+on `ThingFile`) for an "unsupported" PDF failure, and distinct denied/unsupported/network recovery
+UI in the preview pane (denied has no retry -- "stays denied" per the audit's own instruction).
+(Prev/Next already had accessible names from an earlier T08 pass -- re-verified, not re-touched.)
+
+**Closed (H-04, new `src/lib/owned-file-resources.ts`):** no `blob:` URL created by
+`processFileForUpload`/`getSafeFileUrl` was ever revoked anywhere in the codebase (confirmed by
+grep -- only `lists.index.tsx`'s List-cover preview revoked its own, unrelated URLs). Added a
+refcounted ownership registry (`acquireBlobUrl`/`releaseBlobUrl`/`transferBlobUrlOwnership`/
+`releaseAllBlobUrlsForOwner`) that only ever revokes a URL it itself acquired, and wired it into
+the two `processFileForUpload` consumers: `MagicBox.tsx` (owner key scoped to the draft slot, not
+component mount lifecycle, so a retained draft's preview survives an unmount -- acquire on attach,
+release on remove-chip, release-all on a fully successful Toss) and `ThingDetailContent.tsx`'s
+comment-attachment composer (acquire on both the live-state and direct-draft-write branches,
+release on remove-chip). **Deliberately conservative:** did not wire a release on a successful
+comment *submit* -- `use-thing-comments.ts`'s own optimistic cache entry keeps referencing the
+same blob URL until the post-settle `invalidateQueries` refetch replaces it with server truth, and
+releasing at submit time risked a broken-image flash in that window; named as a smaller residual
+gap rather than silently claimed complete. Also added a private-file gate before the Office
+Online/Google Docs Viewer embeds (`PDFViewer.tsx`'s `isPrivateFileUrl()`, checking for Supabase
+Storage's own `/object/public/` vs `/object/sign/` path shape, defaulting to "private" for
+anything unrecognized) and replaced `ListCallPanel.tsx`'s equivalent Office Online embed (its
+`docUrl` is *always* a private signed URL from the chat bucket, confirmed directly) with a
+download-only fallback.
+
+**Closed (H-06, `use-list-call.ts`, `ListCallPanel.tsx`):** only "joining"/"connecting" and
+"reconnecting" got any visible UI -- "error" and "ended" rendered nothing at all, because
+`ListCallPanel`'s sole visibility gate (`if (!call.joined && !call.connecting) return null`) hid
+the whole panel the instant a join failed or a call ended, leaving only a toast and no retry, no
+instructions, no audio-only option. Added visible error/ended panels (dismissed via the existing
+`call.leave()`, which already transitions both states to `idle`); added `join(opts?: {audioOnly})`
+threading through to `room.join({video: !opts?.audioOnly})` (already-supported at the `CallRoom`
+level, just never exposed); added `classifyJoinError()`/`lastErrorKind` (`denied`/`device`/
+`generic`) so the UI offers "Join with audio only" specifically for permission-denied/device-in-use
+failures, not generic ones. (Ring confirmation, ringtone/timer cleanup, and the T03 Morning-Brief
+blocker during joining+connected+reconnecting were all already correct -- re-verified, not
+re-touched.)
+
+**Closed (H-07):** added deterministic DST-transition fixture tests for
+`useUpcomingMeetingReminder` (a real 2026 America/New_York spring-forward boundary) proving its
+urgent-window/countdown logic -- pure epoch-millisecond arithmetic throughout, in this hook and in
+`ScheduleMeetingDialog.tsx`'s own `.toISOString()` submission -- is unaffected by DST, since it
+never does manual UTC-offset math. Wrote
+`docs/superpowers/plans/KATALIST_T14_TWO_ACCOUNT_CALL_CHECKLIST.md`, a prepared (not executed)
+manual script for the one thing this session cannot run locally: real multi-party WebRTC behavior
+across two genuine browsers/devices.
+
+**Closed (H-08):** the guest-side Bridge RPCs themselves (`bridge_session_grant`, `bridge_get_thing`,
+`bridge_act`, `bridge_comment`, `bridge_redeem_token`) were already genuinely solid -- confirmed
+directly, not assumed: real assignee/assignment/terminal checks, generic safe errors, and zero
+raw-token/private-payload logging anywhere (only one `console.error` in the whole Bridge surface,
+logging a scope name and the DB error's own message, never the token/session/body). The actual
+gaps were zero local, credential-free executable coverage of this authorization matrix (it existed
+only in `tests/run-bridge-e2e.ts`, which needs `bun` + a live server + service-role env and is not
+wired into `npm test`), and no idempotency key on `bridge_comment` (a lost-response retry created a
+duplicate comment; `bridge_act`'s status changes were already naturally idempotent). Added a new
+additive migration (`20260926120000_bridge_comment_idempotency.sql`): a nullable `client_token uuid`
+on `thing_comments`, a unique index scoped to `(thing_id, author_actor_id, client_token) WHERE
+client_token IS NOT NULL`, and a 3-arg `bridge_comment` that returns the original comment's id on a
+repeated token instead of duplicating (the superseded 2-arg form is dropped, matching every other
+Bridge RPC's single-signature convention). `bridge.$token.tsx` generates one `crypto.randomUUID()`
+per compose action, reuses it on retry, and clears it on edit or success; threaded through
+`api/public/bridge/comment.ts` with UUID-shape validation before it ever reaches the RPC.
+
+**New:** `scripts/pdf-canvas-races.test.mjs` (8 source-assertion tests -- `PdfCanvas.tsx` statically
+imports a Vite-only `?url` worker asset specifier that Node's `--experimental-test-module-mocks`
+cannot intercept through this repo's custom ESM loader chain, confirmed directly by attempting it
+both with and without the query string; `t08-hit-targets.test.mjs`/
+`thing-stack-card-pdf-overview.test.mjs` hit the identical obstacle for this same file and already
+use source assertions, so this follows that established precedent rather than inventing a new one).
+`scripts/file-utils-download.test.mjs` (5 real behavioral tests -- no import obstacle here).
+`scripts/pdf-viewer-private-file-policy.test.mjs` (5 source-assertion tests, same `?url` obstacle
+via `PDFViewer.tsx`'s own `PdfCanvas` import). `scripts/owned-file-resources.test.mjs` (6 real
+behavioral tests). `scripts/blob-url-ownership-wiring.test.mjs` (5 source-assertion tests for the
+MagicBox/ThingDetailContent wiring). Extended `scripts/use-list-call-lifecycle.test.mjs` (+5 real
+behavioral tests: audio-only join constraints, device/generic error classification, error-state
+reset on a fresh join). `scripts/list-call-panel-recovery-states.test.mjs` (4 source-assertion
+tests, same `?url` obstacle via `ListCallPanel.tsx`'s own `PdfCanvas` import).
+`scripts/meeting-reminder-timezone.test.mjs` (4 real behavioral tests, real DST boundary).
+`scripts/bridge-authorization-sql.test.mjs` (16 tests against a real PGlite Postgres-compatible
+engine -- real `pgcrypto` `digest`/`gen_random_bytes`, not stand-ins -- executing the guest-side
+Bridge RPCs copied verbatim from their latest migrations, covering
+valid/expired-grant/expired-session/revoked-grant/revoked-session/malformed/wrong-recipient/
+wrong-session/terminal/unrelated-Thing, plus the new idempotency migration applied on top of the
+original `bridge_comment`, matching this repo's own "historical + new migration" pattern from
+`morning-brief-receipts-sql.test.mjs`). `scripts/bridge-route-safety.test.mjs` (5 tests: no
+raw-token/body logging, no service-role key material, every route uses `bridgeError()`, the client
+token is actually threaded end to end). 862/862 total tests, 0 typecheck errors, 0 lint errors (36
+warnings, unchanged), clean `build:app`.
+
+**Remaining:** live multi-user calls (the two-account checklist above), the Bridge migration's
+actual deployment and real Supabase `auth.uid()`/service-role integration, and
+`tests/run-bridge-e2e.ts`'s live execution all remain external gates this session cannot verify
+without live credentials -- unchanged from every other task's standing caveat in this plan. The new
+migration is prepared and locally tested only; it has not been applied to any database. The
+comment-composer's release-on-successful-submit gap (H-04) is named above, not silently covered.
+
+### T15 — Integrated local acceptance and audit reconciliation (2026-09-27)
+
+**Disposition: LOCAL PASS within the user's authorized screen-test scope; production/release is not closed.** Final detailed report: [`KATALIST_A_TO_H_FINAL_ACCEPTANCE.md`](KATALIST_A_TO_H_FINAL_ACCEPTANCE.md). The report reconciles all 62 audit IDs individually, records evidence and residual clauses, and names the external release gates.
+
+**User viewport restriction:** desktop and tablet only. T15 browser coverage ran at 768×1024 tablet portrait, 1024×768 tablet landscape, 1440×900 desktop, and 1920×1080 full HD. The 390×844 phone project was not run or captured. The earlier T10 handoff's narrow-screen Morning Brief gap was fixed in its later gap-closure pass; tablet portrait now exercises that compact entry point.
+
+**Final local gates:** 881/881 tests pass; typecheck has 0 errors; lint has 0 errors (warnings remain); `build:app` passes with a fake Supabase fixture and demo mode; `git diff --check` passes. Default Playwright runs only the four desktop/tablet projects: 60 passed, 4 opposite-breakpoint tests skipped, 0 failed. Browser scan covered five routes (Court, Lists index, Buckets index, Team Hub, Me) at each allowed viewport: 20/20 HTTP 200, no browser console errors, no text below 12px, no actionable target below 32px. Expected DNS/WebSocket failures from the intentionally unreachable `ci-fixture.supabase.co` backend are recorded separately and are not counted as app console errors or realtime acceptance.
+
+The integrated run exposed and fixed undersized actionable controls, List members horizontal overflow at 200% zoom, duplicate desktop/compact Morning Brief dialogs, a tablet portrait Magic Box with a zero-height input and no visible Toss button, and a 50px top-navigation collision between Me and Work/Home. Eight additional Court controls measured below the 32px floor at tablet portrait were corrected. A new bounding-box regression test verifies the header across all four supported sizes. Court 200% zoom then had no horizontal overflow; reduced-motion and keyboard focus-visible evidence was captured. Local warm SPA navigation p75 was 47ms over 20 samples (300ms target), explicitly a local demo-preview measurement rather than network/reference-device evidence. Screenshots and `results.json` are under `output/t15-desktop-tablet-20260927/`.
+
+**Still open:** phone-size screen coverage is outside the user's requested scope; manual desktop VoiceOver, physical tablet touch, real/reference performance and heap-cycle evidence remain RELEASE-05; hosted CI/deploy, unapplied feature migrations (including Bridge comment idempotency), live RLS/realtime, two-account/device call and Bridge checks, and pilot sign-off remain RELEASE-01…06. T15 did not push, deploy, apply migrations, contact production, or mark partial audit clauses as closed. The report specifically retains partial dispositions for C-01/C-02, E-03, G-06, H-01/H-04/H-08 and V-03/V-06 rather than laundering them into a blanket “A–H complete” claim.

@@ -150,3 +150,23 @@ test("a localStorage that throws (privacy-mode/quota) is treated as no stored pr
     Object.defineProperty(window, "localStorage", { value: realStorage, configurable: true });
   }
 });
+
+test("G13: the stored preference survives a simulated reload -- a brand-new mount with no prior React state still reads it from storage", async () => {
+  const { setStoredMotionPreference } = await import("@/hooks/use-motion-preference");
+  window.localStorage.clear();
+  installFakeMatchMedia(false);
+
+  setStoredMotionPreference(true);
+  // A real page reload discards all React state and re-imports/re-mounts
+  // from scratch -- the closest in-process simulation is a fresh `render`
+  // (not a rerender of an existing tree) reading storage for the first
+  // time, with nothing carried over from the write above except what's
+  // actually in localStorage.
+  let latest = null;
+  await act(async () => {
+    render(h(Probe, { onValue: (v) => (latest = v) }));
+  });
+
+  assert.equal(latest.reduceMotion, true, "the preference must be read fresh from storage, not only kept in memory");
+  cleanup();
+});

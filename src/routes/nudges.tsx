@@ -360,8 +360,14 @@ function NudgesPage() {
                                     // Eligibility (which rows can actually be nudged) hasn't
                                     // resolved yet — the row itself is real, so don't render a
                                     // confident "Open" (which implies "not eligible") before we
-                                    // know either way.
-                                    <span className="inline-flex items-center rounded-[5px] border border-border px-3 py-1.5 text-[13px] text-muted-foreground opacity-60">
+                                    // know either way. role="status" so assistive tech actually
+                                    // announces this transient state, matching the accessible
+                                    // explanation the other two branches below already give.
+                                    <span
+                                      role="status"
+                                      aria-live="polite"
+                                      className="inline-flex items-center rounded-[5px] border border-border px-3 py-1.5 text-[13px] text-muted-foreground opacity-60"
+                                    >
                                       Checking…
                                     </span>
                                   ) : eligibilityError ? (
@@ -387,9 +393,21 @@ function NudgesPage() {
                                       {nudgingId === row.id ? "Nudging…" : "Nudge"}
                                     </button>
                                   ) : (
+                                    // G12: confirmed ineligible (eligibility resolved, no
+                                    // error, row.canNudge is false) previously gave no reason
+                                    // at all here, unlike the "unconfirmed" branch above --
+                                    // give the specific, known reason for cooldown, and an
+                                    // honest generic one otherwise (we don't have a
+                                    // server-returned reason for every other ineligibility
+                                    // cause, and won't fabricate a more specific one).
                                     <button
                                       type="button"
                                       onClick={() => setSelectedId(row.id)}
+                                      title={
+                                        row.group === "recently_nudged"
+                                          ? "In cooldown after a recent nudge — try again later"
+                                          : "Not eligible for a nudge right now"
+                                      }
                                       className="inline-flex items-center rounded-[5px] border border-border px-3 py-1.5 text-[13px] text-foreground hover:bg-muted"
                                     >
                                       Open
@@ -421,11 +439,14 @@ function NudgesPage() {
               <section className="rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-[16px] font-semibold text-black">Recent nudge activity</h2>
-                  {/* G05: "See all"/"Show less" toggles the already-loaded
-                      list (there is no separate paginated history to
-                      fetch -- recent is derived client-side from the same
-                      data already in memory), and only appears when
-                      there's actually more to reveal. */}
+                  {/* G12: "See all"/"Show less" toggles the already-loaded
+                      list. This is genuinely the full list, not a truncated
+                      page of it -- `recent` is defined as "still within the
+                      cooldown window" and the underlying fetch itself is now
+                      bounded by that same time window (see use-nudges.ts's
+                      history query), not by an arbitrary row count, so
+                      there is nothing further to paginate into. Only shown
+                      when there's actually more than the 5-item preview. */}
                   {recent.length > 5 && (
                     <button
                       type="button"
@@ -483,10 +504,15 @@ function NudgesPage() {
             </DialogDescription>
           </DialogHeader>
           <ul className="space-y-2.5 text-[13px] text-[#3d3f74]">
-            <li>• At most one automatic nudge per Thing every 24 hours.</li>
-            <li>• Quiet hours: no nudges are sent between 9 PM and 8 AM.</li>
+            <li>• Pressing "Nudge" yourself is capped at once per Thing every 2 hours.</li>
+            <li>• At most one automatic nudge per Thing every 24 hours — a separate, longer limit from the manual one above.</li>
+            <li>
+              • Quiet hours (9 PM–8 AM, if enabled on your profile): Coey's automatic nudges pause
+              during this window. Pressing "Nudge" yourself is a deliberate action and is never
+              blocked by quiet hours.
+            </li>
             <li>• A Morning Brief digest is sent at most once per morning.</li>
-            <li>• A weekly "spring clean" and upgrade nudge are each capped at once per week.</li>
+            <li>• A weekly "spring clean" digest is capped at once per week.</li>
             <li>• Reactivation nudges for a fully stale Thing stop after two attempts (3-day, then 7-day).</li>
           </ul>
         </DialogContent>

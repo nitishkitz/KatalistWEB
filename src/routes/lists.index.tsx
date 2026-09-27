@@ -200,7 +200,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                             to="/lists/$listId"
                             params={{ listId: row.id }}
                             viewTransition
-                            className="truncate text-[13.5px] font-bold text-foreground"
+                            className="inline-flex min-h-8 items-center truncate text-[13.5px] font-bold text-foreground"
                             style={{ viewTransitionName: `list-title-${row.id}` }}
                           >
                             {row.name}
@@ -251,7 +251,6 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
                     <time
                       dateTime={row.updatedAtIso ?? undefined}
                       title={row.updatedAtIso ? new Date(row.updatedAtIso).toLocaleString() : "Update time unavailable"}
-                      tabIndex={0}
                       className="text-[12px] text-muted-foreground"
                     >
                       {row.updatedAt}
@@ -529,7 +528,7 @@ function ListsPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search lists..."
-              className="min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-muted-foreground"
+              className="min-h-8 min-w-0 flex-1 bg-transparent text-[12.5px] outline-none placeholder:text-muted-foreground"
             />
             {query ? (
               <button

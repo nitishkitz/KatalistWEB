@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { withReadDeadline } from "@/lib/read-request";
 
 export type BucketNote = {
   id: string;
@@ -20,22 +21,24 @@ export function useBucketNotes(bucketId: string) {
   const query = useQuery({
     queryKey: key,
     enabled: Boolean(bucketId) && Boolean(user),
-    queryFn: async (): Promise<BucketNote[]> => {
-      const { data, error } = await supabase
-        .from("bucket_notes")
-        .select("id, title, body, created_at, updated_at")
-        .eq("bucket_id", bucketId)
-        .is("deleted_at", null)
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((r) => ({
-        id: r.id,
-        title: r.title,
-        body: r.body,
-        createdAt: r.created_at,
-        updatedAt: r.updated_at,
-      }));
-    },
+    queryFn: ({ signal }): Promise<BucketNote[]> =>
+      withReadDeadline(signal, async (combined) => {
+        const { data, error } = await supabase
+          .from("bucket_notes")
+          .select("id, title, body, created_at, updated_at")
+          .eq("bucket_id", bucketId)
+          .is("deleted_at", null)
+          .order("updated_at", { ascending: false })
+          .abortSignal(combined);
+        if (error) throw error;
+        return (data ?? []).map((r) => ({
+          id: r.id,
+          title: r.title,
+          body: r.body,
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+        }));
+      }),
   });
 
   const invalidate = (epoch: number) => {

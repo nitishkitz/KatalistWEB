@@ -16,6 +16,8 @@ let catchCalls = [];
 let setPaceCalls = [];
 let snoozeCalls = [];
 let nudgeCalls = [];
+let acknowledgeCalls = [];
+let sortCalls = [];
 let catchGate = null;
 let nextCatchRejects = null;
 
@@ -29,6 +31,12 @@ mock.module("@/features/things/rpc", {
         nextCatchRejects = null;
         throw err;
       }
+    },
+    rpcCatchThing: async (thingId) => {
+      acknowledgeCalls.push(thingId);
+    },
+    rpcSortThing: async (thingId) => {
+      sortCalls.push(thingId);
     },
     rpcSetPersonalPace: async (thingId, pace) => {
       setPaceCalls.push({ thingId, pace });
@@ -67,11 +75,37 @@ function resetShared() {
   setPaceCalls = [];
   snoozeCalls = [];
   nudgeCalls = [];
+  acknowledgeCalls = [];
+  sortCalls = [];
   catchGate = null;
   nextCatchRejects = null;
 }
 
 const noopDeps = { dismissGhost: async () => {} };
+
+test("Court row acknowledgement preserves the existing catch-only transport and shares a cache claim", async () => {
+  resetShared();
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  qc.setQueryData(courtKey, { things: [makeThing("a")], myActorId: "p1" });
+  const outcome = await runThingAction(qc, { kind: "acknowledge", thingId: "a" }, noopDeps);
+  assert.deepEqual(outcome, { status: "performed" });
+  assert.deepEqual(acknowledgeCalls, ["a"]);
+  assert.deepEqual(catchCalls, []);
+  assert.equal(qc.getQueryData(courtKey).things[0].acknowledgement, "caught");
+  assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "not_started");
+});
+
+test("Court row Sort uses the shared optimistic patch and domain RPC", async () => {
+  resetShared();
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  qc.setQueryData(courtKey, { things: [makeThing("a")], myActorId: "p1" });
+  const outcome = await runThingAction(qc, { kind: "sort", thingId: "a" }, noopDeps);
+  assert.deepEqual(outcome, { status: "performed" });
+  assert.deepEqual(sortCalls, ["a"]);
+  assert.equal(qc.getQueryData(courtKey).things[0].workStatus, "sorted");
+});
 
 test("catch: performs the domain action once and optimistically patches the Court cache", async () => {
   resetShared();

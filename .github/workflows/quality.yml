@@ -50,9 +50,9 @@ jobs:
       - run: npm ci
       - run: npm run build:app
 
-  # T00: local-fixture browser smoke coverage (tests/e2e/preview/) -- every
-  # spec there is read-only/no-side-effect, so it needs no test account or
-  # staging secrets. The "staging" project is never registered here (no
+  # T00: isolated synthetic preview coverage (tests/e2e/preview/). Demo
+  # persona actions write only preview-local state; fixture Supabase settings
+  # must never resolve to a real backend. The "staging" project is not registered here (no
   # KATALIST_STAGING_BASE_URL/KATALIST_TEST_ACCOUNT_* configured), so this
   # job only ever exercises preview-*.
   e2e-preview:
@@ -65,14 +65,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      # No real Supabase project needed: every preview spec is read-only
-      # and unauthenticated (see tests/e2e/preview/README's own contract),
-      # and the client only needs syntactically-valid config to construct
-      # without throwing -- confirmed directly that these fixture values
-      # (never a real project) are sufficient for all three specs to pass.
+      # Authenticated preview specs require the Demo tab. Without this flag
+      # those specs skip and a green workflow would not exercise them.
       - run: npx playwright test
         env:
           KATALIST_E2E_PORT: "4173"
+          VITE_KATALIST_DEMO_MODE: "true"
           VITE_SUPABASE_URL: "https://ci-fixture.supabase.co"
           VITE_SUPABASE_PUBLISHABLE_KEY: "ci-fixture-anon-key"
       - uses: actions/upload-artifact@v4

@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Pace } from "@/domain/thing";
 import type { NudgeReason } from "./rpc";
-import { rpcCatchAndStart, rpcNudgeThing, rpcSetPersonalPace, rpcSnoozeThing } from "./rpc";
+import { rpcCatchAndStart, rpcCatchThing, rpcNudgeThing, rpcSetPersonalPace, rpcSnoozeThing, rpcSortThing } from "./rpc";
 import { snoozeUntilFor, type SnoozeOption } from "./personal-snooze";
 import {
   cancelThingReads,
@@ -48,6 +48,8 @@ export type ActionOutcome =
 
 export type ThingActionRequest =
   | { kind: "catch"; thingId: string }
+  | { kind: "acknowledge"; thingId: string }
+  | { kind: "sort"; thingId: string }
   | { kind: "set_pace"; thingId: string; pace: Pace }
   | { kind: "move_now"; thingId: string }
   | { kind: "snooze"; thingId: string; option: SnoozeOption }
@@ -77,6 +79,10 @@ function patchFor(request: ThingActionRequest): ThingPatch | undefined {
   switch (request.kind) {
     case "catch":
       return { acknowledgement: "caught", workStatus: "under_progress", personalPace: "next" };
+    case "acknowledge":
+      return { acknowledgement: "caught", personalPace: "next" };
+    case "sort":
+      return { workStatus: "sorted" };
     case "set_pace":
       return { personalPace: request.pace };
     case "move_now":
@@ -90,6 +96,12 @@ async function dispatch(request: ThingActionRequest, deps: RunThingActionDeps): 
   switch (request.kind) {
     case "catch":
       await rpcCatchAndStart(request.thingId);
+      return;
+    case "acknowledge":
+      await rpcCatchThing(request.thingId);
+      return;
+    case "sort":
+      await rpcSortThing(request.thingId);
       return;
     case "set_pace":
       await rpcSetPersonalPace(request.thingId, request.pace);

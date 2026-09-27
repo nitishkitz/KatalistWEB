@@ -1,11 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
   Clock,
-  Filter,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
@@ -19,10 +18,19 @@ import { ThingCard } from "@/features/court/ThingCard";
 import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
 import type { Thing } from "@/domain/thing";
 import { cn } from "@/lib/utils";
+import { logTelemetryEvent } from "@/lib/telemetry";
 import { useCatchup } from "@/features/catchup/use-catchup";
 import { useMorningBrief } from "@/features/catchup/use-morning-brief";
 import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
 import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
+
+const DESKTOP_BREAKPOINT_QUERY = "(min-width: 1024px)";
+
+function matchesDesktopViewport() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    ? window.matchMedia(DESKTOP_BREAKPOINT_QUERY).matches
+    : false;
+}
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -189,6 +197,23 @@ function CourtPage() {
   // "exactly one automatic controller" true regardless of viewport.
   const catchup = useCatchup();
   const morningBrief = useMorningBrief();
+  // The desktop and compact Court trees remain mounted together for instant
+  // breakpoint changes, but each tree owns a portalled dialog. Gate their
+  // dialog `open` props to the active viewport so one manual Review action
+  // never mounts two competing Radix dialogs/focus scopes.
+  const [isDesktopViewport, setIsDesktopViewport] = useState(matchesDesktopViewport);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia(DESKTOP_BREAKPOINT_QUERY);
+    const update = () => setIsDesktopViewport(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  const desktopMorningBrief = useMemo(
+    () => ({ ...morningBrief, open: morningBrief.open && isDesktopViewport }),
+    [morningBrief, isDesktopViewport],
+  );
   // T10/mobile-entry: a Catch Up moment's Thing is not guaranteed to be one
   // of Court's own currently-loaded now/next/later/theirs/all Things (e.g.
   // a ghost breakthrough deliberately surfaces a Thing from the OTHER
@@ -256,6 +281,7 @@ function CourtPage() {
   const openCatchUpThingMobile = useCallback(
     (thing: Thing) => {
       morningBrief.dismiss();
+      logTelemetryEvent({ category: "brief_action", outcome: "success", scope: "morning-brief" });
       setSelectedId(thing.id);
     },
     [morningBrief],
@@ -285,7 +311,7 @@ function CourtPage() {
         myActorId={myActorId}
         onSelect={(thing) => setSelectedId(thing.id)}
         catchup={catchup}
-        morningBrief={morningBrief}
+        morningBrief={desktopMorningBrief}
       />
 
       <div className="lg:hidden">
@@ -346,7 +372,7 @@ function CourtPage() {
             </p>
 
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
+              <div className="flex items-center rounded-lg border border-border bg-card p-0.5" role="group" aria-label="Filter Court">
                 {(
                   [
                     ["all", "All"],
@@ -359,8 +385,9 @@ function CourtPage() {
                     key={id}
                     type="button"
                     onClick={() => setFilter(id)}
+                    aria-pressed={filter === id}
                     className={cn(
-                      "rounded-md px-3 py-1.5 text-[12.5px] font-medium",
+                      "min-h-8 rounded-md px-3 py-1.5 text-[12.5px] font-medium",
                       filter === id
                         ? "bg-muted text-foreground"
                         : "text-muted-foreground hover:text-foreground",
@@ -369,13 +396,6 @@ function CourtPage() {
                     {label}
                   </button>
                 ))}
-                <button
-                  type="button"
-                  className="px-2 text-muted-foreground"
-                  aria-label="More filters"
-                >
-                  ···
-                </button>
               </div>
               <div className="ml-auto flex items-center gap-2">
                 <label className="flex h-8 items-center gap-2 rounded-lg border border-border bg-card px-2.5">
@@ -384,7 +404,7 @@ function CourtPage() {
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="Search things"
-                    className="w-36 bg-transparent text-[12.5px] outline-none"
+                    className="h-8 w-36 bg-transparent text-[12.5px] outline-none"
                   />
                 </label>
                 <button
@@ -411,13 +431,6 @@ function CourtPage() {
                       : sort === "importance"
                         ? "Importance"
                         : "Pace"}
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[12.5px] text-foreground"
-                >
-                  <Filter className="h-3.5 w-3.5" />
-                  Filter
                 </button>
               </div>
             </div>
@@ -523,7 +536,7 @@ function CourtPage() {
         )}
 
         <CatchUpOverlay
-          open={morningBrief.open}
+          open={morningBrief.open && !isDesktopViewport}
           onClose={morningBrief.dismiss}
           moments={catchup.moments}
           myActorId={myActorId}

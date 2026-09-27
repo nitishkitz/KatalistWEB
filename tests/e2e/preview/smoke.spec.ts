@@ -25,7 +25,15 @@ test.describe("entry routes render without a signed-in session", () => {
 
     await page.goto("/auth");
     await expect(page.getByRole("heading", { name: /welcome back/i })).toBeVisible();
-    // Default channel's OTP entry is reachable without any prior state.
+    // Under VITE_KATALIST_DEMO_MODE=true (e.g. when run in the same
+    // invocation as this directory's demo-gated specs), the default tab is
+    // "Demo accounts" instead of OTP -- intentional product behavior from
+    // T12, not a bug. The OTP entry is still reachable via its own tab, so
+    // switch to it explicitly rather than assuming OTP is the default view.
+    const otpTab = page.getByRole("button", { name: /phone.*otp/i });
+    if (await otpTab.isVisible().catch(() => false)) {
+      await otpTab.click();
+    }
     await expect(page.getByPlaceholder(/enter your phone number|you@example\.com/i)).toBeVisible();
 
     expect(consoleErrors, `unexpected console errors: ${consoleErrors.join("\n")}`).toEqual([]);

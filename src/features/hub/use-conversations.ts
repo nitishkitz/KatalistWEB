@@ -288,5 +288,12 @@ export function useConversation(listId: string | undefined) {
     // fetch is still running but we already have a seeded record from the
     // sidebar to display in the meantime".
     isLoading: !query.data && query.isLoading,
+    // B-03/C-06: previously not exposed at all -- a revoked membership (the
+    // List's own row now 403s/RLS-filters to nothing) settled as
+    // `conversation: null` completely indistinguishable from "genuinely
+    // never existed" or "still loading", so the workspace had no way to
+    // show a real access-lost state instead of a broken/empty header.
+    error: query.error,
+    refetch: query.refetch,
   };
 }

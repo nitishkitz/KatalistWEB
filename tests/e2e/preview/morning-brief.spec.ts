@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 /**
- * T10-07: the plan's five-viewport Morning Brief pass (section 7). Morning
+ * T10-07: the desktop/tablet Morning Brief pass. Morning
  * Brief only renders behind an authenticated Court route, so this spec
  * signs in via a Demo Persona (`VITE_KATALIST_DEMO_MODE=true` required --
  * see below) rather than a real account.
@@ -24,7 +24,7 @@ import { test, expect } from "@playwright/test";
  * webServer is started with (it is NOT this repo's own default -- see
  * `.env.local`/`.env.example`, both `false`) -- e.g.:
  *   VITE_KATALIST_DEMO_MODE=true npx playwright test tests/e2e/preview/morning-brief.spec.ts \
- *     --project=preview-desktop --project=preview-mobile \
+ *     --project=preview-desktop \
  *     --project=preview-tablet-portrait --project=preview-tablet-landscape \
  *     --project=preview-full-hd
  * Every test below skips itself (rather than failing) if the Demo tab isn't
@@ -44,6 +44,7 @@ async function signInAsFirstDemoPersona(page: import("@playwright/test").Page) {
     .then(() => true)
     .catch(() => false);
   if (!appeared) {
+    if (process.env.CI) throw new Error("Demo tab is missing; authenticated preview coverage must not skip in CI");
     return false; // VITE_KATALIST_DEMO_MODE is not enabled for this run
   }
   await demoTab.click();
@@ -113,6 +114,7 @@ test.describe("Morning Brief: responsive Court entry point", () => {
     await reviewButton.click();
     const dialog = page.getByRole("dialog", { name: /Morning Brief/i });
     await expect(dialog).toBeVisible();
+    await expect(page.getByRole("dialog")).toHaveCount(1);
 
     const dialogOverflow = await dialog.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
     expect(dialogOverflow, "Morning Brief dialog clips its own content horizontally").toBe(false);
@@ -126,7 +128,7 @@ test.describe("Morning Brief: responsive Court entry point", () => {
     expect(active, "focus was not restored anywhere after Escape").not.toBeNull();
   });
 
-  test("below lg: the mobile Court lane list has no horizontal overflow, and Morning Brief (banner + dialog + Escape) now works fully", async ({
+  test("below lg: the compact Court lane list has no horizontal overflow, and Morning Brief (banner + dialog + Escape) works fully", async ({
     page,
   }, testInfo) => {
     const viewport = page.viewportSize();
@@ -136,8 +138,8 @@ test.describe("Morning Brief: responsive Court entry point", () => {
     test.skip(!signedIn, "VITE_KATALIST_DEMO_MODE is not enabled for this run");
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1);
-    expect(overflow, "the mobile Court lane list has horizontal overflow at this viewport").toBe(false);
-    await page.screenshot({ path: testInfo.outputPath("mobile-court.png"), fullPage: false });
+    expect(overflow, "the compact Court lane list has horizontal overflow at this viewport").toBe(false);
+    await page.screenshot({ path: testInfo.outputPath("compact-court.png"), fullPage: false });
 
     // T10/mobile-entry: Morning Brief is now reachable here too -- the
     // banner is rendered by the same `lg:hidden` mobile block, fed by the
@@ -153,9 +155,9 @@ test.describe("Morning Brief: responsive Court entry point", () => {
     await expect(dialog).toBeVisible();
 
     const dialogOverflow = await dialog.evaluate((el) => el.scrollWidth > el.clientWidth + 1);
-    expect(dialogOverflow, "Morning Brief dialog clips its own content horizontally on mobile").toBe(false);
+    expect(dialogOverflow, "Morning Brief dialog clips its own content horizontally in the compact layout").toBe(false);
 
-    await page.screenshot({ path: testInfo.outputPath("mobile-morning-brief-open.png"), fullPage: false });
+    await page.screenshot({ path: testInfo.outputPath("compact-morning-brief-open.png"), fullPage: false });
 
     // Escape closes and restores focus to a connected element (U02), same
     // contract as the >=lg test above.

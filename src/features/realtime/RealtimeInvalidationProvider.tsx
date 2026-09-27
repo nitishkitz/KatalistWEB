@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { logTelemetryEvent } from "@/lib/telemetry";
 import { useCurrentIdentity } from "@/features/realtime/use-current-identity";
 import { targetsForEvent, type RealtimeTable } from "@/features/realtime/event-invalidation-map";
 import { createInvalidationBatcher } from "@/features/realtime/invalidation-batcher";
@@ -165,7 +166,10 @@ export function RealtimeInvalidationProvider() {
       if (!active || status !== "SUBSCRIBED") return;
       const isReconnect = subscriptionStatusRef.current !== "never-subscribed";
       subscriptionStatusRef.current = isReconnect ? "reconnected" : "initial";
-      if (isReconnect) catchUp(false);
+      if (isReconnect) {
+        logTelemetryEvent({ category: "realtime_reconnect", outcome: "success", scope: "realtime" });
+        catchUp(false);
+      }
     });
 
     return () => {

@@ -1,4 +1,6 @@
 import { Calendar, MoreHorizontal, Star } from "lucide-react";
+import { useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { format, isToday, isTomorrow, isThisWeek } from "date-fns";
 import type { Thing } from "@/domain/thing";
 import { ImportanceBadge, PaceBadge } from "./ImportanceBadge";
@@ -6,7 +8,9 @@ import { AcknowledgementBadge } from "./AcknowledgementBadge";
 import { WorkStatusBadge } from "./WorkStatusBadge";
 import { PersonCell } from "./PersonCell";
 import { cn } from "@/lib/utils";
-import { rpcCatchThing, rpcNudgeThing, rpcSortThing } from "@/features/things/rpc";
+import { runThingAction } from "@/features/things/run-thing-action";
+import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
+import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { toast } from "sonner";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { useCourt } from "@/features/court/use-court";
@@ -33,10 +37,36 @@ export function ThingRow({
   thing: Thing;
   onSelect?: (thing: Thing) => void;
 }) {
+  const qc = useQueryClient();
+  const busyRef = useRef(false);
+  const [busy, setBusy] = useState(false);
   const { myActorId } = useCourt();
   const due = formatDue(thing);
   const caps = getThingCapabilities(thing, myActorId);
-  const terminal = caps.terminal;
+
+  const perform = async (kind: "acknowledge" | "nudge" | "sort", successMessage: string) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    const epoch = getIdentityEpoch(qc).epoch;
+    try {
+      const outcome = await runThingAction(qc, { kind, thingId: thing.id }, { dismissGhost: async () => {} });
+      if (!isEpochCurrent(qc, epoch)) return;
+      if (outcome.status === "failed") {
+        toast.error(domainErrorMessage(outcome.error));
+      } else if (outcome.status === "performed") {
+        await invalidatePersonalSurfaces(qc, epoch);
+        if (!isEpochCurrent(qc, epoch)) return;
+        await qc.invalidateQueries({ queryKey: ["thing", thing.id] });
+        toast.success(successMessage);
+      }
+    } catch (error) {
+      if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(error));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
 
   return (
     <tr
@@ -78,24 +108,20 @@ export function ThingRow({
       <td className="px-2 text-[12px] text-muted-foreground">{thing.listName ?? "Standalone"}</td>
       <td className="pr-2 text-right">
         <details className="relative" onClick={(e) => e.stopPropagation()}>
-          <summary className="list-none rounded p-1 text-muted-foreground hover:bg-muted [&::-webkit-details-marker]:hidden">
+          <summary className="flex min-h-8 min-w-8 items-center justify-center list-none rounded text-muted-foreground hover:bg-muted [&::-webkit-details-marker]:hidden">
             <MoreHorizontal className="h-4 w-4" />
             <span className="sr-only">Thing actions</span>
           </summary>
           <div className="absolute right-0 z-20 mt-1 w-40 overflow-hidden rounded-lg border border-border bg-card py-1 text-left katalist-elevation-popover">
-            <button type="button" className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted" onClick={() => onSelect?.(thing)}>
+            <button type="button" className="block min-h-8 w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted" onClick={() => onSelect?.(thing)}>
               Open
             </button>
             {caps.canCatch ? (
               <button
                 type="button"
-                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
-                onClick={() =>
-                  void rpcCatchThing(thing.id).then(
-                    () => toast.success("Caught."),
-                    (e: unknown) => toast.error(domainErrorMessage(e)),
-                  )
-                }
+                disabled={busy}
+                className="block min-h-8 w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
+                onClick={() => void perform("acknowledge", "Caught.")}
               >
                 Caught It
               </button>
@@ -103,13 +129,9 @@ export function ThingRow({
             {caps.canNudge ? (
               <button
                 type="button"
-                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
-                onClick={() =>
-                  void rpcNudgeThing(thing.id).then(
-                    () => toast.success("Just a gentle paw tap on this one."),
-                    (e: unknown) => toast.error(domainErrorMessage(e)),
-                  )
-                }
+                disabled={busy}
+                className="block min-h-8 w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
+                onClick={() => void perform("nudge", "Just a gentle paw tap on this one.")}
               >
                 Nudge
               </button>
@@ -117,13 +139,9 @@ export function ThingRow({
             {caps.canSort ? (
               <button
                 type="button"
-                className="block w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
-                onClick={() =>
-                  void rpcSortThing(thing.id).then(
-                    () => toast.success("Nicely sorted."),
-                    (e: unknown) => toast.error(domainErrorMessage(e)),
-                  )
-                }
+                disabled={busy}
+                className="block min-h-8 w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
+                onClick={() => void perform("sort", "Nicely sorted.")}
               >
                 Sort
               </button>

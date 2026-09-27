@@ -29,6 +29,7 @@ import { ListDetailSkeleton, Shimmer } from "@/components/katalist/ScreenSkeleto
 import { useThing } from "@/features/things/use-thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { domainErrorMessage } from "@/lib/domain-error";
+import { classifyAsyncError } from "@/lib/query-policy";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Thing } from "@/domain/thing";
@@ -309,18 +310,32 @@ function BucketDetailPage() {
   }
 
   if (error) {
-    // A failed fetch, not a genuinely missing/inaccessible Bucket — offer
-    // Retry instead of implying the Bucket doesn't exist.
+    // B-03/C-06: only a genuinely transient failure implies Retry might
+    // help. A confirmed access-loss kind (revoked private-Bucket access,
+    // deleted Bucket) is not a fetch failure to retry -- it correctly
+    // reflects that this identity can no longer see this Bucket.
+    const kind = classifyAsyncError(error);
+    const accessLost = kind === "forbidden" || kind === "unauthenticated" || kind === "not-found";
     return (
-      <AppShell title="Bucket" subtitle="Couldn’t load">
-        <p className="text-sm text-muted-foreground">{domainErrorMessage(error)}</p>
-        <button
-          type="button"
-          onClick={() => void refetchBucket()}
-          className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
-        >
-          Retry
-        </button>
+      <AppShell title="Bucket" subtitle={accessLost ? "No longer available" : "Couldn’t load"}>
+        <p className="text-sm text-muted-foreground">
+          {accessLost
+            ? "You no longer have access to this Bucket, or it no longer exists."
+            : domainErrorMessage(error)}
+        </p>
+        {accessLost ? (
+          <Link to="/buckets" className="mt-3 inline-block text-sm font-semibold text-primary">
+            Back to Buckets
+          </Link>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void refetchBucket()}
+            className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
+          >
+            Retry
+          </button>
+        )}
       </AppShell>
     );
   }

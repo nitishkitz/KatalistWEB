@@ -27,3 +27,10 @@ test("a synthetic @katalist.local auth email is never shown as a contact email",
   assert.match(me, /isSyntheticAuthEmail\s*=\s*rawEmail\.endsWith\("@katalist\.local"\)/);
   assert.match(me, /const email = isSyntheticAuthEmail \? "" : rawEmail/);
 });
+
+test("G13: sorted/caught/streak tiles each render an explanatory hint, not just a bare number", () => {
+  assert.match(me, /hint:\s*"Every sort counts, even on the same Thing twice"/);
+  assert.match(me, /hint:\s*"Every catch counts, even on the same Thing twice"/);
+  assert.match(me, /hint:\s*"Consecutive days with at least one Thing sorted"/);
+  assert.match(me, /\{s\.hint\}/);
+});

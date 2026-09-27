@@ -130,7 +130,7 @@ export function CourtWithOthersSidebar({
                 type="button"
                 onClick={() => setTheirFocus(id)}
                 className={cn(
-                  "pb-2 text-[12px] whitespace-nowrap transition-colors relative cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
+                  "inline-flex min-h-8 items-center pb-2 text-[12px] whitespace-nowrap transition-colors relative cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
                   isActive ? "text-black font-medium" : "text-black/80 hover:text-black font-normal",
                 )}
               >
@@ -251,7 +251,7 @@ export function CourtWithOthersSidebar({
                               handleNudge(thing);
                             }}
                             className={cn(
-                              "group/nudge inline-flex items-center gap-1.5 rounded-[7px] border px-2.5 py-1 text-[12px] font-medium transition-colors cursor-pointer disabled:cursor-default",
+                              "group/nudge inline-flex min-h-8 items-center gap-1.5 rounded-[7px] border px-2.5 py-1 text-[12px] font-medium transition-colors cursor-pointer disabled:cursor-default",
                               isNudged
                                 ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                                 : "border-[#eaeffa] bg-[#eff1fc] font-normal text-[#1d1d1d] hover:bg-[#e6eafb]",
@@ -293,10 +293,7 @@ export function CourtWithOthersSidebar({
           <button
             type="button"
             onClick={onViewAllTheirs}
-            // D01/T08: intrinsic content height alone was ~18px, below the
-            // 24px WCAG 2.5.8 absolute minimum -- min-h ensures a real hit
-            // area without changing the icon/text size.
-            className="inline-flex min-h-6 items-center gap-1 text-[12px] font-medium text-black hover:text-[#503188] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            className="inline-flex min-h-8 items-center gap-1 text-[12px] font-medium text-black hover:text-[#503188] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
           >
             View all {theirs.length}
             <KatalistIcon name="view-all-arrow" className="h-3 w-3" />

@@ -41,14 +41,14 @@ export function TopNav() {
   ];
 
   return (
-    <nav className="sticky top-0 z-40 hidden md:flex h-14 w-full items-center justify-between border-b border-[#f0f3fb] bg-[#f5f8fe] px-5">
+    <nav className="sticky top-0 z-40 hidden md:flex h-14 w-full items-center justify-between border-b border-[#f0f3fb] bg-[#f5f8fe] px-3 lg:px-5">
       {/* Left */}
-      <div className="flex items-center gap-5">
+      <div className="flex shrink-0 items-center gap-5">
         <Logo markClassName="h-7 w-7" withText={true} textClassName="text-[19px]" />
       </div>
 
-      {/* Center: nav links (absolutely centered in the bar) */}
-      <div className="absolute left-1/2 top-0 flex h-14 -translate-x-1/2 items-center gap-1">
+      {/* Tablet links share the available row; desktop links stay centered. */}
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-0 lg:absolute lg:left-1/2 lg:top-0 lg:h-14 lg:-translate-x-1/2 lg:flex-none lg:gap-1">
         {navItems.map((item) => {
           const isActive =
             item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
@@ -57,7 +57,7 @@ export function TopNav() {
               key={item.title}
               to={item.to}
               className={cn(
-                "relative flex items-center px-3 h-14 text-[15px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                "relative flex h-14 items-center whitespace-nowrap px-2 text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset lg:px-3 lg:text-[15px]",
                 isActive
                   ? "text-[#503188] font-medium"
                   : "text-[#1d1d1d] hover:text-[#503188]"
@@ -79,7 +79,7 @@ export function TopNav() {
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 lg:gap-3">
         <button
           type="button"
           onClick={() => void setContext(context === "work" ? "home" : "work")}

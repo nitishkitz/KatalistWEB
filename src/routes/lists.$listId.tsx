@@ -37,6 +37,7 @@ import { ListMembersSection, type MemberRoleFilter } from "@/features/lists/comp
 import { ListThingsSection, type ListLaneId } from "@/features/lists/components/ListThingsSection";
 import type { ListMember } from "@/features/lists/fixtures";
 import { domainErrorMessage, extractErrorMessage } from "@/lib/domain-error";
+import { classifyAsyncError } from "@/lib/query-policy";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { toast } from "sonner";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -420,16 +421,33 @@ function ListDetailPage() {
   }
 
   if (error) {
+    // B-03/C-06: a confirmed access-loss kind (revoked membership, deleted
+    // List) is never worth a Retry -- the read didn't fail transiently, it
+    // correctly reflects that this identity can no longer see this List.
+    // Offering Retry there implies trying again might work, which it won't.
+    const kind = classifyAsyncError(error);
+    const accessLost = kind === "forbidden" || kind === "unauthenticated" || kind === "not-found";
     return (
-      <AppShell title="List" subtitle="Couldn’t load">
-        <p className="text-sm text-muted-foreground">{domainErrorMessage(error)}</p>
-        <button
-          type="button"
-          onClick={() => void refetchList()}
-          className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
-        >
-          Retry
-        </button>
+      <AppShell title="List" subtitle={accessLost ? "No longer available" : "Couldn’t load"}>
+        <p className="text-sm text-muted-foreground">
+          {accessLost
+            ? "You no longer have access to this List, or it no longer exists."
+            : domainErrorMessage(error)}
+        </p>
+        {!accessLost && (
+          <button
+            type="button"
+            onClick={() => void refetchList()}
+            className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
+          >
+            Retry
+          </button>
+        )}
+        {accessLost ? (
+          <Link to="/lists" className="mt-3 inline-block text-sm text-primary">
+            Back to Lists
+          </Link>
+        ) : null}
         <ListCallPanel call={call} selfName={selfName} listId={listId} onInvite={() => setInviteOpen(true)} />
       </AppShell>
     );
@@ -835,7 +853,14 @@ function ListDetailPage() {
                     </button>
                   )}
                 </div>
-                {meetingsHook.meetings.length === 0 ? (
+                {meetingsHook.error && meetingsHook.meetings.length === 0 ? (
+                  <div className="mt-3 flex items-center justify-between gap-2 text-[12px] text-amber-900">
+                    <span>Couldn't load meetings.</span>
+                    <button type="button" onClick={() => void meetingsHook.refetch()} className="font-semibold underline">
+                      Retry
+                    </button>
+                  </div>
+                ) : meetingsHook.meetings.length === 0 ? (
                   <p className="mt-3 text-[12px] text-[#8487a7]">No meetings scheduled yet.</p>
                 ) : (
                   <div className="mt-3 space-y-2">

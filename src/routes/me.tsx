@@ -20,6 +20,8 @@ import {
   ImagePlus,
   Check,
   Camera,
+  Loader2,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -86,6 +88,11 @@ function MePage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editOccupation, setEditOccupation] = useState("");
+  const [editNameError, setEditNameError] = useState<string | null>(null);
+  // G13: per-file avatar-upload state -- keeps the actual File so Retry
+  // never has to ask the user to re-pick it, and distinguishes an in-flight
+  // upload from a failed one instead of leaving no visible state at all.
+  const [avatarAttempt, setAvatarAttempt] = useState<{ file: File; status: "uploading" | "failed" } | null>(null);
   const { reduceMotion: reduced, setReduceMotion: setReduced } = useStoredMotionPreference();
   // G06: real push permission state, shown honestly in the notifications
   // panel below instead of the previous static "in-app notifications
@@ -173,15 +180,31 @@ function MePage() {
 
   const coverClass = COVER_THEMES.find((c) => c.key === profile?.cover_theme)?.className ?? DEFAULT_COVER;
 
-  const onAvatarFile = (file?: File | null) => {
-    if (!file) return;
+  const submitAvatarFile = (file: File) => {
+    setAvatarAttempt({ file, status: "uploading" });
     const epoch = getIdentityEpoch(qc).epoch;
     uploadAvatar.mutate(file, {
-      onSuccess: () => { if (isEpochCurrent(qc, epoch)) toast.success("Photo updated."); },
+      onSuccess: () => {
+        if (!isEpochCurrent(qc, epoch)) return;
+        toast.success("Photo updated.");
+        setAvatarAttempt(null);
+      },
       onError: (err) => {
-        if (isEpochCurrent(qc, epoch)) toast.error(err instanceof Error ? err.message : "Couldn’t save photo.");
+        if (!isEpochCurrent(qc, epoch)) return;
+        toast.error(err instanceof Error ? err.message : "Couldn’t save photo.");
+        // Keep the same File so Retry can resubmit it without asking the
+        // user to re-select anything.
+        setAvatarAttempt({ file, status: "failed" });
       },
     });
+  };
+  const onAvatarFile = (file?: File | null) => {
+    if (!file) return;
+    submitAvatarFile(file);
+  };
+  const retryAvatarUpload = () => {
+    if (!avatarAttempt) return;
+    submitAvatarFile(avatarAttempt.file);
   };
   const saveCover = (key: string) => {
     setCoverOpen(false);
@@ -198,14 +221,21 @@ function MePage() {
   const openEdit = () => {
     setEditName(name);
     setEditOccupation(profile?.occupation ?? "");
+    setEditNameError(null);
     setEditOpen(true);
   };
   const saveEdit = () => {
     const dn = editName.trim();
     if (!dn) {
-      toast.error("Name can’t be empty.");
+      // G13: inline, field-level message (not just a toast) so the user
+      // sees exactly which field needs fixing, matching the pattern this
+      // dialog otherwise entirely lacked. Edits are already retained -- the
+      // dialog stays open either way -- this only makes the reason visible
+      // at the field itself.
+      setEditNameError("Name can’t be empty.");
       return;
     }
+    setEditNameError(null);
     const epoch = getIdentityEpoch(qc).epoch;
     updateProfile.mutate(
       { display_name: dn, occupation: editOccupation.trim() || null },
@@ -216,6 +246,9 @@ function MePage() {
           setEditOpen(false);
         },
         onError: (err) => {
+          // A genuine server/network rejection stays a toast -- unlike the
+          // empty-name case above, this isn't a locally-knowable failure
+          // mode, so there's no specific field to point at.
           if (isEpochCurrent(qc, epoch)) toast.error(err instanceof Error ? err.message : "Couldn’t save.");
         },
       },
@@ -273,21 +306,45 @@ function MePage() {
                 {demoSession ? (
                   <span className="inline-block rounded-full ring-4 ring-white">{avatarNode}</span>
                 ) : (
-                  <label
-                    className="group/av relative inline-block cursor-pointer rounded-full ring-4 ring-white"
-                    title="Change photo"
-                  >
-                    {avatarNode}
-                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-opacity group-hover/av:bg-black/35 group-hover/av:opacity-100">
-                      <Camera className="h-5 w-5" />
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="sr-only"
-                      onChange={(e) => onAvatarFile(e.target.files?.[0])}
-                    />
-                  </label>
+                  <div className="relative inline-block rounded-full ring-4 ring-white">
+                    <label
+                      className="group/av relative inline-block cursor-pointer rounded-full"
+                      title="Change photo"
+                    >
+                      {avatarNode}
+                      <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-opacity group-hover/av:bg-black/35 group-hover/av:opacity-100">
+                        <Camera className="h-5 w-5" />
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={(e) => onAvatarFile(e.target.files?.[0])}
+                      />
+                    </label>
+                    {/* G13: per-file upload feedback -- previously a failed
+                        upload gave only a toast, with no lasting indicator
+                        and no way to retry without re-picking the file. */}
+                    {avatarAttempt?.status === "uploading" ? (
+                      <span
+                        role="status"
+                        aria-label="Uploading photo"
+                        className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white"
+                      >
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      </span>
+                    ) : avatarAttempt?.status === "failed" ? (
+                      <button
+                        type="button"
+                        onClick={retryAvatarUpload}
+                        title="Upload failed — click to retry"
+                        className="absolute -bottom-1 -right-1 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        <span className="sr-only">Upload failed — retry</span>
+                      </button>
+                    ) : null}
+                  </div>
                 )}
                 <div className="min-w-0 pb-1">
                   <h1 className="text-[26px] font-semibold leading-tight text-black">{name}</h1>
@@ -324,9 +381,31 @@ function MePage() {
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {(
             [
-              { icon: Crown, tint: "bg-[#f0ebfd] text-[#975ee2]", value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.sorted), label: "Things sorted" },
-              { icon: BarChart3, tint: "bg-[#e6fcf0] text-[#12a15f]", value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.caught), label: "Things caught" },
-              { icon: Flame, tint: "bg-[#fef0e4] text-[#fd983f]", value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : stats.streak, label: "Current streak" },
+              {
+                icon: Crown,
+                tint: "bg-[#f0ebfd] text-[#975ee2]",
+                value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.sorted),
+                label: "Things sorted",
+                // G13: sorted/caught are activity-event counts (one per
+                // sort/catch), not distinct-Thing counts -- sorting the
+                // same Thing again counts again. Explained rather than
+                // silently left ambiguous.
+                hint: "Every sort counts, even on the same Thing twice",
+              },
+              {
+                icon: BarChart3,
+                tint: "bg-[#e6fcf0] text-[#12a15f]",
+                value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.caught),
+                label: "Things caught",
+                hint: "Every catch counts, even on the same Thing twice",
+              },
+              {
+                icon: Flame,
+                tint: "bg-[#fef0e4] text-[#fd983f]",
+                value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : stats.streak,
+                label: "Current streak",
+                hint: "Consecutive days with at least one Thing sorted",
+              },
               {
                 // G06: stats.weekly is a rolling 7-day window (now - 7
                 // days), not a calendar week -- "This week" implied a
@@ -335,6 +414,7 @@ function MePage() {
                 tint: "bg-[#eef1ff] text-[#2874f4]",
                 value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.weekly),
                 label: "Last 7 days",
+                hint: "Rolling 7-day window, not a calendar week",
               },
             ] as const
           ).map((s) => (
@@ -346,9 +426,10 @@ function MePage() {
               <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", s.tint)}>
                 <s.icon className="h-5 w-5" />
               </span>
-              <div>
+              <div className="min-w-0">
                 <div className="text-[22px] font-semibold leading-none text-black">{s.value}</div>
                 <div className="mt-1 text-[12px] text-[#6a769c]">{s.label}</div>
+                <div className="mt-0.5 text-[12px] leading-tight text-[#9aa3bd]">{s.hint}</div>
               </div>
             </div>
           ))}
@@ -460,9 +541,17 @@ function MePage() {
             Name
             <input
               value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              className="mt-1 h-10 w-full rounded-xl border border-border px-3 text-[13px] font-normal outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+              onChange={(e) => {
+                setEditName(e.target.value);
+                setEditNameError(null);
+              }}
+              aria-invalid={Boolean(editNameError)}
+              className={cn(
+                "mt-1 h-10 w-full rounded-xl border px-3 text-[13px] font-normal outline-none focus:ring-2 focus:ring-ring",
+                editNameError ? "border-destructive focus:border-destructive" : "border-border focus:border-primary",
+              )}
             />
+            {editNameError ? <p className="mt-1 text-[12px] font-normal text-destructive">{editNameError}</p> : null}
           </label>
           <label className="mt-3 block text-[12px] font-medium text-[#3d3f74]">
             Role / occupation
@@ -492,13 +581,23 @@ function MePage() {
         </DialogContent>
       </Dialog>
 
-      {panel ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 p-4" onClick={() => setPanel(null)}>
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-5" onClick={(e) => e.stopPropagation()}>
+      {/* G13: these four settings panels plus "Recently Shredded" were a
+          hand-rolled `fixed inset-0` backdrop + plain <div> -- no
+          role="dialog", no focus trap, no aria-labelledby, no Escape
+          handling beyond whatever the browser gave it for free. Moved to
+          the same accessible Dialog primitive "Edit profile" above already
+          uses; content/controls are unchanged, this is only the wrapper. */}
+      <Dialog open={panel !== null} onOpenChange={(open) => setPanel(open ? panel : null)}>
+        <DialogContent className="rounded-2xl bg-white p-5 sm:max-w-md">
+          <div>
             {panel === "shredded" ? (
               <>
-                <h2 className="text-[15px] font-semibold">Recently Shredded</h2>
-                <p className="mt-1 text-[12px] text-muted-foreground">Restore something you shredded from your surfaces.</p>
+                <DialogHeader>
+                  <DialogTitle className="text-[15px] font-semibold">Recently Shredded</DialogTitle>
+                  <DialogDescription className="text-[12px]">
+                    Restore something you shredded from your surfaces.
+                  </DialogDescription>
+                </DialogHeader>
                 {trophyReadState === "error" || trophyReadState === "loading" ? (
                   <p className="mt-4 text-[13px] text-muted-foreground">{trophyReadState === "loading" ? "Loading Shred history…" : "Shred history unavailable. Retry from the Trophy section."}</p>
                 ) : stats.shredded.length === 0 ? (
@@ -526,8 +625,14 @@ function MePage() {
               </>
             ) : (
               <>
-                <h2 className="text-[15px] font-semibold">{settingsRows.find((s) => s.id === panel)?.title}</h2>
-                <p className="mt-1 text-[12px] text-muted-foreground">{settingsRows.find((s) => s.id === panel)?.body}</p>
+                <DialogHeader>
+                  <DialogTitle className="text-[15px] font-semibold">
+                    {settingsRows.find((s) => s.id === panel)?.title}
+                  </DialogTitle>
+                  <DialogDescription className="text-[12px]">
+                    {settingsRows.find((s) => s.id === panel)?.body}
+                  </DialogDescription>
+                </DialogHeader>
                 {panel === "appearance" ? (
                   <label className="mt-4 flex items-center justify-between text-[13px]">
                     Reduced motion
@@ -598,8 +703,8 @@ function MePage() {
               Close
             </button>
           </div>
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }

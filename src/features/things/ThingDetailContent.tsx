@@ -54,6 +54,7 @@ import { useLocalVersion } from "./use-local-version";
 import { type ThingFile } from "@/features/things/PDFViewer";
 import { markThingAsRead } from "@/features/things/read-state";
 import { processFileForUpload } from "@/lib/file-utils";
+import { acquireBlobUrl, releaseBlobUrl } from "@/lib/owned-file-resources";
 import { ThingIdentityHeader } from "./components/ThingIdentityHeader";
 import { ThingStatusControls } from "./components/ThingStatusControls";
 import { ThingAttachments } from "./components/ThingAttachments";
@@ -325,6 +326,11 @@ export function ThingDetailContent({
         }
       }
       if (newFiles.length === 0) return;
+      // H04: acquired under the Thing these files were actually picked
+      // for, regardless of which branch below ends up storing them --
+      // matches the draft-slot scoping already used for the comment draft
+      // itself (session-drafts.ts keys on the same targetThingId).
+      for (const f of newFiles) acquireBlobUrl(f.url, `thing-comment:${targetThingId}`);
       // R-02: still mounted AND still showing the Thing these files were
       // picked for -- update live state directly; the write-through effect
       // below persists it to the draft on the next render, same as before.
@@ -622,7 +628,11 @@ export function ThingDetailContent({
     );
 
   const handleRemoveCommentAttachment = (id: string) =>
-    setCommentAttachments((prev) => prev.filter((f) => f.id !== id));
+    setCommentAttachments((prev) => {
+      const removed = prev.find((f) => f.id === id);
+      if (removed && thing?.id) releaseBlobUrl(removed.url, `thing-comment:${thing.id}`);
+      return prev.filter((f) => f.id !== id);
+    });
 
   if (variant === "court") {
     const displayFiles: ThingFile[] =

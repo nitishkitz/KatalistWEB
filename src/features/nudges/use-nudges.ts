@@ -32,6 +32,12 @@ function asRow(t: Thing, group: NudgeGroup, canNudge: boolean, reason: string, d
   };
 }
 
+// A nudge stops mattering for cooldown/"recent activity" purposes once it's
+// this old -- shared by the history query's own fetch window (below) and
+// the eligibility/"recent" derivation, so neither can silently disagree
+// about what "recent" means.
+const COOLDOWN_MS = 120 * 60 * 1000;
+
 function groupThing(t: Thing, recently: boolean): { group: NudgeGroup; reason: string } {
   if (t.acknowledgement === "waiting_for_catch") return { group: "waiting_for_catch", reason: "Waiting for Catch" };
   if (recently) return { group: "recently_nudged", reason: "Recently nudged" };
@@ -66,12 +72,24 @@ export function useNudges() {
     queryKey: keys.nudgeHistory(user?.id, context),
     enabled: liveAuth,
     queryFn: async ({ signal }) => {
+      // "Recent nudge activity" is defined as "still within the cooldown
+      // window" (below), never an open-ended history log -- so the fetch
+      // itself is bounded by that same time window rather than an arbitrary
+      // row count. A row-count limit here previously meant a busy context
+      // (more than 40 nudges anywhere in the last two hours) could silently
+      // drop a still-in-cooldown nudge from both the "recent" list and the
+      // eligibility check, purely because something else got nudged more
+      // recently -- not because it actually fell out of cooldown. The
+      // generous `.limit(500)` below is a defensive sanity bound, not a
+      // pagination page size: it should never actually bind in practice.
+      const cutoffIso = new Date(Date.now() - COOLDOWN_MS).toISOString();
       const { data, error } = await withReadDeadline(signal, async (combined) =>
         supabase
           .from("nudges")
           .select("id, thing_id, created_at, reason, to_actor_id")
+          .gte("created_at", cutoffIso)
           .order("created_at", { ascending: false })
-          .limit(40)
+          .limit(500)
           .abortSignal(combined),
       );
       if (error) throw error;
@@ -84,7 +102,6 @@ export function useNudges() {
     const recent: RecentNudge[] = [];
     const allowed = new Set((nudgeable.data ?? []).map((n) => n.thing_id));
     const reasonByThing = new Map((nudgeable.data ?? []).map((n) => [n.thing_id, n.reason as NudgeReason]));
-    const COOLDOWN_MS = 120 * 60 * 1000;
     const latestByThing = new Map<string, { created_at: string; reason: string }>();
     for (const n of history.data ?? []) {
       if (!latestByThing.has(n.thing_id)) latestByThing.set(n.thing_id, { created_at: n.created_at, reason: n.reason });

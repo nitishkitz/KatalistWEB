@@ -15,6 +15,7 @@ import { parseToss, tossBlockedByPerson } from "./parse-toss";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import type { ThingFile, Person } from "@/domain/thing";
 import { processFileForUpload, formatFileSize } from "@/lib/file-utils";
+import { acquireBlobUrl, releaseBlobUrl, releaseAllBlobUrlsForOwner } from "@/lib/owned-file-resources";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
@@ -50,6 +51,11 @@ export function MagicBox({
   // switching to Work. A List-scoped composer keys off the List instead,
   // since it never changes context underneath the same instance.
   const draftEntityId = listId ? `list:${listId}` : `court:${context}`;
+  // H04: scopes blob-URL ownership to this composer's own draft slot, not
+  // to component mount lifecycle -- unmounting (e.g. navigating away) must
+  // never revoke a retained draft's attachment preview, only an explicit
+  // remove or a genuinely completed/cleared Toss should.
+  const fileOwnerKey = `magic-box:${draftEntityId}`;
   // T09 fix: file processing and Toss are async and can outlive a
   // destination switch (Work<->Home, or a different List) that happens
   // while they're in flight -- without this guard, a slow upload or Toss
@@ -179,6 +185,7 @@ export function MagicBox({
       // upload landing here would silently append a file to whatever
       // List/context the user has since switched to.
       if (epochRef.current !== opEpoch) return;
+      acquireBlobUrl(processed.url, fileOwnerKey);
       setAttachedFiles((prev) => [...prev, processed]);
       applyFirstAsTitleIfEmpty(processed);
     } catch (err) {
@@ -220,7 +227,11 @@ export function MagicBox({
   };
 
   const removeAttachedFile = (fileId: string) => {
-    setAttachedFiles((prev) => prev.filter((f) => f.id !== fileId));
+    setAttachedFiles((prev) => {
+      const removed = prev.find((f) => f.id === fileId);
+      if (removed) releaseBlobUrl(removed.url, fileOwnerKey);
+      return prev.filter((f) => f.id !== fileId);
+    });
   };
 
   const removeFailedAttachment = (opId: string) => {
@@ -500,6 +511,11 @@ export function MagicBox({
         // success or a fresh edit (see the input's onChange) clears it.
         if (!hasPartialFailure) {
           setValue("");
+          // A fully successful Toss is done with these local blob previews
+          // -- the created Thing's own files are a separate, durable
+          // concern (a JSON snapshot of `attachedFiles` at capture time)
+          // and no longer need this tab's temporary object URLs alive.
+          releaseAllBlobUrlsForOwner(fileOwnerKey);
           setAttachedFiles([]);
           setFailedAttachments([]);
         }
@@ -818,7 +834,7 @@ export function MagicBox({
           "flex items-center gap-2.5 transition-opacity duration-200",
           desktop
             ? "h-[50px] rounded-[10px] border border-[#975ee2]/25 bg-white px-3 font-composer hover:border-[#975ee2]/40 transition-all"
-            : "rounded-xl border border-border bg-card px-1.5",
+            : "h-12 rounded-xl border border-border bg-card px-1.5",
           tossed && "opacity-60",
         )}
         style={desktop ? { boxShadow: "0 10px 30px -14px rgba(151,94,226,0.35)" } : undefined}
@@ -829,7 +845,7 @@ export function MagicBox({
             The mirror div renders @person #list /bucket tokens as colored bold
             spans. The real <input> sits on top with color:transparent so only
             the blinking caret is visible. Font metrics must match exactly. */}
-        <div className="relative flex-1 h-full">
+        <div className="relative min-w-0 flex-1 h-full">
           {/* Mirror — purely visual, no interaction */}
           <div
             aria-hidden="true"
@@ -996,7 +1012,7 @@ export function MagicBox({
               }}
               title={isMac ? "Press ⌘K to activate" : "Press Ctrl+K to activate"}
               aria-label={isMac ? "Focus Magic Box (⌘K)" : "Focus Magic Box (Ctrl+K)"}
-              className="hidden sm:inline-flex items-center rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[12px] font-medium text-slate-500 cursor-pointer select-none hover:bg-slate-100 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="hidden sm:inline-flex min-h-8 items-center rounded border border-slate-200 bg-slate-50 px-2 text-[12px] font-medium text-slate-500 cursor-pointer select-none hover:bg-slate-100 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <kbd className="font-medium">{isMac ? "⌘ K" : "Ctrl K"}</kbd>
             </button>
@@ -1008,14 +1024,6 @@ export function MagicBox({
               title="Attach files (photos, videos, doc, excel, etc.)"
             >
               <Paperclip className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Voice input"
-              title="Voice input"
-            >
-              <KatalistIcon name="mic" className="h-4 w-4" />
             </button>
             {value ? (
               <button
@@ -1048,7 +1056,7 @@ export function MagicBox({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              className="flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               aria-label="Attach file"
               title="Attach files (photos, videos, doc, excel, etc.)"
             >
@@ -1056,10 +1064,13 @@ export function MagicBox({
             </button>
             <button
               type="button"
-              className="flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-              aria-label="Voice input"
+              disabled={!canToss}
+              onClick={() => void mutation.mutate()}
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground outline-none transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Toss Thing"
+              title="Toss Thing"
             >
-              <KatalistIcon name="mic" className="h-4 w-4" />
+              Toss
             </button>
           </div>
         )}

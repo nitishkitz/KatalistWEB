@@ -13,16 +13,18 @@ import { defineConfig, devices } from "@playwright/test";
  *
  *  - "staging" projects are for the plan's own authenticated, live-data
  *    checks (Capture->Catch->Sort, two real accounts, actual realtime
- *    reconnect, etc.) and are SKIPPED unless KATALIST_STAGING_BASE_URL,
- *    KATALIST_TEST_ACCOUNT_EMAIL and KATALIST_TEST_ACCOUNT_PASSWORD are
- *    all set -- per the plan's own instruction, staging tests require
- *    explicit test-account configuration, never production defaults, and
- *    must never run with real user data.
+ *    reconnect, etc.) and are registered only when the deployment URL,
+ *    Supabase URL/key, disposable credentials, and an explicit isolated-
+ *    environment acknowledgement are all set. This prevents accidental
+ *    runs against an unverified project or customer account.
  */
 const STAGING_CONFIGURED = Boolean(
-  process.env.KATALIST_STAGING_BASE_URL &&
+  process.env.KATALIST_STAGING_ISOLATED === "true" &&
+    process.env.KATALIST_STAGING_BASE_URL &&
     process.env.KATALIST_TEST_ACCOUNT_EMAIL &&
-    process.env.KATALIST_TEST_ACCOUNT_PASSWORD,
+    process.env.KATALIST_TEST_ACCOUNT_PASSWORD &&
+    process.env.KATALIST_STAGING_SUPABASE_URL &&
+    process.env.KATALIST_STAGING_SUPABASE_PUBLISHABLE_KEY,
 );
 
 // T00: an isolated, configurable port (not the developer's own `npm run dev`
@@ -54,7 +56,7 @@ export default defineConfig({
   // T00: a freshly-started (not long-lived/warmed) local dev server's SSR
   // module compilation is a real bottleneck under this suite's default
   // worker concurrency -- confirmed directly: even after global-setup's
-  // sequential warm-up, running all five viewport projects together at
+  // sequential warm-up, running the viewport projects together at
   // default worker count still flaked on the same first-navigation routes
   // roughly 2 of 3 runs, while `workers: 1` passed reliably every time.
   // This suite is small/fast enough that serializing it locally costs
@@ -73,11 +75,13 @@ export default defineConfig({
       testDir: "./tests/e2e/preview",
       use: { ...devices["Desktop Chrome"], viewport: VIEWPORTS.desktop, baseURL: E2E_BASE_URL },
     },
-    {
-      name: "preview-mobile",
-      testDir: "./tests/e2e/preview",
-      use: { ...devices["Pixel 7"], viewport: VIEWPORTS.mobile, baseURL: E2E_BASE_URL },
-    },
+    ...(process.env.KATALIST_INCLUDE_PHONE_VIEWPORT === "true"
+      ? [{
+          name: "preview-mobile",
+          testDir: "./tests/e2e/preview",
+          use: { ...devices["Pixel 7"], viewport: VIEWPORTS.mobile, baseURL: E2E_BASE_URL },
+        }]
+      : []),
     {
       name: "preview-tablet-portrait",
       testDir: "./tests/e2e/preview",

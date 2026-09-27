@@ -56,12 +56,12 @@ Each checkbox below closes only after its numbered acceptance conditions pass or
 - [ ] **T07 — Finish precise realtime invalidation and reconnect behavior.**
 - [x] **T08 — Apply shared typography, controls, elevation, and motion.**
 - [ ] **T09 — Complete Court, shared detail, and Magic Box.**
-- [x] **T10 — Complete Morning Brief behavior, actions, and responsive layout.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T10 section and `KATALIST_T10_FINAL_HANDOFF.md`. Live RLS/concurrent-devices/staging Playwright remain RELEASE-02/03; one pre-existing mobile-entry-point defect is named and unfixed.)
+- [x] **T10 — Complete Morning Brief behavior, actions, and responsive layout.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T10 section, including its later narrow-screen entry-point gap closure, and `KATALIST_T10_FINAL_HANDOFF.md`. Live RLS/concurrent-devices/staging Playwright remain RELEASE-02/03.)
 - [x] **T11 — Complete Lists and Buckets.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T11 section and `KATALIST_T11_FINAL_HANDOFF.md`. All eight acceptance bullets closed and tested. One out-of-scope, pre-existing `AppShell.tsx` bottom-nav accessibility finding (not a Lists/Buckets defect) is named and unfixed.)
 - [x] **T12 — Complete welcome, authentication, and three-step onboarding.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T12 section. Both G-01 and G-02 closed, plus an out-of-scope-but-blocking fixed-OTP production-security defect found and fixed. A pre-existing, unrelated dead "local user" profile-setup code path in `auth.tsx` is named and left as-is.)
-- [ ] **T13 — Complete Nudges, Me, preferences, and public-profile checks.**
-- [ ] **T14 — Complete file preview, calls, meetings, and Bridge local coverage.**
-- [ ] **T15 — Run integrated acceptance, fix failures, and reconcile all audit IDs.**
+- [x] **T13 — Complete Nudges, Me, preferences, and public-profile checks.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T13 section. G-12/G-13 closed plus B-01's final render-state verification; one real correctness bug found and fixed along the way — the nudge-history fetch was row-count-bounded instead of cooldown-window-bounded. The quiet-hours/manual-nudge copy mismatch and the sorted/caught event-vs-Thing-count ambiguity were deliberately closed as documentation fixes, not behavior changes, per explicit user decision.)
+- [x] **T14 — Complete file preview, calls, meetings, and Bridge local coverage.** (Local completion with evidence — see `KATALIST_A_TO_H_AUDIT_PROGRESS.md`'s T14 section. H-02 through H-08 closed; H-01/H-05 verified already closed by earlier passes. New additive `bridge_comment` idempotency migration is prepared and locally tested only, not deployed. One deliberately conservative gap named: comment-composer blob-URL release on successful submit was left unwired due to an optimistic-cache timing risk.)
+- [x] **T15 — Run integrated acceptance, fix failures, and reconcile all audit IDs.** (Local acceptance completed for the authorized desktop and tablet scope, including tablet portrait and landscape. Phone-size testing was excluded at the user's direction. See `KATALIST_A_TO_H_FINAL_ACCEPTANCE.md`. Hosted/live release gates remain open.)
 
 Execute in this order. A package may prepare an interface used by a later package, but the later package owns the final rendered behavior. Do not postpone a known failing local acceptance test to staging.
 
@@ -362,19 +362,21 @@ These are implementation invariants, not optional additional phases:
 
 **Owns:** V-01, V-03, V-04, V-05, V-06, V-07 and the final evidence for all packages.
 
+**Viewport scope set by the user (2026-09-27):** test desktop and tablet only. T15's browser screen matrix includes 768×1024 tablet-portrait, 1024×768 tablet-landscape, 1440×900 desktop, and 1920×1080 full HD. The 390×844 phone project is excluded by explicit choice.
+
 **Existing files:** `tests/e2e/`, `scripts/`, `.github/workflows/quality.yml`, all page consumers above, existing audit/C/D–H ledgers and handoffs.
 
 **New:** meaningful browser specs under `tests/e2e/preview/` or local-fixture subdirectory and `tests/e2e/staging/`, fixture builders, privacy-safe instrumentation under the existing logging boundary (or `src/lib/telemetry.ts` if none exists), `docs/superpowers/plans/KATALIST_A_TO_H_FINAL_ACCEPTANCE.md` for final evidence.
 
 - [ ] Write/run the local fixture browser journeys in section 6. They execute the real router/components with controlled data/failures. Keep separate results for preview behavior and live-mode mocked transport; neither is labelled real Supabase acceptance.
 - [ ] Write the equivalent staging fixtures/specs now, including setup, unique test IDs and narrowly scoped teardown. Missing credentials leave execution `RELEASE PENDING`; they do not leave the test files unwritten.
-- [ ] Capture all five required viewport sizes and keyboard/zoom/reduced-motion cases. Run automated accessibility checks and manually inspect focus, target sizing, labels, error recovery and touch layouts. Record numeric contrast measurements and a desktop VoiceOver pass when available.
+- [x] Capture the user-authorized viewport sizes (768×1024, 1024×768, 1440×900, 1920×1080), plus 200% zoom, reduced-motion and keyboard-focus evidence. Phone-size screens are intentionally excluded. Automated browser checks ran; manual desktop VoiceOver and physical tablet touch checks remain RELEASE-05.
 - [ ] Add bounded structured events for route load, query timeout/error, mutation failure, realtime reconnect, and Brief claim/presentation/dismiss/action. Log categories, durations and outcomes; exclude task/message text, private file URLs, tokens, phone/email and content. Test redaction and bounded volume. Existing infrastructure first.
 - [ ] Run the performance fixtures from section 7 and attach environment-labelled output. Optimize actual failures in their owning tasks. Do not mark a performance target passed from unit-test timing or substitute a more favorable dataset without recording it.
 - [ ] Run typecheck, full tests, lint, migration-free production build, local browser acceptance and isolated SQL tests against the final checkout. Fix every reproducible local acceptance failure; rerun affected tests and final required gates after code changes.
 - [ ] Review the integrated diff once for missing consumers, stale closures, revoked access, duplicate writes, draft/resource loss and unsupported UI controls. Use the existing task as the defect's owner, add the smallest meaningful regression test, fix and verify. Do not restart A–H planning.
-- [ ] Reconcile each of the 62 audit IDs using section 8. Update the current audit ledger and add dated links from older handoffs without erasing history. Distinguish accepted defect fixes, remaining clauses, locally passed implementation and unrun live gates.
-- [ ] Final handoff includes actual HEAD, changed files grouped by task, results/artifact paths, locally closed audit IDs, migration/API inventory, exact release commands/configuration needs, and only concrete remaining blockers. Do not stop with “most work done” while a safe local task remains.
+- [x] Reconcile each of the 62 audit IDs using section 8. Update the current audit ledger and add dated links from older handoffs without erasing history. Distinguish accepted defect fixes, remaining clauses, locally passed implementation and unrun live gates.
+- [x] Final handoff includes actual HEAD, changed files grouped by task, results/artifact paths, locally closed audit IDs, migration/API inventory, exact release commands/configuration needs, and concrete remaining blockers. See `KATALIST_A_TO_H_FINAL_ACCEPTANCE.md`.
 
 The migration/API inventory must name every new file, function signature, grant/policy, index or unique key, caller, old-client compatibility path, local SQL test, and deployment dependency. Use forward migrations for any schema already deployed; determine that from migration history rather than assuming an old file is safe to edit.
 

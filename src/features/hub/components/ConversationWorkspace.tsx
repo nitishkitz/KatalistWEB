@@ -43,7 +43,15 @@ export function ConversationWorkspace({
   const qc = useQueryClient();
   const { user } = useSession();
   const online = usePresence();
-  const { conversation, isLoading: conversationLoading } = useConversation(listId);
+  const { conversation, isLoading: conversationLoading, error: conversationError, refetch: refetchConversation } = useConversation(listId);
+  // B-03/C-06: a revoked membership resolves as a successful, empty RLS
+  // read (no thrown error at all -- see use-conversations.ts's own
+  // `.maybeSingle()` comment), identically to a genuinely deleted List --
+  // `conversation` settles to null either way. A genuinely transient
+  // fetch failure (network blip) is the one case still worth a real Retry
+  // rather than the permanent "no longer available" message.
+  const conversationGone = !conversationLoading && !conversation && !conversationError;
+  const conversationLoadFailed = !conversationLoading && !conversation && Boolean(conversationError);
   const { lists } = useLists();
   const chat = useListMessages(listId);
   const systemHistory = useListSystemHistory(listId, tab === "call");
@@ -467,6 +475,30 @@ export function ConversationWorkspace({
           ) : null}
         </div>
       )}
+
+      {/* B-03/C-06: the conversation-metadata header (title/member count
+          above) falls back to generic placeholder text when `conversation`
+          is null, which previously happened silently for a revoked
+          membership or a genuinely deleted List -- the chat/files panels
+          below already correctly self-detect and surface this via their
+          own `accessLost`/`error` state (see ListChatPanel.tsx/
+          HubFilesPanel.tsx), but the header itself gave no indication.
+          This banner makes the header-level state truthful too, without
+          touching the already-correct body panels. */}
+      {conversationGone || conversationLoadFailed ? (
+        <div role="alert" className="flex items-center justify-between gap-3 border-b border-[#eef0f6] bg-amber-50 px-4 py-2 text-[12.5px] text-amber-900">
+          <span>
+            {conversationGone
+              ? "This conversation is no longer available."
+              : "Couldn't confirm this conversation is still available."}
+          </span>
+          {conversationLoadFailed ? (
+            <button type="button" onClick={() => void refetchConversation()} className="shrink-0 font-semibold underline">
+              Retry
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Body */}
       <div className="flex min-h-0 flex-1 flex-col">

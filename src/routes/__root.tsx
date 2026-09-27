@@ -7,7 +7,8 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { logTelemetryEvent, telemetryScopeForPath } from "@/lib/telemetry";
 
 import { Toaster } from "@/components/ui/sonner";
 import { ProfileDirectoryProvider } from "@/features/people/ProfileDirectoryProvider";
@@ -137,6 +138,37 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+/** V-05: route path (scope tag only, never the full URL/query string) plus
+ *  load duration, using the router's own onBeforeLoad/onLoad pair -- this
+ *  is the data-fetching span specifically, not the full navigation
+ *  (which also includes render). */
+function RouteLoadTelemetry() {
+  const router = useRouter();
+  const startedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const unsubBefore = router.subscribe("onBeforeLoad", () => {
+      startedAtRef.current = performance.now();
+    });
+    const unsubAfter = router.subscribe("onLoad", (event) => {
+      const startedAt = startedAtRef.current;
+      startedAtRef.current = null;
+      logTelemetryEvent({
+        category: "route_load",
+        outcome: "success",
+        scope: telemetryScopeForPath(event.toLocation.pathname),
+        durationMs: startedAt != null ? Math.round(performance.now() - startedAt) : undefined,
+      });
+    });
+    return () => {
+      unsubBefore();
+      unsubAfter();
+    };
+  }, [router]);
+
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -148,6 +180,7 @@ function RootComponent() {
           guarantee as routed content, rather than resting solely on
           their own independent user?.id-keyed effects. */}
       <MotionPreferenceApplier />
+      <RouteLoadTelemetry />
       <IdentityBoundary>
         {/* P7: mounted once here, inside the remounted subtree, instead of
             once per AppShell instance -- route transitions never multiply

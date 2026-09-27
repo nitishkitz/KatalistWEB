@@ -29,6 +29,8 @@ import { CourtDetailModal } from "./CourtDetailModal";
 import type { CourtFocusSelection } from "./court-stack-model";
 import type { FocusViewTabId } from "./court-stack-model";
 import { KatalistIcon } from "./KatalistIcon";
+import { classifyAsyncError } from "@/lib/query-policy";
+import { logTelemetryEvent } from "@/lib/telemetry";
 import {
   DEFAULT_COURT_FILTERS,
   applyCourtView,
@@ -436,6 +438,7 @@ export function CourtDesktop({
   // usual detail modal; no hero animation (the origin card lives in the overlay).
   const openCatchUpThing = (thing: Thing) => {
     morningBrief.dismiss();
+    logTelemetryEvent({ category: "brief_action", outcome: "success", scope: "morning-brief" });
     setHeroRect(null);
     const lane: FocusViewTabId = thing.assignee.id === myActorId ? laneOf(thing) : "theirs";
     setModalSelection({ lane, thing });
@@ -492,21 +495,41 @@ export function CourtDesktop({
   }, []);
 
   if (error) {
+    // B-03: an expired/confirmed-unauthenticated session is not a transient
+    // load failure -- retrying the same request will just fail again the
+    // same way, since it's the identity, not the network, that's the
+    // problem. Court has no meaningful "forbidden"/"not-found" case (it is
+    // always the viewer's own Things), so unauthenticated is the one
+    // access-loss kind worth distinguishing here.
+    const unauthenticated = classifyAsyncError(error) === "unauthenticated";
     return (
       <div className="hidden lg:block">
         <section className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-border bg-white px-8 text-center">
           <KatalistIcon name="stuck" className="h-7 w-7 text-status-now" />
-          <h2 className="mt-3 text-sm font-semibold">The Court could not be loaded.</h2>
+          <h2 className="mt-3 text-sm font-semibold">
+            {unauthenticated ? "Your session has ended." : "The Court could not be loaded."}
+          </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Your Things are unchanged. Try loading the Court again.
+            {unauthenticated
+              ? "Your Things are unchanged. Sign in again to keep going."
+              : "Your Things are unchanged. Try loading the Court again."}
           </p>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="mt-4 h-10 rounded-lg border border-primary px-4 text-xs font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            Retry
-          </button>
+          {unauthenticated ? (
+            <a
+              href="/auth"
+              className="mt-4 h-10 rounded-lg border border-primary px-4 text-xs font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring inline-flex items-center"
+            >
+              Sign in
+            </a>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="mt-4 h-10 rounded-lg border border-primary px-4 text-xs font-semibold text-primary outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Retry
+            </button>
+          )}
         </section>
       </div>
     );
@@ -532,7 +555,7 @@ export function CourtDesktop({
                   aria-pressed={isActive}
                   onClick={() => setDetailedFilter("quick", id)}
                   className={cn(
-                    "rounded-full px-3 py-1 text-[13px] transition-colors outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
+                    "inline-flex min-h-8 items-center rounded-full px-3 py-1 text-[13px] transition-colors outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
                     isActive
                       ? "bg-[#ece7fe] text-[#503188] font-medium"
                       : "text-[#1d1d1d] hover:text-[#503188] font-normal",
@@ -562,7 +585,7 @@ export function CourtDesktop({
                       }));
                     }}
                     className={cn(
-                      "flex items-center gap-1.5 rounded-full border px-2 py-1 !rounded-full h-7 transition-all duration-200 outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
+                      "flex h-8 min-h-8 items-center gap-1.5 rounded-full border px-2 py-1 !rounded-full transition-all duration-200 outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring",
                       isActive
                         ? "border-primary bg-primary/10 ring-2 ring-primary ring-offset-2 scale-110 "
                         : "border-border/80 hover:border-primary/45 opacity-75 hover:opacity-100 hover:scale-105",
@@ -585,7 +608,7 @@ export function CourtDesktop({
                 <button
                   type="button"
                   onClick={() => setFilters((current) => ({ ...current, personId: null }))}
-                  className="ml-1 inline-flex h-5 items-center rounded-full bg-primary/10 px-1.5 text-[12px] font-semibold text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+                  className="ml-1 inline-flex h-8 min-h-8 items-center rounded-full bg-primary/10 px-2 text-[12px] font-semibold text-primary hover:bg-primary/20 transition-colors cursor-pointer"
                   title="Clear person filter"
                 >
                   ✕ Clear
@@ -617,14 +640,14 @@ export function CourtDesktop({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search Court"
-              className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
+              className="min-h-8 min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground"
               aria-label="Search Court"
             />
             {query ? (
               <button
                 type="button"
                 onClick={() => setQuery("")}
-                className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex h-8 w-8 items-center justify-center rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Clear search"
                 title="Clear search"
               >

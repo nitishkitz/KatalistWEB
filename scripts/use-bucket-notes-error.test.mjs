@@ -15,6 +15,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 let notesResult = { data: null, error: null };
+let observedSignal = null;
 
 mock.module("@/hooks/useSession", { namedExports: { useSession: () => ({ user: { id: "profile-1" } }) } });
 mock.module("@/integrations/supabase/client", {
@@ -25,7 +26,11 @@ mock.module("@/integrations/supabase/client", {
           select: () => node,
           eq: () => node,
           is: () => node,
-          order: async () => notesResult,
+          order: () => node,
+          abortSignal: async (signal) => {
+            observedSignal = signal;
+            return notesResult;
+          },
         };
         return node;
       },
@@ -85,6 +90,7 @@ test("a successful read with real rows has no error and maps rows correctly", as
   assert.equal(latest.error, null);
   assert.equal(latest.notes.length, 1);
   assert.equal(latest.notes[0].title, "Title");
+  assert.ok(observedSignal instanceof AbortSignal, "the notes read receives the query/deadline cancellation signal");
 
   cleanup();
   qc.clear();

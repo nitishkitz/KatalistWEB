@@ -149,12 +149,41 @@ export async function processFileForUpload(file: File): Promise<ThingFile> {
   };
 }
 
-export function downloadFile(file: { name: string; url?: string }) {
-  if (!file.url) return;
+function clickAnchor(href: string, downloadName: string): void {
   const link = document.createElement("a");
-  link.href = file.url;
-  link.download = file.name;
+  link.href = href;
+  link.download = downloadName;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+/**
+ * H03: a bare anchor click reports nothing -- a dead/expired URL, a CORS
+ * failure, or a network error all looked identical to "download started" to
+ * the caller. `blob:`/`data:` URLs are already local content with nothing to
+ * fetch, so those still go straight to the anchor; a real network fetch is
+ * only meaningful (and only where failure can actually be observed) for a
+ * remote URL.
+ */
+export async function downloadFile(file: { name: string; url?: string }): Promise<void> {
+  if (!file.url) throw new Error("No file URL available.");
+  if (file.url.startsWith("blob:") || file.url.startsWith("data:")) {
+    clickAnchor(file.url, file.name);
+    return;
+  }
+  const response = await fetch(file.url);
+  if (!response.ok) {
+    throw new Error(`Download failed (${response.status}).`);
+  }
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    clickAnchor(objectUrl, file.name);
+  } finally {
+    // Give the browser a moment to pick up the download before revoking --
+    // revoking synchronously can race the anchor's own navigation in some
+    // browsers.
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  }
 }

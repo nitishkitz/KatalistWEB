@@ -25,6 +25,7 @@ import {
   type MorningBriefClaimResult,
 } from "./morning-brief-receipts";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { logTelemetryEvent } from "@/lib/telemetry";
 
 /**
  * F01/F04/T10-03: wires the pure schedule model (morning-brief-schedule.ts),
@@ -339,6 +340,7 @@ export function useMorningBrief(): UseMorningBrief {
           return;
         }
         recordPresented(scope);
+        logTelemetryEvent({ category: "brief_claim", outcome: result.claimed ? "success" : "failure", scope: "morning-brief" });
         const stillEligible =
           !hasBlockingInteractionRef.current &&
           !isTabHiddenRef.current &&
@@ -350,6 +352,7 @@ export function useMorningBrief(): UseMorningBrief {
           result.localDate === scope.localDate;
         if (result.claimed && stillEligible) {
           setOpenForScope(scope);
+          logTelemetryEvent({ category: "brief_presentation", outcome: "success", scope: "morning-brief" });
         }
       } catch (err) {
         if (!mountedRef.current || !isOwner()) return;
@@ -384,6 +387,7 @@ export function useMorningBrief(): UseMorningBrief {
         // or a manual retry surface) can re-attempt -- but nothing here
         // schedules its own automatic retry, so this can never retry-storm.
         entry.status = "idle";
+        logTelemetryEvent({ category: "brief_claim", outcome: "failure", scope: "morning-brief" });
         console.error("Morning Brief claim failed", err);
       }
     },
@@ -487,21 +491,29 @@ export function useMorningBrief(): UseMorningBrief {
     if (!scope) return;
     if (scope.identityKind === "preview") {
       dismissMorningBriefPreview(scope.identityId, scope.context, scope.localDate);
+      logTelemetryEvent({ category: "brief_dismiss", outcome: "success", scope: "morning-brief" });
     } else {
-      void dismissMorningBriefLive(scope.context, scope.timezone, scope.localDate).catch((err) => {
-        // Best-effort: a failed dismissal must not resurrect "not yet
-        // shown today" (it never un-claims), and must not repeat an
-        // already-successful Thing action -- there is none here, this
-        // only ever records a timestamp.
-        console.error("Morning Brief dismiss failed", err);
-      });
+      void dismissMorningBriefLive(scope.context, scope.timezone, scope.localDate).then(
+        () => logTelemetryEvent({ category: "brief_dismiss", outcome: "success", scope: "morning-brief" }),
+        (err) => {
+          // Best-effort: a failed dismissal must not resurrect "not yet
+          // shown today" (it never un-claims), and must not repeat an
+          // already-successful Thing action -- there is none here, this
+          // only ever records a timestamp.
+          logTelemetryEvent({ category: "brief_dismiss", outcome: "failure", scope: "morning-brief" });
+          console.error("Morning Brief dismiss failed", err);
+        },
+      );
     }
   }, [openForScope, currentScope]);
 
   const reopen = useCallback(() => {
     // Deliberately does not touch the receipt at all -- see the type's own
     // doc comment on `reopen`. Only opens for a real, current scope.
-    if (currentScope) setOpenForScope(currentScope);
+    if (currentScope) {
+      setOpenForScope(currentScope);
+      logTelemetryEvent({ category: "brief_presentation", outcome: "success", scope: "morning-brief-manual" });
+    }
   }, [currentScope]);
 
   return { open, dismiss, reopen, alreadyPresentedToday };

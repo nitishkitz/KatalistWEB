@@ -30,6 +30,9 @@ let createdRooms = [];
 // CallRoom's own lower-level closed-check separately).
 let joinGate = null;
 
+let rejectErrorName = "NotAllowedError";
+let lastJoinConstraints = null;
+
 class FakeCallRoom {
   constructor(opts) {
     this.opts = opts;
@@ -37,10 +40,11 @@ class FakeCallRoom {
     lastRoom = this;
     createdRooms.push(this);
   }
-  async join() {
+  async join(constraints) {
+    lastJoinConstraints = constraints;
     if (joinGate) await joinGate;
     if (joinBehavior === "reject") {
-      const err = new DOMException("denied", "NotAllowedError");
+      const err = new DOMException("denied", rejectErrorName);
       throw err;
     }
     return { getTracks: () => [], getVideoTracks: () => [] };
@@ -124,6 +128,7 @@ test("a peer going disconnected surfaces as reconnecting, and recovers back to c
 
 test("a join() permission failure surfaces as error with a specific message, and leaves idle (not ended)", async () => {
   joinBehavior = "reject";
+  rejectErrorName = "NotAllowedError";
   let latest = null;
   await act(async () => {
     renderProbe((v) => (latest = v));
@@ -134,7 +139,90 @@ test("a join() permission failure surfaces as error with a specific message, and
   });
   assert.equal(latest.call.lifecycle, "error");
   assert.match(latest.call.lastError ?? "", /permission/i);
+  assert.equal(latest.call.lastErrorKind, "denied");
   assert.equal(latest.isBlocked, false, "a call that never connected must not hold the blocker");
+
+  cleanup();
+});
+
+test("H06: join() defaults to requesting video, and join({audioOnly: true}) requests audio only", async () => {
+  joinBehavior = "resolve";
+  let latest = null;
+  await act(async () => {
+    renderProbe((v) => (latest = v));
+  });
+
+  await act(async () => {
+    await latest.call.join();
+  });
+  assert.equal(lastJoinConstraints.video, true);
+  await act(async () => {
+    latest.call.leave();
+  });
+
+  await act(async () => {
+    await latest.call.join({ audioOnly: true });
+  });
+  assert.equal(lastJoinConstraints.video, false, "audioOnly must request video: false, not omit the field");
+  assert.ok(lastJoinConstraints.audio, "audio must still be requested");
+
+  cleanup();
+});
+
+test("H06: a device-in-use failure is classified distinctly from a permission denial, and offers audio-only", async () => {
+  joinBehavior = "reject";
+  rejectErrorName = "NotReadableError";
+  let latest = null;
+  await act(async () => {
+    renderProbe((v) => (latest = v));
+  });
+
+  await act(async () => {
+    await latest.call.join();
+  });
+  assert.equal(latest.call.lifecycle, "error");
+  assert.equal(latest.call.lastErrorKind, "device");
+  assert.match(latest.call.lastError ?? "", /in use/i);
+
+  cleanup();
+});
+
+test("H06: a generic/network join failure is classified as generic, not denied or device", async () => {
+  joinBehavior = "reject";
+  rejectErrorName = "AbortError";
+  let latest = null;
+  await act(async () => {
+    renderProbe((v) => (latest = v));
+  });
+
+  await act(async () => {
+    await latest.call.join();
+  });
+  assert.equal(latest.call.lifecycle, "error");
+  assert.equal(latest.call.lastErrorKind, "generic");
+
+  cleanup();
+});
+
+test("H06: a fresh join() call clears the previous attempt's error/kind", async () => {
+  joinBehavior = "reject";
+  rejectErrorName = "NotAllowedError";
+  let latest = null;
+  await act(async () => {
+    renderProbe((v) => (latest = v));
+  });
+  await act(async () => {
+    await latest.call.join();
+  });
+  assert.equal(latest.call.lastErrorKind, "denied");
+
+  joinBehavior = "resolve";
+  await act(async () => {
+    await latest.call.join();
+  });
+  assert.equal(latest.call.lifecycle, "connected");
+  assert.equal(latest.call.lastError, null);
+  assert.equal(latest.call.lastErrorKind, null);
 
   cleanup();
 });

@@ -30,6 +30,7 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Download,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
@@ -360,6 +361,67 @@ export function ListCallPanel({
     }
   };
 
+  // H06: "error" and "ended" previously rendered nothing at all -- a failed
+  // join (permission denial, device unavailable, generic failure) showed
+  // only a toast, and the whole panel vanished with no retry, no
+  // instructions, and no way to try audio-only. `leave()` transitions
+  // both of these states to "idle" (see its own lifecycle reducer above),
+  // which is what actually dismisses this panel -- there is no separate
+  // close prop to wire.
+  if (call.lifecycle === "error") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center katalist-elevation-dialog">
+          <p className="text-[14px] font-semibold text-[#000533]">Couldn't join the call</p>
+          <p className="mt-2 text-[13px] text-[#6a769c]">{call.lastError}</p>
+          {call.lastErrorKind === "denied" && (
+            <p className="mt-1 text-[12px] text-[#8487a7]">
+              Allow camera/microphone access in your browser's site settings, then try again.
+            </p>
+          )}
+          <div className="mt-5 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => void call.join()}
+              className="h-10 rounded-lg bg-primary text-[13px] font-medium text-primary-foreground hover:bg-primary/90"
+            >
+              Retry
+            </button>
+            {(call.lastErrorKind === "denied" || call.lastErrorKind === "device") && (
+              <button
+                type="button"
+                onClick={() => void call.join({ audioOnly: true })}
+                className="h-10 rounded-lg border border-border text-[13px] font-medium text-foreground hover:bg-muted"
+              >
+                Join with audio only
+              </button>
+            )}
+            <button type="button" onClick={() => call.leave()} className="h-9 text-[12px] text-muted-foreground hover:text-foreground">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (call.lifecycle === "ended") {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+        <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center katalist-elevation-dialog">
+          <p className="text-[14px] font-semibold text-[#000533]">Call ended</p>
+          <button
+            type="button"
+            onClick={() => call.leave()}
+            className="mt-5 h-10 w-full rounded-lg border border-border text-[13px] font-medium text-foreground hover:bg-muted"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!call.joined && !call.connecting) return null;
 
   const count = call.participants.length + 1;
@@ -607,11 +669,32 @@ export function ListCallPanel({
                     ) : call.docKind === "image" && call.docUrl ? (
                       <img src={call.docUrl} alt={call.docName ?? "Shared document"} className="h-full w-full object-contain" />
                     ) : call.docUrl ? (
-                      <iframe
-                        src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(call.docUrl)}`}
-                        className="h-full w-full border-0 bg-white"
-                        title={call.docName ?? "Shared document"}
-                      />
+                      // H04: call.docUrl is always a private signed URL
+                      // (createSignedUrl against the private chat bucket,
+                      // see handleUploadDoc above) -- sending it to
+                      // Office Online would leak it to a third party. Each
+                      // participant already has their own authorized
+                      // access to it, so they can open/download it
+                      // directly instead of it being embedded from an
+                      // external service.
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center">
+                        <FileText className="h-10 w-10 text-[#8487a7]" />
+                        <p className="max-w-[260px] truncate text-[13px] font-medium text-[#000533]">
+                          {call.docName ?? "Shared document"}
+                        </p>
+                        <p className="text-[12px] text-[#8487a7]">
+                          Inline preview isn't available for this file type.
+                        </p>
+                        <a
+                          href={call.docUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#eaeffa] bg-white px-3 py-1.5 text-[12px] font-medium text-[#3d3f74] hover:bg-muted"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Open document
+                        </a>
+                      </div>
                     ) : null}
                   </div>
                 ) : (

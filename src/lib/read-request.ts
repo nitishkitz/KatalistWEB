@@ -21,6 +21,8 @@
  * codebase).
  */
 
+import { logTelemetryEvent } from "./telemetry";
+
 /** Matches AsyncState's own SLOW/STALLED tiers (query-policy.ts) -- the
  *  stalled tier is exactly where a read should actually be aborted. */
 export const READ_DEADLINE_MS = 15_000;
@@ -76,6 +78,11 @@ export async function withReadDeadline<T>(
     return await run(combined);
   } catch (err) {
     if (deadlineController.signal.aborted && !querySignal?.aborted) {
+      // V-05: logged HERE, once, inside the shared primitive -- every read
+      // this app makes goes through withReadDeadline, so this single hook
+      // point covers every call site's timeout without adding a call at
+      // each of the ~13 places that use it.
+      logTelemetryEvent({ category: "query_timeout", outcome: "timeout", durationMs: deadlineMs });
       throw makeReadTimeoutError();
     }
     throw err;

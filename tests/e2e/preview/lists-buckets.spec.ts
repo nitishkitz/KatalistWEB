@@ -4,7 +4,10 @@ async function signInAsDemo(page: Page) {
   await page.goto("/auth");
   const demo = page.getByRole("button", { name: /^Demo$/i });
   const available = await demo.waitFor({ state: "visible", timeout: 8_000 }).then(() => true).catch(() => false);
-  if (!available) return false;
+  if (!available) {
+    if (process.env.CI) throw new Error("Demo tab is missing; Lists/Buckets preview coverage must not skip in CI");
+    return false;
+  }
   await demo.click();
   await page.getByRole("button", { name: /Priya Sharma/i }).click();
   await page.waitForURL("/");
@@ -13,7 +16,12 @@ async function signInAsDemo(page: Page) {
 
 async function expectNoPageOverflow(page: Page, label: string) {
   const result = await page.evaluate(() => ({
-    overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    // Compare against innerWidth, not documentElement.clientWidth --
+    // clientWidth already subtracts the vertical scrollbar's own width, so
+    // at narrow viewports a normal scrollbar (no actual overflowing
+    // element) falsely trips this check. The offenders list below already
+    // uses innerWidth as its own threshold; match it here for consistency.
+    overflow: document.documentElement.scrollWidth > window.innerWidth + 1,
     dimensions: { scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth, innerWidth: window.innerWidth },
     offenders: [...document.querySelectorAll<HTMLElement>("body *")]
       .filter((element) => element.getBoundingClientRect().right > window.innerWidth + 1)
@@ -44,8 +52,9 @@ test("Lists index/detail keeps native navigation, shared chat and responsive sum
   await expectNoPageOverflow(page, "List detail");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
-  const viewport = page.viewportSize();
-  if (viewport) await page.setViewportSize({ width: Math.max(320, Math.floor(viewport.width / 2)), height: viewport.height });
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = "200%";
+  });
   await expectNoPageOverflow(page, "List detail at 200% zoom equivalent");
 });
 
@@ -63,12 +72,7 @@ test("Buckets index/detail exposes truthful references and one responsive Thing 
   const firstOpen = page.getByRole("button", { name: /^Open$/i }).first();
   if (await firstOpen.isVisible()) {
     await firstOpen.click();
-    const viewport = page.viewportSize();
-    if (viewport && viewport.width < 1024) {
-      await expect(page.getByRole("dialog")).toBeVisible();
-    } else {
-      await expect(page.getByLabel("Inline Thing details")).toBeVisible();
-    }
+    await expect(page.getByLabel("Inline Thing details")).toBeVisible();
     await page.keyboard.press("Escape");
   }
   await expectNoPageOverflow(page, "Bucket detail");

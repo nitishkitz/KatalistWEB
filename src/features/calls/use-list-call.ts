@@ -24,6 +24,21 @@ export type CallReaction = { id: string; from: string; emoji: string };
  */
 export type CallLifecycleState = "idle" | "joining" | "connected" | "reconnecting" | "ended" | "error";
 
+/** H06: coarse classification of a join() failure, so the UI can offer the
+ *  right recovery -- "denied" and "device" are both worth an audio-only
+ *  retry offer (a camera-specific block or an in-use camera doesn't
+ *  necessarily also block the microphone); "generic" (network/signaling)
+ *  is not, since retrying the identical request is the only real option. */
+export type CallErrorKind = "denied" | "device" | "generic";
+
+function classifyJoinError(err: unknown): CallErrorKind {
+  if (err instanceof DOMException) {
+    if (err.name === "NotAllowedError" || err.name === "SecurityError") return "denied";
+    if (err.name === "NotFoundError" || err.name === "NotReadableError" || err.name === "OverconstrainedError") return "device";
+  }
+  return "generic";
+}
+
 /** Reduces one incoming/outgoing DrawOp onto the shared whiteboard history. */
 function applyDrawOp(prev: DrawOp[], op: DrawOp): DrawOp[] {
   if (op.kind === "clear") return [];
@@ -70,7 +85,9 @@ export type ListCallControls = {
   lifecycle: CallLifecycleState;
   /** Message from the most recent join() failure, if lifecycle is "error". */
   lastError: string | null;
-  join: () => Promise<boolean>;
+  /** Coarse classification of `lastError`, if lifecycle is "error". */
+  lastErrorKind: CallErrorKind | null;
+  join: (opts?: { audioOnly?: boolean }) => Promise<boolean>;
   leave: () => void;
   toggleMute: () => void;
   toggleCamera: () => void;
@@ -122,6 +139,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
   const [handRaised, setHandRaised] = useState(false);
   const [lifecycle, setLifecycle] = useState<CallLifecycleState>("idle");
   const [lastError, setLastError] = useState<string | null>(null);
+  const [lastErrorKind, setLastErrorKind] = useState<CallErrorKind | null>(null);
 
   const leave = useCallback(() => {
     joinGenerationRef.current += 1; // supersede any join() still in flight
@@ -147,7 +165,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setLifecycle((prev) => (prev === "connected" || prev === "reconnecting" ? "ended" : "idle"));
   }, []);
 
-  const join = useCallback(async (): Promise<boolean> => {
+  const join = useCallback(async (opts?: { audioOnly?: boolean }): Promise<boolean> => {
     if (roomRef.current || connecting) return false;
     if (!selfId) {
       toast.error("Sign in to start a call.");
@@ -157,6 +175,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     setConnecting(true);
     setLifecycle("joining");
     setLastError(null);
+    setLastErrorKind(null);
     // R-05: CallRoom's own `closed` guard (see call-room.ts) covers most of
     // the window, but a queued broadcast event can still reach these
     // callbacks after a newer join/leave has superseded this room at the
@@ -196,7 +215,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     try {
       const stream = await room.join({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: true,
+        video: !opts?.audioOnly,
       });
       // H-05: a leave() (or a second join()) could have run while the
       // above await was pending -- roomRef/state now belong to whatever
@@ -216,13 +235,21 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     } catch (err) {
       if (joinGenerationRef.current !== myGeneration) return false; // superseded -- a newer join/leave already owns roomRef/state
       roomRef.current = null;
+      const kind = classifyJoinError(err);
       const message =
-        err instanceof DOMException && err.name === "NotAllowedError"
-          ? "Camera and microphone permission is required to join the call."
-          : "Could not start the call on this device.";
+        kind === "denied"
+          ? opts?.audioOnly
+            ? "Microphone permission is required to join the call."
+            : "Camera and microphone permission is required to join the call."
+          : kind === "device"
+            ? opts?.audioOnly
+              ? "Couldn't access your microphone. It may be in use by another app."
+              : "Couldn't access your camera or microphone. It may be in use by another app."
+            : "Could not start the call on this device.";
       toast.error(message);
       setLifecycle("error");
       setLastError(message);
+      setLastErrorKind(kind);
       return false;
     } finally {
       if (joinGenerationRef.current === myGeneration) setConnecting(false);
@@ -411,6 +438,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     handRaised,
     lifecycle,
     lastError,
+    lastErrorKind,
     join,
     leave,
     toggleMute,

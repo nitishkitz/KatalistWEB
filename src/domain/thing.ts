@@ -60,6 +60,10 @@ export type ThingFile = {
   sizeLabel?: string;
   mimeType?: string;
   isNew?: boolean;
+  /** H03: the real Storage object path behind `url`, needed to request a
+   *  fresh signed URL when the current one expires -- absent for a
+   *  not-yet-uploaded local preview (`isNew`), which has no Storage path. */
+  storageKey?: string;
 };
 
 export type CourtLane = "now" | "next" | "later";

@@ -33,9 +33,9 @@ test("PDFViewer's page-navigation buttons have accessible names and a real >=32p
   assert.equal(navButtonBlocks.length, 2, "both prev/next buttons must have the >=32px hit target");
 });
 
-test("CourtWithOthersSidebar's \"View all\" footer link has a real >=24px hit target", () => {
+test("CourtWithOthersSidebar's \"View all\" footer link has a real >=32px desktop hit target", () => {
   assert.match(courtWithOthers, /View all \{theirs\.length\}/);
-  assert.match(courtWithOthers, /inline-flex min-h-6 items-center gap-1 text-\[12px\]/);
+  assert.match(courtWithOthers, /inline-flex min-h-8 items-center gap-1 text-\[12px\]/);
 });
 
 test("Button's touch-target variants exist at the required 44px size, with icon artwork unscaled", () => {

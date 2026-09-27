@@ -186,7 +186,7 @@ export function HubSidebar() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search people, lists..."
-            className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#000533] outline-none placeholder:text-[#8487a7]"
+            className="min-h-8 min-w-0 flex-1 bg-transparent text-[12.5px] text-[#000533] outline-none placeholder:text-[#8487a7]"
           />
         </label>
       </div>
@@ -199,7 +199,7 @@ export function HubSidebar() {
             type="button"
             onClick={() => setView(v)}
             className={cn(
-              "flex flex-1 items-center justify-center gap-1.5 rounded-[8px] px-2 py-1.5 text-[12.5px] font-medium capitalize transition-colors",
+              "flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-[8px] px-2 py-2 text-[12.5px] font-medium capitalize transition-colors",
               view === v ? "bg-white text-[#6638ec] " : "text-[#6a769c] hover:text-[#000533]",
             )}
           >

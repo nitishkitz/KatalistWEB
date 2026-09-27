@@ -54,7 +54,7 @@ export function ListMembersSection({
     <div>
       <div className="flex flex-col gap-3 lg:flex-row">
         {/* Left: members management card */}
-        <div className="flex-1 rounded-[10px] bg-white p-6">
+        <div className="min-w-0 flex-1 rounded-[10px] bg-white p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-[19.75px] font-medium text-[#000533]">Members &amp; Permissions</h2>

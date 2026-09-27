@@ -74,7 +74,7 @@ function BucketTableRow({ bucket }: { bucket: BucketCard }) {
           <span className={cn("h-8 w-1 shrink-0 rounded-full", accent.line)} />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <Link to="/buckets/$bucketId" params={{ bucketId: bucket.id }} className="truncate text-[13px] font-semibold text-[#000533] group-hover:text-[#975ee2]">
+              <Link to="/buckets/$bucketId" params={{ bucketId: bucket.id }} className="inline-flex min-h-8 items-center truncate text-[13px] font-semibold text-[#000533] group-hover:text-[#975ee2]">
                 {bucket.name}
               </Link>
             </div>
@@ -165,7 +165,7 @@ function BucketsPage() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search buckets..."
             aria-label="Search Buckets"
-            className="w-full bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#8487a7]"
+            className="min-h-8 w-full bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#8487a7]"
           />
           {query ? (
             <button type="button" onClick={() => setQuery("")} aria-label="Clear Bucket search" className="rounded p-1 text-muted-foreground hover:text-foreground">

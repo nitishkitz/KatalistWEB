@@ -33,6 +33,13 @@ function BridgePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState("");
+  // H08: a client-generated idempotency token, held only while an attempt
+  // to send THIS exact text is unresolved -- a manual retry after a failed
+  // send reuses it (so a lost-response duplicate is deduped server-side),
+  // but editing the text or a successful send clears it, since either one
+  // means the next send is a genuinely different logical comment and must
+  // get its own fresh token.
+  const [pendingCommentToken, setPendingCommentToken] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -93,17 +100,23 @@ function BridgePage() {
 
   async function sendComment() {
     if (!comment.trim()) return;
+    const clientToken = pendingCommentToken ?? crypto.randomUUID();
+    setPendingCommentToken(clientToken);
     setBusy(true);
     try {
       const res = await fetch("/api/public/bridge/comment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: comment.trim() }),
+        body: JSON.stringify({ body: comment.trim(), clientToken }),
       });
       if (!res.ok) throw new Error("Unable to update this Thing.");
       setLog((l) => [...l, comment.trim()]);
       setComment("");
+      setPendingCommentToken(null);
     } catch (err) {
+      // Deliberately keep pendingCommentToken so a manual retry of this
+      // same text reuses it -- a lost-response duplicate is then deduped
+      // server-side instead of creating a second comment.
       toast.error(domainErrorMessage(err));
     } finally {
       setBusy(false);
@@ -205,7 +218,13 @@ function BridgePage() {
           >
             <input
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
+              onChange={(e) => {
+                setComment(e.target.value);
+                // Editing after a failed send means the next attempt is a
+                // different logical comment, not a retry of the old text
+                // -- it must get its own fresh token.
+                setPendingCommentToken(null);
+              }}
               className="h-9 flex-1 rounded-lg border border-border px-3 text-[13px]"
               placeholder="Comment"
             />

@@ -76,6 +76,7 @@ export async function fetchRealAttachments(thingIds: string[]): Promise<Map<stri
         urlError: signing?.error ?? (!signing ? "Preview unavailable for this file." : undefined),
         sizeLabel: row.byte_size ? formatFileSize(row.byte_size) : undefined,
         mimeType: row.mime_type ?? undefined,
+        storageKey: row.storage_key,
       };
       return { thingId: row.thing_id, file };
     });
@@ -151,5 +152,17 @@ export async function uploadThingAttachment(thingId: string, file: File): Promis
     sizeLabel: formatFileSize(file.size),
     mimeType: file.type || undefined,
     isNew: true,
+    storageKey: reserved.storage_key,
   };
+}
+
+/**
+ * H03: one-shot signed-URL refresh for a real (already-uploaded) attachment
+ * -- goes through the same RLS-scoped `signThingAttachmentPaths` path as the
+ * initial load, so a Thing the caller can no longer access still fails here
+ * too (a resign is never a way to bypass a genuine denial).
+ */
+export async function resignThingAttachmentUrl(storageKey: string): Promise<string | undefined> {
+  const signing = await signThingAttachmentPaths([storageKey]);
+  return signing.get(storageKey)?.url;
 }
