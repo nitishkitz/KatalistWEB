@@ -6,7 +6,7 @@
 **Screen scope:** desktop and tablet (768×1024, 1024×768, 1440×900, 1920×1080). Phone-size visual testing is excluded by the owner's instruction.
 **Mutation scope:** read-only source/test audit. This document is the only intended edit. No application fix, migration, push, deployment, or customer-data operation was performed.
 
-> **Historical audit snapshot:** this document records findings at the start of 2026-09-27. A later implementation turn changed some of the cited files and applied the two named migrations. Read its remediation/deployment handoff before treating a finding below as still open; this audit's evidence and original risk assessment are preserved rather than rewritten after the fact.
+> **Historical audit snapshot:** this document records findings at the start of 2026-09-27. A later implementation turn changed some of the cited files and applied the two named migrations. Read [the remediation and deployment handoff](KATALIST_A_TO_H_REMEDIATION_AND_DEPLOYMENT_2026-09-27.md) before treating a finding below as still open; this audit's evidence and original risk assessment are preserved rather than rewritten after the fact.
 
 ## Executive finding
 
