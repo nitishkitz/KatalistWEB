@@ -124,6 +124,17 @@ function PeekQueueCard({
       ? "You"
       : thing.assignee.name.split(" ")[0];
   const due = formatCourtDue(thing);
+  const queueMeta = [
+    thing.dueAt ? due.label : null,
+    (thing.commentCount ?? 0) > 0
+      ? `${thing.commentCount} ${thing.commentCount === 1 ? "comment" : "comments"}`
+      : null,
+    (thing.attachmentCount ?? thing.files?.length ?? 0) > 0
+      ? `${thing.attachmentCount ?? thing.files?.length} ${
+          (thing.attachmentCount ?? thing.files?.length ?? 0) === 1 ? "file" : "files"
+        }`
+      : null,
+  ].filter(Boolean);
   const imagePreview = thing.files?.find(
     (file) => ["image", "png", "jpg"].includes(file.type) && file.url,
   );
@@ -144,7 +155,7 @@ function PeekQueueCard({
         );
         e.dataTransfer.effectAllowed = "copyMove";
       }}
-      className="group/queue relative flex min-h-[76px] w-full flex-col justify-center rounded-b-xl border border-slate-200/80 bg-white px-3.5 py-2 text-left shadow-[0_3px_5px_rgba(15,23,42,0.14)] transition-colors hover:border-slate-300 select-none outline-none focus-visible:ring-2 focus-visible:ring-ring [&:not(:first-child)]:-mt-1"
+      className="group/queue relative z-0 flex max-h-[76px] min-h-[76px] w-full flex-col justify-center overflow-hidden rounded-b-xl border border-slate-200/80 bg-white px-3.5 py-2 text-left shadow-[0_3px_5px_rgba(15,23,42,0.14)] transition-[max-height,transform,box-shadow,border-color,margin] duration-[520ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:z-30 hover:mb-2.5 hover:max-h-[136px] hover:-translate-y-1 hover:scale-[1.012] hover:border-slate-300 hover:shadow-[0_18px_36px_-18px_rgba(15,23,42,0.38),0_7px_13px_-8px_rgba(15,23,42,0.2)] focus-visible:z-30 focus-visible:mb-2.5 focus-visible:max-h-[136px] focus-visible:-translate-y-1 focus-visible:scale-[1.012] focus-visible:border-slate-300 focus-visible:shadow-[0_18px_36px_-18px_rgba(15,23,42,0.38),0_7px_13px_-8px_rgba(15,23,42,0.2)] select-none outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:transform-none motion-reduce:focus-visible:transform-none [&:not(:first-child)]:-mt-1"
       style={{ zIndex: 10 - depth }}
       title={`Jump to ${thing.title}`}
       aria-label={`Jump to ${thing.title}`}
@@ -181,6 +192,17 @@ function PeekQueueCard({
           <p className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-[1.25] text-slate-900">
             {thing.title}
           </p>
+          <div className="grid grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity,margin] duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/queue:mt-2 group-hover/queue:grid-rows-[1fr] group-hover/queue:opacity-100 group-focus-visible/queue:mt-2 group-focus-visible/queue:grid-rows-[1fr] group-focus-visible/queue:opacity-100 motion-reduce:transition-none">
+            <div className="overflow-hidden">
+              {queueMeta.length > 0 ? (
+                <p className="truncate text-[11px] font-medium text-slate-500">
+                  {queueMeta.join(" · ")}
+                </p>
+              ) : (
+                <p className="text-[11px] font-medium text-slate-500">Open Thing</p>
+              )}
+            </div>
+          </div>
         </div>
         {imagePreview?.url ? (
           <img
