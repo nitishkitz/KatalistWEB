@@ -41,7 +41,12 @@ const DISCOVERY_KICKER = "3/3";
 // from the SAME badge/cell primitives Court itself uses (ImportanceBadge,
 // PaceBadge, AcknowledgementBadge, WorkStatusBadge, PersonCell), not a new
 // bespoke preview component.
-const PREVIEW_PERSON = { id: "preview-person", name: "Priya Sharma", initials: "PS", avatarUrl: null };
+const PREVIEW_PERSON = {
+  id: "preview-person",
+  name: "Priya Sharma",
+  initials: "PS",
+  avatarUrl: null,
+};
 
 function OnboardingPage() {
   const navigate = useNavigate();
@@ -78,7 +83,7 @@ function OnboardingPage() {
 
   if (loading || !session || !hydrated) {
     return (
-      <div className="min-h-screen bg-background px-6 py-8">
+      <div className="h-[100dvh] overflow-hidden bg-background px-6 py-6 sm:py-8">
         <Logo />
       </div>
     );
@@ -101,17 +106,17 @@ function OnboardingPage() {
 
   if (onDiscoveryStep) {
     return (
-      <div className="min-h-screen bg-background px-6 py-10">
+      <div className="h-[100dvh] overflow-hidden bg-background px-6 py-6 sm:py-8">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <Logo />
           <span className="text-[13px] text-muted-foreground">{DISCOVERY_KICKER}</span>
         </div>
-        <div className="mx-auto mt-16 max-w-md">
+        <div className="mx-auto mt-[clamp(32px,10vh,64px)] max-w-md">
           <p className="text-[12px] text-muted-foreground">Coey</p>
           <h1 className="mt-2 text-2xl font-semibold">Find people you already work with</h1>
           <p className="mt-3 text-[14px] text-muted-foreground">
-            Search your team and send contact requests inside Katalist. This does not read or
-            import your phone or email address book.
+            Search your team and send contact requests inside Katalist. This does not read or import
+            your phone or email address book.
           </p>
           <div className="mt-8 flex gap-2">
             <button
@@ -141,16 +146,16 @@ function OnboardingPage() {
   const isLastTourStep = i === STEPS.length - 1;
 
   return (
-    <div className="min-h-screen bg-background px-6 py-8">
+    <div className="h-[100dvh] overflow-hidden bg-background px-6 py-6 sm:py-8">
       <div className="mx-auto flex max-w-5xl items-center justify-between">
         <Logo />
         <span className="text-[13px] text-muted-foreground">{step.kicker}</span>
       </div>
-      <div className="mx-auto mt-16 grid max-w-5xl gap-10 lg:grid-cols-2">
+      <div className="mx-auto mt-[clamp(32px,10vh,64px)] grid max-w-5xl gap-6 lg:grid-cols-2 lg:gap-10">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">{step.title}</h1>
           <p className="mt-3 max-w-sm text-[15px] text-muted-foreground">{step.body}</p>
-          <div className="mt-10 flex items-center gap-3">
+          <div className="mt-6 flex items-center gap-3 sm:mt-8">
             <button
               type="button"
               className="h-10 rounded-lg bg-primary px-4 text-[13px] text-primary-foreground"
@@ -187,7 +192,8 @@ function OnboardingPage() {
         </div>
         <div className="rounded-2xl border border-border bg-card p-6">
           <p className="text-[12px] font-medium text-muted-foreground">
-            Product preview <span className="italic">(illustrative example, not your real data)</span>
+            Product preview{" "}
+            <span className="italic">(illustrative example, not your real data)</span>
           </p>
           <div className="mt-4 flex flex-col gap-2 rounded-xl border border-border bg-background p-3">
             <p className="text-[13px] font-medium text-foreground">Draft the Q3 proposal</p>
@@ -204,7 +210,7 @@ function OnboardingPage() {
           </div>
         </div>
       </div>
-      <div className="mx-auto mt-12 flex max-w-5xl justify-center gap-1.5">
+      <div className="mx-auto mt-6 flex max-w-5xl justify-center gap-1.5 sm:mt-10">
         {[...STEPS, DISCOVERY_KICKER].map((_, idx) => (
           <span
             key={idx}

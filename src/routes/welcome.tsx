@@ -109,10 +109,10 @@ function WelcomePage() {
   const isLast = index === STEPS.length - 1;
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="grid h-[100dvh] overflow-hidden lg:grid-cols-2">
       <AuthHeroPanel />
 
-      <div className="flex flex-col bg-[#fefefe] px-6 py-8 sm:px-12">
+      <div className="flex min-h-0 flex-col overflow-hidden bg-[#fefefe] px-6 py-5 sm:px-12 sm:py-6">
         <div className="flex items-center justify-between lg:justify-end">
           <div className="lg:hidden">
             <Logo />
@@ -123,17 +123,17 @@ function WelcomePage() {
           <img
             src={step.image}
             alt=""
-            className="h-auto w-full max-w-sm object-contain"
+            className="h-auto max-h-[min(42vh,360px)] w-full max-w-sm object-contain"
           />
 
-          <h1 className="mt-8 text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+          <h1 className="mt-4 text-3xl font-bold leading-tight tracking-tight text-foreground sm:mt-6 sm:text-4xl">
             {step.title}
           </h1>
-          <p className="mt-4 max-w-md text-base font-medium text-foreground/70">
+          <p className="mt-2 max-w-md text-base font-medium text-foreground/70 sm:mt-3">
             {step.body}
           </p>
 
-          <div className="mt-8 flex items-center gap-2">
+          <div className="mt-4 flex items-center gap-2 sm:mt-6">
             {STEPS.map((s, i) => (
               <button
                 key={s.title}
@@ -149,15 +149,13 @@ function WelcomePage() {
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-3 pb-4">
+        <div className="flex shrink-0 flex-col items-center gap-3 pb-1 sm:pb-3">
           <div className="flex w-full max-w-md items-center gap-3">
             <Button
               variant="outline"
               size="lg"
               className="flex-1"
-              onClick={() =>
-                isLast ? setIndex(index - 1) : navigate({ to: "/auth" })
-              }
+              onClick={() => (isLast ? setIndex(index - 1) : navigate({ to: "/auth" }))}
             >
               {isLast ? (
                 <>
@@ -170,9 +168,7 @@ function WelcomePage() {
             <Button
               size="lg"
               className="flex-1"
-              onClick={() =>
-                isLast ? navigate({ to: "/auth" }) : setIndex(index + 1)
-              }
+              onClick={() => (isLast ? navigate({ to: "/auth" }) : setIndex(index + 1))}
             >
               {isLast ? "Enter Katalist" : "Next"}
               <ArrowRight className="ml-1 h-4 w-4" />

@@ -29,30 +29,29 @@ export function AuthHeroPanel({
         backgroundPosition: "center",
       }}
     >
-      <div className="relative z-10 flex flex-col items-center px-12 text-center">
+      <div className="relative z-10 flex flex-col items-center px-8 text-center sm:px-12">
         <div className="flex flex-col items-center">
           <div
             className="flex h-28 w-28 items-center justify-center rounded-3xl"
             style={{
-              background:
-                "linear-gradient(141.9deg, #975ee2 9.2%, #60399e 44.8%, #1c153f 91.1%)",
+              background: "linear-gradient(141.9deg, #975ee2 9.2%, #60399e 44.8%, #1c153f 91.1%)",
             }}
           >
             <img
               src={katalistMark}
               alt=""
               aria-hidden="true"
-              className="h-[72px] w-auto object-contain"
+              className="h-[clamp(48px,7vh,72px)] w-auto object-contain"
             />
           </div>
           <span className="-mt-2.5 text-[9px] font-medium uppercase tracking-[0.14em] text-white">
             Life, Sorted
           </span>
         </div>
-        <h1 className="mt-6 font-logo text-[56px] font-bold uppercase leading-none tracking-tight text-white">
+        <h1 className="mt-[clamp(16px,3vh,24px)] font-logo text-[clamp(38px,4.5vw,56px)] font-bold uppercase leading-none tracking-tight text-white">
           Katalist
         </h1>
-        <p className="mt-4 max-w-[280px] text-sm text-white/70">
+        <p className="mt-[clamp(10px,2vh,16px)] max-w-[280px] text-sm text-white/70">
           Bring clarity to what matters today.
         </p>
       </div>

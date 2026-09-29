@@ -4,6 +4,7 @@ import {
   ArrowRight,
   Camera,
   Globe,
+  LoaderCircle,
   Mail,
   QrCode,
   Smartphone,
@@ -14,11 +15,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import {
   Select,
   SelectContent,
@@ -98,6 +95,7 @@ const COUNTRY_CODES = [
 ];
 
 type Channel = "phone" | "email";
+type AuthProgress = "idle" | "sending" | "code-sent" | "verifying" | "verified" | "error";
 
 // G02: a resend must not be spammable, and a sent code must not remain
 // verifiable forever -- both are part of "finish auth acceptance", not only
@@ -118,16 +116,10 @@ function BrandDivider() {
       <div
         className="absolute left-1/2 top-0 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md"
         style={{
-          background:
-            "linear-gradient(141.9deg, #975ee2 9.2%, #60399e 44.8%, #1c153f 91.1%)",
+          background: "linear-gradient(141.9deg, #975ee2 9.2%, #60399e 44.8%, #1c153f 91.1%)",
         }}
       >
-        <img
-          src={katalistMark}
-          alt=""
-          aria-hidden="true"
-          className="h-5 w-auto object-contain"
-        />
+        <img src={katalistMark} alt="" aria-hidden="true" className="h-5 w-auto object-contain" />
       </div>
     </div>
   );
@@ -143,7 +135,11 @@ function DemoPersonaButton({ persona, onEnter }: { persona: DemoPersona; onEnter
     >
       <div className="flex items-center gap-3">
         {src ? (
-          <img src={src} alt="" className="h-9 w-9 rounded-full object-cover ring-1 ring-border/50" />
+          <img
+            src={src}
+            alt=""
+            className="h-9 w-9 rounded-full object-cover ring-1 ring-border/50"
+          />
         ) : (
           <span
             className={cn(
@@ -155,7 +151,9 @@ function DemoPersonaButton({ persona, onEnter }: { persona: DemoPersona; onEnter
           </span>
         )}
         <div>
-          <p className="text-sm font-semibold text-foreground transition-colors group-hover:text-primary">{persona.name}</p>
+          <p className="text-sm font-semibold text-foreground transition-colors group-hover:text-primary">
+            {persona.name}
+          </p>
           <p className="text-xs text-muted-foreground">
             {persona.role} · <span className="font-mono">{persona.phone}</span>
           </p>
@@ -183,6 +181,8 @@ function AuthPage() {
   const [otp, setOtp] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [authProgress, setAuthProgress] = useState<AuthProgress>("idle");
+  const [authProgressMessage, setAuthProgressMessage] = useState("");
   const [otpSentAt, setOtpSentAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [profilePhone, setProfilePhone] = useState<string | null>(null);
@@ -211,8 +211,7 @@ function AuthPage() {
     otpSentAt == null ? 0 : Math.max(0, Math.ceil((otpSentAt + RESEND_COOLDOWN_MS - now) / 1000));
   const otpExpired = otpSentAt != null && now - otpSentAt > OTP_TTL_MS;
 
-  const destination =
-    channel === "phone" ? `${dialCode}${phone.replace(/\D/g, "")}` : email.trim();
+  const destination = channel === "phone" ? `${dialCode}${phone.replace(/\D/g, "")}` : email.trim();
 
   function handleDemoLogin(persona: DemoPersona) {
     if (!demoEnabled()) return;
@@ -236,6 +235,8 @@ function AuthPage() {
     }
 
     setBusy(true);
+    setAuthProgress("sending");
+    setAuthProgressMessage("Sending your code…");
 
     if (channel === "phone") {
       setBusy(false);
@@ -243,6 +244,8 @@ function AuthPage() {
       setOtp("");
       setOtpSentAt(Date.now());
       setNow(Date.now());
+      setAuthProgress("code-sent");
+      setAuthProgressMessage("Code ready. Enter all 6 digits to continue.");
       toast.success(`Use verification code: ${localFixedOtp()}`);
       return;
     }
@@ -254,6 +257,8 @@ function AuthPage() {
     setBusy(false);
 
     if (error) {
+      setAuthProgress("error");
+      setAuthProgressMessage(extractErrorMessage(error) ?? "We couldn’t send a code. Try again.");
       toast.error(error.message);
       return;
     }
@@ -261,6 +266,8 @@ function AuthPage() {
     setOtp("");
     setOtpSentAt(Date.now());
     setNow(Date.now());
+    setAuthProgress("code-sent");
+    setAuthProgressMessage("Code sent. Enter all 6 digits to continue.");
     toast.success(`We sent a one-time password to ${destination}`);
   }
 
@@ -268,6 +275,8 @@ function AuthPage() {
     if (verifyingOtpRef.current) return;
     verifyingOtpRef.current = true;
     if (otpSentAt != null && Date.now() - otpSentAt > OTP_TTL_MS) {
+      setAuthProgress("error");
+      setAuthProgressMessage("That code expired. Send a new code to continue.");
       toast.error("This code has expired. Send a new one.");
       setOtp("");
       verifyingOtpRef.current = false;
@@ -275,12 +284,22 @@ function AuthPage() {
     }
 
     setBusy(true);
+    setAuthProgress("verifying");
+    setAuthProgressMessage("Checking your code…");
 
     if (channel === "phone") {
       const fixedCode = localFixedOtp();
       if (!fixedCode || code !== fixedCode) {
         setBusy(false);
-        toast.error(fixedCode ? `Please enter the 6-digit test code: ${fixedCode}` : "Phone sign-in is not available in this deployment.");
+        setAuthProgress("error");
+        setAuthProgressMessage(
+          fixedCode ? "That code doesn’t match. Try again." : "Phone sign-in is unavailable.",
+        );
+        toast.error(
+          fixedCode
+            ? `Please enter the 6-digit test code: ${fixedCode}`
+            : "Phone sign-in is not available in this deployment.",
+        );
         setOtp("");
         verifyingOtpRef.current = false;
         return;
@@ -294,7 +313,9 @@ function AuthPage() {
         });
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.error || "Authentication failed");
+          throw new Error(
+            data.error || data.message || data.statusMessage || "Authentication failed",
+          );
         }
 
         const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
@@ -312,11 +333,18 @@ function AuthPage() {
         await waitForSessionReady(authData.session?.access_token);
 
         setBusy(false);
-        toast.success(`Welcome back${authData.user?.user_metadata?.full_name ? `, ${authData.user.user_metadata.full_name}` : ""}!`);
+        setAuthProgress("verified");
+        setAuthProgressMessage("Code verified. Signing you in…");
+        verifyingOtpRef.current = false;
+        toast.success(
+          `Welcome back${authData.user?.user_metadata?.full_name ? `, ${authData.user.user_metadata.full_name}` : ""}!`,
+        );
         navigate({ to: returnTo, replace: true });
         return;
       } catch (err: unknown) {
         setBusy(false);
+        setAuthProgress("error");
+        setAuthProgressMessage(extractErrorMessage(err) ?? "We couldn’t sign you in. Try again.");
         toast.error(extractErrorMessage(err) ?? "Failed to authenticate");
         setOtp("");
         verifyingOtpRef.current = false;
@@ -332,6 +360,8 @@ function AuthPage() {
 
     if (error) {
       setBusy(false);
+      setAuthProgress("error");
+      setAuthProgressMessage(extractErrorMessage(error) ?? "That code doesn’t match. Try again.");
       toast.error(error.message);
       setOtp("");
       verifyingOtpRef.current = false;
@@ -340,6 +370,9 @@ function AuthPage() {
 
     await waitForSessionReady(authData.session?.access_token);
     setBusy(false);
+    setAuthProgress("verified");
+    setAuthProgressMessage("Code verified. Signing you in…");
+    verifyingOtpRef.current = false;
     navigate({ to: returnTo, replace: true });
   }
 
@@ -364,10 +397,10 @@ function AuthPage() {
   const otpRemainingMs = otpSentAt == null ? 0 : otpSentAt + OTP_TTL_MS - now;
 
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
+    <div className="grid h-[100dvh] overflow-hidden lg:grid-cols-2">
       <AuthHeroPanel />
 
-      <div className="flex flex-col bg-[#fefefe] px-6 py-8 sm:px-12 lg:px-16">
+      <div className="flex min-h-0 flex-col overflow-hidden bg-[#fefefe] px-6 py-5 sm:px-12 sm:py-6 lg:px-16">
         <div className="flex items-center justify-between">
           <div className="lg:hidden">
             <Logo />
@@ -380,7 +413,9 @@ function AuthPage() {
                   onClick={() => setTab(tab === "preview" ? "otp" : "preview")}
                   className={cn(
                     "flex items-center gap-1.5",
-                    tab === "preview" ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                    tab === "preview"
+                      ? "text-primary"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   <Sparkles className="h-3.5 w-3.5" />
@@ -402,7 +437,7 @@ function AuthPage() {
           ) : null}
         </div>
 
-        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-10">
+        <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col justify-center py-3 sm:py-5">
           {profilePhone ? (
             <div>
               <div className="flex items-start justify-between gap-4">
@@ -414,7 +449,11 @@ function AuthPage() {
                 </div>
                 <label className="group relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-dashed border-border bg-muted text-muted-foreground hover:border-primary hover:text-primary">
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt="Profile preview" className="h-full w-full object-cover" />
+                    <img
+                      src={avatarUrl}
+                      alt="Profile preview"
+                      className="h-full w-full object-cover"
+                    />
                   ) : (
                     <Camera className="h-5 w-5" />
                   )}
@@ -427,7 +466,8 @@ function AuthPage() {
                       const file = event.target.files?.[0];
                       if (!file) return;
                       const reader = new FileReader();
-                      reader.onload = () => setAvatarUrl(typeof reader.result === "string" ? reader.result : null);
+                      reader.onload = () =>
+                        setAvatarUrl(typeof reader.result === "string" ? reader.result : null);
                       reader.readAsDataURL(file);
                     }}
                   />
@@ -527,14 +567,22 @@ function AuthPage() {
 
               <div className="mt-4 space-y-2.5">
                 {DEMO_PERSONAS.map((persona) => (
-                  <DemoPersonaButton key={persona.key} persona={persona} onEnter={() => handleDemoLogin(persona)} />
+                  <DemoPersonaButton
+                    key={persona.key}
+                    persona={persona}
+                    onEnter={() => handleDemoLogin(persona)}
+                  />
                 ))}
               </div>
             </div>
           ) : tab === "otp" ? (
             sent ? (
               <div className="flex flex-col items-center text-center">
-                <img src={catLogin} alt="" className="-mt-4 w-52 object-contain sm:w-60" />
+                <img
+                  src={catLogin}
+                  alt=""
+                  className="-mt-2 w-[clamp(112px,18vh,180px)] object-contain sm:w-[clamp(136px,20vh,210px)]"
+                />
                 <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-[32px]">
                   Verify your number
                 </h1>
@@ -549,13 +597,17 @@ function AuthPage() {
                   </p>
                 ) : null}
 
-                <div className="mt-8">
+                <div className="mt-5 sm:mt-7">
                   <InputOTP
                     maxLength={6}
                     value={otp}
-                    disabled={otpExpired}
+                    disabled={otpExpired || busy}
                     onChange={(value) => {
                       setOtp(value);
+                      if (authProgress === "error") {
+                        setAuthProgress("code-sent");
+                        setAuthProgressMessage("Code ready. Enter all 6 digits to continue.");
+                      }
                       if (value.length === 6) void verifyOtp(value);
                     }}
                   >
@@ -574,7 +626,25 @@ function AuthPage() {
                 {!otpExpired ? (
                   <p className="mt-4 text-sm text-foreground/70">
                     Code expires in{" "}
-                    <span className="font-semibold text-primary">{formatCountdown(otpRemainingMs)}</span>
+                    <span className="font-semibold text-primary">
+                      {formatCountdown(otpRemainingMs)}
+                    </span>
+                  </p>
+                ) : null}
+
+                {authProgress !== "idle" ? (
+                  <p
+                    role="status"
+                    aria-live="polite"
+                    className={cn(
+                      "mt-3 flex items-center justify-center gap-2 text-sm font-medium",
+                      authProgress === "error" ? "text-destructive" : "text-foreground/70",
+                    )}
+                  >
+                    {authProgress === "sending" || authProgress === "verifying" ? (
+                      <LoaderCircle className="h-4 w-4 animate-spin text-primary" />
+                    ) : null}
+                    {authProgressMessage}
                   </p>
                 ) : null}
 
@@ -586,12 +656,12 @@ function AuthPage() {
                 ) : null}
 
                 <Button
-                  className="mt-6 w-full"
+                  className="mt-4 w-full sm:mt-5"
                   size="lg"
                   disabled={busy || otp.length !== 6 || otpExpired}
                   onClick={() => void verifyOtp(otp)}
                 >
-                  Verify & Continue
+                  {authProgress === "verifying" ? "Checking code…" : "Verify & Continue"}
                   <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
 
@@ -611,30 +681,38 @@ function AuthPage() {
                     disabled={busy || secondsUntilResend > 0}
                     onClick={() => void sendOtp()}
                   >
-                    {secondsUntilResend > 0 ? `Resend code (${secondsUntilResend}s)` : "Resend code"}
+                    {secondsUntilResend > 0
+                      ? `Resend code (${secondsUntilResend}s)`
+                      : "Resend code"}
                   </button>
                 </div>
 
                 <div className="w-full">
                   <BrandDivider />
-                  <p className="mt-6 text-xs text-muted-foreground/80">
-                    Your privacy and security are our priority. We&apos;ll never share your details with
-                    anyone.
+                  <p className="mt-3 text-xs text-muted-foreground/80 sm:mt-5">
+                    Your privacy and security are our priority. We&apos;ll never share your details
+                    with anyone.
                   </p>
                 </div>
               </div>
             ) : (
               <div className="flex flex-col items-center text-center">
-                <img src={catLogin} alt="" className="-mt-4 w-52 object-contain sm:w-60" />
+                <img
+                  src={catLogin}
+                  alt=""
+                  className="-mt-2 w-[clamp(112px,18vh,180px)] object-contain sm:w-[clamp(136px,20vh,210px)]"
+                />
                 <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-[32px]">
                   Welcome to Katalist
                 </h1>
                 <p className="mt-2 text-base text-foreground/70">
-                  {channel === "phone" ? "Sign in with your phone number" : "Sign in with your email"}
+                  {channel === "phone"
+                    ? "Sign in with your phone number"
+                    : "Sign in with your email"}
                 </p>
 
                 {channel === "phone" ? (
-                  <div className="mt-8 flex w-full items-stretch overflow-hidden rounded-md border border-input">
+                  <div className="mt-5 flex w-full items-stretch overflow-hidden rounded-md border border-input sm:mt-7">
                     <Label htmlFor="dial-code" className="sr-only">
                       Country
                     </Label>
@@ -647,7 +725,11 @@ function AuthPage() {
                         <SelectValue>
                           <span className="flex items-center gap-1.5">
                             {dialCode === "+91" ? (
-                              <img src={flagIndia} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" />
+                              <img
+                                src={flagIndia}
+                                alt=""
+                                className="h-3.5 w-5 rounded-[2px] object-cover"
+                              />
                             ) : (
                               <Globe className="h-4 w-4 text-muted-foreground" />
                             )}
@@ -675,7 +757,7 @@ function AuthPage() {
                     />
                   </div>
                 ) : (
-                  <div className="mt-8 w-full">
+                  <div className="mt-5 w-full sm:mt-7">
                     <Label htmlFor="email" className="sr-only">
                       Email address
                     </Label>
@@ -691,7 +773,12 @@ function AuthPage() {
                   </div>
                 )}
 
-                <Button className="mt-4 w-full" size="lg" disabled={busy} onClick={() => void sendOtp()}>
+                <Button
+                  className="mt-4 w-full"
+                  size="lg"
+                  disabled={busy}
+                  onClick={() => void sendOtp()}
+                >
                   Continue
                   <ArrowRight className="ml-1 h-4 w-4" />
                 </Button>
@@ -714,7 +801,7 @@ function AuthPage() {
                   </button>
                 ) : null}
 
-                <p className="mt-8 text-xs text-muted-foreground/80">
+                <p className="mt-5 text-xs text-muted-foreground/80 sm:mt-7">
                   By continuing, you agree to our{" "}
                   <span className="font-semibold text-primary">Terms of Service</span> and{" "}
                   <span className="font-semibold text-primary">Privacy Policy.</span>
@@ -736,15 +823,15 @@ function AuthPage() {
                   Open the Katalist mobile app and scan the QR code to login instantly.
                 </p>
                 <p className="mt-3 text-xs text-muted-foreground">
-                  QR login uses a short-lived secure challenge with the Katalist mobile app. Integration
-                  boundary — use Phone / OTP when available.
+                  QR login uses a short-lived secure challenge with the Katalist mobile app.
+                  Integration boundary — use Phone / OTP when available.
                 </p>
               </div>
             </div>
           )}
 
           {!profilePhone ? (
-            <p className="mt-8 text-center text-sm text-muted-foreground">
+            <p className="mt-4 text-center text-sm text-muted-foreground sm:mt-6">
               New to Katalist?{" "}
               <Link to="/welcome" className="font-medium text-primary hover:underline">
                 Take the tour
