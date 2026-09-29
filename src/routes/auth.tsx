@@ -297,12 +297,12 @@ function AuthPage() {
           throw new Error(data.error || "Authentication failed");
         }
 
-        const { data: authData, error: sessionError } = await supabase.auth.setSession({
-          access_token: data.access_token,
-          refresh_token: data.refresh_token,
+        const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: data.token_hash,
+          type: "magiclink",
         });
 
-        if (sessionError) throw sessionError;
+        if (verifyError) throw verifyError;
 
         // verifyOtp's returned session isn't guaranteed to be readable by
         // the client's own getSession()/getUser() yet - navigating before
