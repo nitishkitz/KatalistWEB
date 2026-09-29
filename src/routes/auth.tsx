@@ -322,6 +322,8 @@ function AuthPage() {
         const data = (await res.json()) as {
           token_hash?: unknown;
           properties?: { hashed_token?: unknown };
+          access_token?: unknown;
+          refresh_token?: unknown;
           error?: string;
           message?: string;
           statusMessage?: string;
@@ -330,6 +332,28 @@ function AuthPage() {
           throw new Error(
             data.error || data.message || data.statusMessage || "Authentication failed",
           );
+        }
+
+        // Older local handlers return a ready session while production uses a
+        // generated magic-link hash. Accept both server contracts so a device
+        // can finish sign-in during a rolling deployment or local HMR update.
+        const accessToken = typeof data.access_token === "string" ? data.access_token : null;
+        const refreshToken = typeof data.refresh_token === "string" ? data.refresh_token : null;
+        if (accessToken && refreshToken) {
+          const { data: sessionData, error: setSessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (setSessionError) throw setSessionError;
+
+          await waitForSessionReady(sessionData.session?.access_token ?? accessToken);
+          setBusy(false);
+          setAuthProgress("verified");
+          setAuthProgressMessage("Code verified. Signing you in…");
+          verifyingOtpRef.current = false;
+          toast.success("Welcome back!");
+          navigate({ to: returnTo, replace: true });
+          return;
         }
 
         // The endpoint returns `token_hash`, while Supabase's generated-link
