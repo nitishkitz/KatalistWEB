@@ -1,10 +1,11 @@
-import type { MutableRefObject } from "react";
+import { useMemo, type MutableRefObject } from "react";
 
 import type { Thing } from "@/domain/thing";
 import { CourtFocusView } from "./CourtFocusView";
 import { CourtLaneStack, type CourtLaneStackHandle } from "./CourtLaneStack";
 import type { CourtFocusSelection, FocusViewTabId } from "./court-stack-model";
 import type { CourtLaneId } from "./court-view-model";
+import { useLists } from "@/features/lists/use-lists";
 
 type CourtWorkspaceProps = {
   selection: CourtFocusSelection | null;
@@ -35,6 +36,12 @@ export function CourtWorkspace({
   onRefresh,
   onViewAll,
 }: CourtWorkspaceProps) {
+  const { lists } = useLists();
+  const listCoversById = useMemo(
+    () => new Map(lists.map((list) => [list.id, list.coverUrl ?? null] as const)),
+    [lists],
+  );
+
   if (selection) {
     return (
       <CourtFocusView
@@ -59,6 +66,8 @@ export function CourtWorkspace({
           }}
           lane={lane}
           things={lanes[lane]}
+          courtThings={lanes}
+          listCoversById={listCoversById}
           myActorId={myActorId}
           initialPosition={initialPositions[lane]}
           onOpen={(thing, origin) => onOpen(lane, thing, origin)}

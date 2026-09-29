@@ -377,10 +377,10 @@ function BucketDetailPage() {
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="inline-flex h-[42px] items-center gap-2 rounded-[9px] bg-[#975ee2] px-4 text-[14px] font-medium text-white transition hover:brightness-95"
+          className="inline-flex h-9 items-center gap-1.5 rounded-[9px] bg-[#975ee2] px-3 text-[12.5px] font-medium text-white transition hover:brightness-95"
         >
-          <Plus className="h-4 w-4" />
-          <span>Add existing reference</span>
+          <Plus className="h-3.5 w-3.5" />
+          <span>Add reference</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 rounded-2xl border border-border/80 bg-white p-3">
@@ -526,7 +526,7 @@ function BucketDetailPage() {
             return (
               <div
                 key={item.listId}
-                className="grid grid-cols-1 items-center gap-3 py-3 sm:grid-cols-[minmax(0,1.6fr)_1fr_0.7fr_1.4fr_auto] sm:gap-4"
+                className="grid min-w-0 grid-cols-1 items-center gap-3 py-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(80px,0.9fr)_minmax(65px,0.6fr)_minmax(120px,1.2fr)_auto] sm:gap-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
                   {l.coverUrl ? (
@@ -728,12 +728,14 @@ function BucketDetailPage() {
         onClose={closeThing}
         backLabel={bucket.name}
         flatPanel
+        className={selectedThing ? "lg:h-[calc(100dvh-3.5rem)] lg:items-stretch lg:overflow-hidden" : undefined}
+        sourceClassName={selectedThing ? "lg:h-full lg:overflow-y-auto lg:overscroll-contain" : undefined}
       >
       <div className="min-h-screen space-y-3 bg-[#edf2fe] px-4 py-3 pb-20">
         {/* Sub-header + tabs card */}
         <div className="rounded-[10px] bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-4 px-5 pt-4 pb-3">
-            <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               <Link
                 to="/buckets"
                 className="inline-flex items-center gap-2 rounded-full text-[12.5px] font-medium text-[#6a769c] transition-colors hover:text-[#000533]"
@@ -741,18 +743,18 @@ function BucketDetailPage() {
                 <ArrowLeft className="h-4 w-4" />
                 <span>Back to Bucket</span>
               </Link>
-              <div className="h-8 w-px bg-[#eef0f6]" />
+              <div className="h-7 w-px bg-[#eef0f6]" />
               <div className="flex items-center gap-2.5">
-                <span className="flex h-11 w-11 items-center justify-center rounded-[6px] bg-[#fee19c] text-[12px] font-medium text-black">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[6px] bg-[#fee19c] text-[12px] font-medium text-black">
                   {bucketInitials}
                 </span>
                 <div className="min-w-0">
-                  <div className="max-w-[240px] truncate text-[15px] font-medium leading-tight text-black">
+                  <div className="max-w-[240px] truncate text-[14px] font-semibold leading-tight text-black">
                     {bucket.name}
                   </div>
-                  <div className="flex items-center gap-1 text-[12px] text-[#6a769c]">
+                  <div className="flex items-center gap-1 text-[11px] text-[#6a769c]">
                     <Lock className="h-3 w-3" />
-                    Private collection. Shared items keep their existing permissions.
+                    Private · shared item permissions stay unchanged
                   </div>
                 </div>
               </div>
@@ -762,7 +764,7 @@ function BucketDetailPage() {
               {settingsMenu}
             </div>
           </div>
-          <div className="flex items-center gap-8 border-t border-[#eef0f6] px-5">
+          <div className="flex items-center gap-6 border-t border-[#eef0f6] px-4">
             {(
               [
                 ["things", "Things"],
@@ -775,7 +777,7 @@ function BucketDetailPage() {
                 type="button"
                 onClick={() => setDetailTab(id)}
                 className={cn(
-                  "relative -mb-px border-b-2 py-3 text-[13px] font-medium transition-colors",
+                  "relative -mb-px border-b-2 py-2 text-[13px] font-medium transition-colors",
                   detailTab === id
                     ? "border-[#975ee2] text-[#000533]"
                     : "border-transparent text-[#6a769c] hover:text-[#000533]",

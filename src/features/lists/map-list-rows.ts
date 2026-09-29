@@ -33,7 +33,7 @@ export async function fetchListCounts(ids: string[]): Promise<Map<string, ListCo
 }
 
 /** Batch-sign the private cover paths into displayable URLs. */
-async function signCoverUrls(paths: string[]): Promise<Map<string, string>> {
+export async function signCoverUrls(paths: string[]): Promise<Map<string, string>> {
   const map = new Map<string, string>();
   const unique = [...new Set(paths.filter(Boolean))];
   if (!unique.length) return map;

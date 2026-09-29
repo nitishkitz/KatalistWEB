@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, FileText, Folder, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
+import { AtSign, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { useAppContext } from "@/features/context/use-app-context";
@@ -19,6 +19,18 @@ import { acquireBlobUrl, releaseBlobUrl, releaseAllBlobUrlsForOwner } from "@/li
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
+
+type MagicBoxMotionState = "idle" | "hover" | "focused" | "typing" | "submitting" | "processing" | "success" | "error";
+
+function MagicBoxGlow() {
+  return (
+    <>
+      <span className="magic-box-aura" aria-hidden="true"><span className="magic-box-aura-light" /></span>
+      <span className="magic-box-frame" aria-hidden="true"><span className="magic-box-frame-light" /></span>
+      <span className="magic-box-fill" aria-hidden="true" />
+    </>
+  );
+}
 
 export function MagicBox({
   listId,
@@ -68,6 +80,29 @@ export function MagicBox({
 
   const [value, setValue] = useState(() => getDraft<string>(qc, "magic-box", draftEntityId)?.value ?? "");
   const [tossed, setTossed] = useState(false);
+  const [motionHovered, setMotionHovered] = useState(false);
+  const [motionFocused, setMotionFocused] = useState(false);
+  const [motionAccent, setMotionAccent] = useState<"submitting" | "success" | "error" | "attachment" | "first-character" | null>(null);
+  const [documentVisible, setDocumentVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
+  const motionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const motionPhaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [submitHandoff, setSubmitHandoff] = useState(false);
+
+  const flashMotion = (accent: typeof motionAccent, duration: number) => {
+    if (motionTimer.current) clearTimeout(motionTimer.current);
+    setMotionAccent(accent);
+    motionTimer.current = setTimeout(() => setMotionAccent(null), duration);
+  };
+
+  useEffect(() => {
+    const updateVisibility = () => setDocumentVisible(document.visibilityState === "visible");
+    document.addEventListener("visibilitychange", updateVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", updateVisibility);
+      if (motionTimer.current) clearTimeout(motionTimer.current);
+      if (motionPhaseTimer.current) clearTimeout(motionPhaseTimer.current);
+    };
+  }, []);
   const [trigger, setTrigger] = useState<{
     type: "person" | "list" | "bucket";
     query: string;
@@ -188,10 +223,12 @@ export function MagicBox({
       acquireBlobUrl(processed.url, fileOwnerKey);
       setAttachedFiles((prev) => [...prev, processed]);
       applyFirstAsTitleIfEmpty(processed);
+      flashMotion("attachment", 630);
     } catch (err) {
       console.error("Failed to process file:", err);
       if (epochRef.current !== opEpoch) return;
       const message = err instanceof Error ? err.message : `Could not attach ${file.name}`;
+      flashMotion("error", 650);
       setFailedAttachments((prev) => [
         ...prev,
         { id: opId, file, name: file.name, sizeLabel: formatFileSize(file.size), error: message },
@@ -534,6 +571,9 @@ export function MagicBox({
       if (effectiveBucketId) {
         await qc.invalidateQueries({ queryKey: ["buckets"] });
       }
+      if (stillSameDestination) {
+        flashMotion(hasPartialFailure ? "error" : "success", hasPartialFailure ? 650 : 380);
+      }
       const count = result?.count ?? 1;
       if (hasPartialFailure) {
         toast.error(
@@ -557,10 +597,26 @@ export function MagicBox({
     },
     onError: (err, _vars, mutationContext) => {
       if (mutationContext && !isEpochCurrent(qc, mutationContext.epoch)) return;
+      flashMotion("error", 650);
       toast.error(err instanceof Error ? err.message : "Couldn’t toss that.");
     },
   });
   const canToss = (Boolean(value.trim()) || attachedFiles.length > 0) && !blocked && !mutation.isPending;
+  const startToss = () => {
+    if (!canToss) return;
+    flashMotion("submitting", 430);
+    setSubmitHandoff(true);
+    if (motionPhaseTimer.current) clearTimeout(motionPhaseTimer.current);
+    motionPhaseTimer.current = setTimeout(() => setSubmitHandoff(false), 420);
+    mutation.mutate();
+  };
+  const motionState: MagicBoxMotionState = motionAccent === "success" || motionAccent === "error"
+    ? motionAccent
+    : motionAccent === "submitting" ? "submitting"
+      : mutation.isPending || processingFiles > 0 ? "processing"
+        : value.trim() ? "typing"
+          : motionFocused ? "focused"
+            : motionHovered ? "hover" : "idle";
 
   return (
     <div
@@ -719,17 +775,6 @@ export function MagicBox({
         accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,*/*"
       />
 
-      {/* T09/E05: destination List and Work/Home context, shown before
-          submit -- previously only surfaced as a placeholder string that
-          vanished the moment the user started typing, so there was no
-          persistent pre-submit confirmation of where a Thing would land. */}
-      <div className="mb-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-        <Folder className="h-3 w-3 shrink-0" />
-        <span>{listName ?? "Court"}</span>
-        <span aria-hidden="true">·</span>
-        <span className="capitalize">{context}</span>
-      </div>
-
       {/* Pending attached files chips */}
       {attachedFiles.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5 animate-in fade-in slide-in-from-bottom-1">
@@ -831,21 +876,31 @@ export function MagicBox({
 
       <div
         className={cn(
-          "flex items-center gap-2.5 transition-opacity duration-200",
+          "magic-box-root flex items-center gap-2.5 transition-opacity duration-200",
           desktop
-            ? "h-[50px] rounded-[10px] border border-[#975ee2]/25 bg-white px-3 font-composer hover:border-[#975ee2]/40 transition-all"
+            ? "h-[46px] rounded-[16px] px-3 font-composer"
             : "h-12 rounded-xl border border-border bg-card px-1.5",
           tossed && "opacity-60",
         )}
-        style={desktop ? { boxShadow: "0 10px 30px -14px rgba(151,94,226,0.35)" } : undefined}
+        data-state={motionState}
+        data-accent={motionAccent ?? undefined}
+        data-visible={documentVisible}
+        data-handoff={submitHandoff}
+        onMouseEnter={() => setMotionHovered(true)}
+        onMouseLeave={() => setMotionHovered(false)}
+        onFocusCapture={() => setMotionFocused(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMotionFocused(false);
+        }}
       >
-        <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+        <MagicBoxGlow />
+        <Sparkles className="magic-box-sparkle relative z-[1] h-4 w-4 shrink-0 text-primary" />
 
         {/* ── Highlight mirror + input overlay ─────────────────────────────
             The mirror div renders @person #list /bucket tokens as colored bold
             spans. The real <input> sits on top with color:transparent so only
             the blinking caret is visible. Font metrics must match exactly. */}
-        <div className="relative min-w-0 flex-1 h-full">
+        <div className="relative z-[1] min-w-0 flex-1 h-full">
           {/* Mirror — purely visual, no interaction */}
           <div
             aria-hidden="true"
@@ -892,6 +947,7 @@ export function MagicBox({
             value={value}
             onChange={(e) => {
               const next = e.target.value;
+              if (!value && next) flashMotion("first-character", 280);
               setValue(next);
               // A fresh edit means the user is composing something new, not
               // retrying the last partial failure -- the next submit should
@@ -983,7 +1039,7 @@ export function MagicBox({
 
             if (e.key === "Enter" && (value.trim() || attachedFiles.length > 0) && !blocked && !mutation.isPending) {
               e.preventDefault();
-              void mutation.mutate();
+              startToss();
               return;
             }
 
@@ -1003,7 +1059,7 @@ export function MagicBox({
         />
         </div>
         {desktop ? (
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="relative z-[1] flex items-center gap-1.5 shrink-0">
             <button
               type="button"
               onClick={() => {
@@ -1019,7 +1075,7 @@ export function MagicBox({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
+              className="magic-box-attachment inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Attach file"
               title="Attach files (photos, videos, doc, excel, etc.)"
             >
@@ -1042,8 +1098,8 @@ export function MagicBox({
             <button
               type="button"
               disabled={!canToss}
-              onClick={() => void mutation.mutate()}
-              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              onClick={startToss}
+              className="magic-box-toss inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               aria-label="Toss Thing"
               title="Toss Thing"
             >
@@ -1052,7 +1108,7 @@ export function MagicBox({
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-1">
+          <div className="relative z-[1] flex items-center gap-1">
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -1065,7 +1121,7 @@ export function MagicBox({
             <button
               type="button"
               disabled={!canToss}
-              onClick={() => void mutation.mutate()}
+              onClick={startToss}
               className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground outline-none transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Toss Thing"
               title="Toss Thing"

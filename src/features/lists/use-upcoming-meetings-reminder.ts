@@ -6,6 +6,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { withReadDeadline } from "@/lib/read-request";
 
 const WITHIN_HOURS = 24;
+const DISMISSED_MEETINGS_KEY = "katalist.dismissed-upcoming-meetings";
 /** Surface the reminder once a meeting is within this many minutes of
  *  starting, and keep it up for as long as the meeting is still running. */
 const URGENT_WINDOW_MS = 5 * 60 * 1000;
@@ -19,6 +20,34 @@ export type UpcomingMeeting = {
   startsAt: string;
   endsAt: string;
 };
+
+function readDismissedMeetingIds(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const stored = JSON.parse(localStorage.getItem(DISMISSED_MEETINGS_KEY) ?? "{}") as Record<string, number>;
+    const now = Date.now();
+    const active = Object.fromEntries(Object.entries(stored).filter(([, endsAt]) => Number(endsAt) > now));
+    if (Object.keys(active).length !== Object.keys(stored).length) {
+      localStorage.setItem(DISMISSED_MEETINGS_KEY, JSON.stringify(active));
+    }
+    return new Set(Object.keys(active));
+  } catch {
+    return new Set();
+  }
+}
+
+function persistDismissedMeeting(id: string, endsAt: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const stored = JSON.parse(localStorage.getItem(DISMISSED_MEETINGS_KEY) ?? "{}") as Record<string, number>;
+    const now = Date.now();
+    const active = Object.fromEntries(Object.entries(stored).filter(([, end]) => Number(end) > now));
+    active[id] = new Date(endsAt).getTime();
+    localStorage.setItem(DISMISSED_MEETINGS_KEY, JSON.stringify(active));
+  } catch {
+    // Dismissal still works for this mounted app if browser storage is blocked.
+  }
+}
 
 async function fetchUpcomingMeetings(querySignal?: AbortSignal): Promise<UpcomingMeeting[]> {
   const { data, error } = await withReadDeadline(querySignal, async (signal) =>
@@ -52,7 +81,7 @@ async function fetchUpcomingMeetings(querySignal?: AbortSignal): Promise<Upcomin
 export function useUpcomingMeetingReminder() {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [dismissed, setDismissed] = useState<Set<string>>(readDismissedMeetingIds);
 
   const query = useQuery({
     queryKey: ["upcoming-meetings"],
@@ -77,7 +106,11 @@ export function useUpcomingMeetingReminder() {
   const msUntilStart = reminder ? new Date(reminder.startsAt).getTime() - Date.now() : null;
   const inProgress = msUntilStart !== null && msUntilStart <= 0;
 
-  const dismiss = (id: string) => setDismissed((prev) => new Set(prev).add(id));
+  const dismiss = (id: string) => {
+    const meeting = meetings.find((item) => item.id === id);
+    if (meeting) persistDismissedMeeting(id, meeting.endsAt);
+    setDismissed((previous) => new Set(previous).add(id));
+  };
 
   return { reminder, inProgress, dismiss };
 }

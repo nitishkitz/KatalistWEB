@@ -7,7 +7,6 @@ import { ChatMessagesSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useListMessages, useListMessageSearch, useListPinnedMessages, type ChatAttachment, type ListChatMessage } from "@/features/lists/use-list-messages";
 import { useSessionDraft } from "@/features/drafts/use-session-draft";
 import { getDraft, getDraftRevision, setDraft } from "@/features/drafts/session-drafts";
-import { getChatScroll, saveChatScroll } from "@/features/lists/chat-scroll-state";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { reconcileMentions, type SelectedMention } from "@/features/lists/chat-mentions";
 import { useConversation, type ConversationParticipant } from "@/features/hub/use-conversations";
@@ -107,10 +106,12 @@ export const ListChatPanel = forwardRef<
   {
     listId: string;
     placeholderName?: string;
+    /** Compact conversation title/search row used by the floating quick chat. */
+    headerTitle?: string;
     viewOnly?: boolean;
     className?: string;
   }
->(function ListChatPanel({ listId, placeholderName, viewOnly = false, className }, forwardedRef) {
+>(function ListChatPanel({ listId, placeholderName, headerTitle, viewOnly = false, className }, forwardedRef) {
   const qc = useQueryClient();
   const chat = useListMessages(listId);
   const pinned = useListPinnedMessages(listId);
@@ -140,7 +141,7 @@ export const ListChatPanel = forwardRef<
   const isNearBottomRef = useRef(true);
   const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
   const previousEdgeRef = useRef<{ first: string | null; last: string | null } | null>(null);
-  const scrollRestoredRef = useRef(false);
+  const initialScrollDoneRef = useRef(false);
   const renderedListRef = useRef(listId);
   const [hasNewMessages, setHasNewMessages] = useState(false);
   const NEAR_BOTTOM_THRESHOLD_PX = 80;
@@ -150,9 +151,8 @@ export const ListChatPanel = forwardRef<
     if (!el) return;
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_THRESHOLD_PX;
     isNearBottomRef.current = nearBottom;
-    saveChatScroll(qc, listId, el.scrollTop, el.scrollHeight - el.scrollTop - el.clientHeight);
     if (nearBottom) setHasNewMessages(false);
-  }, [qc, listId]);
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -223,7 +223,7 @@ export const ListChatPanel = forwardRef<
     if (!el) return;
     if (renderedListRef.current !== listId) {
       renderedListRef.current = listId;
-      scrollRestoredRef.current = false;
+      initialScrollDoneRef.current = false;
       previousEdgeRef.current = null;
       prependAnchorRef.current = null;
       isNearBottomRef.current = true;
@@ -234,11 +234,10 @@ export const ListChatPanel = forwardRef<
       prependAnchorRef.current = null;
       return;
     }
-    if (!scrollRestoredRef.current && !chat.isLoading) {
-      const saved = getChatScroll(qc, listId);
-      el.scrollTop = saved && saved.fromBottom > NEAR_BOTTOM_THRESHOLD_PX ? saved.top : el.scrollHeight;
-      isNearBottomRef.current = !saved || saved.fromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
-      scrollRestoredRef.current = true;
+    if (!initialScrollDoneRef.current && !chat.isLoading) {
+      el.scrollTop = el.scrollHeight;
+      isNearBottomRef.current = true;
+      initialScrollDoneRef.current = true;
     }
     const first = chat.messages[0]?.id ?? null;
     const last = chat.messages.at(-1)?.id ?? null;
@@ -250,7 +249,7 @@ export const ListChatPanel = forwardRef<
     } else {
       setHasNewMessages(true);
     }
-  }, [chat.messages, chat.isLoading, qc, listId]);
+  }, [chat.messages, chat.isLoading, listId]);
 
   useEffect(() => {
     setSearch("");
@@ -302,32 +301,41 @@ export const ListChatPanel = forwardRef<
     }
   };
 
+  const searchToggle = (
+    <button
+      type="button"
+      onClick={() =>
+        setSearchOpen((open) => {
+          setFocusedResult(null);
+          if (open) setSearch("");
+          return !open;
+        })
+      }
+      title="Search messages"
+      aria-label="Search messages"
+      aria-pressed={searchOpen}
+      className={cn(
+        "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        searchOpen ? "bg-[#f0e9fb] text-[#975ee2]" : "text-[#8487a7] hover:bg-[#f4f5fb]",
+      )}
+    >
+      <Search className="h-4 w-4" />
+    </button>
+  );
+
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col bg-white", className)}>
-      <div className="flex items-center justify-end px-5 pt-3">
-        <button
-          type="button"
-          onClick={() =>
-            setSearchOpen((o) => {
-              setFocusedResult(null);
-              if (o) setSearch("");
-              return !o;
-            })
-          }
-          title="Search messages"
-          aria-label="Search messages"
-          aria-pressed={searchOpen}
-          className={cn(
-            "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            searchOpen ? "bg-[#f0e9fb] text-[#975ee2]" : "text-[#8487a7] hover:bg-[#f4f5fb]",
-          )}
-        >
-          <Search className="h-4 w-4" />
-        </button>
-      </div>
+      {headerTitle ? (
+        <div className="flex min-h-9 items-center justify-between gap-2 px-3">
+          <p className="min-w-0 truncate text-[13px] font-semibold text-foreground">{headerTitle}</p>
+          {searchToggle}
+        </div>
+      ) : (
+        <div className="flex items-center justify-end px-5 pt-3">{searchToggle}</div>
+      )}
 
       {searchOpen && (
-        <div className="px-5 pt-1">
+        <div className={cn(headerTitle ? "px-3 pt-1" : "px-5 pt-1")}>
           <div className="relative flex items-center">
             <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#8487a7]" />
             <input

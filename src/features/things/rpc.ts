@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import type { Importance, Pace, ThingFile, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
-import { extractErrorMessage } from "@/lib/domain-error";
+import { extractErrorMessage, isNetworkError } from "@/lib/domain-error";
 import { authedFetch } from "@/lib/authed-fetch";
 import { DEMO_ACTOR_BY_KEY } from "@/features/demo/identities";
 import {
@@ -147,7 +147,18 @@ export async function rpcCatchThing(thingId: string, pace: Pace = "next") {
 export async function rpcSetPersonalPace(thingId: string, pace: Pace) {
   return runDomainMutation({
     thingId,
-    live: () => liveRpc(() => supabase.rpc("set_personal_pace", { p_thing_id: thingId, p_personal_pace: pace })),
+    live: async () => {
+      const write = () => liveRpc(() => supabase.rpc("set_personal_pace", { p_thing_id: thingId, p_personal_pace: pace }));
+      try {
+        return await write();
+      } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        // Setting a pace is idempotent, so one retry is safe when the
+        // response was lost or the connection briefly dropped.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return write();
+      }
+    },
     preview: () => {
       setPaceLocal(thingId, pace);
       return null as never;

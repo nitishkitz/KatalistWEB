@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 import type { ThingFile } from "@/features/things/PDFViewer";
@@ -15,6 +16,7 @@ import type { ThingFile } from "@/features/things/PDFViewer";
 export type ThingAttachmentsProps = {
   files: ThingFile[];
   activeFileId: string | null;
+  showInlinePreview?: boolean;
   viewOnly: boolean;
   isLoading: boolean;
   attachmentsUnavailable: boolean;
@@ -52,6 +54,7 @@ function fileTypeChip(type: ThingFile["type"]): {
 export function ThingAttachments({
   files,
   activeFileId,
+  showInlinePreview = true,
   viewOnly,
   isLoading,
   attachmentsUnavailable,
@@ -60,6 +63,10 @@ export function ThingAttachments({
   onAddFileClick,
   fileInput,
 }: ThingAttachmentsProps): React.ReactNode {
+  const [previewImageId, setPreviewImageId] = useState<string | null>(null);
+  const imageFiles = files.filter((file) => file.type === "image" || file.type === "png" || file.type === "jpg");
+  const previewImage = imageFiles.find((file) => file.id === previewImageId) ?? imageFiles[0];
+
   return (
     <div className="py-3 border-b border-border/40">
       {fileInput}
@@ -99,7 +106,10 @@ export function ThingAttachments({
               <button
                 key={file.id}
                 type="button"
-                onClick={() => onSelectFile(file)}
+                onClick={() => {
+                  if (file.type === "image" || file.type === "png" || file.type === "jpg") setPreviewImageId(file.id);
+                  onSelectFile(file);
+                }}
                 className={cn(
                   "flex w-full items-center gap-2.5 px-3 py-2 text-left cursor-pointer outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                   idx > 0 && "border-t border-[#eeeff6]",
@@ -128,6 +138,19 @@ export function ThingAttachments({
       ) : (
         <p className="text-[12px] text-[#6a769c] italic">No files attached yet</p>
       )}
+      {showInlinePreview && previewImage?.url ? (
+        <figure className="mt-3 overflow-hidden rounded-[8px] border border-[#eeeff6] bg-[#f6f7fb]">
+          <img
+            src={previewImage.url}
+            alt={previewImage.name}
+            className="max-h-64 w-full object-contain"
+            loading="lazy"
+          />
+          <figcaption className="truncate border-t border-[#eeeff6] bg-white px-3 py-1.5 text-[11px] text-[#6a769c]">
+            {previewImage.name}
+          </figcaption>
+        </figure>
+      ) : null}
     </div>
   );
 }

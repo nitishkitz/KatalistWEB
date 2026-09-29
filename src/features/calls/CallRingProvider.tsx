@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Phone, PhoneOff } from "lucide-react";
+import { MoreHorizontal, Phone, PhoneOff, Video, X } from "lucide-react";
 import { useSession } from "@/hooks/useSession";
+import { Logo } from "@/components/katalist/Logo";
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { subscribeToRings, getDeviceId, type RingPayload } from "./call-lobby";
 import { createRingtone, unlockAudio, type Ringtone } from "./ringtone";
 import { requestAutojoin } from "./autojoin-signal";
@@ -106,40 +108,49 @@ export function CallRingProvider() {
     }
   };
 
+  const isVideo = ring.callType === "video";
+  const CallIcon = isVideo ? Video : Phone;
+
   return (
     <div
-      className="fixed right-4 top-4 z-[70] w-[340px] animate-in slide-in-from-top-2 rounded-2xl border-2 border-[#12a15f]/50 bg-white p-4"
-      style={{ boxShadow: "0 0 0 4px rgba(18,161,95,0.15), 0 18px 40px rgba(15,23,42,0.3)" }}
+      className="fixed right-4 top-4 z-[70] w-[min(303px,calc(100vw-2rem))] animate-in slide-in-from-top-2 overflow-hidden rounded-[10px] border border-[#eeedf3] bg-white p-2.5 text-[#171717] shadow-[0_14px_40px_rgba(20,16,32,0.2)]"
       role="alert"
+      aria-live="assertive"
     >
-      <div className="flex items-center gap-3">
-        <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#e4fcf0] text-[#12a15f]">
-          <span className="absolute inset-0 animate-ping rounded-full bg-[#12a15f]/30" />
-          <Phone className="relative h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-semibold text-[#000533]">Incoming call</p>
-          <p className="truncate text-[12.5px] text-[#6a769c]">
-            {ring.fromName} · {ring.listName}
-          </p>
+      <div className="flex h-7 items-center justify-between">
+        <Logo markClassName="h-[18px] w-[18px] rounded-[3px] p-[3px]" textClassName="text-[12px]" className="gap-1.5" />
+        <div className="flex items-center gap-1 text-[#51466c]">
+          <button type="button" onClick={dismiss} className="rounded p-1 hover:bg-[#f4f1fa]" aria-label="More call options" title="More options">
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={dismiss} className="rounded p-1 hover:bg-[#f4f1fa]" aria-label="Close incoming call">
+            <X className="h-4 w-4" />
+          </button>
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <button
-          type="button"
-          onClick={dismiss}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:bg-muted"
-        >
-          <PhoneOff className="h-3.5 w-3.5" />
-          Dismiss
+
+      <div className="flex flex-col items-center px-2 pb-2 pt-2">
+        <span className="relative mb-2 inline-flex rounded-full border border-[#d6d3dc] p-1 shadow-[0_8px_24px_rgba(118,105,251,0.12)]">
+          <PersonAvatar name={ring.fromName} src={ring.fromAvatarUrl} size={78} className="ring-1 ring-white" />
+          <span className="absolute bottom-0 right-0 flex h-[22px] w-[22px] items-center justify-center rounded-full border-2 border-white bg-[#7669fb] text-white shadow-sm">
+            <CallIcon className="h-3 w-3" fill={isVideo ? "none" : "currentColor"} />
+          </span>
+        </span>
+        <p className="max-w-full truncate text-center text-[13px] font-semibold leading-[18px] text-black">
+          {ring.fromName} is calling you
+        </p>
+        <p className="mt-0.5 text-[9px] leading-[14px] text-[#55515d]">
+          {ring.callType ? `${isVideo ? "Video" : "Audio"} Call` : "Incoming call"}
+          {ring.kind === "dm" ? null : <span className="text-[#77727e]"> · {ring.listName}</span>}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={join} className="inline-flex h-[31px] items-center justify-center gap-1.5 rounded-[4px] bg-[#7669fb] text-[10px] font-medium text-white transition hover:bg-[#6658ed] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7669fb] focus-visible:ring-offset-2">
+          <CallIcon className="h-3 w-3" /> Answer
         </button>
-        <button
-          type="button"
-          onClick={join}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#12a15f] px-3.5 py-1.5 text-[12px] font-semibold text-white hover:brightness-95"
-        >
-          <Phone className="h-3.5 w-3.5" />
-          Join
+        <button type="button" onClick={dismiss} className="inline-flex h-[31px] items-center justify-center gap-1.5 rounded-[4px] bg-[#f95559] text-[10px] font-medium text-white transition hover:bg-[#e7464b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f95559] focus-visible:ring-offset-2">
+          <PhoneOff className="h-3 w-3" /> Decline
         </button>
       </div>
     </div>

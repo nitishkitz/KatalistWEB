@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ExternalLink,
   Download,
@@ -35,6 +35,147 @@ function isRemoteUrl(url?: string): url is string {
  */
 function isPrivateFileUrl(url: string): boolean {
   return !url.includes("/object/public/");
+}
+
+function DocxPreview({ file }: { file: ThingFile }) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [retry, setRetry] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !file.url) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    host.replaceChildren();
+    setStatus("loading");
+    setPage(1);
+    setPageCount(1);
+
+    const releaseDocumentUrls = () => {
+      host.querySelectorAll<HTMLElement>("*").forEach((element) => {
+        for (const value of [element.getAttribute("src"), element.getAttribute("href")]) {
+          if (value?.startsWith("blob:")) URL.revokeObjectURL(value);
+        }
+      });
+      host.replaceChildren();
+    };
+
+    const load = async () => {
+      try {
+        const { renderAsync } = await import("docx-preview");
+        let response = await fetch(file.url!, { signal: controller.signal });
+        if (!response.ok && file.storageKey) {
+          const refreshedUrl = await resignThingAttachmentUrl(file.storageKey);
+          if (refreshedUrl) response = await fetch(refreshedUrl, { signal: controller.signal });
+        }
+        if (!response.ok) throw new Error("The document could not be loaded.");
+        const bytes = await response.arrayBuffer();
+        if (cancelled) return;
+
+        const styles = document.createElement("div");
+        const body = document.createElement("div");
+        body.className = "docx-preview-body";
+        host.append(styles, body);
+        await renderAsync(bytes, body, styles, {
+          ignoreWidth: false,
+          ignoreHeight: false,
+          breakPages: true,
+          ignoreLastRenderedPageBreak: false,
+          renderAltChunks: false,
+          renderChanges: false,
+          renderComments: false,
+          useBase64URL: true,
+        });
+        if (!cancelled) {
+          setPageCount(Math.max(1, body.querySelectorAll("section.docx").length));
+          setStatus("ready");
+        }
+        else releaseDocumentUrls();
+      } catch (error) {
+        if (cancelled || (error instanceof DOMException && error.name === "AbortError")) return;
+        releaseDocumentUrls();
+        setStatus("error");
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+      controller.abort();
+      releaseDocumentUrls();
+    };
+  }, [file.id, file.storageKey, file.url, retry]);
+
+  // Render Word's page boxes at their authored dimensions, then scale the
+  // page to the available preview width. Keep only the selected page mounted
+  // in the viewport so page navigation behaves like a document viewer.
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || status !== "ready") return;
+    const pages = Array.from(host.querySelectorAll<HTMLElement>("section.docx"));
+    const wrapper = host.querySelector<HTMLElement>(".docx-wrapper");
+    if (!pages.length || !wrapper) return;
+
+    pages.forEach((pageElement, index) => {
+      pageElement.style.display = index + 1 === page ? "flex" : "none";
+    });
+    const fitPage = () => {
+      const selectedPage = pages[page - 1];
+      if (!selectedPage) return;
+      wrapper.style.zoom = "1";
+      const naturalWidth = selectedPage.getBoundingClientRect().width;
+      const availableWidth = Math.max(1, host.clientWidth - 24);
+      wrapper.style.zoom = String(Math.min(1, availableWidth / naturalWidth));
+    };
+    fitPage();
+    const observer = new ResizeObserver(fitPage);
+    observer.observe(host);
+    return () => observer.disconnect();
+  }, [page, pageCount, status]);
+
+  return (
+    <div className="flex h-full w-full min-h-[340px] flex-col overflow-hidden bg-transparent">
+      <div className="mb-1 flex shrink-0 items-center justify-center gap-2 text-[12px] text-slate-600" aria-label="Word document page controls">
+        <button type="button" aria-label="Previous page" disabled={page <= 1 || status !== "ready"} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-md bg-white/70 p-1 disabled:cursor-not-allowed disabled:opacity-40">
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <label className="flex items-center gap-1.5">
+          <span className="sr-only">Page number</span>
+          <input type="number" min={1} max={pageCount} value={page} disabled={status !== "ready"} onChange={(event) => {
+            const value = Number(event.target.value);
+            if (Number.isFinite(value)) setPage(Math.min(pageCount, Math.max(1, value)));
+          }} className="h-7 w-12 rounded-md bg-white/70 text-center tabular-nums outline-none focus:ring-1 focus:ring-violet-300" />
+          <span>of {pageCount}</span>
+        </label>
+        <button type="button" aria-label="Next page" disabled={page >= pageCount || status !== "ready"} onClick={() => setPage((value) => Math.min(pageCount, value + 1))} className="rounded-md bg-white/70 p-1 disabled:cursor-not-allowed disabled:opacity-40">
+          <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+      {status === "loading" ? (
+        <div role="status" className="flex flex-1 items-center justify-center gap-2 text-[13px] text-slate-500">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading Word document…
+        </div>
+      ) : null}
+      {status === "error" ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <p role="alert" className="text-[13px] text-slate-600">Couldn’t preview this Word document.</p>
+          <button type="button" onClick={() => setRetry((value) => value + 1)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50">
+            <RotateCcw className="h-3.5 w-3.5" /> Try again
+          </button>
+        </div>
+      ) : null}
+      <div
+        ref={hostRef}
+        className={cn(
+          "docx-preview-host min-h-0 min-w-0 flex-1 overflow-auto [&_.docx-wrapper]:!bg-transparent [&_.docx-wrapper]:!p-0 [&_.docx]:!m-0 [&_.docx]:!max-w-none [&_.docx]:!shadow-none",
+          status !== "ready" && "hidden",
+        )}
+      />
+    </div>
+  );
 }
 
 type PDFViewerProps = {
@@ -111,6 +252,10 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
   const isPdf = file.type === "pdf";
   const isExcel = file.type === "excel";
   const isDoc = file.type === "docx";
+  const isDocx = isDoc && (
+    file.name.toLowerCase().endsWith(".docx") ||
+    file.mimeType?.toLowerCase().includes("wordprocessingml") === true
+  );
 
   const typeLabel: Record<string, string> = {
     pdf: "PDF",
@@ -149,45 +294,48 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
             {file.sizeLabel || "Attachment"}
           </p>
         </div>
-        {file.url && (
-          <a
-            href={file.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[9px] border border-[#ebedf3] bg-white text-[#5f5f90] hover:text-[#000533] transition-colors"
-            aria-label="Open file in new tab"
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        )}
       </div>
 
       {/* Toolbar */}
       <div className="flex items-center justify-between px-5 pb-3">
-        <button
-          type="button"
-          onClick={() => void handleDownload()}
-          disabled={currentDownloadState === "pending"}
-          className={cn(
-            "inline-flex items-center gap-1.5 text-[12px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed",
-            currentDownloadState === "failed" ? "text-destructive hover:text-destructive/80" : "text-[#434f80] hover:text-[#000533]",
+        <div className="flex min-w-0 items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleDownload()}
+            disabled={currentDownloadState === "pending"}
+            className={cn(
+              "inline-flex items-center gap-1.5 text-[12px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed",
+              currentDownloadState === "failed" ? "text-destructive hover:text-destructive/80" : "text-[#434f80] hover:text-[#000533]",
+            )}
+          >
+            {currentDownloadState === "pending" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : currentDownloadState === "failed" ? (
+              <RotateCcw className="h-3.5 w-3.5" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            <span>
+              {currentDownloadState === "pending"
+                ? "Downloading…"
+                : currentDownloadState === "failed"
+                  ? "Download failed — retry"
+                  : "Download"}
+            </span>
+          </button>
+          {file.url && (
+            <a
+              href={file.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-[#ebedf3] bg-white text-[#5f5f90] hover:text-[#000533] transition-colors"
+              aria-label="Open file in new tab"
+              title="Open file in new tab"
+            >
+              <ExternalLink className="h-4 w-4" />
+            </a>
           )}
-        >
-          {currentDownloadState === "pending" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : currentDownloadState === "failed" ? (
-            <RotateCcw className="h-3.5 w-3.5" />
-          ) : (
-            <Download className="h-3.5 w-3.5" />
-          )}
-          <span>
-            {currentDownloadState === "pending"
-              ? "Downloading…"
-              : currentDownloadState === "failed"
-                ? "Download failed — retry"
-                : "Download"}
-          </span>
-        </button>
+        </div>
 
         {isPdf ? (
           <div className="flex items-center gap-2.5 text-[12px] text-[#434f80]">
@@ -275,6 +423,8 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
               className="mx-auto max-w-[760px]"
             />
           </div>
+        ) : isDocx && file.url ? (
+          <DocxPreview key={file.id} file={file} />
         ) : (isDoc || isExcel) && isRemoteUrl(file.url) && !isPrivateFileUrl(file.url) ? (
           <iframe
             src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(file.url)}`}

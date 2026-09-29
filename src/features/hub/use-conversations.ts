@@ -6,6 +6,7 @@ import { isPreviewSession } from "@/lib/session-mode";
 import { fetchProfileIdentitiesByIds, matchAvatarByName } from "@/features/people/directory";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { withReadDeadline } from "@/lib/read-request";
+import { signCoverUrls } from "@/features/lists/map-list-rows";
 import { getConversationLastReadAt } from "./chat-read-state";
 
 export type ConversationParticipant = {
@@ -22,6 +23,8 @@ export type Conversation = {
   title: string;
   /** DM: the other person's avatar. Group: null (UI stacks member avatars). */
   avatarUrl: string | null;
+  /** Group conversation's List cover, when one is configured. */
+  coverUrl?: string | null;
   ownerId: string;
   /** Every participant except me. */
   others: ConversationParticipant[];
@@ -57,6 +60,8 @@ type HubSummaryRow = {
   last_author_profile_id: string | null; last_has_attachment: boolean; sort_at: string;
 };
 type HubUnreadRow = { list_id: string; unread_count: number; mention_count: number };
+type HubCoverRow = { id: string; cover_storage_path: string | null };
+type HubNamedCoverRow = { name: string; cover_storage_path: string | null };
 
 const HUB_PAGE_SIZE = 100;
 type HubCursor = { at: string; id: string };
@@ -69,7 +74,7 @@ export async function fetchConversations(
   // deadline (read-request.ts), wired to React Query's own cancellation
   // signal so a superseded/refetched call or unmount stops whichever
   // request is actually in flight.
-  const { lists, hasMore, memberRows, identities, unreadCounts, readWatermarks } = await withReadDeadline(querySignal, async (signal) => {
+  const { lists, hasMore, memberRows, identities, unreadCounts, readWatermarks, coverUrlsByList } = await withReadDeadline(querySignal, async (signal) => {
     // RLS-scoped SQL returns at most 101 conversation summaries, each with
     // one latest message; full histories never cross the rail boundary.
     const { data: listRows, error } = await callUngeneratedRpc("get_hub_conversation_page", {
@@ -79,12 +84,12 @@ export async function fetchConversations(
     const summaries = (listRows ?? []) as HubSummaryRow[];
     const hasMore = summaries.length > HUB_PAGE_SIZE;
     const lists = summaries.slice(0, HUB_PAGE_SIZE);
-    if (lists.length === 0) return { lists, hasMore, memberRows: [], identities: [], unreadCounts: new Map<string, HubUnreadRow>(), readWatermarks: new Map<string, number>() };
+    if (lists.length === 0) return { lists, hasMore, memberRows: [], identities: [], unreadCounts: new Map<string, HubUnreadRow>(), readWatermarks: new Map<string, number>(), coverUrlsByList: new Map<string, string>() };
 
     const ids = lists.map((l) => l.id);
     const readWatermarks = new Map(ids.map((id) => [id, getConversationLastReadAt(id, myId)]));
 
-    const [membersResult, countsResult] = await Promise.all([
+    const [membersResult, countsResult, coverUrlsByList] = await Promise.all([
       supabase.from("list_members").select("list_id, profile_id").in("list_id", ids).abortSignal(signal),
       (async () => {
         try {
@@ -99,6 +104,48 @@ export async function fetchConversations(
           return { data: null, error: new Error("Unread counts unavailable") };
         }
       })(),
+      (async () => {
+        try {
+          const [{ data, error }, { data: namedData, error: namedError }] = await Promise.all([
+            supabase
+            .from("lists")
+            .select("id,cover_storage_path")
+            .in("id", ids)
+            .abortSignal(signal),
+            // A quick-chat group and its task List are separate `lists` rows.
+            // Load visible task List covers as a fallback so a group with the
+            // same name can use the cover its List page already displays.
+            supabase
+              .from("lists")
+              .select("name,cover_storage_path")
+              .eq("kind", "list")
+              .is("archived_at", null)
+              .abortSignal(signal),
+          ]);
+          if (error) return new Map<string, string>();
+          const rows = (data ?? []) as HubCoverRow[];
+          const namedRows = namedError ? [] : (namedData ?? []) as HubNamedCoverRow[];
+          const taskCoverByName = new Map(namedRows.flatMap((row) => row.cover_storage_path
+            ? [[row.name.trim().toLocaleLowerCase(), row.cover_storage_path] as const]
+            : []));
+          const pathByList = new Map<string, string>();
+          for (const row of rows) {
+            const conversation = lists.find((list) => list.id === row.id);
+            const path = row.cover_storage_path || (conversation?.kind === "group"
+              ? taskCoverByName.get(conversation.name.trim().toLocaleLowerCase())
+              : undefined);
+            if (path) pathByList.set(row.id, path);
+          }
+          const signed = await signCoverUrls([...pathByList.values()]);
+          return new Map([...pathByList].flatMap(([id, path]) => {
+            const url = signed.get(path);
+            return url ? [[id, url] as const] : [];
+          }));
+        } catch {
+          // Covers are decorative; a signing/query failure should not hide chat.
+          return new Map<string, string>();
+        }
+      })(),
     ]);
     if (membersResult.error) throw membersResult.error;
     const identities = await fetchProfileIdentitiesByIds([
@@ -108,7 +155,7 @@ export async function fetchConversations(
     ], signal);
     const unreadCounts = new Map<string, HubUnreadRow>();
     if (!countsResult.error) for (const row of (countsResult.data ?? []) as HubUnreadRow[]) unreadCounts.set(row.list_id, row);
-    return { lists, hasMore, memberRows: membersResult.data ?? [], identities, unreadCounts, readWatermarks };
+    return { lists, hasMore, memberRows: membersResult.data ?? [], identities, unreadCounts, readWatermarks, coverUrlsByList };
   });
   if (lists.length === 0) return { conversations: [] };
 
@@ -154,6 +201,7 @@ export async function fetchConversations(
       kind: l.kind,
       title,
       avatarUrl,
+      coverUrl: l.kind === "group" ? coverUrlsByList.get(l.id) ?? null : null,
       ownerId: l.owner_profile_id,
       others,
       memberCount: participantIds.length,

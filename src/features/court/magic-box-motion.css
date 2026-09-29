@@ -1,0 +1,156 @@
+.magic-box-root {
+  /* Idle keeps a soft glow; active states brighten and animate it.
+     --magic-frame-opacity = the border line/frame
+     --magic-aura-opacity  = the soft outer bloom */
+  --magic-frame-opacity: 1;
+  --magic-aura-opacity: .26;
+  --magic-orbit: 7s;
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
+}
+
+/* Hover keeps the quiet idle treatment and lifts slightly. */
+.magic-box-root[data-state="hover"] { transform: translateY(-1px); }
+
+/* Active states -- effects switch on. */
+.magic-box-root[data-state="focused"],
+.magic-box-root[data-state="typing"] { --magic-aura-opacity: .8; --magic-orbit: 7s; }
+.magic-box-root[data-state="submitting"] { --magic-aura-opacity: .92; --magic-orbit: 3s; }
+.magic-box-root[data-state="processing"] { --magic-aura-opacity: .88; --magic-orbit: 3.1s; }
+.magic-box-root[data-state="success"] { --magic-aura-opacity: .76; }
+.magic-box-root[data-state="error"] { --magic-aura-opacity: .76; }
+
+/* White pill interior -- sits ABOVE the two negative-z gradient layers so the
+   colour only ever shows as the border rim and the outer bloom, never washing
+   over the input. A subtle inner white line brightens the edge like the ref. */
+.magic-box-fill {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .9);
+  pointer-events: none;
+}
+
+/* Soft outer bloom -- a big, heavily blurred gradient behind everything that
+   bleeds continuously into the page (no masks, no rings). */
+.magic-box-aura {
+  position: absolute;
+  z-index: -2;
+  inset: -12px;
+  border-radius: 28px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: var(--magic-aura-opacity);
+  filter: blur(17px) saturate(1.2);
+  transition: opacity 520ms cubic-bezier(.22, .7, .2, 1);
+  animation: magic-box-breathe 7.5s ease-in-out infinite;
+  will-change: opacity;
+}
+
+/* Border frame -- inactive it is a thin flat purple line; active it thickens
+   into the rotating gradient. Only its rim peeks out from behind the fill. */
+.magic-box-frame {
+  position: absolute;
+  z-index: -1;
+  inset: -1.5px;
+  border-radius: 17.5px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: var(--magic-frame-opacity);
+  filter: saturate(1.3);
+  transition: inset 260ms cubic-bezier(.2, .8, .2, 1), border-radius 260ms cubic-bezier(.2, .8, .2, 1), opacity 300ms cubic-bezier(.18, .8, .25, 1);
+}
+
+.magic-box-aura-light,
+.magic-box-frame-light {
+  position: absolute;
+  width: 200%;
+  aspect-ratio: 1;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(0deg);
+  will-change: transform;
+}
+/* Inactive default: a solid light-purple rim over a quiet bloom. */
+.magic-box-frame-light { background: #c9b3f0; }
+.magic-box-aura-light {
+  background: conic-gradient(from 210deg, #b98aee 0deg, #d9a8f2 70deg, #aaa0ed 140deg, #aebcf1 200deg, #d1dcef 242deg, #aebcf1 285deg, #b98aee 360deg);
+}
+
+/* Active states -- keep the frame THIN, just swap it to the rotating gradient
+   and spin both layers. Grouped so idle/hover never get any of this. */
+.magic-box-root[data-state="focused"] .magic-box-frame-light,
+.magic-box-root[data-state="typing"] .magic-box-frame-light,
+.magic-box-root[data-state="submitting"] .magic-box-frame-light,
+.magic-box-root[data-state="processing"] .magic-box-frame-light,
+.magic-box-root[data-state="success"] .magic-box-frame-light,
+.magic-box-root[data-state="error"] .magic-box-frame-light {
+  background: conic-gradient(from 210deg, #a855f7 0deg, #d76cff 70deg, #7c6cff 140deg, #4f7cff 200deg, #22d3ee 242deg, #4f7cff 285deg, #a855f7 360deg);
+  animation: magic-box-orbit var(--magic-orbit) linear infinite reverse;
+}
+.magic-box-root[data-state="focused"] .magic-box-aura-light,
+.magic-box-root[data-state="typing"] .magic-box-aura-light,
+.magic-box-root[data-state="submitting"] .magic-box-aura-light,
+.magic-box-root[data-state="processing"] .magic-box-aura-light,
+.magic-box-root[data-state="success"] .magic-box-aura-light,
+.magic-box-root[data-state="error"] .magic-box-aura-light {
+  animation: magic-box-orbit calc(var(--magic-orbit) * 1.25) linear infinite;
+}
+
+@keyframes magic-box-orbit { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
+@keyframes magic-box-breathe {
+  0%, 100% { opacity: calc(var(--magic-aura-opacity) * .78); }
+  50% { opacity: var(--magic-aura-opacity); }
+}
+
+.magic-box-root[data-accent="attachment"] .magic-box-frame,
+.magic-box-root[data-accent="first-character"] .magic-box-frame { animation: magic-box-brief-light 620ms ease-out both; }
+.magic-box-root[data-accent="first-character"] .magic-box-sparkle { animation: magic-box-sparkle 280ms cubic-bezier(.2, .8, .2, 1); }
+.magic-box-root[data-handoff="true"] .magic-box-frame { animation: magic-box-brief-light 420ms ease-out both; }
+.magic-box-root[data-handoff="true"]::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  inset: 5px 0 5px auto;
+  width: 28%;
+  pointer-events: none;
+  border-radius: 12px;
+  background: radial-gradient(ellipse at right, rgba(79,124,255,.12), transparent 75%);
+  animation: magic-box-handoff 420ms ease-out both;
+}
+.magic-box-root[data-state="success"] .magic-box-frame-light,
+.magic-box-root[data-state="success"] .magic-box-aura-light { background: conic-gradient(from 210deg, #975ee2, #4f7cff 45%, #34d399 57%, #4f7cff 66%, #975ee2); }
+.magic-box-root[data-state="error"] .magic-box-frame { animation: magic-box-error 650ms linear both; }
+.magic-box-root[data-state="error"] .magic-box-frame-light,
+.magic-box-root[data-state="error"] .magic-box-aura-light { background: conic-gradient(from 210deg, #975ee2, #4f7cff 42%, #f04438 58%, #975ee2); }
+
+.magic-box-toss { transition: transform 230ms cubic-bezier(.2, .8, .2, 1), filter 180ms ease; }
+.magic-box-toss:active { transform: scale(.96); }
+.magic-box-attachment { position: relative; }
+.magic-box-attachment:hover::before { content: ""; position: absolute; inset: 1px; border-radius: 50%; background: rgba(151,94,226,.08); pointer-events: none; }
+
+@keyframes magic-box-brief-light { 0%, 100% { opacity: var(--magic-frame-opacity); } 34% { opacity: 1; filter: saturate(1.6) brightness(1.1); } }
+@keyframes magic-box-sparkle { 50% { transform: scale(1.08) rotate(6deg); } }
+@keyframes magic-box-handoff { 0% { opacity: 0; transform: translateX(12px); } 35% { opacity: 1; } 100% { opacity: 0; transform: translateX(-12px); } }
+@keyframes magic-box-error { 0%, 32%, 54%, 84%, 100% { opacity: .5; } 16%, 68% { opacity: 1; } }
+
+.magic-box-root[data-visible="false"] .magic-box-frame-light,
+.magic-box-root[data-visible="false"] .magic-box-aura,
+.magic-box-root[data-visible="false"] .magic-box-aura-light { animation-play-state: paused; }
+
+@media (max-width: 640px) {
+  .magic-box-frame { inset: -2.5px; border-radius: 14px; }
+  .magic-box-aura { inset: -14px; border-radius: 24px; filter: blur(18px) saturate(1.3); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magic-box-root, .magic-box-toss { transition: none !important; transform: none !important; }
+  .magic-box-frame-light, .magic-box-aura-light, .magic-box-frame, .magic-box-sparkle, .magic-box-root::after { animation: none !important; }
+  .magic-box-aura { animation: none !important; }
+}

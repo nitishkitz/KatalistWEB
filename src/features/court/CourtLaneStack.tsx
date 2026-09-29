@@ -17,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
 import { rpcCatchAndStart, rpcSetPersonalPace, rpcSnoozeThing, rpcSortThing } from "@/features/things/rpc";
+import { runThingAction } from "@/features/things/run-thing-action";
 import {
   cancelThingReads,
   claimThingMutation,
@@ -43,6 +44,7 @@ import {
 import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { KatalistIcon } from "./KatalistIcon";
 import { courtLaneContent } from "./court-lane-content";
+import { courtLaneDropAction } from "./court-lane-drop";
 import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -60,6 +62,8 @@ export type CourtLaneStackHandle = {
 export type CourtLaneStackProps = {
   lane: CourtLaneId;
   things: Thing[];
+  courtThings: Record<CourtLaneId, Thing[]>;
+  listCoversById?: ReadonlyMap<string, string | null>;
   myActorId: string | null;
   initialPosition?: { activeIndex: number; activeThingId: string | null };
   onOpen: (thing: Thing, origin: HTMLElement) => void;
@@ -90,14 +94,30 @@ type StackAnim = {
 function PeekQueueCard({
   thing,
   lane,
+  depth,
+  myActorId,
   onOpen,
 }: {
   thing: Thing;
   lane: CourtLaneId;
+  depth: number;
+  myActorId: string | null;
   onOpen: () => void;
 }) {
-  const assigneeAvatar = useAvatarUrl(thing.assignee.name, null, thing.assignee.avatarUrl);
+  const assignedByOther = Boolean(
+    myActorId && thing.assignee.id === myActorId && thing.owner.id !== thing.assignee.id,
+  );
+  const facePerson = assignedByOther ? thing.owner : thing.assignee;
+  const faceAvatar = useAvatarUrl(facePerson.name, null, facePerson.avatarUrl);
+  const faceLabel = assignedByOther
+    ? `${thing.owner.name.split(" ")[0]} → You`
+    : myActorId && thing.assignee.id === myActorId
+      ? "You"
+      : thing.assignee.name.split(" ")[0];
   const due = formatCourtDue(thing);
+  const imagePreview = thing.files?.find(
+    (file) => ["image", "png", "jpg"].includes(file.type) && file.url,
+  );
 
   return (
     <button
@@ -115,49 +135,62 @@ function PeekQueueCard({
         );
         e.dataTransfer.effectAllowed = "copyMove";
       }}
-      className="group/queue flex w-full flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 text-left cursor-pointer transition-all hover:border-slate-300 select-none min-h-[58px] h-[58px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group/queue relative flex min-h-[76px] w-full flex-col justify-center rounded-b-xl border border-slate-200/80 bg-white px-3.5 py-2 text-left shadow-[0_3px_5px_rgba(15,23,42,0.14)] transition-colors hover:border-slate-300 select-none outline-none focus-visible:ring-2 focus-visible:ring-ring [&:not(:first-child)]:-mt-1"
+      style={{ zIndex: 10 - depth }}
       title={`Jump to ${thing.title}`}
       aria-label={`Jump to ${thing.title}`}
     >
-      <div className="flex items-center justify-between text-[12px]">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <PersonAvatar
-            name={thing.assignee.name}
-            initials={thing.assignee.initials}
-            src={assigneeAvatar}
-            size={20}
-          />
-          <span className="font-medium text-slate-800 text-[12px] truncate">
-            {thing.assignee.name.split(" ")[0]}
-          </span>
-        </div>
-        {thing.dueAt && (
-          <span
-            className={cn(
-              "shrink-0 text-[12px] font-bold",
-              due.urgent
-                ? "text-red-500"
-                : lane === "now"
-                  ? "text-red-500"
-                  : lane === "next"
-                    ? "text-blue-500"
-                    : "text-slate-500",
+      <div className="flex min-w-0 items-center gap-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2 text-[12px] leading-tight">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <PersonAvatar
+                name={facePerson.name}
+                initials={facePerson.initials}
+                src={faceAvatar}
+                size={20}
+              />
+              <span className="truncate text-[12px] font-medium text-slate-800">
+                {faceLabel}
+              </span>
+            </div>
+            {thing.dueAt && (
+              <span
+                className={cn(
+                  "shrink-0 text-[12px] font-bold",
+                  due.urgent
+                    ? "text-red-500"
+                    : lane === "now"
+                      ? "text-red-500"
+                      : lane === "next"
+                        ? "text-blue-500"
+                        : "text-slate-500",
+                )}
+              >
+                {due.label}
+              </span>
             )}
-          >
-            {due.label}
-          </span>
-        )}
+          </div>
+          <p className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-[1.25] text-slate-900">
+            {thing.title}
+          </p>
+        </div>
+        {imagePreview?.url ? (
+          <img
+            src={imagePreview.url}
+            alt=""
+            className="h-12 w-14 shrink-0 rounded-md object-cover"
+            loading="lazy"
+          />
+        ) : null}
       </div>
-      <p className="mt-0.5 text-[12.5px] font-medium text-slate-900 truncate leading-tight">
-        {thing.title}
-      </p>
     </button>
   );
 }
 
 export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackProps>(
   function CourtLaneStack(
-    { lane, things: allThings, myActorId, initialPosition, onOpen, onRefresh, onViewAll },
+    { lane, things: allThings, courtThings, listCoversById, myActorId, initialPosition, onOpen, onRefresh, onViewAll },
     ref,
   ) {
     const qc = useQueryClient();
@@ -330,7 +363,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         if (reduceMotion) {
           setActiveIndex(nextIndex);
           activeThingIdRef.current = nextThing.id;
-          setAnnouncement(`Now viewing ${nextThing.title}.`);
+          setAnnouncement(`Card ${nextIndex + 1} of ${things.length}`);
           return;
         }
 
@@ -338,7 +371,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         setAnim({ outgoing: activeThing, direction });
         setActiveIndex(nextIndex);
         activeThingIdRef.current = nextThing.id;
-        setAnnouncement(`Now viewing ${nextThing.title}.`);
+        setAnnouncement(`Card ${nextIndex + 1} of ${things.length}`);
       },
       [activeThing, pendingAction, renderIndex, things],
     );
@@ -356,7 +389,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         if (reduceMotion) {
           setActiveIndex(nextIndex);
           activeThingIdRef.current = nextThing.id;
-          setAnnouncement(`Now viewing ${nextThing.title}.`);
+          setAnnouncement(`Card ${nextIndex + 1} of ${things.length}`);
           return;
         }
 
@@ -365,7 +398,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         setAnim({ outgoing: activeThing, direction });
         setActiveIndex(nextIndex);
         activeThingIdRef.current = nextThing.id;
-        setAnnouncement(`Now viewing ${nextThing.title}.`);
+        setAnnouncement(`Card ${nextIndex + 1} of ${things.length}`);
       },
       [activeThing, pendingAction, renderIndex, things],
     );
@@ -691,6 +724,8 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       startNavigation(event.key === "ArrowDown" ? 1 : -1);
     };
 
+    // A document or image preview makes the active card much taller. Show one
+    // readable card below it and use the pager for the rest of the deck.
     const depthCount = Math.min(6, Math.max(0, things.length - 1));
     const swipeDistance = Math.abs(gesture.offset.x);
     const swipeCommitted = swipeDistance >= 54;
@@ -736,12 +771,36 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               title: string;
             };
             if (data.fromLane === lane) return;
+            const sourceThing = Object.values(courtThings)
+              .flat()
+              .find((thing) => thing.id === data.thingId);
+            if (!sourceThing) return;
+            const action = courtLaneDropAction(sourceThing, myActorId, lane);
+            if (!action) {
+              toast.error("Only the assignee can move this Thing between lanes.");
+              return;
+            }
 
-            await rpcSetPersonalPace(data.thingId, lane);
-            toast.success(`Moved "${data.title}" to ${content.label}`);
-            if (isEpochCurrent(qc, dropEpoch)) await onRefresh(dropEpoch);
+            const outcome = await runThingAction(
+              qc,
+              action,
+              { dismissGhost: async () => {} },
+            );
+            if (outcome.status === "failed") {
+              if (isEpochCurrent(qc, dropEpoch)) toast.error(domainErrorMessage(outcome.error));
+              return;
+            }
+            if (outcome.status !== "performed" || !isEpochCurrent(qc, dropEpoch)) return;
+            toast.success(`Moved "${sourceThing.title}" to ${content.label}`);
+            try {
+              await onRefresh(dropEpoch);
+            } catch {
+              // The mutation succeeded and the optimistic Court cache already
+              // reflects the new pace. A refresh failure must not claim the move failed.
+              toast.info("Moved. The board will refresh when Katalist reconnects.");
+            }
           } catch (err: unknown) {
-            toast.error(domainErrorMessage(err));
+            if (isEpochCurrent(qc, dropEpoch)) toast.error(domainErrorMessage(err));
           }
         }}
       >
@@ -808,29 +867,44 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           {(() => {
             const unreadThings = things.filter((t) => (t.unreadCommentCount ?? 0) > 0);
             return (
-              <button
-                type="button"
-                onClick={(e) => {
-                  if (unreadThings[0]) {
-                    onOpen(unreadThings[0], e.currentTarget);
-                  } else {
-                    onViewAll?.(lane);
+              <div className="flex shrink-0 items-center gap-1.5">
+                {things.length > 1 && (
+                  <div className="flex items-center gap-1" aria-hidden="true">
+                    {things.map((thing, index) => (
+                      <span
+                        key={thing.id}
+                        className="h-1.5 w-1.5 rounded-full transition-colors"
+                        style={{
+                          backgroundColor: index === renderIndex ? content.accent : `${content.accent}40`,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    if (unreadThings[0]) {
+                      onOpen(unreadThings[0], e.currentTarget);
+                    } else {
+                      onViewAll?.(lane);
+                    }
+                  }}
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/60 hover:text-slate-700 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={
+                    unreadThings.length > 0
+                      ? `${unreadThings.length} with unread comments in ${content.label}`
+                      : `View all ${things.length} in ${content.label}`
                   }
-                }}
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-white/60 hover:text-slate-700 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={
-                  unreadThings.length > 0
-                    ? `${unreadThings.length} with unread comments in ${content.label}`
-                    : `View all ${things.length} in ${content.label}`
-                }
-                title={
-                  unreadThings.length > 0
-                    ? `${unreadThings.length} with unread comments`
-                    : `View all ${things.length}`
-                }
-              >
-                <KatalistIcon name="chevron-right" className="h-4 w-4" />
-              </button>
+                  title={
+                    unreadThings.length > 0
+                      ? `${unreadThings.length} with unread comments`
+                      : `View all ${things.length}`
+                  }
+                >
+                  <KatalistIcon name="chevron-right" className="h-4 w-4" />
+                </button>
+              </div>
             );
           })()}
         </div>
@@ -910,6 +984,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 <ThingStackCard
                   ref={activeButtonRef}
                   thing={activeThing}
+                  listCoverUrl={activeThing.listId ? listCoversById?.get(activeThing.listId) : null}
                   lane={lane}
                   myActorId={myActorId}
                   pendingAction={pendingAction}
@@ -967,6 +1042,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 >
                   <ThingStackCard
                     thing={anim.outgoing}
+                    listCoverUrl={anim.outgoing.listId ? listCoversById?.get(anim.outgoing.listId) : null}
                     lane={lane}
                     myActorId={myActorId}
                     pendingAction={null}
@@ -981,7 +1057,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             {/* Peek queue — fills the room below the active card and clips extras
                 so the pager below always stays visible. */}
             {things.length > 1 && (
-              <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+              <div className="relative z-10 -mt-1.5 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-px pb-1">
                 {Array.from({ length: depthCount }, (_, i) => {
                   const depth = i + 1;
                   const targetIndex = (renderIndex + depth) % things.length;
@@ -992,6 +1068,8 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                       key={`queue-${depthThing.id}`}
                       thing={depthThing}
                       lane={lane}
+                      depth={depth}
+                      myActorId={myActorId}
                       onOpen={() => navigateToIndex(targetIndex)}
                     />
                   );
@@ -999,28 +1077,6 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               </div>
             )}
 
-            {/* Deck indicator — pinned, always visible */}
-            {things.length > 1 ? (
-              <div className="shrink-0 flex items-center justify-between px-3 pt-3 pb-1 text-[12px] text-slate-500 font-medium">
-                <button
-                  type="button"
-                  onClick={() => startNavigation(-1)}
-                  className="flex h-8 w-8 items-center justify-center rounded hover:text-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Previous card"
-                >
-                  <KatalistIcon name="arrow-left" className="h-3.5 w-3.5" />
-                </button>
-                <span>{renderIndex + 1} of {things.length}</span>
-                <button
-                  type="button"
-                  onClick={() => startNavigation(1)}
-                  className="flex h-8 w-8 items-center justify-center rounded hover:text-slate-800 transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Next card"
-                >
-                  <KatalistIcon name="arrow-right" className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ) : null}
           </div>
         ) : (
           <div className="flex min-h-[160px] flex-1 items-center justify-center px-3 text-center text-[12px] text-muted-foreground">
@@ -1030,7 +1086,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
 
         {/* decorative deck offset: depth * -6 */}
         <div className="sr-only" aria-live="polite" aria-atomic="true">
-          {announcement || `${Math.max(0, things.length - 1)} more Things in ${content.label}`}
+          {announcement || `Card ${renderIndex + 1} of ${things.length}`}
         </div>
       </section>
     );

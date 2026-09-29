@@ -23,8 +23,8 @@ let nextCatchRejects = null;
 
 mock.module("@/features/things/rpc", {
   namedExports: {
-    rpcCatchAndStart: async (thingId) => {
-      catchCalls.push(thingId);
+    rpcCatchAndStart: async (thingId, pace) => {
+      catchCalls.push({ thingId, pace });
       if (catchGate) await catchGate;
       if (nextCatchRejects) {
         const err = nextCatchRejects;
@@ -116,10 +116,26 @@ test("catch: performs the domain action once and optimistically patches the Cour
   const outcome = await runThingAction(qc, { kind: "catch", thingId: "a" }, noopDeps);
 
   assert.deepEqual(outcome, { status: "performed" });
-  assert.deepEqual(catchCalls, ["a"]);
+  assert.deepEqual(catchCalls, [{ thingId: "a", pace: undefined }]);
   const after = qc.getQueryData(courtKey);
   assert.equal(after.things[0].workStatus, "under_progress");
   assert.equal(after.things[0].acknowledgement, "caught");
+});
+
+test("catch can start an uncaught Thing directly in the lane where it was dropped", async () => {
+  resetShared();
+  const qc = newClient();
+  const courtKey = ["court", "p1", "work"];
+  qc.setQueryData(courtKey, { things: [makeThing("a")], myActorId: "p1" });
+
+  const outcome = await runThingAction(qc, { kind: "catch", thingId: "a", pace: "now" }, noopDeps);
+
+  assert.deepEqual(outcome, { status: "performed" });
+  assert.deepEqual(catchCalls, [{ thingId: "a", pace: "now" }]);
+  const after = qc.getQueryData(courtKey).things[0];
+  assert.equal(after.acknowledgement, "caught");
+  assert.equal(after.workStatus, "under_progress");
+  assert.equal(after.personalPace, "now");
 });
 
 test("duplicate synchronous clicks on the same Thing: only the first performs, the second is already-in-flight", async () => {
@@ -172,7 +188,7 @@ test("two independent Things dispatch and claim independently -- neither blocks 
   ]);
   assert.deepEqual(outcomeA, { status: "performed" });
   assert.deepEqual(outcomeB, { status: "performed" });
-  assert.deepEqual(catchCalls.sort(), ["a", "b"]);
+  assert.deepEqual(catchCalls.map((call) => call.thingId).sort(), ["a", "b"]);
 });
 
 test("domain failure rolls back the optimistic patch and returns a failed outcome", async () => {

@@ -145,7 +145,7 @@ function NudgesPage() {
       (!listFilter || n.listId === listFilter),
   );
 
-  const handleNudge = (id: string, dbReason?: NudgeReason) => {
+  const handleNudge = (id: string, recipient: string, title: string, dbReason?: NudgeReason) => {
     if (nudgingId) return;
     setNudgingId(id);
     const epoch = getIdentityEpoch(qc).epoch;
@@ -153,7 +153,7 @@ function NudgesPage() {
       () => {
         setNudgingId(null);
         if (!isEpochCurrent(qc, epoch)) return;
-        toast.success("Just a gentle paw tap on this one.");
+        toast.success(`Nudged ${recipient} about “${title}”.`);
         void qc.invalidateQueries({ queryKey: ["nudges"] });
         void qc.invalidateQueries({ queryKey: ["nudge-history"] });
         void qc.invalidateQueries({ queryKey: ["thing"] });
@@ -181,7 +181,14 @@ function NudgesPage() {
         loadingContent={<NudgesSkeleton />}
       >
         {() => (
-      <InlineThingDetailWorkspace thing={selected} onClose={() => setSelectedId(null)} flatPanel>
+      <InlineThingDetailWorkspace
+        thing={selected}
+        onClose={() => setSelectedId(null)}
+        flatPanel
+        filePreview
+        className={selected ? "lg:h-[calc(100dvh-3.5rem)] lg:items-stretch lg:overflow-hidden" : undefined}
+        sourceClassName={selected ? "lg:h-full lg:overflow-y-auto lg:overscroll-contain" : undefined}
+      >
         <div className="space-y-5">
           {/* Header */}
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -386,7 +393,7 @@ function NudgesPage() {
                                     <button
                                       type="button"
                                       disabled={nudgingId === row.id}
-                                      onClick={() => handleNudge(row.id, row.dbReason)}
+                                      onClick={() => handleNudge(row.id, row.person, row.title, row.dbReason)}
                                       className="inline-flex items-center gap-1.5 rounded-[5px] border border-[rgba(151,94,226,0.1)] px-3 py-1.5 text-[13px] text-[#975ee2] transition-colors hover:bg-[#f6f3fe] disabled:opacity-60"
                                     >
                                       <Bell className="h-3.5 w-3.5" />

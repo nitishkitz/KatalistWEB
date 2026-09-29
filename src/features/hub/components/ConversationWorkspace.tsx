@@ -190,13 +190,15 @@ export function ConversationWorkspace({
 
   // Ring + push a chosen set of people without touching the caller's own join
   // state (used both when starting a call and when inviting mid-call).
-  const ringAndAnnounce = (selectedIds: string[]) => {
+  const ringAndAnnounce = (selectedIds: string[], withVideo: boolean) => {
     void announceCall({
       listId,
       listName: title,
       fromDeviceId: getDeviceId(),
       fromName: selfName,
+      fromAvatarUrl: (user?.user_metadata?.avatar_url as string | undefined) ?? null,
       memberIds: selectedIds,
+      callType: withVideo ? "video" : "audio",
       kind: conversation?.kind ?? "group",
     });
     chat.sendSystem.mutate("started a call");
@@ -225,7 +227,7 @@ export function ConversationWorkspace({
     const ok = await call.join();
     if (!ok) return;
     if (!withVideo) call.toggleCamera(); // audio-only: drop the camera immediately
-    ringAndAnnounce(selectedIds ?? memberIds);
+    ringAndAnnounce(selectedIds ?? memberIds, withVideo);
   };
 
   const openStartCall = (defaultVideo: boolean) => {
@@ -594,7 +596,7 @@ export function ConversationWorkspace({
         onOpenChange={setInviteOpen}
         people={callPeople}
         variant="invite"
-        onInvite={(selectedIds) => ringAndAnnounce(selectedIds)}
+        onInvite={(selectedIds) => ringAndAnnounce(selectedIds, !call.cameraOff)}
       />
 
       {/* Giant in-app preview for image search results — same convention as

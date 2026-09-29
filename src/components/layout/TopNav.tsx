@@ -1,4 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { BriefcaseBusiness, House } from "lucide-react";
 import { Logo } from "@/components/katalist/Logo";
 import { KatalistIcon } from "@/features/court/KatalistIcon";
 import { useAppContext } from "@/features/context/use-app-context";
@@ -6,6 +7,7 @@ import { useSession } from "@/hooks/useSession";
 import { useProfile } from "@/features/me/use-profile";
 import { useAvatarUrl } from "@/features/people/directory";
 import { NotificationBell } from "@/features/notifications/NotificationPanel";
+import { CatchUpNavCapsule } from "@/features/catchup/CatchUpNavCapsule";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
 
@@ -41,7 +43,7 @@ export function TopNav() {
   ];
 
   return (
-    <nav className="sticky top-0 z-40 hidden md:flex h-14 w-full items-center justify-between border-b border-[#f0f3fb] bg-[#f5f8fe] px-3 lg:px-5">
+    <nav className="sticky top-0 z-40 hidden h-14 w-full items-center justify-between overflow-visible border-b border-[#f0f3fb] bg-[#f5f8fe] px-3 md:flex lg:px-5">
       {/* Left */}
       <div className="flex shrink-0 items-center gap-5">
         <Logo markClassName="h-7 w-7" withText={true} textClassName="text-[19px]" />
@@ -57,7 +59,7 @@ export function TopNav() {
               key={item.title}
               to={item.to}
               className={cn(
-                "relative flex h-14 items-center whitespace-nowrap px-2 text-[13px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset lg:px-3 lg:text-[15px]",
+                "relative flex h-14 shrink-0 items-center whitespace-nowrap px-1.5 text-[12px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-2 lg:px-3 lg:text-[15px]",
                 isActive
                   ? "text-[#503188] font-medium"
                   : "text-[#1d1d1d] hover:text-[#503188]"
@@ -76,19 +78,52 @@ export function TopNav() {
             </Link>
           );
         })}
+        <CatchUpNavCapsule />
       </div>
 
       {/* Right */}
-      <div className="flex shrink-0 items-center gap-2 lg:gap-3">
-        <button
-          type="button"
-          onClick={() => void setContext(context === "work" ? "home" : "work")}
-          className="flex h-8 items-center gap-1.5 rounded-[7px] border border-[#eaeffa] bg-white px-2.5 text-[13px] font-normal text-[#1d1d1d] transition-colors hover:bg-[#f5f8fe] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5 lg:gap-2.5">
+        <div
+          role="group"
+          aria-label="Work and Home context"
+          className="relative inline-flex h-9 w-[146px] shrink-0 items-center overflow-hidden rounded-full border border-[#e5e8f2] bg-[#eef1f8] p-0.5 shadow-sm lg:w-[156px]"
         >
-          <KatalistIcon name="apps-grid" className="h-3.5 w-3.5 text-[#503188]" />
-          <span className="capitalize">{context === "work" ? "Work" : "Home"}</span>
-          <KatalistIcon name="chevron-down" className="h-3 w-3 text-[#5d6786]" />
-        </button>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-y-0.5 left-0.5 z-0 w-[calc(50%-2px)] rounded-full bg-white shadow-[0_2px_8px_rgba(35,31,75,0.16)] transition-transform duration-500 ease-out motion-reduce:transition-none",
+              context === "home" && "translate-x-full",
+            )}
+          />
+          <button
+            type="button"
+            aria-pressed={context === "work"}
+            onClick={() => void setContext("work")}
+            className={cn(
+              "relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1 text-[11px] font-medium outline-none transition-[color,transform] duration-300 focus-visible:ring-2 focus-visible:ring-ring lg:gap-1.5 lg:px-2.5 lg:text-[12px]",
+              context === "work"
+                ? "text-[#503188]"
+                : "text-[#667085] hover:text-[#3f276f]",
+            )}
+          >
+            <BriefcaseBusiness className={cn("h-3.5 w-3.5 transition-transform duration-300 motion-reduce:transition-none", context === "work" ? "scale-110" : "scale-95")} aria-hidden="true" />
+            Work
+          </button>
+          <button
+            type="button"
+            aria-pressed={context === "home"}
+            onClick={() => void setContext("home")}
+            className={cn(
+              "relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1 text-[11px] font-medium outline-none transition-[color,transform] duration-300 focus-visible:ring-2 focus-visible:ring-ring lg:gap-1.5 lg:px-2.5 lg:text-[12px]",
+              context === "home"
+                ? "text-[#503188]"
+                : "text-[#667085] hover:text-[#3f276f]",
+            )}
+          >
+            <House className={cn("h-3.5 w-3.5 transition-transform duration-300 motion-reduce:transition-none", context === "home" ? "scale-110" : "scale-95")} aria-hidden="true" />
+            Home
+          </button>
+        </div>
 
         <NotificationBell />
 

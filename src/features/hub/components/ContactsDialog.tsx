@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, MessageCircle, Phone, UserPlus, Check, X, Clock, Mail, Copy, Users } from "lucide-react";
+import { Search, MessageCircle, Phone, UserPlus, Check, X, Mail, Copy, Users } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useTeam, type TeamMember } from "@/features/people/use-team";
 import { usePresence } from "@/features/people/presence";
@@ -21,6 +21,8 @@ import { useContacts, useContactRequests, useInvitations, useRefreshContacts } f
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { useMotionPreference } from "@/hooks/use-motion-preference";
+import { ContactPhysicsPile } from "./ContactPhysicsPile";
 
 type Tab = "people" | "contacts" | "requests" | "invites";
 
@@ -37,8 +39,22 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const [tab, setTab] = useState<Tab>("people");
   const [query, setQuery] = useState("");
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [searchMatchIds, setSearchMatchIds] = useState<string[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
+  const { reduceMotion } = useMotionPreference();
+
+  // This drawer is a temporary workspace. Once it closes, discard its
+  // navigation and search state so the next visit always starts predictably.
+  useEffect(() => {
+    if (open) return;
+    setTab("people");
+    setQuery("");
+    setSelectedPersonId(null);
+    setSearchMatchIds([]);
+    setInviteEmail("");
+  }, [open]);
 
   const contactIds = useMemo(() => new Set(contacts.map((c) => c.id)), [contacts]);
   const outgoingIds = useMemo(() => new Set(outgoing.map((r) => r.person.id)), [outgoing]);
@@ -55,10 +71,34 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     );
   }, [members, query]);
 
+  const realMembers = useMemo(() => members.filter((member) => isUuid(member.id)), [members]);
+
   // When the query is an email that matches nobody on Katalist, offer to invite it.
   const trimmedQuery = query.trim();
   const isEmailQuery = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedQuery);
   const showInviteCta = isEmailQuery && people.length === 0;
+  const resultPersonIds = useMemo(() => (trimmedQuery ? searchMatchIds : selectedPersonId ? [selectedPersonId] : []), [searchMatchIds, selectedPersonId, trimmedQuery]);
+  const activePersonId = trimmedQuery ? searchMatchIds[0] ?? null : selectedPersonId;
+  const featuredPerson = realMembers.find((member) => member.id === activePersonId) ?? null;
+  // Matter.js is ideal for the small, tactile pile. Once a query matches a
+  // larger roster, use a regular scrollable list so every result stays
+  // reachable without simulating dozens of moving bodies.
+  const useScrollableResults = Boolean(trimmedQuery) && people.length > 12;
+  const physicsMembers = useMemo(() => {
+    const visibleIds = new Set([...realMembers.slice(0, 24).map((member) => member.id), ...people.map((member) => member.id)]);
+    return realMembers.filter((member) => visibleIds.has(member.id));
+  }, [people, realMembers]);
+
+  useEffect(() => {
+    if (!trimmedQuery) {
+      setSearchMatchIds([]);
+      return;
+    }
+    // Keep the current card in place while typing. Only commit a new match
+    // after the debounce, rather than releasing and lifting it per keystroke.
+    const timeout = window.setTimeout(() => setSearchMatchIds(people.map((person) => person.id)), reduceMotion ? 0 : 180);
+    return () => window.clearTimeout(timeout);
+  }, [people, reduceMotion, trimmedQuery]);
 
   const openDm = async (member: { id: string; name: string }, startCall: boolean) => {
     if (!isUuid(member.id)) {
@@ -169,14 +209,18 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   ];
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[80vh] max-h-[720px] max-w-3xl flex-col bg-white p-0">
-        <DialogHeader className="border-b border-[#eef0f6] px-6 py-4">
-          <DialogTitle className="text-[17px] text-[#000533]">People &amp; contacts</DialogTitle>
-        </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={false}>
+      <DialogContent
+        // Contacts occupies the workspace; header and sidebar remain usable.
+        // Radix nonmodal mode omits the backdrop and lets the outside click
+        // dismiss this panel and activate the clicked navigation together.
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        className="fixed inset-y-0 left-0 right-0 top-14 flex h-[calc(100dvh-3.5rem)] max-h-[calc(100dvh-3.5rem)] w-full max-w-none translate-x-0 translate-y-0 flex-col rounded-none border-y-0 border-r-0 bg-white p-0 data-[state=open]:slide-in-from-right data-[state=closed]:slide-out-to-right data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100 md:left-[300px] md:w-[calc(100vw-300px)] sm:rounded-none"
+      >
+        <DialogTitle className="sr-only">People and contacts</DialogTitle>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 border-b border-[#eef0f6] px-4">
+        <div className="flex shrink-0 items-center gap-1 border-b border-[#eef0f6] px-4 pr-14">
           {tabs.map((t) => (
             <button
               key={t.id}
@@ -197,18 +241,27 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           ))}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        <div
+          className={cn(
+            "min-h-0 flex-1 px-5 md:px-10",
+            tab === "people" && useScrollableResults ? "overflow-y-auto py-3 md:py-4" : tab === "people" || tab === "contacts" ? "overflow-hidden py-3 md:py-4" : "overflow-y-auto py-4 md:py-6",
+          )}
+        >
           {/* ALL PEOPLE */}
           {tab === "people" && (
-            <>
-              <label className="mb-3 flex h-10 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 focus-within:border-[#975ee2]">
+            <div className={cn("relative flex min-h-0 flex-col", useScrollableResults ? "min-h-full" : "h-full")}>
+              <label className="mx-auto mb-3 flex h-11 w-full max-w-[760px] shrink-0 items-center gap-3 rounded-[12px] border border-[#ebecf7] bg-[#fbfaff] px-4 shadow-[0_5px_16px_rgba(60,35,100,0.06)] transition-[border-color,box-shadow] duration-200 focus-within:border-[#b590ee] focus-within:shadow-[0_8px_24px_rgba(109,69,173,0.12)]">
                 <Search className="h-4 w-4 text-[#8487a7]" />
                 <input
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setSelectedPersonId(null);
+                  }}
                   placeholder="Search by name, or type an email to invite"
-                  className="min-w-0 flex-1 bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#8487a7]"
+                  className="min-w-0 flex-1 bg-transparent text-[14px] text-[#000533] outline-none placeholder:text-[#8487a7]"
                 />
+                {query ? <button type="button" onClick={() => { setQuery(""); setSelectedPersonId(null); }} aria-label="Clear search" className="rounded-full p-1 text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#6638ec]"><X className="h-4 w-4" /></button> : null}
               </label>
 
               {/* Not on Katalist → offer an email invite inline. */}
@@ -232,54 +285,57 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                 </div>
               )}
 
-              <div className="space-y-1">
-                {people.length === 0 ? (
-                  <p className="py-10 text-center text-[12.5px] text-[#6a769c]">
-                    {isEmailQuery ? "No one on Katalist with that email — invite them above." : "No people found."}
-                  </p>
-                ) : (
-                  people.map((m) => {
-                    const isContact = contactIds.has(m.id);
-                    const requested = outgoingIds.has(m.id);
-                    return (
+              {trimmedQuery && people.length === 0 && !showInviteCta ? (
+                <p className="pointer-events-none absolute left-0 right-0 top-16 z-50 text-center text-[12.5px] text-[#6a769c]">No people found.</p>
+              ) : null}
+
+              {useScrollableResults ? (
+                <div className="min-h-0 flex-1" aria-label={`${people.length} matching people`}>
+                  <p className="mb-2 px-2 text-[12px] font-medium text-[#8487a7]" aria-live="polite">{people.length} people found</p>
+                  <div className="grid grid-cols-1 gap-1 xl:grid-cols-2">
+                    {people.map((person) => (
                       <Row
-                        key={m.id}
-                        member={m}
-                        online={online.has(m.id)}
-                        busy={busyId === m.id}
-                        onMessage={() => void openDm(m, false)}
-                        onCall={() => void openDm(m, true)}
-                        trailing={
-                          isContact ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#e4fcf0] px-2.5 py-1 text-[12px] font-medium text-[#12a15f]">
-                              <Check className="h-3 w-3" /> Contact
-                            </span>
-                          ) : requested ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#f1f2f7] px-2.5 py-1 text-[12px] font-medium text-[#8487a7]">
-                              <Clock className="h-3 w-3" /> Requested
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={busyId === m.id}
-                              onClick={() => void connect(m)}
-                              className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#ebecf7] px-2.5 text-[12px] font-medium text-[#3d3f74] hover:border-[#975ee2] disabled:opacity-50"
-                            >
-                              <UserPlus className="h-3.5 w-3.5" /> Connect
-                            </button>
-                          )
-                        }
+                        key={person.id}
+                        member={person}
+                        online={online.has(person.id)}
+                        busy={busyId === person.id}
+                        onMessage={() => void openDm(person, false)}
+                        onCall={() => void openDm(person, true)}
+                        trailing={contactIds.has(person.id) ? <span className="rounded-full bg-[#f2ecfa] px-2.5 py-1 text-[12px] font-medium text-[#7045a4]">Contact</span> : outgoingIds.has(person.id) ? <span className="rounded-full bg-[#f2ecfa] px-2.5 py-1 text-[12px] font-medium text-[#7045a4]">Requested</span> : (
+                          <button type="button" disabled={busyId === person.id} onClick={() => void connect(person)} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#e7def3] bg-white px-3 text-[12px] font-medium text-[#563c7e] transition-colors hover:border-[#975ee2] disabled:opacity-50"><UserPlus className="h-3.5 w-3.5" /> Connect</button>
+                        )}
                       />
-                    );
-                  })
-                )}
-              </div>
-            </>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <ContactPhysicsPile
+                  members={physicsMembers}
+                  activePersonId={activePersonId}
+                  resultPersonIds={resultPersonIds}
+                  onlineIds={online}
+                  reduceMotion={reduceMotion}
+                  onSelect={(personId) => {
+                    setQuery("");
+                    setSelectedPersonId(personId);
+                  }}
+                  activeControls={featuredPerson ? (
+                    <>
+                      {!contactIds.has(featuredPerson.id) && !outgoingIds.has(featuredPerson.id) ? (
+                        <button type="button" disabled={busyId === featuredPerson.id} onClick={() => void connect(featuredPerson)} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#e7def3] bg-white px-3 text-[12px] font-medium text-[#563c7e] transition-colors hover:border-[#975ee2] disabled:opacity-50"><UserPlus className="h-3.5 w-3.5" /> Connect</button>
+                      ) : <span className="rounded-full bg-[#f2ecfa] px-2.5 py-1 text-[12px] font-medium text-[#7045a4]">{contactIds.has(featuredPerson.id) ? "Contact" : "Requested"}</span>}
+                      <button type="button" disabled={busyId === featuredPerson.id} onClick={() => void openDm(featuredPerson, false)} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-[#8454d8] px-3 text-[12px] font-semibold text-white transition-transform duration-150 hover:-translate-y-0.5 hover:bg-[#7444c7] disabled:opacity-50"><MessageCircle className="h-3.5 w-3.5" /> Message</button>
+                      <button type="button" disabled={busyId === featuredPerson.id} onClick={() => void openDm(featuredPerson, true)} aria-label={`Call ${featuredPerson.name}`} className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-[#e7def3] bg-white text-[#563c7e] transition-colors hover:border-[#975ee2] disabled:opacity-50"><Phone className="h-3.5 w-3.5" /></button>
+                    </>
+                  ) : null}
+                />
+              )}
+            </div>
           )}
 
           {/* CONTACTS */}
           {tab === "contacts" && (
-            <div className="space-y-1">
+            <div className="grid h-full min-h-0 content-start grid-cols-1 gap-1 overflow-hidden xl:grid-cols-2 xl:gap-x-6">
               {contacts.length === 0 ? (
                 <Empty icon={Users} title="No contacts yet" hint="Connect with people from the All people tab." />
               ) : (

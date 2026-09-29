@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { createFileRoute, Outlet, useParams, useSearch } from "@tanstack/react-router";
+import { useEffect, useRef, useState } from "react";
+import { createFileRoute, Outlet, useNavigate, useParams, useRouterState, useSearch } from "@tanstack/react-router";
 import { AppShell } from "@/components/layout/AppShell";
 import { HubSidebar } from "@/features/hub/components/HubSidebar";
 import { ContactsDialog } from "@/features/hub/components/ContactsDialog";
@@ -35,6 +35,25 @@ function TeamHubLayout() {
   const inConversation = Boolean(params.conversationId);
   const { openContacts: openContactsOnArrival } = useSearch({ from: "/team" });
   const [contactsOpen, setContactsOpen] = useState(Boolean(openContactsOnArrival));
+  const navigate = useNavigate({ from: "/team" });
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const previousPathname = useRef(pathname);
+
+  // Child-route navigation can also come from keyboard shortcuts or code.
+  // Close the workspace panel whenever the selected conversation changes.
+  useEffect(() => {
+    if (previousPathname.current === pathname) return;
+    previousPathname.current = pathname;
+    setContactsOpen(false);
+  }, [pathname]);
+
+  // `openContacts` is an arrival instruction, not persistent UI state.
+  // Consume it immediately so closing the drawer stays closed after a reload
+  // or after moving between Team child routes.
+  useEffect(() => {
+    if (!openContactsOnArrival) return;
+    void navigate({ search: {}, replace: true });
+  }, [navigate, openContactsOnArrival]);
 
   return (
     <HubContext.Provider value={{ openContacts: () => setContactsOpen(true) }}>

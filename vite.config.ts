@@ -237,11 +237,27 @@ function phoneAuthPlugin(): Plugin {
           });
           if (linkErr) throw linkErr;
 
+          const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+          const anonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+          if (!supabaseUrl || !anonKey) {
+            throw new Error("Supabase URL and publishable key must be configured for phone sign-in.");
+          }
+          const authClient = createSupabaseClient(supabaseUrl, anonKey, {
+            auth: { persistSession: false },
+          });
+          const { data: authData, error: verifyErr } = await authClient.auth.verifyOtp({
+            token_hash: linkData.properties.hashed_token,
+            type: "magiclink",
+          });
+          if (verifyErr) throw verifyErr;
+          if (!authData.session) throw new Error("Phone sign-in did not return an active session.");
+
           res.statusCode = 200;
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify({
-            token_hash: linkData.properties.hashed_token,
-            email: userEmail,
+            access_token: authData.session.access_token,
+            refresh_token: authData.session.refresh_token,
+            user: authData.user,
           }));
         } catch (err: unknown) {
           console.error("[phone-auth] error:", err);

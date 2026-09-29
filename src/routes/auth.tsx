@@ -1,18 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Camera,
-  CheckCircle2,
-  Cloud,
-  Layers,
-  Lock,
+  Globe,
   Mail,
   QrCode,
-  Shield,
   Smartphone,
   Sparkles,
-  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,7 +30,11 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession, DEMO_PERSONAS, signInAsDemo, DemoPersona } from "@/hooks/useSession";
 import { Logo } from "@/components/katalist/Logo";
+import { AuthHeroPanel } from "@/components/katalist/AuthHeroPanel";
 import { demoEnabled } from "@/lib/session-mode";
+import catLogin from "@/assets/auth/cat-login.png";
+import flagIndia from "@/assets/auth/flag-india.png";
+import katalistMark from "@/assets/auth/katalist-mark.svg";
 import { localFixedOtp, localFixedOtpEnabled } from "@/lib/fixed-otp";
 import { extractErrorMessage } from "@/lib/domain-error";
 import { createLocalUser, type LocalProfileErrors } from "@/lib/auth/local-user";
@@ -106,6 +105,34 @@ type Channel = "phone" | "email";
 const RESEND_COOLDOWN_MS = 30_000;
 const OTP_TTL_MS = 5 * 60_000;
 
+function formatCountdown(ms: number) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function BrandDivider() {
+  return (
+    <div className="relative mt-10 border-t border-border">
+      <div
+        className="absolute left-1/2 top-0 flex h-9 w-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md"
+        style={{
+          background:
+            "linear-gradient(141.9deg, #975ee2 9.2%, #60399e 44.8%, #1c153f 91.1%)",
+        }}
+      >
+        <img
+          src={katalistMark}
+          alt=""
+          aria-hidden="true"
+          className="h-5 w-auto object-contain"
+        />
+      </div>
+    </div>
+  );
+}
+
 function DemoPersonaButton({ persona, onEnter }: { persona: DemoPersona; onEnter: () => void }) {
   const src = useAvatarUrl(persona.name, persona.email);
   return (
@@ -164,6 +191,7 @@ function AuthPage() {
   const [occupation, setOccupation] = useState("");
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [profileErrors, setProfileErrors] = useState<LocalProfileErrors>({});
+  const verifyingOtpRef = useRef(false);
 
   useEffect(() => {
     if (!loading && session) {
@@ -237,9 +265,12 @@ function AuthPage() {
   }
 
   async function verifyOtp(code: string) {
+    if (verifyingOtpRef.current) return;
+    verifyingOtpRef.current = true;
     if (otpSentAt != null && Date.now() - otpSentAt > OTP_TTL_MS) {
       toast.error("This code has expired. Send a new one.");
       setOtp("");
+      verifyingOtpRef.current = false;
       return;
     }
 
@@ -251,6 +282,7 @@ function AuthPage() {
         setBusy(false);
         toast.error(fixedCode ? `Please enter the 6-digit test code: ${fixedCode}` : "Phone sign-in is not available in this deployment.");
         setOtp("");
+        verifyingOtpRef.current = false;
         return;
       }
 
@@ -265,14 +297,12 @@ function AuthPage() {
           throw new Error(data.error || "Authentication failed");
         }
 
-        const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: data.token_hash,
-          type: "magiclink",
+        const { data: authData, error: sessionError } = await supabase.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
         });
 
-        if (verifyError) {
-          throw verifyError;
-        }
+        if (sessionError) throw sessionError;
 
         // verifyOtp's returned session isn't guaranteed to be readable by
         // the client's own getSession()/getUser() yet - navigating before
@@ -289,6 +319,7 @@ function AuthPage() {
         setBusy(false);
         toast.error(extractErrorMessage(err) ?? "Failed to authenticate");
         setOtp("");
+        verifyingOtpRef.current = false;
         return;
       }
     }
@@ -303,6 +334,7 @@ function AuthPage() {
       setBusy(false);
       toast.error(error.message);
       setOtp("");
+      verifyingOtpRef.current = false;
       return;
     }
 
@@ -328,423 +360,397 @@ function AuthPage() {
     navigate({ to: returnTo, replace: true });
   }
 
+  const showAltMethodLink = !profilePhone;
+  const otpRemainingMs = otpSentAt == null ? 0 : otpSentAt + OTP_TTL_MS - now;
+
   return (
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto grid min-h-screen max-w-6xl gap-12 px-6 py-8 lg:grid-cols-2">
-        {/* Brand panel */}
-        <div className="flex flex-col">
-          <div className="flex items-center justify-between">
+    <div className="grid min-h-screen lg:grid-cols-2">
+      <AuthHeroPanel />
+
+      <div className="flex flex-col bg-[#fefefe] px-6 py-8 sm:px-12 lg:px-16">
+        <div className="flex items-center justify-between">
+          <div className="lg:hidden">
             <Logo />
-            <p className="text-sm text-muted-foreground lg:hidden">
-              Life, <span className="font-semibold text-primary">Sorted.</span>
-            </p>
           </div>
-
-          <div className="mt-16 max-w-md">
-            <h1 className="text-4xl font-bold leading-tight tracking-tight text-foreground md:text-5xl">
-              Welcome back
-              <br />
-              to <span className="text-primary">Katalist</span>
-            </h1>
-            <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-              The smart way to capture, organize and get things done — together.
-            </p>
-
-            <ul className="mt-8 space-y-5">
-              {[
-                {
-                  icon: CheckCircle2,
-                  title: "Capture anything instantly",
-                  body: "Things, notes, links and more.",
-                },
-                {
-                  icon: Layers,
-                  title: "Organize with clarity",
-                  body: "Buckets, lists and court to stay focused.",
-                },
-                {
-                  icon: Users,
-                  title: "Collaborate effortlessly",
-                  body: "Assign, share and move things forward.",
-                },
-              ].map(({ icon: Icon, title, body }) => (
-                <li key={title} className="flex gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-secondary">
-                    <Icon className="h-4 w-4 text-primary" />
-                  </span>
-                  <span>
-                    <span className="block text-sm font-semibold text-foreground">{title}</span>
-                    <span className="block text-sm text-muted-foreground">{body}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="mt-8 flex justify-center lg:justify-start">
-              <img
-                src="/welcome-hero.png"
-                alt="Katalist overview"
-                className="w-full max-w-md rounded-2xl object-contain drop-shadow-sm transition-transform duration-300 hover:scale-[1.02]"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Auth card */}
-        <div className="flex flex-col justify-center">
-          <div className="rounded-2xl border border-border bg-card katalist-shadow">
-            <div className="grid grid-cols-3 border-b border-border">
-              {(
-                (
-                  demoEnabled()
-                    ? ([["preview", "Demo", Sparkles], ["otp", "Phone / OTP", Smartphone], ["qr", "Scan QR", QrCode]] as const)
-                    : ([["otp", "Phone / OTP", Smartphone], ["qr", "Scan QR", QrCode]] as const)
-                )
-              ).map(([key, label, Icon]) => (
+          {showAltMethodLink ? (
+            <div className="ml-auto flex items-center gap-4 text-xs font-medium">
+              {demoEnabled() ? (
                 <button
-                  key={key}
-                  onClick={() => setTab(key)}
+                  type="button"
+                  onClick={() => setTab(tab === "preview" ? "otp" : "preview")}
                   className={cn(
-                    "flex items-center justify-center gap-1.5 border-b-2 px-2 py-3.5 text-xs sm:text-sm font-medium transition-colors",
-                    tab === key
-                      ? "border-primary text-primary font-semibold"
-                      : "border-transparent text-muted-foreground hover:text-foreground",
+                    "flex items-center gap-1.5",
+                    tab === "preview" ? "text-primary" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  <span>{label}</span>
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {tab === "preview" ? "Phone / OTP" : "Demo"}
                 </button>
-              ))}
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setTab(tab === "qr" ? "otp" : "qr")}
+                className={cn(
+                  "flex items-center gap-1.5",
+                  tab === "qr" ? "text-primary" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <QrCode className="h-3.5 w-3.5" />
+                {tab === "qr" ? "Phone / OTP" : "Scan QR"}
+              </button>
             </div>
+          ) : null}
+        </div>
 
-            <div className="p-6">
-              {profilePhone ? (
+        <div className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center py-10">
+          {profilePhone ? (
+            <div>
+              <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h2 className="text-base font-semibold text-foreground">Create your profile</h2>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Tell us a little about you to finish setting up {profilePhone}.
-                      </p>
-                    </div>
-                    <label className="group relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-dashed border-border bg-muted text-muted-foreground hover:border-primary hover:text-primary">
-                      {avatarUrl ? (
-                        <img src={avatarUrl} alt="Profile preview" className="h-full w-full object-cover" />
-                      ) : (
-                        <Camera className="h-5 w-5" />
-                      )}
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp"
-                        className="sr-only"
-                        aria-label="Profile photo"
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (!file) return;
-                          const reader = new FileReader();
-                          reader.onload = () => setAvatarUrl(typeof reader.result === "string" ? reader.result : null);
-                          reader.readAsDataURL(file);
-                        }}
-                      />
-                    </label>
-                  </div>
+                  <h2 className="text-xl font-semibold text-foreground">Create your profile</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Tell us a little about you to finish setting up {profilePhone}.
+                  </p>
+                </div>
+                <label className="group relative flex h-16 w-16 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-dashed border-border bg-muted text-muted-foreground hover:border-primary hover:text-primary">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Profile preview" className="h-full w-full object-cover" />
+                  ) : (
+                    <Camera className="h-5 w-5" />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    aria-label="Profile photo"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => setAvatarUrl(typeof reader.result === "string" ? reader.result : null);
+                      reader.readAsDataURL(file);
+                    }}
+                  />
+                </label>
+              </div>
 
-                  <div className="mt-6 space-y-4">
-                    <div>
-                      <Label htmlFor="profile-name">Full name</Label>
-                      <Input
-                        id="profile-name"
-                        autoComplete="name"
-                        className="mt-1.5"
-                        value={fullName}
-                        onChange={(event) => {
-                          setFullName(event.target.value);
-                          setProfileErrors((current) => ({ ...current, fullName: undefined }));
-                        }}
-                        aria-invalid={Boolean(profileErrors.fullName)}
-                      />
-                      {profileErrors.fullName ? (
-                        <p className="mt-1 text-xs text-destructive">{profileErrors.fullName}</p>
-                      ) : null}
-                    </div>
+              <div className="mt-6 space-y-4">
+                <div>
+                  <Label htmlFor="profile-name">Full name</Label>
+                  <Input
+                    id="profile-name"
+                    autoComplete="name"
+                    className="mt-1.5"
+                    value={fullName}
+                    onChange={(event) => {
+                      setFullName(event.target.value);
+                      setProfileErrors((current) => ({ ...current, fullName: undefined }));
+                    }}
+                    aria-invalid={Boolean(profileErrors.fullName)}
+                  />
+                  {profileErrors.fullName ? (
+                    <p className="mt-1 text-xs text-destructive">{profileErrors.fullName}</p>
+                  ) : null}
+                </div>
 
-                    <div>
-                      <Label htmlFor="profile-age">Age</Label>
-                      <Input
-                        id="profile-age"
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={120}
-                        className="mt-1.5"
-                        value={age}
-                        onChange={(event) => {
-                          setAge(event.target.value);
-                          setProfileErrors((current) => ({ ...current, age: undefined }));
-                        }}
-                        aria-invalid={Boolean(profileErrors.age)}
-                      />
-                      {profileErrors.age ? (
-                        <p className="mt-1 text-xs text-destructive">{profileErrors.age}</p>
-                      ) : null}
-                    </div>
+                <div>
+                  <Label htmlFor="profile-age">Age</Label>
+                  <Input
+                    id="profile-age"
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={120}
+                    className="mt-1.5"
+                    value={age}
+                    onChange={(event) => {
+                      setAge(event.target.value);
+                      setProfileErrors((current) => ({ ...current, age: undefined }));
+                    }}
+                    aria-invalid={Boolean(profileErrors.age)}
+                  />
+                  {profileErrors.age ? (
+                    <p className="mt-1 text-xs text-destructive">{profileErrors.age}</p>
+                  ) : null}
+                </div>
 
-                    <div>
-                      <Label htmlFor="profile-occupation">Occupation</Label>
-                      <Input
-                        id="profile-occupation"
-                        autoComplete="organization-title"
-                        className="mt-1.5"
-                        value={occupation}
-                        onChange={(event) => {
-                          setOccupation(event.target.value);
-                          setProfileErrors((current) => ({ ...current, occupation: undefined }));
-                        }}
-                        onKeyDown={(event) => event.key === "Enter" && completeLocalProfile()}
-                        aria-invalid={Boolean(profileErrors.occupation)}
-                      />
-                      {profileErrors.occupation ? (
-                        <p className="mt-1 text-xs text-destructive">{profileErrors.occupation}</p>
-                      ) : null}
-                    </div>
-                  </div>
+                <div>
+                  <Label htmlFor="profile-occupation">Occupation</Label>
+                  <Input
+                    id="profile-occupation"
+                    autoComplete="organization-title"
+                    className="mt-1.5"
+                    value={occupation}
+                    onChange={(event) => {
+                      setOccupation(event.target.value);
+                      setProfileErrors((current) => ({ ...current, occupation: undefined }));
+                    }}
+                    onKeyDown={(event) => event.key === "Enter" && completeLocalProfile()}
+                    aria-invalid={Boolean(profileErrors.occupation)}
+                  />
+                  {profileErrors.occupation ? (
+                    <p className="mt-1 text-xs text-destructive">{profileErrors.occupation}</p>
+                  ) : null}
+                </div>
+              </div>
 
-                  <Button className="mt-6 w-full" size="lg" onClick={completeLocalProfile}>
-                    Create profile
-                    <ArrowRight className="ml-1 h-4 w-4" />
-                  </Button>
-                  <button
-                    type="button"
-                    className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      setProfilePhone(null);
-                      setSent(false);
-                      setOtp("");
-                      setProfileErrors({});
+              <Button className="mt-6 w-full" size="lg" onClick={completeLocalProfile}>
+                Create profile
+                <ArrowRight className="ml-1 h-4 w-4" />
+              </Button>
+              <button
+                type="button"
+                className="mt-3 w-full text-sm text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setProfilePhone(null);
+                  setSent(false);
+                  setOtp("");
+                  setProfileErrors({});
+                }}
+              >
+                Use another number
+              </button>
+            </div>
+          ) : tab === "preview" ? (
+            <div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold text-foreground">Demo accounts</h2>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    One tap. Uses the existing sample Court / Lists / Nudges data.
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                  <Sparkles className="h-3 w-3" /> Dev Ready
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-2.5">
+                {DEMO_PERSONAS.map((persona) => (
+                  <DemoPersonaButton key={persona.key} persona={persona} onEnter={() => handleDemoLogin(persona)} />
+                ))}
+              </div>
+            </div>
+          ) : tab === "otp" ? (
+            sent ? (
+              <div className="flex flex-col items-center text-center">
+                <img src={catLogin} alt="" className="-mt-4 w-52 object-contain sm:w-60" />
+                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-[32px]">
+                  Verify your number
+                </h1>
+                <p className="mt-2 text-base text-foreground/70">
+                  We sent a 6-digit code to{" "}
+                  <span className="font-medium text-foreground">{destination}</span>
+                </p>
+
+                {otpExpired ? (
+                  <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                    This code has expired. Send a new one to continue.
+                  </p>
+                ) : null}
+
+                <div className="mt-8">
+                  <InputOTP
+                    maxLength={6}
+                    value={otp}
+                    disabled={otpExpired}
+                    onChange={(value) => {
+                      setOtp(value);
+                      if (value.length === 6) void verifyOtp(value);
                     }}
                   >
-                    Use another number
+                    <InputOTPGroup className="gap-2 sm:gap-3">
+                      {[0, 1, 2, 3, 4, 5].map((i) => (
+                        <InputOTPSlot
+                          key={i}
+                          index={i}
+                          className="h-14 w-12 text-lg font-semibold sm:h-16 sm:w-14"
+                        />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+
+                {!otpExpired ? (
+                  <p className="mt-4 text-sm text-foreground/70">
+                    Code expires in{" "}
+                    <span className="font-semibold text-primary">{formatCountdown(otpRemainingMs)}</span>
+                  </p>
+                ) : null}
+
+                {channel === "phone" && phoneAvailable ? (
+                  <p className="mt-2 rounded-md bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground">
+                    Test mode — enter code{" "}
+                    <span className="font-semibold text-primary">{localFixedOtp()}</span>
+                  </p>
+                ) : null}
+
+                <Button
+                  className="mt-6 w-full"
+                  size="lg"
+                  disabled={busy || otp.length !== 6 || otpExpired}
+                  onClick={() => void verifyOtp(otp)}
+                >
+                  Verify & Continue
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+
+                <div className="mt-4 flex w-full items-center justify-between text-sm">
+                  <button
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setSent(false);
+                      setOtp("");
+                      setOtpSentAt(null);
+                    }}
+                  >
+                    Change {channel === "phone" ? "number" : "email"}
+                  </button>
+                  <button
+                    className="font-medium text-primary hover:underline disabled:opacity-50"
+                    disabled={busy || secondsUntilResend > 0}
+                    onClick={() => void sendOtp()}
+                  >
+                    {secondsUntilResend > 0 ? `Resend code (${secondsUntilResend}s)` : "Resend code"}
                   </button>
                 </div>
-              ) : tab === "preview" ? (
-                <div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-base font-semibold text-foreground">
-                        Demo accounts
-                      </h2>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        One tap. Uses the existing sample Court / Lists / Nudges data.
-                      </p>
-                    </div>
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
-                      <Sparkles className="h-3 w-3" /> Dev Ready
-                    </span>
-                  </div>
 
-                  <div className="mt-4 space-y-2.5">
-                    {DEMO_PERSONAS.map((persona) => (
-                      <DemoPersonaButton key={persona.key} persona={persona} onEnter={() => handleDemoLogin(persona)} />
-                    ))}
-                  </div>
+                <div className="w-full">
+                  <BrandDivider />
+                  <p className="mt-6 text-xs text-muted-foreground/80">
+                    Your privacy and security are our priority. We&apos;ll never share your details with
+                    anyone.
+                  </p>
                 </div>
-              ) : tab === "otp" ? (
-                sent ? (
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground">
-                      Enter your one-time password
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      We sent a 6-digit code to{" "}
-                      <span className="font-medium text-foreground">{destination}</span>
-                    </p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center text-center">
+                <img src={catLogin} alt="" className="-mt-4 w-52 object-contain sm:w-60" />
+                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-foreground sm:text-[32px]">
+                  Welcome to Katalist
+                </h1>
+                <p className="mt-2 text-base text-foreground/70">
+                  {channel === "phone" ? "Sign in with your phone number" : "Sign in with your email"}
+                </p>
 
-                    {otpExpired ? (
-                      <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                        This code has expired. Send a new one to continue.
-                      </p>
-                    ) : null}
-
-                    <div className="mt-6 flex justify-center">
-                      <InputOTP
-                        maxLength={6}
-                        value={otp}
-                        disabled={otpExpired}
-                        onChange={(value) => {
-                          setOtp(value);
-                          if (value.length === 6) void verifyOtp(value);
-                        }}
+                {channel === "phone" ? (
+                  <div className="mt-8 flex w-full items-stretch overflow-hidden rounded-md border border-input">
+                    <Label htmlFor="dial-code" className="sr-only">
+                      Country
+                    </Label>
+                    <Select value={dialCode} onValueChange={setDialCode}>
+                      <SelectTrigger
+                        id="dial-code"
+                        aria-label="Country"
+                        className="w-auto shrink-0 gap-1.5 rounded-none border-0 border-r border-input px-3 focus:ring-0"
                       >
-                        <InputOTPGroup>
-                          {[0, 1, 2, 3, 4, 5].map((i) => (
-                            <InputOTPSlot key={i} index={i} />
-                          ))}
-                        </InputOTPGroup>
-                      </InputOTP>
-                    </div>
-
-                    <Button
-                      className="mt-6 w-full"
-                      size="lg"
-                      disabled={busy || otp.length !== 6 || otpExpired}
-                      onClick={() => void verifyOtp(otp)}
-                    >
-                      Verify & continue
-                      <ArrowRight className="ml-1 h-4 w-4" />
-                    </Button>
-
-                    <div className="mt-4 flex items-center justify-between text-sm">
-                      <button
-                        className="text-muted-foreground hover:text-foreground"
-                        onClick={() => {
-                          setSent(false);
-                          setOtp("");
-                          setOtpSentAt(null);
-                        }}
-                      >
-                        Change {channel === "phone" ? "number" : "email"}
-                      </button>
-                      <button
-                        className="font-medium text-primary hover:underline disabled:opacity-50"
-                        disabled={busy || secondsUntilResend > 0}
-                        onClick={() => void sendOtp()}
-                      >
-                        {secondsUntilResend > 0 ? `Resend code (${secondsUntilResend}s)` : "Resend code"}
-                      </button>
-                    </div>
+                        <SelectValue>
+                          <span className="flex items-center gap-1.5">
+                            {dialCode === "+91" ? (
+                              <img src={flagIndia} alt="" className="h-3.5 w-5 rounded-[2px] object-cover" />
+                            ) : (
+                              <Globe className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            {dialCode}
+                          </span>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRY_CODES.map((c) => (
+                          <SelectItem key={c.code} value={c.code}>
+                            {c.label} ({c.code})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="Enter your phone number"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
+                      className="flex-1 rounded-none border-0 focus-visible:ring-0"
+                      aria-label="Phone number"
+                    />
                   </div>
                 ) : (
-                  <div>
-                    <h2 className="text-base font-semibold text-foreground">
-                      {channel === "phone"
-                        ? "Login with your phone number"
-                        : "Login with your email"}
-                    </h2>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      We'll send you a one-time password (OTP)
-                    </p>
+                  <div className="mt-8 w-full">
+                    <Label htmlFor="email" className="sr-only">
+                      Email address
+                    </Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      inputMode="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
+                    />
+                  </div>
+                )}
 
+                <Button className="mt-4 w-full" size="lg" disabled={busy} onClick={() => void sendOtp()}>
+                  Continue
+                  <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+                <p className="mt-3 text-sm text-foreground/70">We&apos;ll send a one time code</p>
+
+                {phoneAvailable ? (
+                  <button
+                    className="mt-2 flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
+                    onClick={() => setChannel(channel === "phone" ? "email" : "phone")}
+                  >
                     {channel === "phone" ? (
-                      <div className="mt-5 flex gap-2">
-                        <div>
-                          <Label htmlFor="dial-code" className="sr-only">
-                            Country
-                          </Label>
-                          <Select value={dialCode} onValueChange={setDialCode}>
-                            <SelectTrigger id="dial-code" className="w-36" aria-label="Country">
-                              <SelectValue>
-                                {COUNTRY_CODES.find((c) => c.code === dialCode)?.label ?? "Country"}{" "}
-                                {dialCode}
-                              </SelectValue>
-                            </SelectTrigger>
-                            <SelectContent>
-                              {COUNTRY_CODES.map((c) => (
-                                <SelectItem key={c.code} value={c.code}>
-                                  {c.label} ({c.code})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Input
-                          type="tel"
-                          inputMode="tel"
-                          placeholder="Enter your phone number"
-                          value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
-                          className="flex-1"
-                          aria-label="Phone number"
-                        />
-                      </div>
+                      <>
+                        <Mail className="h-4 w-4" /> Use email instead
+                      </>
                     ) : (
-                      <div className="mt-5">
-                        <Label htmlFor="email" className="sr-only">
-                          Email address
-                        </Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          inputMode="email"
-                          placeholder="you@example.com"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && void sendOtp()}
-                        />
-                      </div>
+                      <>
+                        <Smartphone className="h-4 w-4" /> Use phone instead
+                      </>
                     )}
+                  </button>
+                ) : null}
 
-                    <Button
-                      className="mt-4 w-full"
-                      size="lg"
-                      disabled={busy}
-                      onClick={() => void sendOtp()}
-                    >
-                      Send OTP
-                      <ArrowRight className="ml-1 h-4 w-4" />
-                    </Button>
+                <p className="mt-8 text-xs text-muted-foreground/80">
+                  By continuing, you agree to our{" "}
+                  <span className="font-semibold text-primary">Terms of Service</span> and{" "}
+                  <span className="font-semibold text-primary">Privacy Policy.</span>
+                </p>
 
-                    {phoneAvailable ? (
-                      <button
-                        className="mt-3 flex w-full items-center justify-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-                        onClick={() => setChannel(channel === "phone" ? "email" : "phone")}
-                      >
-                        {channel === "phone" ? (
-                          <>
-                            <Mail className="h-4 w-4" /> Use email instead
-                          </>
-                        ) : (
-                          <>
-                            <Smartphone className="h-4 w-4" /> Use phone instead
-                          </>
-                        )}
-                      </button>
-                    ) : null}
-                  </div>
-                )
-              ) : (
-                <div className="flex flex-col items-center gap-4 rounded-xl bg-secondary/60 p-6 text-center">
-                  <div className="flex h-40 w-40 items-center justify-center rounded-xl border border-border bg-card">
-                    <QrCode className="h-20 w-20 text-foreground/80" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Scan QR to login</p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Open the Katalist mobile app and scan the QR code to login instantly.
-                    </p>
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      QR login uses a short-lived secure challenge with the Katalist mobile app. Integration boundary — use Phone / OTP when available.
-                    </p>
-                  </div>
+                <div className="w-full">
+                  <BrandDivider />
                 </div>
-              )}
-            </div>
-
-            {demoEnabled() ? (
-              <div className="border-t border-border px-6 py-3 text-center text-xs text-muted-foreground">
-                Demo is for testing. Phone / OTP and QR stay for live accounts.
               </div>
-            ) : null}
-
-            <div className="border-t border-border px-6 py-4 text-center text-sm text-muted-foreground">
-              New to Katalist?{" "}
-              <Link to="/onboarding" className="font-medium text-primary hover:underline">
-                Create an account
-              </Link>
+            )
+          ) : (
+            <div className="flex flex-col items-center gap-4 rounded-xl bg-secondary/60 p-6 text-center">
+              <div className="flex h-40 w-40 items-center justify-center rounded-xl border border-border bg-card">
+                <QrCode className="h-20 w-20 text-foreground/80" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">Scan QR to login</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Open the Katalist mobile app and scan the QR code to login instantly.
+                </p>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  QR login uses a short-lived secure challenge with the Katalist mobile app. Integration
+                  boundary — use Phone / OTP when available.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5" /> Secure connection
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Shield className="h-3.5 w-3.5" /> Your data is private
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Cloud className="h-3.5 w-3.5" /> Secure and reliable
-            </span>
-          </div>
+          {!profilePhone ? (
+            <p className="mt-8 text-center text-sm text-muted-foreground">
+              New to Katalist?{" "}
+              <Link to="/welcome" className="font-medium text-primary hover:underline">
+                Take the tour
+              </Link>
+            </p>
+          ) : null}
         </div>
       </div>
     </div>

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Thing } from "@/domain/thing";
+import { PDFViewer, type ThingFile } from "./PDFViewer";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
 import { ThingDetailContent } from "./ThingDetailContent";
@@ -30,6 +31,8 @@ type InlineThingDetailWorkspaceProps = {
   magicBoxProps?: { listId?: string; listName?: string };
   /** Opt into the flat white-card look used by the restyled Team/Bucket-detail screens (hex borders, rounded-[10px], no shadcn shadow token) instead of the generic card default. */
   flatPanel?: boolean;
+  /** Show selected attachments in a dedicated side preview pane. */
+  filePreview?: boolean;
 };
 
 const FLAT_PANEL_SHADOW = "0 3px 9.4px 0 rgba(0,0,0,0.05)";
@@ -47,8 +50,14 @@ export function InlineThingDetailWorkspace({
   navTitle,
   magicBoxProps,
   flatPanel = false,
+  filePreview = false,
 }: InlineThingDetailWorkspaceProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFile, setSelectedFile] = useState<ThingFile | null>(null);
+
+  useEffect(() => {
+    setSelectedFile(null);
+  }, [thing?.id]);
 
   useEffect(() => {
     if (!thing) return;
@@ -322,22 +331,35 @@ export function InlineThingDetailWorkspace({
     >
       <div className={cn("min-w-0 overflow-x-hidden", sourceClassName)}>{children}</div>
 
-      <div
-        className={cn(
-          "min-w-0 p-6 md:p-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200",
-          flatPanel ? "rounded-[10px] bg-white" : "rounded-2xl border border-border/80 bg-white ",
-        )}
-        style={flatPanel ? { boxShadow: FLAT_PANEL_SHADOW } : undefined}
-      >
-        <div className="max-h-[calc(100vh-10rem)] overflow-y-auto overscroll-contain">
-          <ThingDetailContent
-            initialThing={thing}
-            headerAction={headerAction}
-            onAfterTerminalAction={onClose}
-            variant="court"
-            viewOnly={viewOnly}
-          />
+      <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <div
+          className={cn(
+            "min-w-0 p-6 md:p-8 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-200",
+            flatPanel ? "rounded-[10px] bg-white" : "rounded-2xl border border-border/80 bg-white ",
+            filePreview && selectedFile ? "flex-1 overflow-y-auto overscroll-contain" : "w-full overflow-y-auto overscroll-contain",
+          )}
+          style={flatPanel ? { boxShadow: FLAT_PANEL_SHADOW } : undefined}
+        >
+          <div className="max-h-[calc(100vh-10rem)] lg:max-h-full">
+            <ThingDetailContent
+              initialThing={thing}
+              headerAction={headerAction}
+              onAfterTerminalAction={onClose}
+              onFileSelect={filePreview ? setSelectedFile : undefined}
+              variant="court"
+              viewOnly={viewOnly}
+            />
+          </div>
         </div>
+        {filePreview && selectedFile ? (
+          <div className="hidden min-h-0 min-w-0 flex-1 overflow-hidden lg:flex">
+            <PDFViewer
+              file={selectedFile}
+              addedByName={thing.creator.name}
+              addedLabel={thing.updatedAt ? format(new Date(thing.updatedAt), "MMM d, h:mm a") : undefined}
+            />
+          </div>
+        ) : null}
       </div>
     </section>
   );

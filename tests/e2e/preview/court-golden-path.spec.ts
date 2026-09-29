@@ -102,14 +102,21 @@ test("capture shows prompt feedback and disables repeat submission while pending
   // which is itself evidence the guard works, not a way to test past it).
   await expect(tossButton).toBeDisabled();
 
-  const toast = page.getByText(`"${title}" tossed`);
-  await expect(toast).toBeVisible({ timeout: 10_000 });
+  const chatHead = page.locator("[data-chat-heads-dock]");
+  await expect(chatHead).toHaveAttribute("aria-label", /1 unread/, { timeout: 10_000 });
+  const preview = page.locator("[data-chat-head-preview]");
+  await expect(preview).toContainText(`"${title}" tossed`);
+  await expect(preview).toHaveCount(0, { timeout: 7_000 });
+  await expect(chatHead).toHaveAttribute("aria-label", /1 unread/);
+  await chatHead.click();
+  const updates = page.locator("[data-chat-head-updates]");
+  await expect(updates.getByText(`"${title}" tossed`)).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator("[data-sonner-toaster]")).toBeHidden();
   const feedbackMs = Date.now() - capturedAt;
   expect(feedbackMs, "capture feedback took too long to become visible").toBeLessThan(5_000);
 
-  // Exactly one success toast for this title -- not two, even though the
-  // button was interacted with twice.
-  await expect(page.getByText(`"${title}" tossed`)).toHaveCount(1);
+  // Exactly one activity entry for this title.
+  await expect(updates.getByText(`"${title}" tossed`)).toHaveCount(1);
 
   // The composer clears after a successful Toss, ready for the next capture.
   await expect(magicBoxInput).toHaveValue("");

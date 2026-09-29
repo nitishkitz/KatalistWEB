@@ -14,7 +14,9 @@ export type RingPayload = {
   listName: string;
   fromDeviceId: string;
   fromName: string;
+  fromAvatarUrl?: string | null;
   memberIds: string[];
+  callType?: "audio" | "video";
   /** Conversation kind, so the ring routes to /team (dm/group) vs /lists. */
   kind?: "dm" | "group" | "list";
 };

@@ -47,7 +47,7 @@ export type ActionOutcome =
   | { status: "failed"; error: unknown };
 
 export type ThingActionRequest =
-  | { kind: "catch"; thingId: string }
+  | { kind: "catch"; thingId: string; pace?: Pace }
   | { kind: "acknowledge"; thingId: string }
   | { kind: "sort"; thingId: string }
   | { kind: "set_pace"; thingId: string; pace: Pace }
@@ -78,7 +78,7 @@ const SUPPORTED_SNOOZE_OPTIONS: readonly SnoozeOption[] = ["1h", "6h", "next_day
 function patchFor(request: ThingActionRequest): ThingPatch | undefined {
   switch (request.kind) {
     case "catch":
-      return { acknowledgement: "caught", workStatus: "under_progress", personalPace: "next" };
+      return { acknowledgement: "caught", workStatus: "under_progress", personalPace: request.pace ?? "next" };
     case "acknowledge":
       return { acknowledgement: "caught", personalPace: "next" };
     case "sort":
@@ -95,7 +95,7 @@ function patchFor(request: ThingActionRequest): ThingPatch | undefined {
 async function dispatch(request: ThingActionRequest, deps: RunThingActionDeps): Promise<void> {
   switch (request.kind) {
     case "catch":
-      await rpcCatchAndStart(request.thingId);
+      await rpcCatchAndStart(request.thingId, request.pace);
       return;
     case "acknowledge":
       await rpcCatchThing(request.thingId);
@@ -140,6 +140,9 @@ export async function runThingAction(
   request: ThingActionRequest,
   deps: RunThingActionDeps,
 ): Promise<ActionOutcome> {
+  if (request.kind === "catch" && request.pace !== undefined && !SUPPORTED_PACES.includes(request.pace)) {
+    return { status: "failed", error: new Error(`Unsupported pace: ${String(request.pace)}`) };
+  }
   if (request.kind === "set_pace" && !SUPPORTED_PACES.includes(request.pace)) {
     return { status: "failed", error: new Error(`Unsupported pace: ${String(request.pace)}`) };
   }

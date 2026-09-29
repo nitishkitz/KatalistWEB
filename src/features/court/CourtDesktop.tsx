@@ -13,7 +13,6 @@ import type { Thing } from "@/domain/thing";
 import { laneOf, theirStateFor } from "@/domain/thing";
 import type { UseCatchup } from "@/features/catchup/use-catchup";
 import type { UseMorningBrief } from "@/features/catchup/use-morning-brief";
-import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
 import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
 import { cn } from "@/lib/utils";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -767,18 +766,6 @@ export function CourtDesktop({
         </div>
       </div>
 
-      {/* T10-06: reachable once settled even on an initial failure or a
-          genuinely empty result -- CatchUpBanner itself decides what to
-          render for each case; this is no longer gated on `count > 0`. */}
-      {!focusSelection ? (
-        <CatchUpBanner
-          moments={catchup.moments}
-          onReview={morningBrief.reopen}
-          error={catchup.error}
-          hasFetchedOnce={catchup.hasFetchedOnce}
-        />
-      ) : null}
-
       {/* T09/E-04: distinguishes a genuinely empty Court (nothing tossed
           yet -- Magic Box right below is the capture action) from a Court
           with Things that a search/filter has narrowed to zero (Clear
@@ -809,7 +796,7 @@ export function CourtDesktop({
 
       <div className="flex w-full min-w-0 items-start gap-4">
         {/* Lanes */}
-        <div className="min-w-0 flex-1 flex flex-col h-[calc(100vh-8rem)]">
+        <div className="min-h-0 min-w-0 flex-1 flex flex-col h-[calc(100vh-8rem)]">
           <CourtWorkspace
             selection={focusSelection}
             lanes={{ now: view.now, next: view.next, later: view.later }}
@@ -829,7 +816,7 @@ export function CourtDesktop({
             onViewAll={handleViewAll}
           />
           {!focusSelection && (
-            <div className="z-30 flex shrink-0 justify-center w-full mt-3 pt-1">
+            <div className="sticky bottom-0 z-30 mt-auto flex shrink-0 w-full justify-center bg-background/95 pt-3 pb-1 backdrop-blur-sm">
               <div className="w-full max-w-2xl">
                 <MagicBox
                   desktop

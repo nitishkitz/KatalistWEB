@@ -1,19 +1,79 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { isValidElement, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { toast } from "sonner";
-import { PictureInPicture2, X } from "lucide-react";
+import { toast, useSonner } from "sonner";
+import { AlertCircle, CheckCircle2, Info, MessageCircle, PictureInPicture2, X } from "lucide-react";
 import { useSession } from "@/hooks/useSession";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { ListChatPanel } from "@/features/lists/ListChatPanel";
 import { cn } from "@/lib/utils";
-import katalistMark from "@/assets/katalist-mark.png.asset.json";
+import pose209 from "@/assets/chat-quick-actions/pose-209.png";
+import pose201 from "@/assets/chat-quick-actions/pose-201.png";
+import pose193 from "@/assets/chat-quick-actions/pose-193.png";
+import pose2 from "@/assets/chat-quick-actions/pose-2.png";
 import { useConversations, type Conversation } from "./use-conversations";
 import { markConversationAsRead, useConversationUnreadCount } from "./chat-read-state";
 
 const BUBBLE_SIZE = 52;
+const VIEWPORT_INSET = 12;
 const DRAG_THRESHOLD_PX = 6;
+const PREVIEW_DURATION_MS = 4400;
 const POSITION_STORAGE_KEY = "katalist_chat_bubble_pos";
+const QUICK_ACTION_POSES = [pose2, pose209, pose201, pose193];
+type ActivityToast = ReturnType<typeof useSonner>["toasts"][number] & { receivedAt: number; read: boolean };
+let activityOwnerId: string | undefined;
+let activityCache: ActivityToast[] = [];
+let seenToastCache = new Set<string | number>();
+
+function activityForUser(userId: string | undefined) {
+  if (typeof window === "undefined") return [];
+  if (activityOwnerId !== userId) {
+    activityOwnerId = userId;
+    activityCache = [];
+    seenToastCache = new Set();
+  }
+  return activityCache;
+}
+
+function toastContent(value: ReactNode | (() => ReactNode)) {
+  return typeof value === "function" ? value() : value;
+}
+
+function ActivityFeed({ items, onClose }: { items: ActivityToast[]; onClose: () => void }) {
+  return (
+    <div data-chat-head-updates className="flex h-[420px] flex-col overflow-hidden rounded-md bg-popover">
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div>
+          <h2 className="text-sm font-semibold text-[#241747]">Recent updates</h2>
+          <p className="text-xs text-muted-foreground">Feedback from your actions</p>
+        </div>
+        <button type="button" onClick={onClose} aria-label="Close updates" className="rounded-full p-1.5 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><X className="h-4 w-4" /></button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        {items.length === 0 ? (
+          <p className="px-3 py-10 text-center text-sm text-muted-foreground">No updates yet.</p>
+        ) : items.map((item) => {
+          const Icon = item.type === "error" || item.type === "warning" ? AlertCircle : item.type === "success" ? CheckCircle2 : Info;
+          const color = item.type === "error" || item.type === "warning" ? "bg-red-50 text-red-600" : item.type === "success" ? "bg-emerald-50 text-emerald-600" : "bg-violet-50 text-violet-600";
+          const action = item.action;
+          return (
+            <div key={item.id} className="flex gap-3 rounded-xl px-2 py-3 hover:bg-[#f8f6fc]">
+              <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${color}`}><Icon className="h-4 w-4" /></span>
+              <div className="min-w-0 flex-1 text-sm">
+                <div className="break-words font-medium text-foreground">{toastContent(item.title)}</div>
+                {item.description ? <div className="mt-0.5 break-words text-xs text-muted-foreground">{toastContent(item.description)}</div> : null}
+                {action && (isValidElement(action) ? action : typeof action === "object" && "label" in action ? (
+                  <button type="button" className="mt-2 text-xs font-semibold text-violet-700 hover:underline" onClick={(event) => { action.onClick(event); onClose(); }}>{action.label}</button>
+                ) : null)}
+              </div>
+              <time className="shrink-0 pt-0.5 text-[11px] text-muted-foreground">{new Date(item.receivedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** Not yet in TypeScript's DOM lib (the API itself is still a Draft
  *  Community Group Report) — minimal shape for what this file uses. */
@@ -37,7 +97,12 @@ function loadPosition(): { x: number; y: number } {
     const raw = localStorage.getItem(POSITION_STORAGE_KEY);
     if (!raw) return defaultPosition();
     const parsed = JSON.parse(raw) as { x: number; y: number };
-    if (typeof parsed.x === "number" && typeof parsed.y === "number") return parsed;
+    if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+      return {
+        x: clamp(parsed.x, window.innerWidth - BUBBLE_SIZE - VIEWPORT_INSET),
+        y: clamp(parsed.y, window.innerHeight - BUBBLE_SIZE - VIEWPORT_INSET),
+      };
+    }
   } catch {
     // ignore
   }
@@ -85,15 +150,19 @@ function SwitcherBubble({
       aria-label={`Open conversation: ${conversation.title}`}
       aria-pressed={selected}
       className={cn(
-        "relative shrink-0 rounded-full transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        selected && "ring-2 ring-[#7b56fd] ring-offset-2",
+        "relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 p-[2px] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        selected ? "border-[#7b56fd]" : "border-transparent",
       )}
     >
-      <PersonAvatar name={conversation.title} src={conversation.avatarUrl} size={36} />
+      <PersonAvatar
+        name={conversation.title}
+        src={conversation.kind === "group" ? conversation.coverUrl : conversation.avatarUrl}
+        size={36}
+      />
       {count === "unknown" ? (
-        <span title="Unread count unavailable — retrying" className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-amber-500 px-0.5 text-[12px] font-semibold text-white">?</span>
+        <span title="Unread count unavailable — retrying" className="absolute right-0 top-0 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-amber-500 px-0.5 text-[12px] font-semibold text-white">?</span>
       ) : count > 0 ? (
-        <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-[#fc404d] px-0.5 text-[12px] font-semibold text-white">
+        <span className="absolute right-0 top-0 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-background bg-[#fc404d] px-0.5 text-[12px] font-semibold text-white">
           {count > 99 ? "99+" : count}
         </span>
       ) : null}
@@ -122,7 +191,7 @@ function MiniChatContent({
 }) {
   return (
     <div className="flex h-[420px] flex-col overflow-hidden rounded-md bg-popover">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+      <div className="flex items-center gap-2 border-b border-border px-2 py-1">
         <div className="flex flex-1 items-center gap-1.5 overflow-x-auto">
           {conversations.slice(0, 12).map((c) => (
             <SwitcherBubble key={c.id} conversation={c} myId={myId} selected={c.id === selected.id} onSelect={() => onSelect(c.id)} />
@@ -148,8 +217,7 @@ function MiniChatContent({
           <X className="h-4 w-4" />
         </button>
       </div>
-      <p className="truncate px-3 pt-2 text-[13px] font-semibold text-foreground">{selected.title}</p>
-      <ListChatPanel listId={selected.id} placeholderName={selected.title} className="flex-1" />
+      <ListChatPanel listId={selected.id} placeholderName={selected.title} headerTitle={selected.title} className="flex-1" />
     </div>
   );
 }
@@ -175,11 +243,16 @@ function MiniChatContent({
 export function ChatHeadsDock() {
   const { user } = useSession();
   const { conversations } = useConversations();
+  const { toasts } = useSonner();
   const [pos, setPos] = useState(loadPosition);
   const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<"updates" | "chats">("chats");
+  const [activity, setActivity] = useState<ActivityToast[]>(() => activityForUser(user?.id));
+  const [previewId, setPreviewId] = useState<string | number | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [unreadById, setUnreadById] = useState<Record<string, number | "unknown">>({});
   const [pipWindow, setPipWindow] = useState<PipWindow | null>(null);
+  const [poseIndex, setPoseIndex] = useState(0);
   const bubbleRef = useRef<HTMLButtonElement | null>(null);
   const dragRef = useRef<{
     startX: number;
@@ -190,10 +263,69 @@ export function ChatHeadsDock() {
   } | null>(null);
 
   const selected = conversations.find((c) => c.id === selectedId) ?? conversations[0] ?? null;
+  const updateActivity = (update: (current: ActivityToast[]) => ActivityToast[]) => {
+    setActivity((current) => {
+      const next = update(current);
+      activityCache = next;
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!toasts.length) return;
+    const incoming = toasts.filter((item) => !seenToastCache.has(item.id));
+    if (!incoming.length) return;
+    incoming.forEach((item) => seenToastCache.add(item.id));
+    const receivedAt = Date.now();
+    updateActivity((current) => [...incoming.map((item) => ({ ...item, receivedAt, read: false })), ...current].slice(0, 50));
+    if (!open) setPreviewId(incoming[0].id);
+  }, [toasts, open]);
+
+  useEffect(() => {
+    if (previewId === null) return;
+    const timer = window.setTimeout(() => setPreviewId(null), PREVIEW_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [previewId]);
+
+  const unreadActivity = activity.filter((item) => !item.read).length;
+
+  useEffect(() => {
+    if (open && activeTab === "updates" && unreadActivity) {
+      updateActivity((current) => current.map((item) => item.read ? item : { ...item, read: true }));
+    }
+  }, [open, activeTab, unreadActivity]);
 
   useEffect(() => {
     if ((open || pipWindow) && selected) markConversationAsRead(selected.id, user?.id);
   }, [open, pipWindow, selected, user?.id]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setPoseIndex((index) => (index + 1) % QUICK_ACTION_POSES.length);
+    }, 4200);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const keepBubbleInView = () => {
+      setPos((current) => {
+        const next = {
+          x: clamp(current.x, window.innerWidth - BUBBLE_SIZE - VIEWPORT_INSET),
+          y: clamp(current.y, window.innerHeight - BUBBLE_SIZE - VIEWPORT_INSET),
+        };
+        if (next.x !== current.x || next.y !== current.y) {
+          try {
+            localStorage.setItem(POSITION_STORAGE_KEY, JSON.stringify(next));
+          } catch {
+            // ignore storage errors
+          }
+        }
+        return next;
+      });
+    };
+    window.addEventListener("resize", keepBubbleInView);
+    return () => window.removeEventListener("resize", keepBubbleInView);
+  }, []);
 
   // If the user closes the PiP window from its own chrome (not our button),
   // fall back to the normal in-tab popover state.
@@ -243,6 +375,7 @@ export function ChatHeadsDock() {
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    setPreviewId(null);
     e.currentTarget.setPointerCapture(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, startPos: pos, current: pos, moved: false };
   };
@@ -289,10 +422,18 @@ export function ChatHeadsDock() {
       pipWindow.focus();
       return;
     }
+    if (!open) setActiveTab(unreadActivity > 0 || !selected ? "updates" : "chats");
     setOpen((o) => !o);
   };
 
-  if (conversations.length === 0) return null;
+  const badgeCount = totalUnread + unreadActivity;
+  const preview = !open ? activity.find((item) => item.id === previewId) : null;
+  const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 768 : window.innerHeight;
+  const previewWidth = Math.min(300, viewportWidth - 24);
+  const previewOnRight = pos.x + BUBBLE_SIZE + previewWidth + 24 <= viewportWidth;
+  const previewLeft = previewOnRight ? pos.x + BUBBLE_SIZE + 12 : Math.max(12, pos.x - previewWidth - 12);
+  const previewTop = Math.min(Math.max(12, pos.y - 2), viewportHeight - 132);
 
   return (
     <>
@@ -302,27 +443,37 @@ export function ChatHeadsDock() {
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverAnchor asChild>
           <button
+            data-chat-heads-dock
             ref={bubbleRef}
             type="button"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            title={hasUnknownUnread ? "Chats — some unread counts unavailable" : "Chats"}
-            aria-label={hasUnknownUnread ? "Chats — some unread counts unavailable" : "Chats"}
+            title={hasUnknownUnread ? "Chats and updates — some unread counts unavailable" : "Chats and updates"}
+            aria-label={hasUnknownUnread ? "Chats and updates — some unread counts unavailable" : `Chats and updates${badgeCount ? `, ${badgeCount} unread` : ""}`}
             style={{ left: pos.x, top: pos.y, width: BUBBLE_SIZE, height: BUBBLE_SIZE, touchAction: "none" }}
             className="fixed z-40 flex items-center justify-center rounded-full bg-white katalist-elevation-card outline-none ring-1 ring-black/10 cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[#7b56fd]"
           >
-            <img src={katalistMark.url} alt="" className="h-7 w-7" />
-            {totalUnread > 0 || hasUnknownUnread ? (
+            <img
+              src={QUICK_ACTION_POSES[poseIndex]}
+              alt=""
+              draggable={false}
+              className="h-full w-full rounded-full object-cover"
+            />
+            {badgeCount > 0 || hasUnknownUnread ? (
               <span className={cn("absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-background px-1 text-[12px] font-semibold text-white", hasUnknownUnread ? "bg-amber-500" : "bg-[#fc404d]")}>
-                {hasUnknownUnread ? "?" : totalUnread > 99 ? "99+" : totalUnread}
+                {hasUnknownUnread ? "?" : badgeCount > 99 ? "99+" : badgeCount}
               </span>
             ) : null}
           </button>
         </PopoverAnchor>
         <PopoverContent side="top" align="start" className="w-[320px] p-0" sideOffset={10}>
-          {selected ? (
+          <div className="flex border-b border-border bg-white px-2 pt-2">
+            <button type="button" onClick={() => setActiveTab("updates")} className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-t-lg px-2 py-2 text-xs font-semibold", activeTab === "updates" ? "bg-violet-50 text-violet-700" : "text-muted-foreground hover:bg-muted")}><Info className="h-3.5 w-3.5" />Updates{unreadActivity ? ` ${unreadActivity}` : ""}</button>
+            {selected ? <button type="button" onClick={() => setActiveTab("chats")} className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-t-lg px-2 py-2 text-xs font-semibold", activeTab === "chats" ? "bg-violet-50 text-violet-700" : "text-muted-foreground hover:bg-muted")}><MessageCircle className="h-3.5 w-3.5" />Chats{totalUnread ? ` ${totalUnread}` : ""}</button> : null}
+          </div>
+          {activeTab === "updates" || !selected ? <ActivityFeed items={activity} onClose={() => setOpen(false)} /> : (
             <MiniChatContent
               conversations={conversations}
               selected={selected}
@@ -333,9 +484,23 @@ export function ChatHeadsDock() {
               poppedOut={false}
               onPopOut={() => void openPip()}
             />
-          ) : null}
+          )}
         </PopoverContent>
       </Popover>
+      {preview ? (
+        <div
+          data-chat-head-preview
+          role="status"
+          aria-live="polite"
+          style={{ left: previewLeft, top: previewTop, width: previewWidth }}
+          className="pointer-events-none fixed z-50 rounded-xl border border-violet-200 bg-white px-4 py-3 text-sm shadow-[0_12px_32px_rgba(43,26,84,0.18)] motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-95"
+        >
+          <div className="font-semibold text-[#241747]">{toastContent(preview.title)}</div>
+          {preview.description ? <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{toastContent(preview.description)}</div> : null}
+          <div className="mt-1.5 text-[11px] font-medium text-violet-600">Tap the cat to see updates</div>
+          <span aria-hidden="true" className={cn("absolute top-4 h-3 w-3 rotate-45 border-violet-200 bg-white", previewOnRight ? "-left-[7px] border-b border-l" : "-right-[7px] border-r border-t")} />
+        </div>
+      ) : null}
       {pipWindow && selected
         ? createPortal(
             <MiniChatContent

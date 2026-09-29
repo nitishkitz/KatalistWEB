@@ -1,6 +1,7 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
+@import "./features/court/magic-box-motion.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -374,6 +375,38 @@
   animation: katalist-shimmer 1.5s infinite;
 }
 
+/* Matter.js owns only position and rotation. The cards stay as semantic DOM
+   buttons, so keyboard focus and the existing contact actions still work. */
+.contact-physics-card {
+  will-change: transform;
+  transform-origin: center;
+  backface-visibility: hidden;
+  touch-action: manipulation;
+}
+
+.contact-physics-card[data-active="true"] {
+  filter: saturate(1.05);
+}
+
+.contact-physics-card--resting {
+  padding: 5px;
+  border-radius: 999px;
+}
+
+.contact-physics-card--resting > span:first-child {
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contact-physics-card {
+    will-change: auto;
+  }
+}
+
+.reduce-motion .contact-physics-card {
+  will-change: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .katalist-shimmer::after {
     animation: none;
@@ -416,4 +449,10 @@
   transition-duration: 0.01ms !important;
   animation-duration: 0.01ms !important;
   scroll-behavior: auto !important;
+}
+/* The app's chat head collects Sonner feedback while it is mounted. Keep the
+   Sonner host alive so all existing toast calls still reach useSonner. */
+body:has([data-chat-heads-dock]) [data-sonner-toaster] {
+  visibility: hidden;
+  pointer-events: none;
 }

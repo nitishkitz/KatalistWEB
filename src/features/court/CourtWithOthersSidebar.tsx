@@ -66,7 +66,7 @@ export function CourtWithOthersSidebar({
         setNudgingId(null);
         if (!isEpochCurrent(qc, epoch)) return;
         toast.success(
-          alreadyNudged ? "Nudged again — they'll get another gentle tap." : "Just a gentle paw tap on this one.",
+          alreadyNudged ? `Nudged ${thing.assignee.name} again about “${thing.title}”.` : `Nudged ${thing.assignee.name} about “${thing.title}”.`,
         );
         void qc.invalidateQueries({ queryKey: ["nudges"] });
         void qc.invalidateQueries({ queryKey: ["nudge-history"] });
@@ -86,7 +86,7 @@ export function CourtWithOthersSidebar({
         // A repeat nudge is usually just a cooldown — reflect the Nudged state.
         if (alreadyNudged) {
           setNudgedIds((prev) => ({ ...prev, [thing.id]: true }));
-          toast("Already nudged — give them a little time to catch it.");
+          toast(`${thing.assignee.name} was already nudged about “${thing.title}”. Give them a little time to catch it.`);
         } else {
           toast(friendly);
         }
@@ -115,7 +115,7 @@ export function CourtWithOthersSidebar({
           </div>
         </div>
         {/* Underline Tabs */}
-        <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
           {(
             [
               ["waiting_for_catch", "Waiting for Catch", theirGroups.waiting_for_catch.length],
@@ -130,12 +130,16 @@ export function CourtWithOthersSidebar({
                 type="button"
                 onClick={() => setTheirFocus(id)}
                 className={cn(
-                  "inline-flex min-h-8 items-center pb-2 text-[12px] whitespace-nowrap transition-colors relative cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
+                  "inline-flex min-h-8 shrink-0 items-center gap-1 pb-2 text-[12px] whitespace-nowrap transition-colors relative cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
                   isActive ? "text-black font-medium" : "text-black/80 hover:text-black font-normal",
                 )}
+                aria-label={`${label}: ${count}`}
               >
-                {label}{" "}
-                <span className={cn(id === "needs_attention" ? "text-[#fd1c1a]" : "text-black/80")}>
+                <span>{label}</span>
+                <span className={cn(
+                  "inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-slate-100 px-0.5 text-[11px] tabular-nums",
+                  id === "needs_attention" ? "bg-red-50 text-[#fd1c1a]" : "text-black/80",
+                )}>
                   {count}
                 </span>
                 {isActive && (

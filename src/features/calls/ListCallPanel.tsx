@@ -39,7 +39,6 @@ import { detectFileType } from "@/lib/file-utils";
 import { PdfCanvas } from "@/features/things/PdfCanvas";
 import { useListMessages } from "@/features/lists/use-list-messages";
 import { useSessionDraft } from "@/features/drafts/use-session-draft";
-import { getChatScroll, saveChatScroll } from "@/features/lists/chat-scroll-state";
 import { getDraftRevision } from "@/features/drafts/session-drafts";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { AnnotateCanvas, type AnnotateCanvasHandle } from "./AnnotateCanvas";
@@ -210,9 +209,8 @@ export function ListCallPanel({
       return;
     }
     if (!restoredChatScrollRef.current && !chat.isLoading) {
-      const saved = getChatScroll(qc, listId);
-      el.scrollTop = saved && saved.fromBottom > 80 ? saved.top : el.scrollHeight;
-      nearBottomRef.current = !saved || saved.fromBottom <= 80;
+      el.scrollTop = el.scrollHeight;
+      nearBottomRef.current = true;
       restoredChatScrollRef.current = true;
     }
     const lastId = chat.messages.at(-1)?.id ?? null;
@@ -841,7 +839,6 @@ export function ListCallPanel({
               const el = e.currentTarget;
               const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
               nearBottomRef.current = fromBottom < 80;
-              saveChatScroll(qc, listId, el.scrollTop, fromBottom);
               if (nearBottomRef.current) setNewChatMessages(false);
             }} className="flex-1 space-y-2 overflow-y-auto px-3 py-2" style={{ maxHeight: 220 }}>
               {chat.hasMore || chat.olderError ? <button type="button" disabled={chat.isLoadingOlder} onClick={() => void loadOlderChat()} className="w-full rounded-md border border-border px-2 py-1 text-xs text-primary disabled:opacity-50">{chat.isLoadingOlder ? "Loading older…" : chat.olderError ? "Couldn't load older. Retry" : "Load older messages"}</button> : null}

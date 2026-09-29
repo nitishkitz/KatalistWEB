@@ -21,8 +21,8 @@ import { cn } from "@/lib/utils";
 import { logTelemetryEvent } from "@/lib/telemetry";
 import { useCatchup } from "@/features/catchup/use-catchup";
 import { useMorningBrief } from "@/features/catchup/use-morning-brief";
-import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
 import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
+import { consumeCatchupOpen, CATCHUP_OPEN_EVENT } from "@/features/catchup/catchup-entry";
 
 const DESKTOP_BREAKPOINT_QUERY = "(min-width: 1024px)";
 
@@ -107,24 +107,26 @@ function Lane({
               <ThingCard key={t.id} thing={t} onSelect={onSelect} />
             ))}
           </div>
-          <table className="hidden w-full table-fixed md:table">
-            <colgroup>
-              <col className="w-[26%]" />
-              <col className="w-[12%]" />
-              <col className="w-[10%]" />
-              <col className="w-[10%]" />
-              <col className="w-[13%]" />
-              <col className="w-[12%]" />
-              <col className="w-[10%]" />
-              <col className="w-[7%]" />
-            </colgroup>
-            <ThingTableHeader />
-            <tbody>
-              {visible.map((t) => (
-                <ThingRow key={t.id} thing={t} onSelect={onSelect} />
-              ))}
-            </tbody>
-          </table>
+          <div className="hidden min-w-0 overflow-x-auto overscroll-x-contain md:block">
+            <table className="w-full min-w-[860px] table-fixed">
+              <colgroup>
+                <col className="w-[26%]" />
+                <col className="w-[12%]" />
+                <col className="w-[10%]" />
+                <col className="w-[10%]" />
+                <col className="w-[13%]" />
+                <col className="w-[12%]" />
+                <col className="w-[10%]" />
+                <col className="w-[7%]" />
+              </colgroup>
+              <ThingTableHeader />
+              <tbody>
+                {visible.map((t) => (
+                  <ThingRow key={t.id} thing={t} onSelect={onSelect} />
+                ))}
+              </tbody>
+            </table>
+          </div>
           {hidden > 0 && !showAll ? (
             <button
               type="button"
@@ -214,6 +216,16 @@ function CourtPage() {
     () => ({ ...morningBrief, open: morningBrief.open && isDesktopViewport }),
     [morningBrief, isDesktopViewport],
   );
+  const reopenMorningBrief = morningBrief.reopen;
+  useEffect(() => {
+    const openCatchup = () => {
+      consumeCatchupOpen();
+      reopenMorningBrief();
+    };
+    window.addEventListener(CATCHUP_OPEN_EVENT, openCatchup);
+    if (consumeCatchupOpen()) window.setTimeout(openCatchup, 0);
+    return () => window.removeEventListener(CATCHUP_OPEN_EVENT, openCatchup);
+  }, [reopenMorningBrief]);
   // T10/mobile-entry: a Catch Up moment's Thing is not guaranteed to be one
   // of Court's own currently-loaded now/next/later/theirs/all Things (e.g.
   // a ghost breakthrough deliberately surfaces a Thing from the OTHER
@@ -347,19 +359,6 @@ function CourtPage() {
                 tolerates the id not being in cache yet and simply shows
                 nothing until the invalidation MagicBox already triggers
                 finishes refetching. */}
-            {/* T10/mobile-entry: the reachable mobile Morning Brief entry
-                point this route previously lacked entirely below `lg`
-                (1024px) -- same `CatchUpBanner` component CourtDesktop uses,
-                fed by the single lifted `catchup`/`morningBrief` instances
-                above, reachable on every settled branch (loading/error/
-                empty/ready), not gated on a non-zero moment count. */}
-            <CatchUpBanner
-              moments={catchup.moments}
-              onReview={morningBrief.reopen}
-              error={catchup.error}
-              hasFetchedOnce={catchup.hasFetchedOnce}
-            />
-
             <MagicBox onThingCreated={(thingId) => setSelectedId(thingId)} />
 
             <p className="mb-3 flex items-center gap-2 text-[13px] text-muted-foreground">
@@ -513,8 +512,8 @@ function CourtPage() {
                   />
                 </div>
                 {theirFocus ? (
-                  <div className="px-4 pb-4">
-                    <table className="w-full table-fixed">
+                  <div className="min-w-0 overflow-x-auto overscroll-x-contain px-4 pb-4">
+                    <table className="w-full min-w-[860px] table-fixed">
                       <ThingTableHeader />
                       <tbody>
                         {theirGroups[theirFocus].map((t) => (

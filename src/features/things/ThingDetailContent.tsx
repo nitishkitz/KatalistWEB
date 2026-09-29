@@ -31,6 +31,7 @@ import {
   rpcReassignThing,
   rpcSetDue,
   rpcSetPersonalPace,
+  rpcSetOwnerImportance,
   rpcSetWorkStatus,
   rpcShred,
   rpcSortThing,
@@ -568,6 +569,13 @@ export function ThingDetailContent({
       }),
     );
 
+  const handleSetRequestedPace = (pace: Pace) =>
+    run.mutate(
+      withOptimisticPatch(qc, thing.id, { ownerImportance: pace }, async () => {
+        await rpcSetOwnerImportance(thing.id, pace);
+      }),
+    );
+
   const handleCatchAndStart = () =>
     run.mutate(
       withOptimisticPatch(
@@ -661,6 +669,7 @@ export function ThingDetailContent({
             busy={busy}
             activePace={activePace}
             onSetPace={handleSetPace}
+            onSetRequestedPace={handleSetRequestedPace}
             currentBucket={currentBucket}
             buckets={buckets}
             onSelectBucket={handleSelectBucket}
@@ -668,6 +677,9 @@ export function ThingDetailContent({
             assigneeAvatar={assigneeAvatar}
             isAssigneeSameAsOwner={isAssigneeSameAsOwner}
             dueLabel={dueLabel}
+            viewOnly={viewOnly}
+            assignableList={assignableList}
+            onReassign={handleReassign}
             onCatch={handleCatchAndStart}
             onSort={handleSort}
           />
@@ -685,6 +697,7 @@ export function ThingDetailContent({
           <ThingAttachments
             files={displayFiles}
             activeFileId={activeFileId}
+            showInlinePreview={!onFileSelect}
             viewOnly={viewOnly}
             isLoading={thing.detailLevel === "overview" && live.isLoading}
             attachmentsUnavailable={Boolean(thing.attachmentsUnavailable)}
@@ -854,7 +867,7 @@ export function ThingDetailContent({
                   onClick={() =>
                     run.mutate(async () => {
                       await rpcNudgeThing(thing.id);
-                      toast.success("Just a gentle paw tap on this one.");
+                      toast.success(`Nudged ${thing.assignee.name} about “${thing.title}”.`);
                     })
                   }
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
@@ -954,6 +967,7 @@ export function ThingDetailContent({
           busy={busy}
           activePace={activePace}
           onSetPace={handleSetPace}
+            onSetRequestedPace={handleSetRequestedPace}
           currentBucket={currentBucket}
           buckets={buckets}
           onSelectBucket={handleSelectBucket}

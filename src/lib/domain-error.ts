@@ -23,6 +23,20 @@ export function extractErrorMessage(err: unknown): string | undefined {
   return undefined;
 }
 
+/** Only classify transport failures as connection failures. Domain errors can
+ * also begin with "Failed to", and those should keep their useful message. */
+export function isNetworkError(err: unknown): boolean {
+  const message = (extractErrorMessage(err) ?? "").toLowerCase();
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("fetch failed") ||
+    message.includes("networkerror") ||
+    message.includes("network request failed") ||
+    message.includes("network is unreachable") ||
+    message.includes("err_network")
+  );
+}
+
 export function domainErrorMessage(err: unknown): string {
   const raw = extractErrorMessage(err) ?? "";
   const lower = raw.toLowerCase();
@@ -35,7 +49,7 @@ export function domainErrorMessage(err: unknown): string {
   if (lower.includes("lifecycle") || lower.includes("cannot") || lower.includes("not available")) {
     return "That move isn’t available anymore.";
   }
-  if (lower.includes("fetch") || lower.includes("network") || lower.includes("failed to")) {
+  if (isNetworkError(err)) {
     return "Couldn’t reach Katalist. Try again.";
   }
   return raw || "Something didn’t go through. Try again.";

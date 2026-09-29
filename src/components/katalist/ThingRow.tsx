@@ -131,7 +131,7 @@ export function ThingRow({
                 type="button"
                 disabled={busy}
                 className="block min-h-8 w-full px-3 py-1.5 text-left text-[12px] hover:bg-muted"
-                onClick={() => void perform("nudge", "Just a gentle paw tap on this one.")}
+                onClick={() => void perform("nudge", `Nudged ${thing.assignee.name} about “${thing.title}”.`)}
               >
                 Nudge
               </button>

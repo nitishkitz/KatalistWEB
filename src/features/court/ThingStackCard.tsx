@@ -13,6 +13,7 @@ export type CourtStackAction = "catch" | "later" | "sort";
 
 type ThingStackCardProps = {
   thing: Thing;
+  listCoverUrl?: string | null;
   lane: CourtLaneId;
   myActorId: string | null;
   pendingAction: CourtStackAction | null;
@@ -87,16 +88,9 @@ const laneFigma: Record<
   later: { primaryBtn: "#fe1d19", primaryHover: "#e01512", dueChipBg: "#f0effc", dueChipText: "#641dfb" },
 };
 
-const workLabel: Record<Thing["workStatus"], string> = {
-  not_started: "Not Started",
-  under_progress: "Under Progress",
-  sorted: "Sorted",
-  cancelled: "Cancelled",
-};
-
 export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>(
   function ThingStackCard(
-    { thing, lane, myActorId, pendingAction, suppressClickRef, onOpen, onAction, onSnooze },
+    { thing, listCoverUrl, lane, myActorId, pendingAction, suppressClickRef, onOpen, onAction, onSnooze },
     ref,
   ) {
     const due = formatCourtDue(thing);
@@ -114,6 +108,9 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     const disabled = pendingAction !== null;
     const styling = laneCardBorder[lane];
     const fileCount = thing.attachmentCount ?? thing.files?.length ?? 0;
+    const hasList = Boolean(
+      thing.listId && thing.listName && !["standalone", "list"].includes(thing.listName.toLowerCase()),
+    );
 
     const run = (event: MouseEvent<HTMLButtonElement>, action: CourtStackAction) => {
       event.stopPropagation();
@@ -222,9 +219,16 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           <span className="mt-2 text-[15px] font-medium leading-[1.35] tracking-[-0.01em] text-slate-900 break-words line-clamp-3">
             {thing.title}
           </span>
-          {thing.listName && thing.listName.toLowerCase() !== "standalone" && thing.listName.toLowerCase() !== "list" && (
-            <span className="mt-0.5 block text-[12px] text-muted-foreground font-medium truncate">
-              {thing.listName}
+          {hasList && thing.listName && (
+            <span className="mt-1 inline-flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground font-medium truncate">
+              <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-violet-50 text-violet-600">
+                {listCoverUrl ? (
+                  <img src={listCoverUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <KatalistIcon name="list" className="h-3 w-3" aria-hidden="true" />
+                )}
+              </span>
+              <span className="truncate">{thing.listName}</span>
             </span>
           )}
 
@@ -281,10 +285,10 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               return (
                 <div
                   className={cn(
-                    "mt-2.5 flex h-[175px] min-h-[175px] max-h-[175px] flex-col overflow-hidden rounded-xl",
+                    "mt-2.5 flex h-[clamp(120px,22vh,225px)] min-h-[clamp(120px,22vh,225px)] max-h-[clamp(120px,22vh,225px)] flex-col overflow-hidden rounded-xl",
                     isMedia
                       ? "bg-slate-50"
-                      : "justify-between border border-slate-200/80 bg-white p-3 text-left",
+                      : "justify-between border border-slate-200/80 bg-slate-50 text-left",
                   )}
                 >
                   {isImg && firstFile.url ? (
@@ -308,18 +312,27 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                       </div>
                     </div>
                   ) : isPdf || isDocx ? (
-                    <div className="flex-1 min-h-0 overflow-hidden text-left">
-                      <h4 className={cn("text-[13px] font-bold leading-tight truncate", isDocx ? "text-blue-600" : "text-slate-900")}>
-                        {firstFile.name.replace(/\.[^/.]+$/, "")}
-                      </h4>
-                      <p className={cn("text-[12px] mt-0.5 font-medium", isDocx ? "text-blue-500" : "text-muted-foreground")}>
-                        {thing.listName || (isDocx ? "Notes" : "Document")}
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden text-left">
+                      <div className="flex items-center gap-3 px-4 pt-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-blue-500">
+                          <KatalistIcon name="attachment" className="h-4 w-4" />
+                        </span>
+                        <div className="min-w-0">
+                          <h4 className="truncate text-[13px] font-semibold leading-tight text-slate-900">
+                            {firstFile.name.replace(/\.[^/.]+$/, "")}
+                          </h4>
+                          <p className="mt-0.5 truncate text-[11px] text-[#46557d]">
+                            {thing.listName || (isDocx ? "Notes" : "Document")}
+                          </p>
+                        </div>
+                      </div>
+                      <p className="mt-3 line-clamp-6 overflow-hidden px-4 text-[11px] leading-[1.4] text-[#46557d] whitespace-pre-line">
+                        {thing.description || "Open this file to view its contents."}
                       </p>
-                      <div className="mt-2 text-[12px] text-slate-600 leading-snug space-y-1">
-                        <p className="font-bold text-slate-800 text-[12px]">Overview</p>
-                        <p className="text-slate-600 text-[12px] line-clamp-4">
-                          {thing.description || "No preview available for this file. Open it to view the full attachment."}
-                        </p>
+                      <div className="mt-auto flex h-10 shrink-0 items-center gap-2 border-t border-slate-200/80 px-3 text-[11px] text-slate-700">
+                        <span className="rounded bg-white px-1.5 py-0.5 font-medium uppercase text-red-500">{isPdf ? "PDF" : "DOCX"}</span>
+                        <span className="min-w-0 flex-1 truncate">{firstFile.name}</span>
+                        {fileCount > 1 ? <span className="shrink-0 font-medium">+{fileCount - 1} files</span> : null}
                       </div>
                     </div>
                   ) : (
@@ -344,34 +357,6 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
               );
             })()
           ) : null}
-
-          {/* Assigned pace — only for Things assigned to you by someone else */}
-          {assignedByOther &&
-            (() => {
-              const pace = thing.personalPace ?? thing.ownerImportance;
-              return (
-                <div className="mt-2.5 flex items-center text-[12px]">
-                  <span className="text-[12px] text-[#3b4976]">
-                    Assigned pace:{" "}
-                    <span
-                      className="font-medium capitalize"
-                      style={{
-                        color:
-                          pace === "now"
-                            ? "#fe0908"
-                            : pace === "next"
-                              ? "#0b62f8"
-                              : pace === "later"
-                                ? "#7c33fd"
-                                : "#7078a2",
-                      }}
-                    >
-                      {pace ?? "—"}
-                    </span>
-                  </span>
-                </div>
-              );
-            })()}
         </button>
 
         {/* Card action: Catch (Things awaiting catch) or Sort (already
@@ -384,7 +369,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
         {(capabilities.canCatch || capabilities.canSort || onSnooze) && (
           <div
             onPointerDown={(e) => e.stopPropagation()}
-            className="flex items-center gap-2 p-3 pt-2.5 border-t border-slate-100"
+            className="flex items-center gap-2 px-4 pb-3 pt-0"
           >
             {capabilities.canCatch && (
               <button
@@ -392,7 +377,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 disabled={disabled}
                 onClick={(event) => run(event, "catch")}
                 style={{ backgroundColor: laneFigma[lane].primaryBtn }}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               >
                 <span>Catch</span>
               </button>
@@ -403,7 +388,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 disabled={disabled}
                 onClick={(event) => run(event, "sort")}
                 style={{ backgroundColor: laneFigma[lane].primaryBtn }}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[7px] px-3.5 text-[12px] font-medium text-white transition hover:brightness-95 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               >
                 <span>Mark Sorted</span>
               </button>
@@ -422,7 +407,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 }}
                 aria-label="Snooze"
                 title="Snooze"
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[7px] border border-slate-200 px-3 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+                className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-[7px] border border-slate-200 px-3 text-[12px] font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               >
                 <span>Snooze</span>
               </button>
