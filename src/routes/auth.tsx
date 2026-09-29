@@ -319,15 +319,36 @@ function AuthPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ phone: destination, otp: code }),
         });
-        const data = await res.json();
+        const data = (await res.json()) as {
+          token_hash?: unknown;
+          properties?: { hashed_token?: unknown };
+          error?: string;
+          message?: string;
+          statusMessage?: string;
+        };
         if (!res.ok) {
           throw new Error(
             data.error || data.message || data.statusMessage || "Authentication failed",
           );
         }
 
+        // The endpoint returns `token_hash`, while Supabase's generated-link
+        // payload calls the same value `properties.hashed_token`. Supporting
+        // both keeps the browser contract explicit across deployed versions.
+        const tokenHash =
+          typeof data.token_hash === "string"
+            ? data.token_hash
+            : typeof data.properties?.hashed_token === "string"
+              ? data.properties.hashed_token
+              : null;
+        if (!tokenHash) {
+          throw new Error(
+            "We couldn’t prepare a verification session. Request a new code and try again.",
+          );
+        }
+
         const { data: authData, error: verifyError } = await supabase.auth.verifyOtp({
-          token_hash: data.token_hash,
+          token_hash: tokenHash,
           type: "magiclink",
         });
 
