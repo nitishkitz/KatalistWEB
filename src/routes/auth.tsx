@@ -110,6 +110,14 @@ function formatCountdown(ms: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+function authErrorCopy(error: unknown, fallback: string) {
+  const message = extractErrorMessage(error) ?? fallback;
+  if (/fetch failed|network(?:\s+error)?|failed to fetch/i.test(message)) {
+    return "We couldn’t reach sign-in. Check your connection and try again.";
+  }
+  return message;
+}
+
 function BrandDivider() {
   return (
     <div className="relative mt-10 border-t border-border">
@@ -258,7 +266,7 @@ function AuthPage() {
 
     if (error) {
       setAuthProgress("error");
-      setAuthProgressMessage(extractErrorMessage(error) ?? "We couldn’t send a code. Try again.");
+      setAuthProgressMessage(authErrorCopy(error, "We couldn’t send a code. Try again."));
       toast.error(error.message);
       return;
     }
@@ -344,7 +352,7 @@ function AuthPage() {
       } catch (err: unknown) {
         setBusy(false);
         setAuthProgress("error");
-        setAuthProgressMessage(extractErrorMessage(err) ?? "We couldn’t sign you in. Try again.");
+        setAuthProgressMessage(authErrorCopy(err, "We couldn’t sign you in. Try again."));
         toast.error(extractErrorMessage(err) ?? "Failed to authenticate");
         setOtp("");
         verifyingOtpRef.current = false;
@@ -361,7 +369,7 @@ function AuthPage() {
     if (error) {
       setBusy(false);
       setAuthProgress("error");
-      setAuthProgressMessage(extractErrorMessage(error) ?? "That code doesn’t match. Try again.");
+      setAuthProgressMessage(authErrorCopy(error, "That code doesn’t match. Try again."));
       toast.error(error.message);
       setOtp("");
       verifyingOtpRef.current = false;
