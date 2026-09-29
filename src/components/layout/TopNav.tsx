@@ -76,13 +76,11 @@ export function TopNav() {
         </div>
       </div>
 
-      {/* Catch Up remains anchored in the centre of the header. */}
-      <div className="absolute left-1/2 top-1.5 -translate-x-1/2">
-        <CatchUpNavCapsule />
-      </div>
-
       {/* Right */}
       <div className="flex min-w-0 shrink-0 items-center gap-1.5 lg:gap-2.5">
+        <div className="hidden xl:block">
+          <CatchUpNavCapsule />
+        </div>
         <div
           role="group"
           aria-label="Work and Home context"
