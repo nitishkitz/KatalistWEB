@@ -44,40 +44,40 @@ export function TopNav() {
 
   return (
     <nav className="sticky top-0 z-40 hidden h-14 w-full items-center justify-between overflow-visible border-b border-[#f0f3fb] bg-[#f5f8fe] px-3 md:flex lg:px-5">
-      {/* Left */}
-      <div className="flex shrink-0 items-center gap-5">
+      {/* Brand and primary navigation */}
+      <div className="flex min-w-0 shrink-0 items-center">
         <Logo markClassName="h-7 w-7" withText={true} textClassName="text-[19px]" />
+        <span aria-hidden="true" className="mx-3 h-6 w-px bg-[#dfe4ef] lg:mx-4" />
+        <div className="flex min-w-0 items-center gap-0">
+          {navItems.map((item) => {
+            const isActive = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+            return (
+              <Link
+                key={item.title}
+                to={item.to}
+                className={cn(
+                  "relative flex h-14 shrink-0 items-center whitespace-nowrap px-1.5 text-[12px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-2 lg:px-2.5 lg:text-[14px]",
+                  isActive ? "text-[#503188] font-medium" : "text-[#1d1d1d] hover:text-[#503188]",
+                )}
+              >
+                {item.title}
+                {isActive && (
+                  <span
+                    className="absolute bottom-0 left-2.5 right-2.5 h-[3px] rounded-full"
+                    style={{
+                      background: "linear-gradient(90deg, #975ee2 0%, #503188 100%)",
+                      boxShadow: "0 0 8px 1px rgba(151,94,226,0.55)",
+                    }}
+                  />
+                )}
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
-      {/* Tablet links share the available row; desktop links stay centered. */}
-      <div className="flex min-w-0 flex-1 items-center justify-center gap-0 lg:absolute lg:left-1/2 lg:top-0 lg:h-14 lg:-translate-x-1/2 lg:flex-none lg:gap-1">
-        {navItems.map((item) => {
-          const isActive =
-            item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-          return (
-            <Link
-              key={item.title}
-              to={item.to}
-              className={cn(
-                "relative flex h-14 shrink-0 items-center whitespace-nowrap px-1.5 text-[12px] transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:px-2 lg:px-3 lg:text-[15px]",
-                isActive
-                  ? "text-[#503188] font-medium"
-                  : "text-[#1d1d1d] hover:text-[#503188]"
-              )}
-            >
-              {item.title}
-              {isActive && (
-                <span
-                  className="absolute bottom-0 left-3 right-3 h-[3px] rounded-full"
-                  style={{
-                    background: "linear-gradient(90deg, #975ee2 0%, #503188 100%)",
-                    boxShadow: "0 0 8px 1px rgba(151,94,226,0.55)",
-                  }}
-                />
-              )}
-            </Link>
-          );
-        })}
+      {/* Catch Up remains anchored in the centre of the header. */}
+      <div className="absolute left-1/2 top-1.5 -translate-x-1/2">
         <CatchUpNavCapsule />
       </div>
 
@@ -101,12 +101,16 @@ export function TopNav() {
             onClick={() => void setContext("work")}
             className={cn(
               "relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1 text-[11px] font-medium outline-none transition-[color,transform] duration-300 focus-visible:ring-2 focus-visible:ring-ring lg:gap-1.5 lg:px-2.5 lg:text-[12px]",
-              context === "work"
-                ? "text-[#503188]"
-                : "text-[#667085] hover:text-[#3f276f]",
+              context === "work" ? "text-[#503188]" : "text-[#667085] hover:text-[#3f276f]",
             )}
           >
-            <BriefcaseBusiness className={cn("h-3.5 w-3.5 transition-transform duration-300 motion-reduce:transition-none", context === "work" ? "scale-110" : "scale-95")} aria-hidden="true" />
+            <BriefcaseBusiness
+              className={cn(
+                "h-3.5 w-3.5 transition-transform duration-300 motion-reduce:transition-none",
+                context === "work" ? "scale-110" : "scale-95",
+              )}
+              aria-hidden="true"
+            />
             Work
           </button>
           <button
@@ -115,12 +119,16 @@ export function TopNav() {
             onClick={() => void setContext("home")}
             className={cn(
               "relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1 text-[11px] font-medium outline-none transition-[color,transform] duration-300 focus-visible:ring-2 focus-visible:ring-ring lg:gap-1.5 lg:px-2.5 lg:text-[12px]",
-              context === "home"
-                ? "text-[#503188]"
-                : "text-[#667085] hover:text-[#3f276f]",
+              context === "home" ? "text-[#503188]" : "text-[#667085] hover:text-[#3f276f]",
             )}
           >
-            <House className={cn("h-3.5 w-3.5 transition-transform duration-300 motion-reduce:transition-none", context === "home" ? "scale-110" : "scale-95")} aria-hidden="true" />
+            <House
+              className={cn(
+                "h-3.5 w-3.5 transition-transform duration-300 motion-reduce:transition-none",
+                context === "home" ? "scale-110" : "scale-95",
+              )}
+              aria-hidden="true"
+            />
             Home
           </button>
         </div>
