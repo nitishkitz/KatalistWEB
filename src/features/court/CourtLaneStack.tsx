@@ -16,7 +16,12 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
-import { rpcCatchAndStart, rpcSetPersonalPace, rpcSnoozeThing, rpcSortThing } from "@/features/things/rpc";
+import {
+  rpcCatchAndStart,
+  rpcSetPersonalPace,
+  rpcSnoozeThing,
+  rpcSortThing,
+} from "@/features/things/rpc";
 import { runThingAction } from "@/features/things/run-thing-action";
 import {
   cancelThingReads,
@@ -49,8 +54,13 @@ import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
-import { getEffectiveReducedMotion, subscribeToMotionPreference } from "@/hooks/use-motion-preference";
+import {
+  getEffectiveReducedMotion,
+  subscribeToMotionPreference,
+} from "@/hooks/use-motion-preference";
 import { motionDurationSeconds } from "@/lib/motion-tokens";
+import catchRevealAsset from "@/assets/court-actions/catch.png";
+import snoozeRevealAsset from "@/assets/court-actions/snooze.png";
 
 gsap.registerPlugin(Observer);
 
@@ -71,7 +81,6 @@ export type CourtLaneStackProps = {
   onRefresh: (epoch: number) => unknown;
   onViewAll?: (lane: CourtLaneId) => void;
 };
-
 
 // ─── Rotating deck / peel stack animation system ─────────────────────────────
 // Active card: 0°, scale 1.0, elevated shadow 12
@@ -150,9 +159,7 @@ function PeekQueueCard({
                 src={faceAvatar}
                 size={20}
               />
-              <span className="truncate text-[12px] font-medium text-slate-800">
-                {faceLabel}
-              </span>
+              <span className="truncate text-[12px] font-medium text-slate-800">{faceLabel}</span>
             </div>
             {thing.dueAt && (
               <span
@@ -190,7 +197,17 @@ function PeekQueueCard({
 
 export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackProps>(
   function CourtLaneStack(
-    { lane, things: allThings, courtThings, listCoversById, myActorId, initialPosition, onOpen, onRefresh, onViewAll },
+    {
+      lane,
+      things: allThings,
+      courtThings,
+      listCoversById,
+      myActorId,
+      initialPosition,
+      onOpen,
+      onRefresh,
+      onViewAll,
+    },
     ref,
   ) {
     const qc = useQueryClient();
@@ -245,9 +262,10 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     // so the reconciliation effect below can decide (via
     // shouldRestoreSelectionAfterFailedRemoval, once `things` reflects the
     // reverted removal) whether to restore focus to this Thing.
-    const pendingSelectionRestoreRef = useRef<{ thingId: string; navigationVersionAtRemoval: number } | null>(
-      null,
-    );
+    const pendingSelectionRestoreRef = useRef<{
+      thingId: string;
+      navigationVersionAtRemoval: number;
+    } | null>(null);
 
     useLayoutEffect(() => {
       return () => {
@@ -304,12 +322,12 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       // half of the check to mean anything.
       const restoring = Boolean(
         pending &&
-          shouldRestoreSelectionAfterFailedRemoval({
-            navigationVersionAtRemoval: pending.navigationVersionAtRemoval,
-            currentNavigationVersion: navigationVersionRef.current,
-            removedThingId: pending.thingId,
-            things,
-          }),
+        shouldRestoreSelectionAfterFailedRemoval({
+          navigationVersionAtRemoval: pending.navigationVersionAtRemoval,
+          currentNavigationVersion: navigationVersionRef.current,
+          removedThingId: pending.thingId,
+          things,
+        }),
       );
       setActiveIndex((prev) => {
         const targetId = restoring ? pending!.thingId : activeThingIdRef.current;
@@ -520,7 +538,12 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       // instead of two independent ones each thinking they own the cache.
       // Timed Snooze (personal-visibility, not a shared field) calls this
       // with no patch at all — see runSnooze below.
-      async (thing: Thing, label: string, patch: ThingPatch | undefined, mutate: () => Promise<unknown>) => {
+      async (
+        thing: Thing,
+        label: string,
+        patch: ThingPatch | undefined,
+        mutate: () => Promise<unknown>,
+      ) => {
         if (inFlightRef.current.has(thing.id)) return;
         // Captured before any await, at construction time — see
         // withOptimisticPatch's identical comment in query-updates.ts for
@@ -781,11 +804,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               return;
             }
 
-            const outcome = await runThingAction(
-              qc,
-              action,
-              { dismissGhost: async () => {} },
-            );
+            const outcome = await runThingAction(qc, action, { dismissGhost: async () => {} });
             if (outcome.status === "failed") {
               if (isEpochCurrent(qc, dropEpoch)) toast.error(domainErrorMessage(outcome.error));
               return;
@@ -816,7 +835,10 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             )}
           >
             <div className="flex items-center gap-2 rounded-xl bg-white/95 px-4 py-2.5 katalist-elevation-card border border-border/70 backdrop-blur-sm">
-              <KatalistIcon name={content.icon} className={cn("h-4 w-4 fill-current", content.tone)} />
+              <KatalistIcon
+                name={content.icon}
+                className={cn("h-4 w-4 fill-current", content.tone)}
+              />
               <span className="text-[13px] font-bold tracking-tight text-slate-800">
                 Drop to pace as {content.label}
               </span>
@@ -875,7 +897,8 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                         key={thing.id}
                         className="h-1.5 w-1.5 rounded-full transition-colors"
                         style={{
-                          backgroundColor: index === renderIndex ? content.accent : `${content.accent}40`,
+                          backgroundColor:
+                            index === renderIndex ? content.accent : `${content.accent}40`,
                         }}
                       />
                     ))}
@@ -912,10 +935,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         {activeThing ? (
           <div className="flex min-h-0 flex-1 flex-col px-3.5 pb-2.5 pt-2.5">
             {/* Stack arena */}
-            <div
-              className="relative"
-              onKeyDown={onKeyDown}
-            >
+            <div className="relative" onKeyDown={onKeyDown}>
               {/* Horizontal motion uncovers the action behind the card. */}
               {swipeDirection ? (
                 <div
@@ -924,38 +944,37 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                     "pointer-events-none absolute inset-0 z-[19] overflow-hidden rounded-2xl",
                     swipeDirection === "sort"
                       ? capabilities.canSort
-                        ? "bg-emerald-500"
+                        ? "bg-[radial-gradient(circle_at_22%_50%,#f8fff9_0%,#ddf8e7_44%,#bcefd3_100%)]"
                         : "bg-slate-400"
                       : canSnooze
-                        ? "bg-violet-500"
+                        ? "bg-[radial-gradient(circle_at_78%_50%,#fffaff_0%,#f1e3ff_44%,#d9beff_100%)]"
                         : "bg-slate-400",
                   )}
                 >
                   <div
                     className={cn(
-                      "absolute inset-y-0 flex w-[112px] items-center justify-center",
+                      "absolute inset-y-0 flex w-[122px] items-center justify-center",
                       swipeDirection === "sort" ? "left-0" : "right-0",
                     )}
                   >
-                    <div className="flex flex-col items-center gap-1.5 text-center text-white">
-                      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
-                        <KatalistIcon
-                          name={swipeDirection === "sort" ? "sorted" : "snooze"}
-                          className="h-4 w-4"
-                        />
-                      </span>
-                      <span className="text-[12px] font-bold tracking-tight">
+                    <div className="flex flex-col items-center gap-0.5 text-center">
+                      <img
+                        src={swipeDirection === "sort" ? catchRevealAsset : snoozeRevealAsset}
+                        alt=""
+                        className="h-[68px] w-[68px] object-contain drop-shadow-[0_5px_10px_rgba(71,33,118,0.16)]"
+                      />
+                      <span className="text-[12px] font-bold tracking-tight text-[#24113f]">
                         {swipeDirection === "sort"
                           ? capabilities.canSort
                             ? swipeCommitted
                               ? "Release to sort"
-                              : "Sorted"
+                              : "Caught!"
                             : capabilities.canCatch
                               ? "Catch first"
                               : "Unavailable"
                           : swipeCommitted
                             ? "Release to snooze"
-                            : "Snooze"}
+                            : "Snoozed"}
                       </span>
                     </div>
                   </div>
@@ -1042,7 +1061,9 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 >
                   <ThingStackCard
                     thing={anim.outgoing}
-                    listCoverUrl={anim.outgoing.listId ? listCoversById?.get(anim.outgoing.listId) : null}
+                    listCoverUrl={
+                      anim.outgoing.listId ? listCoversById?.get(anim.outgoing.listId) : null
+                    }
                     lane={lane}
                     myActorId={myActorId}
                     pendingAction={null}
@@ -1076,7 +1097,6 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 })}
               </div>
             )}
-
           </div>
         ) : (
           <div className="flex min-h-[160px] flex-1 items-center justify-center px-3 text-center text-[12px] text-muted-foreground">
