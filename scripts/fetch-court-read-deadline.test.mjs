@@ -13,15 +13,19 @@ import { isReadTimeoutError } from "@/lib/read-request";
  * cancellation signal is honored too, and is NOT misreported as a timeout.
  */
 
+let hangActor = false;
+let hangMapping = false;
+let resolveThings = false;
+
 mock.module("@/features/things/map-thing-rows", {
   namedExports: {
-    mapDbThingRows: (rows) => Promise.resolve(rows.map((r) => ({ id: r.id, title: "mapped" }))),
+    mapDbThingRows: (rows) => hangMapping ? new Promise(() => {}) : Promise.resolve(rows.map((r) => ({ id: r.id, title: "mapped" }))),
     THING_COLUMNS: "id",
     THING_OVERVIEW_COLUMNS: "id",
   },
 });
 mock.module("@/features/people/actor-query", {
-  namedExports: { getActorId: async () => "actor-1" },
+  namedExports: { getActorId: async () => hangActor ? new Promise(() => {}) : "actor-1" },
 });
 
 let thingsAbortSignal = null;
@@ -43,6 +47,7 @@ mock.module("@/integrations/supabase/client", {
             return node;
           },
           then: (resolve, reject) => {
+            if (resolveThings) { resolve({ data: [{ id: "thing-1" }], error: null }); return; }
             // Deliberately never resolves on its own -- only reacts to the
             // signal, modeling a genuinely hung request. Matches real
             // fetch()/PostgREST behavior: if the signal is ALREADY aborted
@@ -85,4 +90,27 @@ test("fetchCourt honors an external (React Query) cancellation signal, and does 
     assert.equal(isReadTimeoutError(err), false, "an external cancellation must not be misreported as a deadline timeout");
     return true;
   });
+});
+
+
+test("the complete Court deadline covers a hung shared actor lookup", async () => {
+  hangActor = true;
+  resolveThings = true;
+  try {
+    await assert.rejects(fetchCourt("work", "profile-1", new QueryClient(), undefined, 15), isReadTimeoutError);
+  } finally {
+    hangActor = false;
+    resolveThings = false;
+  }
+});
+
+test("the complete Court deadline covers hung row enrichment after Things arrive", async () => {
+  hangMapping = true;
+  resolveThings = true;
+  try {
+    await assert.rejects(fetchCourt("work", "profile-1", new QueryClient(), undefined, 15), isReadTimeoutError);
+  } finally {
+    hangMapping = false;
+    resolveThings = false;
+  }
 });

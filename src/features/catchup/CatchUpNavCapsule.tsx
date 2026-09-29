@@ -2,10 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { AlertCircle, ArrowRight, ChevronDown, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import coeyAvatar from "@/assets/coey-catchup.png";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { useAppContext } from "@/features/context/use-app-context";
-import { ThingDetailContent } from "@/features/things/ThingDetailContent";
-import { useThing } from "@/features/things/use-thing";
+import type { Thing } from "@/domain/thing";
+import { CourtDetailModal } from "@/features/court/CourtDetailModal";
 import { useMotionPreference } from "@/hooks/use-motion-preference";
 import { useCatchup, type CatchUpMoment } from "./use-catchup";
 import { reasonLabelFor, type CatchUpMomentKind } from "./catchup-logic";
@@ -37,7 +36,7 @@ export function CatchUpNavCapsule() {
   const [hasFocus, setHasFocus] = useState(false);
   const [isPinned, setIsPinned] = useState(false);
   const [autoExpanded, setAutoExpanded] = useState(false);
-  const [selectedThingId, setSelectedThingId] = useState<string | null>(null);
+  const [selectedThing, setSelectedThing] = useState<Thing | null>(null);
   const [expandedHeight, setExpandedHeight] = useState(44);
   const detailsRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -48,7 +47,6 @@ export function CatchUpNavCapsule() {
   const activeMoment = catchup.moments[activeIndex] ?? catchup.moments[0] ?? null;
   const severity = severityFor(activeMoment?.kind);
   const isExpanded = isHovered || hasFocus || isPinned || autoExpanded;
-  const selectedThing = useThing(selectedThingId);
 
   useEffect(() => {
     const details = detailsRef.current;
@@ -96,10 +94,10 @@ export function CatchUpNavCapsule() {
     return () => window.clearInterval(timer);
   }, [count, isExpanded, isPaused, reduceMotion]);
 
-  const openThing = (thingId: string) => {
+  const openThing = (thing: Thing) => {
     setIsPinned(false);
     setAutoExpanded(false);
-    setSelectedThingId(thingId);
+    setSelectedThing(thing);
   };
 
   return (
@@ -157,7 +155,7 @@ export function CatchUpNavCapsule() {
                 <div className="max-h-[300px] space-y-1 overflow-y-auto">
                   {catchup.moments.map((moment) => {
                     const level = severityFor(moment.kind);
-                    return <div key={moment.momentKey} className={cn("rounded-xl border px-3 py-2.5", moment.momentKey === activeMoment?.momentKey ? "border-[#d9c5fa] bg-[#f4efff]" : "border-transparent bg-[#f8f6fd]")}><div className="flex items-start gap-2"><span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", level?.dot)} /><div className="min-w-0"><p className="text-[11px] font-semibold text-[#6941c6]">{momentLabel(moment)}</p><p className="mt-0.5 break-words text-[12px] font-semibold leading-snug text-[#2f234c]">{moment.thing.title}</p>{moment.kind === "nudge" ? <button type="button" onClick={() => openThing(moment.thing.id)} className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-lg bg-[#e9defb] px-3 text-[11px] font-semibold text-[#6541ad] transition-colors hover:bg-[#decdf8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5cf6]">Open Thing<ArrowRight className="h-3 w-3" aria-hidden="true" /></button> : null}</div></div></div>;
+                    return <div key={moment.momentKey} className={cn("rounded-xl border px-3 py-2.5", moment.momentKey === activeMoment?.momentKey ? "border-[#d9c5fa] bg-[#f4efff]" : "border-transparent bg-[#f8f6fd]")}><div className="flex items-start gap-2"><span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", level?.dot)} /><div className="min-w-0"><p className="text-[11px] font-semibold text-[#6941c6]">{momentLabel(moment)}</p><p className="mt-0.5 break-words text-[12px] font-semibold leading-snug text-[#2f234c]">{moment.thing.title}</p><button type="button" onClick={() => openThing(moment.thing)} className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-lg bg-[#e9defb] px-3 text-[11px] font-semibold text-[#6541ad] transition-colors hover:bg-[#decdf8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5cf6]">Open Thing<ArrowRight className="h-3 w-3" aria-hidden="true" /></button></div></div></div>;
                   })}
                 </div>
               )}
@@ -165,13 +163,7 @@ export function CatchUpNavCapsule() {
         </div>
       </div>
     </div>
-    <Dialog open={Boolean(selectedThingId)} onOpenChange={(open) => { if (!open) setSelectedThingId(null); }}>
-      <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto rounded-2xl p-5 sm:p-7">
-        <DialogTitle className="sr-only">Thing details</DialogTitle>
-        <DialogDescription className="sr-only">Review the Thing mentioned in your nudge.</DialogDescription>
-        {selectedThing.isLoading ? <p role="status" className="py-10 text-center text-[13px] text-muted-foreground">Loading Thing…</p> : selectedThing.thing ? <ThingDetailContent key={selectedThing.thing.id} initialThing={selectedThing.thing} variant="court" /> : <div className="py-8 text-center"><p>This Thing is no longer available or couldn't be loaded.</p><button type="button" className="mt-3 rounded-lg bg-[#e9defb] px-3 py-2 text-xs font-semibold text-[#6541ad]" onClick={() => void selectedThing.refetch()}>Try again</button></div>}
-      </DialogContent>
-    </Dialog>
+    <CourtDetailModal thing={selectedThing} isOpen={Boolean(selectedThing)} onClose={() => setSelectedThing(null)} />
     </>
   );
 }

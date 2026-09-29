@@ -19,9 +19,11 @@ interface AppShellProps {
   noPadding?: boolean;
   /** Hide the global top navigation bar (e.g. focused full-screen workspaces). */
   hideTopNav?: boolean;
+  /** Hide the mobile bottom navigation for focused detail screens. */
+  hideBottomNav?: boolean;
 }
 
-export function AppShell({ title, subtitle, actions, children, noPadding, hideTopNav }: AppShellProps) {
+export function AppShell({ title, subtitle, actions, children, noPadding, hideTopNav, hideBottomNav }: AppShellProps) {
   const { session, loading } = useSession();
   const navigate = useNavigate();
   // Global database-change invalidation moved to RealtimeInvalidationProvider
@@ -48,8 +50,8 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
       {!hideTopNav && <TopNav />}
-      <AppSidebar />{/* mobile bottom tab bar only */}
-      <main className="flex-1 min-w-0 pb-16 md:pb-0">
+      <AppSidebar hideBottomNav={hideBottomNav} />{/* mobile bottom tab bar only */}
+      <main className={`flex-1 min-w-0 ${hideBottomNav ? "" : "pb-16 md:pb-0"}`}>
         {noPadding ? children : (
           <div className="mx-auto w-full min-w-0 max-w-[1440px] flex-1 px-4 pb-10 pt-4 md:px-8 md:pt-6">
             {title && <PageHeader title={title} subtitle={subtitle} actions={actions} />}

@@ -74,8 +74,17 @@ export async function withReadDeadline<T>(
   const deadlineController = new AbortController();
   const timer = setTimeout(() => deadlineController.abort(), deadlineMs);
   const combined = anySignal(querySignal ? [deadlineController.signal, querySignal] : [deadlineController.signal]);
+  let rejectOnAbort: (() => void) | undefined;
   try {
-    return await run(combined);
+    const request = run(combined);
+    const aborted = new Promise<never>((_resolve, reject) => {
+      rejectOnAbort = () => reject(combined.reason ?? new DOMException("Read cancelled", "AbortError"));
+      if (combined.aborted) rejectOnAbort();
+      else combined.addEventListener("abort", rejectOnAbort, { once: true });
+    });
+    // Auth token refresh and secondary lookups can stall before fetch sees
+    // the signal. Settle the caller even when that work ignores cancellation.
+    return await Promise.race([request, aborted]);
   } catch (err) {
     if (deadlineController.signal.aborted && !querySignal?.aborted) {
       // V-05: logged HERE, once, inside the shared primitive -- every read
@@ -88,5 +97,6 @@ export async function withReadDeadline<T>(
     throw err;
   } finally {
     clearTimeout(timer);
+    if (rejectOnAbort) combined.removeEventListener("abort", rejectOnAbort);
   }
 }

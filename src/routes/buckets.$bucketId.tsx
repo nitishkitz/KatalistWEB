@@ -13,6 +13,8 @@ import {
   Search,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { ThingStatusCapsule } from "@/features/catchup/ThingStatusCapsule";
+import { useCourt } from "@/features/court/use-court";
 import { useBucket } from "@/features/buckets/use-buckets";
 import { useBucketNotes } from "@/features/buckets/use-bucket-notes";
 import {
@@ -177,6 +179,7 @@ function BucketDetailPage() {
   const { bucketId } = Route.useParams();
   const navigate = useNavigate();
   const { bucket, isLoading, error, rename, remove: deleteBucket, refetch: refetchBucket } = useBucket(bucketId);
+  const { myActorId } = useCourt();
   const { items, add, remove, isLoading: itemsLoading, error: itemsError, refetch: refetchItems } = useBucketItems(bucketId);
   const things = useAccessibleThings();
   const lists = useAccessibleLists();
@@ -303,7 +306,7 @@ function BucketDetailPage() {
 
   if (isLoading) {
     return (
-      <AppShell noPadding>
+      <AppShell noPadding hideTopNav hideBottomNav>
         <ListDetailSkeleton />
       </AppShell>
     );
@@ -317,7 +320,7 @@ function BucketDetailPage() {
     const kind = classifyAsyncError(error);
     const accessLost = kind === "forbidden" || kind === "unauthenticated" || kind === "not-found";
     return (
-      <AppShell title="Bucket" subtitle={accessLost ? "No longer available" : "Couldn’t load"}>
+      <AppShell title="Bucket" subtitle={accessLost ? "No longer available" : "Couldn’t load"} hideTopNav hideBottomNav>
         <p className="text-sm text-muted-foreground">
           {accessLost
             ? "You no longer have access to this Bucket, or it no longer exists."
@@ -342,7 +345,7 @@ function BucketDetailPage() {
 
   if (!bucket) {
     return (
-      <AppShell title="Bucket" subtitle="Not found">
+      <AppShell title="Bucket" subtitle="Not found" hideTopNav hideBottomNav>
         <p className="text-sm text-muted-foreground">Bucket not found.</p>
         <Link to="/buckets" className="mt-2 inline-block text-sm font-semibold text-primary">
           Back to Buckets
@@ -722,7 +725,7 @@ function BucketDetailPage() {
   );
 
   return (
-    <AppShell noPadding>
+    <AppShell noPadding hideTopNav hideBottomNav>
       <InlineThingDetailWorkspace
         thing={narrowViewport ? null : selectedThing}
         onClose={closeThing}
@@ -818,6 +821,15 @@ function BucketDetailPage() {
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 text-[#8487a7]" />
               </label>
+
+              <ThingStatusCapsule
+                scopeKey={bucketId}
+                scopeLabel="Bucket"
+                scopeName={bucket.name}
+                things={thingItemsAll.map((item) => item.thing)}
+                myActorId={myActorId}
+                onOpenThing={(thing) => { setDetailTab("things"); setQ(""); setStatusFilter(null); setAssigneeFilter(null); openThing(thing.id); }}
+              />
 
               {/* Assignee avatar filters */}
               {assignees.length > 0 ? (

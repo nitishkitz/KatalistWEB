@@ -49,27 +49,17 @@ export async function fetchCourt(
   // has no actor yet". getActorId already distinguishes those two
   // cases (throws on a real failure; resolves null for a legitimate
   // no-row profile).
-  // T01: the Things read is the slow, unbounded half of this pair (a
-  // network round trip against a real table) -- bounded here with
-  // read-request.ts's shared 15s deadline/cancellation ownership, wired to
-  // both React Query's own cancellation signal (querySignal, so a
-  // superseded/refetched call or unmount stops this request) and
-  // PostgREST's .abortSignal(). The actor lookup (getActorId) is a
-  // separate, shared, deduplicated 30s-cached lookup used by many
-  // features beyond Court; threading per-caller cancellation through that
-  // shared cache is a bigger change than this pass makes -- left as a
-  // named remaining item (see the audit ledger's T01 entry).
-  const [myActorId, { data: rows, error }] = await Promise.all([
-    getActorId(qc, profileId),
-    withReadDeadline(
-      querySignal,
-      async (signal) =>
-        supabase.from("things").select(THING_OVERVIEW_COLUMNS).eq("context", context).is("cancelled_at", null).abortSignal(signal),
-      readDeadlineMs,
-    ),
-  ]);
+  // Bound the complete load, including shared actor resolution and row
+  // enrichment. Only the Things request belongs to this caller; cancelling
+  // Court must not cancel the shared actor cache used by other screens.
+  return withReadDeadline(querySignal, async (signal) => {
+    const [myActorId, { data: rows, error }] = await Promise.all([
+      getActorId(qc, profileId),
+      supabase.from("things").select(THING_OVERVIEW_COLUMNS).eq("context", context).is("cancelled_at", null).abortSignal(signal),
+    ]);
 
-  if (error) throw error;
-  const things = await mapDbThingRows((rows ?? []) as DbThingRow[], myActorId, "overview");
-  return { things, myActorId };
+    if (error) throw error;
+    const things = await mapDbThingRows((rows ?? []) as DbThingRow[], myActorId, "overview");
+    return { things, myActorId };
+  }, readDeadlineMs);
 }

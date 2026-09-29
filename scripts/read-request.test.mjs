@@ -95,3 +95,11 @@ test("isPermanentQueryError treats a read timeout as non-retriable (surface imme
     },
   );
 });
+
+
+test("deadline settles even when underlying work ignores its abort signal", async () => {
+  await assert.rejects(
+    withReadDeadline(undefined, () => new Promise(() => {}), 10),
+    isReadTimeoutError,
+  );
+});

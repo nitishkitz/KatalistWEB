@@ -21,7 +21,7 @@ const navItems = [
   { title: "Me", to: "/me", icon: UserRound },
 ] as const;
 
-export function AppSidebar() {
+export function AppSidebar({ hideBottomNav = false }: { hideBottomNav?: boolean }) {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { context, setContext } = useAppContext();
   const [isBucketFlyoutOpen, setIsBucketFlyoutOpen] = useState(false);
@@ -61,7 +61,7 @@ export function AppSidebar() {
       />
 
       {/* Mobile — bottom tab bar */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t border-border bg-card px-1 md:hidden">
+      {!hideBottomNav ? <nav className="fixed inset-x-0 bottom-0 z-40 flex h-14 items-center justify-around border-t border-border bg-card px-1 md:hidden">
         {navItems.map((item) => {
           const isActive =
             item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
@@ -84,7 +84,7 @@ export function AppSidebar() {
             </Link>
           );
         })}
-      </nav>
+      </nav> : null}
     </>
   );
 }

@@ -10,6 +10,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import { ThingStatusCapsule } from "@/features/catchup/ThingStatusCapsule";
 import { useListCall } from "@/features/calls/use-list-call";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
@@ -597,7 +598,7 @@ function ListDetailPage() {
                     {listInitials}
                   </span>
                 )}
-                <div className="min-w-0">
+              <div className="min-w-0">
                   <div
                     className="text-[15px] font-medium text-black leading-tight truncate max-w-[220px]"
                     style={{ viewTransitionName: `list-title-${list.id}` }}
@@ -647,21 +648,32 @@ function ListDetailPage() {
                 </div>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => (call.joined ? void startOrJoinCall() : openStartCall(true))}
-              disabled={call.connecting}
-              className={cn(
-                "inline-flex h-[42px] items-center gap-2 rounded-[9px] px-4 text-[14px] font-medium transition cursor-pointer disabled:opacity-60",
-                call.joined
-                  ? "bg-[#fc404d] text-white hover:brightness-95"
-                  : "border border-[#eaeffa] bg-white text-[#1d1d1d] hover:bg-muted/40",
-              )}
-              title={call.joined ? "Leave call" : "Start or join a call with this list"}
-            >
-              {call.joined ? <PhoneOff className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
-              <span>{call.connecting ? "Connecting…" : call.joined ? "Leave call" : "Call"}</span>
-            </button>
+            <div className="flex items-center gap-2.5">
+              <ThingStatusCapsule
+                scopeKey={listId}
+                scopeLabel="List"
+                scopeName={list.name}
+                canMutate={!viewOnly}
+                things={listThings}
+                myActorId={myActorId}
+                onOpenThing={(thing) => { setTab("things"); clearThingFilters(); setNavSearch(""); setNavLane(laneOf(thing)); setSelectedFile(null); setSelectedId(thing.id); }}
+              />
+              <button
+                type="button"
+                onClick={() => (call.joined ? void startOrJoinCall() : openStartCall(true))}
+                disabled={call.connecting}
+                className={cn(
+                  "inline-flex h-[42px] items-center gap-2 rounded-[9px] px-4 text-[14px] font-medium transition cursor-pointer disabled:opacity-60",
+                  call.joined
+                    ? "bg-[#fc404d] text-white hover:brightness-95"
+                    : "border border-[#eaeffa] bg-white text-[#1d1d1d] hover:bg-muted/40",
+                )}
+                title={call.joined ? "Leave call" : "Start or join a call with this list"}
+              >
+                {call.joined ? <PhoneOff className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+                <span>{call.connecting ? "Connecting…" : call.joined ? "Leave call" : "Call"}</span>
+              </button>
+            </div>
           </div>
 
           {/* Tabs */}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { format } from "date-fns";
 import type { Thing } from "@/domain/thing";
@@ -9,10 +10,10 @@ import type { CourtLaneId } from "./court-view-model";
 
 type CourtDetailModalProps = {
   thing: Thing | null;
-  lane: CourtLaneId | "theirs";
+  lane?: CourtLaneId | "theirs";
   isOpen: boolean;
   onClose: () => void;
-  onOpenFullView: () => void;
+  onOpenFullView?: () => void;
   onRefresh?: (epoch: number) => void;
 };
 
@@ -20,7 +21,6 @@ export function CourtDetailModal({
   thing,
   isOpen,
   onClose,
-  onOpenFullView,
 }: CourtDetailModalProps) {
   const detail = useThing(isOpen ? thing?.id ?? null : null);
   const detailFiles = detail.thing?.detailLevel === "overview" ? undefined : detail.thing?.files;
@@ -59,9 +59,9 @@ export function CourtDetailModal({
 
   if (!isOpen || !thing) return null;
 
-  const hasFiles = (thing.attachmentCount ?? detailFiles?.length ?? thing.files?.length ?? 0) > 0;
+  const hasFiles = (thing.attachmentCount ?? 0) > 0 || (detailFiles?.length ?? 0) > 0 || (thing.files?.length ?? 0) > 0;
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -115,6 +115,7 @@ export function CourtDetailModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

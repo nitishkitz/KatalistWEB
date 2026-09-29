@@ -1,0 +1,50 @@
+.coey-chat-head-artwork {
+  display: block;
+  position: relative;
+  pointer-events: none;
+  user-select: none;
+}
+.coey-chat-head-canvas {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 99.803253px;
+  height: 99.803253px;
+  transform-origin: top left;
+}
+.coey-chat-head-canvas > img {
+  position: absolute;
+  display: block;
+  max-width: none;
+}
+.coey-chat-head-outer {
+  left: 0;
+  top: 0;
+}
+.coey-chat-head-inset {
+  left: 6.96289px;
+  top: 6.96289px;
+}
+.coey-chat-head-disc {
+  left: 13.92578px;
+  top: 13.92578px;
+}
+.coey-chat-head-portrait {
+  position: absolute;
+  left: 10.056641px;
+  top: 12.378906px;
+  width: 68.83519px;
+  height: 74.295204px;
+  overflow: hidden;
+  mask-mode: alpha;
+  mask-repeat: no-repeat;
+  mask-position: 3.869px 0.175px;
+  mask-size: 72.725px 74.097px;
+}
+.coey-chat-head-portrait img {
+  position: absolute;
+  height: 182.19%;
+  width: 110.67%;
+  max-width: none;
+  left: -3.12%;
+  top: -9.71%;
+}
