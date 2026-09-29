@@ -83,14 +83,39 @@ const laneFigma: Record<
   CourtLaneId,
   { primaryBtn: string; primaryHover: string; dueChipBg: string; dueChipText: string }
 > = {
-  now: { primaryBtn: "#fe1d19", primaryHover: "#e01512", dueChipBg: "#feeaeb", dueChipText: "#fd0d0d" },
-  next: { primaryBtn: "#005dfe", primaryHover: "#0050df", dueChipBg: "#e3f0fd", dueChipText: "#0b62f8" },
-  later: { primaryBtn: "#fe1d19", primaryHover: "#e01512", dueChipBg: "#f0effc", dueChipText: "#641dfb" },
+  now: {
+    primaryBtn: "#fe1d19",
+    primaryHover: "#e01512",
+    dueChipBg: "#feeaeb",
+    dueChipText: "#fd0d0d",
+  },
+  next: {
+    primaryBtn: "#005dfe",
+    primaryHover: "#0050df",
+    dueChipBg: "#e3f0fd",
+    dueChipText: "#0b62f8",
+  },
+  later: {
+    primaryBtn: "#fe1d19",
+    primaryHover: "#e01512",
+    dueChipBg: "#f0effc",
+    dueChipText: "#641dfb",
+  },
 };
 
 export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>(
   function ThingStackCard(
-    { thing, listCoverUrl, lane, myActorId, pendingAction, suppressClickRef, onOpen, onAction, onSnooze },
+    {
+      thing,
+      listCoverUrl,
+      lane,
+      myActorId,
+      pendingAction,
+      suppressClickRef,
+      onOpen,
+      onAction,
+      onSnooze,
+    },
     ref,
   ) {
     const due = formatCourtDue(thing);
@@ -109,7 +134,9 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
     const styling = laneCardBorder[lane];
     const fileCount = thing.attachmentCount ?? thing.files?.length ?? 0;
     const hasList = Boolean(
-      thing.listId && thing.listName && !["standalone", "list"].includes(thing.listName.toLowerCase()),
+      thing.listId &&
+      thing.listName &&
+      !["standalone", "list"].includes(thing.listName.toLowerCase()),
     );
 
     const run = (event: MouseEvent<HTMLButtonElement>, action: CourtStackAction) => {
@@ -259,7 +286,9 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                   )}
                 </span>
               )}
-              {thing.overviewStatsUnavailable ? <span title="Open this Thing to retry its counts">Counts unavailable</span> : null}
+              {thing.overviewStatsUnavailable ? (
+                <span title="Open this Thing to retry its counts">Counts unavailable</span>
+              ) : null}
             </div>
           )}
 
@@ -271,92 +300,97 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
           ) : null}
 
           {/* File Preview thumbnail card or Notes preview - strictly uniform height matching Image 1 */}
-          {thing.files && thing.files.length > 0 ? (
-            (() => {
-              const firstFile = thing.files[0];
-              const isPdf = firstFile.type === "pdf";
-              const isDocx = firstFile.type === "docx";
-              const isImg = firstFile.type === "image" || firstFile.type === "png" || firstFile.type === "jpg";
-              const isVid = firstFile.type === "video";
-              // Overview cards must not open a PDF worker or download full
-              // document bytes. The explicit file viewer owns that work.
-              const isMedia = Boolean((isImg || isVid) && firstFile.url);
+          {thing.files && thing.files.length > 0
+            ? (() => {
+                const firstFile = thing.files[0];
+                const isPdf = firstFile.type === "pdf";
+                const isDocx = firstFile.type === "docx";
+                const isImg =
+                  firstFile.type === "image" ||
+                  firstFile.type === "png" ||
+                  firstFile.type === "jpg";
+                const isVid = firstFile.type === "video";
+                // Overview cards must not open a PDF worker or download full
+                // document bytes. The explicit file viewer owns that work.
+                const isMedia = Boolean((isImg || isVid) && firstFile.url);
 
-              return (
-                <div
-                  className={cn(
-                    "mt-2.5 flex h-[clamp(120px,22vh,225px)] min-h-[clamp(120px,22vh,225px)] max-h-[clamp(120px,22vh,225px)] flex-col overflow-hidden rounded-xl",
-                    isMedia
-                      ? "bg-slate-50"
-                      : "justify-between border border-slate-200/80 bg-slate-50 text-left",
-                  )}
-                >
-                  {isImg && firstFile.url ? (
-                    <img
-                      src={firstFile.url}
-                      alt={firstFile.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : isVid && firstFile.url ? (
-                    <div className="relative h-full w-full bg-black">
-                      <video
+                return (
+                  <div
+                    className={cn(
+                      "mt-2.5 flex h-[clamp(120px,22vh,225px)] min-h-[clamp(120px,22vh,225px)] max-h-[clamp(120px,22vh,225px)] flex-col overflow-hidden rounded-xl",
+                      isMedia
+                        ? "bg-slate-50"
+                        : "justify-between border border-slate-200/80 bg-slate-50 text-left",
+                    )}
+                  >
+                    {isImg && firstFile.url ? (
+                      <img
                         src={firstFile.url}
-                        className="h-full w-full object-cover opacity-90"
-                        muted
-                        playsInline
+                        alt={firstFile.name}
+                        className="h-full w-full object-cover"
                       />
-                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                        <div className="h-8 w-8 rounded-full bg-white/85 flex items-center justify-center text-slate-900">
-                          <Play className="h-4 w-4 fill-current ml-0.5" />
+                    ) : isVid && firstFile.url ? (
+                      <div className="relative h-full w-full bg-black">
+                        <video
+                          src={firstFile.url}
+                          className="h-full w-full object-cover opacity-90"
+                          muted
+                          playsInline
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="h-8 w-8 rounded-full bg-white/85 flex items-center justify-center text-slate-900">
+                            <Play className="h-4 w-4 fill-current ml-0.5" />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ) : isPdf || isDocx ? (
-                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden text-left">
-                      <div className="flex items-center gap-3 px-4 pt-3">
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-blue-500">
-                          <KatalistIcon name="attachment" className="h-4 w-4" />
-                        </span>
-                        <div className="min-w-0">
-                          <h4 className="truncate text-[13px] font-semibold leading-tight text-slate-900">
-                            {firstFile.name.replace(/\.[^/.]+$/, "")}
-                          </h4>
-                          <p className="mt-0.5 truncate text-[11px] text-[#46557d]">
-                            {thing.listName || (isDocx ? "Notes" : "Document")}
-                          </p>
+                    ) : isPdf || isDocx ? (
+                      <div className="flex min-h-0 flex-1 flex-col overflow-hidden text-left">
+                        <div className="flex items-center gap-3 px-4 pt-3">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-blue-500">
+                            <KatalistIcon name="attachment" className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <h4 className="truncate text-[13px] font-semibold leading-tight text-slate-900">
+                              {firstFile.name.replace(/\.[^/.]+$/, "")}
+                            </h4>
+                            <p className="mt-0.5 truncate text-[11px] text-[#46557d]">
+                              {thing.listName || (isDocx ? "Notes" : "Document")}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <p className="mt-3 line-clamp-6 overflow-hidden px-4 text-[11px] leading-[1.4] text-[#46557d] whitespace-pre-line">
-                        {thing.description || "Open this file to view its contents."}
-                      </p>
-                      <div className="mt-auto flex h-10 shrink-0 items-center gap-2 border-t border-slate-200/80 px-3 text-[11px] text-slate-700">
-                        <span className="rounded bg-white px-1.5 py-0.5 font-medium uppercase text-red-500">{isPdf ? "PDF" : "DOCX"}</span>
-                        <span className="min-w-0 flex-1 truncate">{firstFile.name}</span>
-                        {fileCount > 1 ? <span className="shrink-0 font-medium">+{fileCount - 1} files</span> : null}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex-1 min-h-0 overflow-hidden text-left flex items-center gap-2">
-                      <span className="flex h-10 w-10 items-center justify-center rounded-lg text-[12px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
-                        {firstFile.type}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12px] font-bold text-slate-900 truncate">
-                          {firstFile.name}
+                        <p className="mt-3 line-clamp-6 overflow-hidden px-4 text-[11px] leading-[1.4] text-[#46557d] whitespace-pre-line">
+                          {thing.description || "Open this file to view its contents."}
                         </p>
-                        {firstFile.sizeLabel && (
-                          <p className="text-[12px] text-slate-500 font-medium">
-                            {firstFile.sizeLabel}
-                          </p>
-                        )}
+                        <div className="mt-auto flex h-10 shrink-0 items-center gap-2 border-t border-slate-200/80 px-3 text-[11px] text-slate-700">
+                          <span className="rounded bg-white px-1.5 py-0.5 font-medium uppercase text-red-500">
+                            {isPdf ? "PDF" : "DOCX"}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">{firstFile.name}</span>
+                          {fileCount > 1 ? (
+                            <span className="shrink-0 font-medium">+{fileCount - 1} files</span>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
-                  )}
-
-                </div>
-              );
-            })()
-          ) : null}
+                    ) : (
+                      <div className="flex h-full flex-1 min-h-0 items-center gap-2 overflow-hidden px-4 text-left">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-lg text-[12px] font-bold uppercase bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
+                          {firstFile.type}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[12px] font-bold text-slate-900 truncate">
+                            {firstFile.name}
+                          </p>
+                          <p className="text-[12px] font-medium text-slate-500">
+                            {firstFile.sizeLabel ||
+                              (isImg || isVid ? "Preview unavailable" : "File attached")}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()
+            : null}
         </button>
 
         {/* Card action: Catch (Things awaiting catch) or Sort (already

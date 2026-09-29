@@ -20,18 +20,27 @@ export type SignedThingPath = { url?: string; error?: string };
 
 /** Dedupe and cap private Storage signing requests for both detail files and
  * bounded overview previews. Every requested path receives an outcome. */
-export async function signThingAttachmentPaths(paths: string[]): Promise<Map<string, SignedThingPath>> {
+export async function signThingAttachmentPaths(
+  paths: string[],
+): Promise<Map<string, SignedThingPath>> {
   const uniquePaths = [...new Set(paths.filter(Boolean))];
   const signingByPath = new Map<string, SignedThingPath>();
   for (let offset = 0; offset < uniquePaths.length; offset += 100) {
     const batch = uniquePaths.slice(offset, offset + 100);
     const { data, error: signingError } = await supabase.storage
-      .from(BUCKET).createSignedUrls(batch, SIGNED_URL_TTL_SECONDS);
+      .from(BUCKET)
+      .createSignedUrls(batch, SIGNED_URL_TTL_SECONDS);
     if (signingError) throw signingError;
     for (const entry of data ?? []) {
-      const item = entry as { path: string; signedUrl?: string; error?: string | { message?: string } };
+      const item = entry as {
+        path: string;
+        signedUrl?: string;
+        error?: string | { message?: string };
+      };
       const reason = item.error
-        ? typeof item.error === "string" ? item.error : item.error.message
+        ? typeof item.error === "string"
+          ? item.error
+          : item.error.message
         : undefined;
       signingByPath.set(item.path, {
         url: item.signedUrl || undefined,
@@ -39,8 +48,30 @@ export async function signThingAttachmentPaths(paths: string[]): Promise<Map<str
       });
     }
   }
+  const unresolved = uniquePaths.filter((path) => !signingByPath.get(path)?.url);
+  if (unresolved.length) {
+    try {
+      const response = await authedFetch("/api/things/sign-attachments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths: unresolved }),
+      });
+      if (response.ok) {
+        const body = (await response.json()) as { urls?: Record<string, string> };
+        for (const [path, url] of Object.entries(body.urls ?? {})) {
+          if (typeof url === "string" && url) signingByPath.set(path, { url });
+        }
+      }
+    } catch {
+      // The client signing result remains the source of truth when the
+      // recovery endpoint is unavailable.
+    }
+  }
   for (const path of uniquePaths) {
-    if (!signingByPath.has(path)) signingByPath.set(path, { error: "Preview unavailable for this file." });
+    if (!signingByPath.get(path)?.url) {
+      const current = signingByPath.get(path);
+      signingByPath.set(path, { error: current?.error || "Preview unavailable for this file." });
+    }
   }
   return signingByPath;
 }
@@ -67,19 +98,19 @@ export async function fetchRealAttachments(thingIds: string[]): Promise<Map<stri
   const signingByPath = await signThingAttachmentPaths(typedRows.map((row) => row.storage_key));
 
   const signed = typedRows.map((row) => {
-      const signing = signingByPath.get(row.storage_key);
-      const file: ThingFile = {
-        id: row.id,
-        name: row.file_name,
-        type: detectFileType(row.file_name, row.mime_type ?? undefined),
-        url: signing?.url,
-        urlError: signing?.error ?? (!signing ? "Preview unavailable for this file." : undefined),
-        sizeLabel: row.byte_size ? formatFileSize(row.byte_size) : undefined,
-        mimeType: row.mime_type ?? undefined,
-        storageKey: row.storage_key,
-      };
-      return { thingId: row.thing_id, file };
-    });
+    const signing = signingByPath.get(row.storage_key);
+    const file: ThingFile = {
+      id: row.id,
+      name: row.file_name,
+      type: detectFileType(row.file_name, row.mime_type ?? undefined),
+      url: signing?.url,
+      urlError: signing?.error ?? (!signing ? "Preview unavailable for this file." : undefined),
+      sizeLabel: row.byte_size ? formatFileSize(row.byte_size) : undefined,
+      mimeType: row.mime_type ?? undefined,
+      storageKey: row.storage_key,
+    };
+    return { thingId: row.thing_id, file };
+  });
 
   for (const { thingId, file } of signed) {
     const existing = result.get(thingId);
