@@ -20,6 +20,9 @@ type ThingStackCardProps = {
   suppressClickRef: MutableRefObject<boolean>;
   onOpen: (thing: Thing, origin: HTMLElement) => void;
   onAction: (action: CourtStackAction) => void;
+  /** A temporarily promoted stack card is a visual preview. Its actions stay
+   * on the stable active card until the user opens the Thing. */
+  hideActions?: boolean;
   /** T09/E01: swipe-left opens the timed-Snooze interval menu -- this gives
    *  a button/keyboard equivalent for that exact same menu, rather than a
    *  second, independent snooze path. Omitted (no button rendered) when
@@ -115,6 +118,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
       onOpen,
       onAction,
       onSnooze,
+      hideActions = false,
     },
     ref,
   ) {
@@ -400,7 +404,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
             keyboard/click equivalent in the stack itself -- this button
             calls the exact same onAction("sort") the swipe gesture already
             dispatches (CourtLaneStack's runAction), not a second path. */}
-        {(capabilities.canCatch || capabilities.canSort || onSnooze) && (
+        {!hideActions && (capabilities.canCatch || capabilities.canSort || onSnooze) && (
           <div
             onPointerDown={(e) => e.stopPropagation()}
             className="flex items-center gap-2 px-4 pb-3 pt-0"

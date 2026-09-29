@@ -106,12 +106,14 @@ function PeekQueueCard({
   depth,
   myActorId,
   onOpen,
+  onPreview,
 }: {
   thing: Thing;
   lane: CourtLaneId;
   depth: number;
   myActorId: string | null;
   onOpen: () => void;
+  onPreview: () => void;
 }) {
   const assignedByOther = Boolean(
     myActorId && thing.assignee.id === myActorId && thing.owner.id !== thing.assignee.id,
@@ -143,6 +145,8 @@ function PeekQueueCard({
     <button
       type="button"
       onClick={onOpen}
+      onPointerEnter={onPreview}
+      onFocus={onPreview}
       draggable={true}
       onDragStart={(e) => {
         e.dataTransfer.setData(
@@ -155,7 +159,7 @@ function PeekQueueCard({
         );
         e.dataTransfer.effectAllowed = "copyMove";
       }}
-      className="group/queue relative z-0 flex max-h-[76px] min-h-[76px] w-full flex-col justify-center overflow-hidden rounded-b-xl border border-slate-200/80 bg-white px-3.5 py-2 text-left shadow-[0_3px_5px_rgba(15,23,42,0.14)] transition-[max-height,transform,box-shadow,border-color,margin] duration-[520ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:z-30 hover:mb-2.5 hover:max-h-[136px] hover:-translate-y-1 hover:scale-[1.012] hover:border-slate-300 hover:shadow-[0_18px_36px_-18px_rgba(15,23,42,0.38),0_7px_13px_-8px_rgba(15,23,42,0.2)] focus-visible:z-30 focus-visible:mb-2.5 focus-visible:max-h-[136px] focus-visible:-translate-y-1 focus-visible:scale-[1.012] focus-visible:border-slate-300 focus-visible:shadow-[0_18px_36px_-18px_rgba(15,23,42,0.38),0_7px_13px_-8px_rgba(15,23,42,0.2)] select-none outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:transform-none motion-reduce:focus-visible:transform-none [&:not(:first-child)]:-mt-1"
+      className="group/queue relative z-0 flex min-h-[76px] w-full flex-col justify-center rounded-b-xl border border-slate-200/80 bg-white px-3.5 py-2 text-left shadow-[0_3px_5px_rgba(15,23,42,0.14)] transition-[transform,box-shadow,border-color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] hover:z-30 hover:-translate-y-0.5 hover:scale-[1.005] hover:border-slate-300 hover:shadow-[0_14px_26px_-18px_rgba(15,23,42,0.34)] select-none outline-none focus-visible:z-30 focus-visible:border-slate-300 focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:transform-none [&:not(:first-child)]:-mt-1"
       style={{ zIndex: 10 - depth }}
       title={`Jump to ${thing.title}`}
       aria-label={`Jump to ${thing.title}`}
@@ -192,17 +196,11 @@ function PeekQueueCard({
           <p className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-[1.25] text-slate-900">
             {thing.title}
           </p>
-          <div className="grid grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity,margin] duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/queue:mt-2 group-hover/queue:grid-rows-[1fr] group-hover/queue:opacity-100 group-focus-visible/queue:mt-2 group-focus-visible/queue:grid-rows-[1fr] group-focus-visible/queue:opacity-100 motion-reduce:transition-none">
-            <div className="overflow-hidden">
-              {queueMeta.length > 0 ? (
-                <p className="truncate text-[11px] font-medium text-slate-500">
-                  {queueMeta.join(" · ")}
-                </p>
-              ) : (
-                <p className="text-[11px] font-medium text-slate-500">Open Thing</p>
-              )}
-            </div>
-          </div>
+          {queueMeta.length > 0 ? (
+            <p className="mt-1 truncate text-[11px] font-medium text-slate-500">
+              {queueMeta.join(" · ")}
+            </p>
+          ) : null}
         </div>
         {imagePreview?.url ? (
           <img
@@ -265,6 +263,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     const [anim, setAnim] = useState<StackAnim | null>(null);
     const [isDragTarget, setIsDragTarget] = useState(false);
     const [snoozeOpen, setSnoozeOpen] = useState(false);
+    const [hoveredPreviewId, setHoveredPreviewId] = useState<string | null>(null);
     const activeThingIdRef = useRef<string | null>(things[initialIndex]?.id ?? null);
     const activeButtonRef = useRef<HTMLButtonElement | null>(null);
     const activeCardRef = useRef<HTMLDivElement | null>(null);
@@ -327,6 +326,11 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     const content = courtLaneContent[lane];
     const renderIndex = reconcileStackIndex(activeIndex, activeThingIdRef.current, things);
     const activeThing = things[renderIndex] ?? null;
+    const hoveredPreview = hoveredPreviewId
+      ? (things.find((thing) => thing.id === hoveredPreviewId) ?? null)
+      : null;
+    const previewThing = hoveredPreview ?? activeThing;
+    const previewIsTemporary = Boolean(hoveredPreview && hoveredPreview.id !== activeThing?.id);
     const capabilities = activeThing
       ? getThingCapabilities(activeThing, myActorId)
       : { canCatch: false, canSetPace: false, canSort: false };
@@ -784,6 +788,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         )}
         style={{ background: content.gradient }}
         aria-labelledby={`court-${lane}-title`}
+        onPointerLeave={() => setHoveredPreviewId(null)}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes("application/katalist-thing")) {
             e.preventDefault();
@@ -954,7 +959,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           })()}
         </div>
 
-        {activeThing ? (
+        {activeThing && previewThing ? (
           <div className="flex min-h-0 flex-1 flex-col px-3.5 pb-2.5 pt-2.5">
             {/* Stack arena */}
             <div className="relative" onKeyDown={onKeyDown}>
@@ -1006,7 +1011,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               {/* Active card stays level during both scroll and swipe. */}
               <div
                 ref={activeCardRef}
-                {...swipePointerProps}
+                {...(!previewIsTemporary ? swipePointerProps : {})}
                 className={cn(
                   "relative z-20 touch-pan-y select-none will-change-transform motion-reduce:!transform-none motion-reduce:transition-none",
                   !gesture.dragging &&
@@ -1019,13 +1024,16 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 )}
                 style={{
                   transformOrigin: "50% 50%",
-                  transform: `translate3d(${gesture.offset.x}px, 0, 0)`,
+                  transform: `translate3d(${previewIsTemporary ? 0 : gesture.offset.x}px, 0, 0)`,
                 }}
               >
                 <ThingStackCard
                   ref={activeButtonRef}
-                  thing={activeThing}
-                  listCoverUrl={activeThing.listId ? listCoversById?.get(activeThing.listId) : null}
+                  key={previewThing.id}
+                  thing={previewThing}
+                  listCoverUrl={
+                    previewThing.listId ? listCoversById?.get(previewThing.listId) : null
+                  }
                   lane={lane}
                   myActorId={myActorId}
                   pendingAction={pendingAction}
@@ -1033,6 +1041,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   onOpen={onOpen}
                   onAction={(action) => void runAction(action)}
                   onSnooze={() => setSnoozeOpen(true)}
+                  hideActions={previewIsTemporary}
                 />
               </div>
 
@@ -1103,9 +1112,16 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               <div className="relative z-10 -mt-1.5 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-px pb-1">
                 {Array.from({ length: depthCount }, (_, i) => {
                   const depth = i + 1;
-                  const targetIndex = (renderIndex + depth) % things.length;
-                  const depthThing = things[targetIndex];
+                  const depthThing = previewIsTemporary
+                    ? [
+                        activeThing,
+                        ...things.filter(
+                          (thing) => thing.id !== activeThing.id && thing.id !== previewThing.id,
+                        ),
+                      ][i]
+                    : things[(renderIndex + depth) % things.length];
                   if (!depthThing) return null;
+                  const targetIndex = things.findIndex((thing) => thing.id === depthThing.id);
                   return (
                     <PeekQueueCard
                       key={`queue-${depthThing.id}`}
@@ -1114,6 +1130,9 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                       depth={depth}
                       myActorId={myActorId}
                       onOpen={() => navigateToIndex(targetIndex)}
+                      onPreview={() => {
+                        if (!previewIsTemporary) setHoveredPreviewId(depthThing.id);
+                      }}
                     />
                   );
                 })}
