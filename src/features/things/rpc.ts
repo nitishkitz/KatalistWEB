@@ -599,19 +599,6 @@ export async function rpcDeleteBucket(bucketId: string) {
 }
 
 export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?: string) {
-  try {
-    if (thingId) {
-      const t = getThing(thingId);
-      addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
-    }
-    if (listId) {
-      const list = getListById(listId);
-      addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
-    }
-  } catch {
-    // ignore
-  }
-
   const isBucketUuid = isUuid(bucketId);
   const isThingUuid = !thingId || isUuid(thingId);
   const isListUuid = !listId || isUuid(listId);
@@ -619,7 +606,7 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
   return runDomainMutation({
     live: async () => {
       if (!isBucketUuid || !isThingUuid || !isListUuid) {
-        return null as never;
+        throw new Error("This Thing or Bucket has an invalid ID. Refresh and try again.");
       }
 
       const res = await authedFetch("/api/buckets/add-item", {
@@ -637,18 +624,20 @@ export async function rpcAddToBucket(bucketId: string, thingId?: string, listId?
       throw new Error(errJson.error || errJson.message || `Failed to add to bucket (${res.status})`);
     },
     preview: () => {
+      if (thingId) {
+        const t = getThing(thingId);
+        addBucketRef(bucketId, { thingId, title: t?.title ?? thingId, kind: "thing" });
+      }
+      if (listId) {
+        const list = getListById(listId);
+        addBucketRef(bucketId, { listId, title: list?.name ?? listId, kind: "list" });
+      }
       return null as never;
     },
   });
 }
 
 export async function rpcRemoveFromBucket(bucketId: string, thingId?: string, listId?: string) {
-  try {
-    removeBucketRef(bucketId, thingId, listId);
-  } catch {
-    // ignore
-  }
-
   const isBucketUuid = isUuid(bucketId);
   const isThingUuid = !thingId || isUuid(thingId);
   const isListUuid = !listId || isUuid(listId);
@@ -656,7 +645,7 @@ export async function rpcRemoveFromBucket(bucketId: string, thingId?: string, li
   return runDomainMutation({
     live: async () => {
       if (!isBucketUuid || !isThingUuid || !isListUuid) {
-        return null as never;
+        throw new Error("This Thing or Bucket has an invalid ID. Refresh and try again.");
       }
       return liveRpc(() =>
         supabase.rpc("remove_from_bucket", {
@@ -667,6 +656,7 @@ export async function rpcRemoveFromBucket(bucketId: string, thingId?: string, li
       );
     },
     preview: () => {
+      removeBucketRef(bucketId, thingId, listId);
       return null as never;
     },
   });
@@ -725,6 +715,9 @@ export async function rpcComment(thingId: string, body: string, attachments?: Th
     addCommentLocal(thingId, body, undefined, attachments);
     return;
   }
+  if (attachments?.some((file) => !file.storageKey)) {
+    throw new Error("Reattach this file before sending. Its temporary preview link cannot be saved.");
+  }
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) throw new Error("Sign in to comment.");
 
@@ -741,8 +734,16 @@ export async function rpcComment(thingId: string, body: string, attachments?: Th
     actorIdByProfileCache.set(auth.user.id, actorId);
   }
 
-  const fullBody = attachments?.length
-    ? `${body}\n<!--attachments:${JSON.stringify(attachments)}-->`
+  const persistedAttachments = attachments?.map((file) => ({
+    id: file.id,
+    name: file.name,
+    type: file.type,
+    sizeLabel: file.sizeLabel,
+    mimeType: file.mimeType,
+    storageKey: file.storageKey,
+  }));
+  const fullBody = persistedAttachments?.length
+    ? `${body}\n<!--attachments:${JSON.stringify(persistedAttachments)}-->`
     : body;
 
   const { error } = await supabase.from("thing_comments").insert({

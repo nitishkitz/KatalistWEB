@@ -392,6 +392,11 @@ export function getSnoozedIds(): Set<string> {
   return set;
 }
 
+export function getSnoozedUntil(id: string): number | null {
+  const until = snoozeMapFor(currentDemoActorId()).get(id);
+  return until && until > Date.now() ? until : null;
+}
+
 /**
  * Snoozes whose wake time has passed for the demo actor. Basis for Catch Up
  * "snooze ended" moments in preview mode (mirrors the live thing_snooze query).

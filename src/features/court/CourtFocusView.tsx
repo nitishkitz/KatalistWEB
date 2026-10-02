@@ -3,12 +3,8 @@ import gsap from "gsap";
 import {
   ArrowLeft,
   ChevronDown,
-  ChevronLeft,
-  Landmark,
   List,
   Search,
-  SlidersHorizontal,
-  X,
 } from "lucide-react";
 import { format } from "date-fns";
 import type { Thing } from "@/domain/thing";
@@ -220,37 +216,22 @@ export function CourtFocusView({
       {/* Top Header: Sticky TopNav */}
       <TopNav />
 
-      {/* Subheader bar (floats on the page background) */}
-      <div className="h-12 shrink-0 px-6 flex items-center justify-between">
-        <div className="flex items-center gap-7">
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex items-center gap-2 rounded text-[13px] font-medium text-[#6a769c] hover:text-[#000533] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Back to Court stacks"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Back to stacks</span>
-            <kbd className="rounded border border-[#e2e4f5] bg-white px-1.5 py-0.5 text-[12px] font-medium text-[#8487a7]">
-              Esc
-            </kbd>
-          </button>
-          <div className="flex items-center gap-2 text-[14px] font-medium text-[#000533]">
-            <Landmark className="h-4 w-4 text-[#000533]" />
-            <span>All Things</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <PersonAvatar name="Nithesh" size={22} initials="N" />
-          <span className="text-[12px] font-medium text-[#5f5f90]">Involving Nithesh</span>
-        </div>
-      </div>
-
       {/* Main Content Split */}
-      <main className="flex-1 flex min-h-0 gap-4 overflow-hidden px-4 pb-4">
+      <main className="flex-1 flex min-h-0 gap-4 overflow-hidden px-4 pt-4 pb-4">
         {/* Left Column: Lane Tabs + Search + Things List (white card) */}
         <aside className="w-[360px] shrink-0 rounded-[12px] bg-white flex flex-col min-h-0 overflow-hidden">
+          <div className="flex h-10 shrink-0 items-center px-5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-2 rounded text-[13px] font-medium text-[#6a769c] hover:text-[#000533] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="Back to Court stacks"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to stacks</span>
+              <kbd className="rounded border border-[#e2e4f5] bg-white px-1.5 py-0.5 text-[12px] font-medium text-[#8487a7]">Esc</kbd>
+            </button>
+          </div>
           {/* Lane Tabs: NOW, NEXT, LATER, WITH OTHERS */}
           <div className="flex items-center gap-5 px-5 pt-4 border-b border-[#e2e4f5] overflow-x-auto no-scrollbar">
             {laneTabs.map((tab) => {
@@ -420,25 +401,8 @@ export function CourtFocusView({
           </div>
         </aside>
 
-        {/* Right Column: detail top bar + (detail | preview), as one white card */}
+        {/* Right Column: detail and preview */}
         <div className="flex-1 rounded-[12px] bg-white flex flex-col min-h-0 overflow-hidden">
-          {/* Detail top bar */}
-          <div className="flex h-14 shrink-0 items-center justify-between border-b border-[#eef0f6] px-6">
-            <span className="truncate max-w-[280px] text-[#975ee2] text-[12.5px] font-medium">
-              {selectedThing?.listName && selectedThing.listName !== "Standalone"
-                ? selectedThing.listName
-                : "Court"}
-            </span>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] bg-[#f5f6fa] text-[#5f5f90] hover:text-[#000533] hover:bg-[#eceef5] transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
           {/* Body: detail + preview */}
           <div className="flex flex-1 flex-row min-h-0 overflow-hidden">
             <div className="flex-1 min-h-0 overflow-auto bg-[#fefdfd] px-8 pt-6 pb-24">

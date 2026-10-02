@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAvatarUrl, matchAvatarByName } from "@/features/people/directory";
 
@@ -41,8 +41,21 @@ export function PersonAvatar({
   const safeName = name && name.trim() && name.toLowerCase() !== "someone" ? name.trim() : "Priya";
   const directoryAvatar = useAvatarUrl(safeName, null, src);
   const resolvedSrc = src || directoryAvatar || matchAvatarByName(safeName);
-  const [failed, setFailed] = useState(false);
-  const show = Boolean(resolvedSrc) && !failed;
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  useEffect(() => {
+    setFailedSrc(null);
+    setRetryCount(0);
+  }, [resolvedSrc]);
+  useEffect(() => {
+    if (!failedSrc || failedSrc !== resolvedSrc || retryCount > 0) return;
+    const timer = window.setTimeout(() => {
+      setRetryCount(1);
+      setFailedSrc(null);
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [failedSrc, resolvedSrc, retryCount]);
+  const show = Boolean(resolvedSrc) && failedSrc !== resolvedSrc;
 
   const displayInitials =
     initials && initials.toUpperCase() !== "S" && initials.toUpperCase() !== "SO"
@@ -65,26 +78,21 @@ export function PersonAvatar({
       )}
       style={{ width: size, height: size }}
     >
+      <span
+        className="flex h-full w-full items-center justify-center font-bold tracking-tight"
+        style={{ fontSize: Math.max(12, Math.round(size * 0.36)) }}
+      >
+        {displayInitials}
+      </span>
       {show ? (
         <img
+          key={`${resolvedSrc}:${retryCount}`}
           src={resolvedSrc ?? undefined}
           alt={safeName}
-          className="h-full w-full object-cover"
-          onError={() => setFailed(true)}
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={() => setFailedSrc(resolvedSrc ?? null)}
         />
-      ) : (
-        <span
-          className="flex h-full w-full items-center justify-center font-bold tracking-tight"
-          // D-01/T08: initials are meaningful content (the only thing
-          // rendered when there's no photo), not decoration -- floored at
-          // the 12px metadata minimum even for the smallest avatar sizes
-          // used in this app (20px), matching every other avatar system
-          // that shows initials inside a small circle.
-          style={{ fontSize: Math.max(12, Math.round(size * 0.36)) }}
-        >
-          {displayInitials}
-        </span>
-      )}
+      ) : null}
     </span>
   );
 }

@@ -66,7 +66,7 @@ export function CourtDetailModal({
       role="dialog"
       aria-modal="true"
       aria-label={thing.title}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 md:p-8 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/40 p-4 md:p-8 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();

@@ -9,11 +9,13 @@ import { useAvatarUrl } from "@/features/people/directory";
 import { NotificationBell } from "@/features/notifications/NotificationPanel";
 import { CatchUpNavCapsule } from "@/features/catchup/CatchUpNavCapsule";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
+import { useOtherModeUnread } from "@/features/hub/use-conversations";
 import { cn } from "@/lib/utils";
 
 export function TopNav() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
   const { context, setContext } = useAppContext();
+  const { mode: otherMode, unread: otherModeUnread } = useOtherModeUnread();
   const { user } = useSession();
   const { data: profile } = useProfile();
 
@@ -110,6 +112,9 @@ export function TopNav() {
               aria-hidden="true"
             />
             Work
+            {otherMode === "work" && otherModeUnread > 0 ? (
+              <ModeUnreadBadge count={otherModeUnread} mode="Work" />
+            ) : null}
           </button>
           <button
             type="button"
@@ -128,6 +133,9 @@ export function TopNav() {
               aria-hidden="true"
             />
             Home
+            {otherMode === "home" && otherModeUnread > 0 ? (
+              <ModeUnreadBadge count={otherModeUnread} mode="Home" />
+            ) : null}
           </button>
         </div>
 
@@ -142,5 +150,17 @@ export function TopNav() {
         </Link>
       </div>
     </nav>
+  );
+}
+
+/** Unread chats waiting in the mode the viewer is not currently in. */
+function ModeUnreadBadge({ count, mode }: { count: number; mode: string }) {
+  return (
+    <span
+      aria-label={`${count} unread in ${mode}`}
+      className="inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-[#ff1c3f] px-1 text-[9px] font-semibold leading-none text-white"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
   );
 }

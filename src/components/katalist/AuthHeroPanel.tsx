@@ -30,23 +30,21 @@ export function AuthHeroPanel({
       }}
     >
       <div className="relative z-10 flex flex-col items-center px-8 text-center sm:px-12">
-        <div className="flex flex-col items-center">
-          <div
-            className="flex h-28 w-28 items-center justify-center rounded-3xl"
-            style={{
-              background: "linear-gradient(141.9deg, #975ee2 9.2%, #60399e 44.8%, #1c153f 91.1%)",
-            }}
-          >
-            <img
-              src={katalistMark}
-              alt=""
-              aria-hidden="true"
-              className="h-[clamp(48px,7vh,72px)] w-auto object-contain"
-            />
-          </div>
-          <span className="-mt-2.5 text-[9px] font-medium uppercase tracking-[0.14em] text-white">
-            Life, Sorted
-          </span>
+        {/* Figma app-icon tile (node 20:43): 128.6px gradient square, K mark
+            85.2x87.8 inset 21.87px / 14.15px from the top-left. */}
+        <div
+          className="relative size-[128.606px] shrink-0 rounded-[12.861px]"
+          style={{
+            backgroundImage:
+              "linear-gradient(141.91deg, rgb(151, 94, 226) 9.173%, rgb(96, 57, 158) 44.765%, rgb(28, 21, 63) 91.077%)",
+          }}
+        >
+          <img
+            src={katalistMark}
+            alt=""
+            aria-hidden="true"
+            className="absolute left-[21.87px] top-[14.15px] block h-[87.767px] w-[85.201px] max-w-none"
+          />
         </div>
         <h1 className="mt-[clamp(16px,3vh,24px)] font-logo text-[clamp(38px,4.5vw,56px)] font-bold uppercase leading-none tracking-tight text-white">
           Katalist

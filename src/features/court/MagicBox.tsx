@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AtSign, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
+import { AtSign, CalendarDays, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
+import { format } from "date-fns";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { useAppContext } from "@/features/context/use-app-context";
@@ -19,6 +20,8 @@ import { acquireBlobUrl, releaseBlobUrl, releaseAllBlobUrlsForOwner } from "@/li
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { Importance } from "@/domain/thing";
 
 type MagicBoxMotionState = "idle" | "hover" | "focused" | "typing" | "submitting" | "processing" | "success" | "error";
 
@@ -79,6 +82,9 @@ export function MagicBox({
   const epochRef = useRef(0);
 
   const [value, setValue] = useState(() => getDraft<string>(qc, "magic-box", draftEntityId)?.value ?? "");
+  const [paceOverride, setPaceOverride] = useState<Importance | null>(null);
+  // undefined follows parsed text; null explicitly clears the inferred date.
+  const [dueOverride, setDueOverride] = useState<string | null | undefined>(undefined);
   const [tossed, setTossed] = useState(false);
   const [motionHovered, setMotionHovered] = useState(false);
   const [motionFocused, setMotionFocused] = useState(false);
@@ -176,6 +182,8 @@ export function MagicBox({
     epochRef.current += 1;
     const draft = getDraft<string>(qc, "magic-box", draftEntityId);
     setValue(draft?.value ?? "");
+    setPaceOverride(null);
+    setDueOverride(undefined);
     setAttachedFiles((draft?.attachments as ThingFile[] | undefined) ?? []);
     // Failed/in-flight uploads are transient per-composer-instance state,
     // not part of the persisted draft -- a validation failure against one
@@ -301,6 +309,13 @@ export function MagicBox({
   }, []);
 
   const parsed = useMemo(() => parseToss(value, people), [value, people]);
+  const effectivePace = paceOverride ?? parsed.importance;
+  const effectiveDueAt = dueOverride === undefined ? parsed.dueAt : dueOverride ?? undefined;
+  const dueIsPast = Boolean(effectiveDueAt && new Date(effectiveDueAt).getTime() < Date.now());
+  const highlightedPhrases = [
+    parsed.pacePhrase ? { phrase: parsed.pacePhrase, kind: "pace" } : null,
+    parsed.duePhrase ? { phrase: parsed.duePhrase, kind: "due" } : null,
+  ].filter((item): item is { phrase: string; kind: string } => Boolean(item));
   // Blocked if there's an unresolved person chip, OR an unconfirmed suggestion that
   // the user hasn't explicitly dismissed yet.
   const blocked = tossBlockedByPerson(
@@ -466,11 +481,11 @@ export function MagicBox({
               const created = await rpcCreateThing({
                 title: titleToUse,
                 context,
-                ownerImportance: parsed.importance,
+                ownerImportance: effectivePace,
                 listId: effectiveListId,
                 assigneeActorId,
-                dueAt: parsed.dueAt,
-                dueHasTime: parsed.dueHasTime,
+                dueAt: effectiveDueAt,
+                dueHasTime: Boolean(effectiveDueAt),
                 files: attachedFiles.length > 0 ? attachedFiles : undefined,
               });
               return { assigneeActorId, id: created?.id ?? null, ok: true as const };
@@ -508,11 +523,11 @@ export function MagicBox({
       const created = await rpcCreateThing({
         title: titleToUse,
         context,
-        ownerImportance: parsed.importance,
+        ownerImportance: effectivePace,
         listId: effectiveListId,
         assigneeActorId: assignee,
-        dueAt: parsed.dueAt,
-        dueHasTime: parsed.dueHasTime,
+        dueAt: effectiveDueAt,
+        dueHasTime: Boolean(effectiveDueAt),
         files: attachedFiles.length > 0 ? attachedFiles : undefined,
       });
 
@@ -548,6 +563,8 @@ export function MagicBox({
         // success or a fresh edit (see the input's onChange) clears it.
         if (!hasPartialFailure) {
           setValue("");
+          setPaceOverride(null);
+          setDueOverride(undefined);
           // A fully successful Toss is done with these local blob previews
           // -- the created Thing's own files are a separate, durable
           // concern (a JSON snapshot of `attachedFiles` at capture time)
@@ -601,9 +618,13 @@ export function MagicBox({
       toast.error(err instanceof Error ? err.message : "Couldn’t toss that.");
     },
   });
-  const canToss = (Boolean(value.trim()) || attachedFiles.length > 0) && !blocked && !mutation.isPending;
+  const canToss = (Boolean(value.trim()) || attachedFiles.length > 0) && !blocked && !dueIsPast && !mutation.isPending;
   const startToss = () => {
     if (!canToss) return;
+    if (effectiveDueAt && new Date(effectiveDueAt).getTime() < Date.now()) {
+      toast.error("This due time has passed. Choose a later time.");
+      return;
+    }
     flashMotion("submitting", 430);
     setSubmitHandoff(true);
     if (motionPhaseTimer.current) clearTimeout(motionPhaseTimer.current);
@@ -934,7 +955,13 @@ export function MagicBox({
                         </span>
                       );
                     }
-                    return <span key={i} className="text-foreground">{part}</span>;
+                    if (!highlightedPhrases.length) return <span key={i} className="text-foreground">{part}</span>;
+                    const escaped = highlightedPhrases.map(({ phrase }) => phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+                    const segments = part.split(new RegExp(`(${escaped.join("|")})`, "gi"));
+                    return segments.map((segment, j) => {
+                      const kind = highlightedPhrases.find(({ phrase }) => phrase.toLowerCase() === segment.toLowerCase())?.kind;
+                      return <span key={`${i}-${j}`} className={kind === "due" ? "font-semibold text-blue-600" : kind === "pace" ? "font-semibold text-primary" : "text-foreground"}>{segment}</span>;
+                    });
                   });
                 })()}
               </>
@@ -949,6 +976,9 @@ export function MagicBox({
               const next = e.target.value;
               if (!value && next) flashMotion("first-character", 280);
               setValue(next);
+              const nextParsed = parseToss(next, people);
+              if (nextParsed.pacePhrase !== parsed.pacePhrase) setPaceOverride(null);
+              if (nextParsed.duePhrase !== parsed.duePhrase) setDueOverride(undefined);
               // A fresh edit means the user is composing something new, not
               // retrying the last partial failure -- the next submit should
               // parse `next` normally again, not silently narrow to
@@ -1037,7 +1067,7 @@ export function MagicBox({
               }
             }
 
-            if (e.key === "Enter" && (value.trim() || attachedFiles.length > 0) && !blocked && !mutation.isPending) {
+            if (e.key === "Enter" && canToss) {
               e.preventDefault();
               startToss();
               return;
@@ -1086,6 +1116,8 @@ export function MagicBox({
                 type="button"
                 onClick={() => {
                   setValue("");
+                  setPaceOverride(null);
+                  setDueOverride(undefined);
                   setTrigger(null);
                 }}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 outline-none hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
@@ -1132,6 +1164,54 @@ export function MagicBox({
         )}
       </div>
 
+      {value.trim() ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" className="rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 font-semibold text-primary hover:bg-primary/10" aria-label={`Pace ${effectivePace}. Change pace`}>
+                {effectivePace.toUpperCase()}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-40 p-1" align="start" side="top">
+              {(["now", "next", "later"] as Importance[]).map((pace) => (
+                <button key={pace} type="button" onClick={() => setPaceOverride(pace)} className="block w-full rounded-md px-3 py-2 text-left text-xs font-medium hover:bg-primary/10" aria-pressed={effectivePace === pace}>
+                  {pace.toUpperCase()}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button type="button" className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-100" aria-label={effectiveDueAt ? `Due ${format(new Date(effectiveDueAt), "MMM d, h:mm a")}. Change date` : "Add due date"}>
+                <CalendarDays className="h-3 w-3" />
+                {effectiveDueAt ? `Due ${format(new Date(effectiveDueAt), "MMM d, h:mm a")}` : "Add date"}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 space-y-2 p-3" align="start" side="top">
+              <label className="block text-xs font-semibold text-foreground" htmlFor="magic-box-due">Due date and time</label>
+              <input
+                id="magic-box-due"
+                type="datetime-local"
+                value={format(effectiveDueAt ? new Date(effectiveDueAt) : new Date(Date.now() + 86400000), "yyyy-MM-dd'T'HH:mm")}
+                onChange={(event) => {
+                  const date = new Date(event.target.value);
+                  if (!Number.isNaN(date.getTime())) setDueOverride(date.toISOString());
+                }}
+                className="w-full rounded-md border border-border px-2 py-1.5 text-xs text-foreground"
+              />
+              {!effectiveDueAt ? <button type="button" className="text-xs font-semibold text-blue-700" onClick={() => {
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                tomorrow.setHours(22, 0, 0, 0);
+                setDueOverride(tomorrow.toISOString());
+              }}>Use tomorrow, 10 PM</button> : null}
+              {effectiveDueAt ? <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setDueOverride(null)}>Remove date</button> : null}
+            </PopoverContent>
+          </Popover>
+          {dueIsPast ? <span role="alert" className="text-amber-700">This time has passed. Change the date before Toss.</span> : null}
+        </div>
+      ) : null}
+
       {/* Natural language AI person suggestion prompt — blocks toss until confirmed or dismissed */}
       {parsed.suggestedPerson &&
         !parsed.assigneeId &&
@@ -1173,9 +1253,9 @@ export function MagicBox({
           </div>
         )}
 
-      {parsed.chips.length > 0 && value.trim() ? (
+      {parsed.chips.some((chip) => chip.kind === "suggestion" || chip.kind === "unresolved") && value.trim() ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {parsed.chips.map((c) => {
+          {parsed.chips.filter((chip) => chip.kind === "suggestion" || chip.kind === "unresolved").map((c) => {
             const isSuggestion = c.kind === "suggestion";
             return (
               <button

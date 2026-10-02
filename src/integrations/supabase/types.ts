@@ -291,14 +291,90 @@ export type Database = {
           },
         ]
       }
+      bucket_note_attachments: {
+        Row: {
+          id: string
+          note_id: string
+          owner_profile_id: string
+          storage_path: string
+          file_name: string
+          mime_type: string | null
+          byte_size: number
+          alt_text: string
+          created_at: string
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          note_id: string
+          owner_profile_id?: string
+          storage_path: string
+          file_name: string
+          mime_type?: string | null
+          byte_size: number
+          alt_text?: string
+          created_at?: string
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          note_id?: string
+          owner_profile_id?: string
+          storage_path?: string
+          file_name?: string
+          mime_type?: string | null
+          byte_size?: number
+          alt_text?: string
+          created_at?: string
+          deleted_at?: string | null
+        }
+        Relationships: []
+      }
+      bucket_note_links: {
+        Row: {
+          id: string
+          note_id: string
+          thing_id: string | null
+          list_id: string | null
+          target_kind: string
+          target_id: string
+          relation: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          note_id: string
+          thing_id?: string | null
+          list_id?: string | null
+          target_kind: string
+          target_id: string
+          relation?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          note_id?: string
+          thing_id?: string | null
+          list_id?: string | null
+          target_kind?: string
+          target_id?: string
+          relation?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
       bucket_notes: {
         Row: {
           author_profile_id: string
           body: string
           bucket_id: string
+          content_json: Json | null
           created_at: string
           deleted_at: string | null
           id: string
+          pinned_at: string | null
+          plain_text: string
+          revision: number
           title: string
           updated_at: string
         }
@@ -306,9 +382,13 @@ export type Database = {
           author_profile_id?: string
           body?: string
           bucket_id: string
+          content_json?: Json | null
           created_at?: string
           deleted_at?: string | null
           id?: string
+          pinned_at?: string | null
+          plain_text?: string
+          revision?: number
           title?: string
           updated_at?: string
         }
@@ -316,9 +396,13 @@ export type Database = {
           author_profile_id?: string
           body?: string
           bucket_id?: string
+          content_json?: Json | null
           created_at?: string
           deleted_at?: string | null
           id?: string
+          pinned_at?: string | null
+          plain_text?: string
+          revision?: number
           title?: string
           updated_at?: string
         }

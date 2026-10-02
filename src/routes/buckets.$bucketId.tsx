@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { format, formatDistanceToNowStrict, isToday } from "date-fns";
 import {
   ArrowLeft,
+  CalendarDays,
   ChevronDown,
   FileText,
   Lock,
@@ -24,17 +25,15 @@ import {
   type BucketItem,
 } from "@/features/buckets/use-bucket-items";
 import { bucketItemsSurface } from "@/features/buckets/bucket-items-surface";
-import { useBucketNoteEditor } from "@/features/buckets/use-bucket-note-editor";
-import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
-import { ThingDetailSheet } from "@/features/things/ThingDetailSheet";
+import { BucketNotesWorkspace } from "@/features/buckets/BucketNotesWorkspace";
+import { CourtDetailModal } from "@/features/court/CourtDetailModal";
 import { ListDetailSkeleton, Shimmer } from "@/components/katalist/ScreenSkeletons";
-import { useThing } from "@/features/things/use-thing";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { classifyAsyncError } from "@/lib/query-policy";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { Thing } from "@/domain/thing";
+import { laneOf, type Thing } from "@/domain/thing";
 import type { ListRow } from "@/features/lists/fixtures";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -55,16 +54,6 @@ import {
 export const Route = createFileRoute("/buckets/$bucketId")({
   component: BucketDetailPage,
 });
-
-const narrowQuery = "(max-width: 1023px)";
-function subscribeNarrow(listener: () => void) {
-  const query = window.matchMedia(narrowQuery);
-  query.addEventListener("change", listener);
-  return () => query.removeEventListener("change", listener);
-}
-function useNarrowViewport() {
-  return useSyncExternalStore(subscribeNarrow, () => window.matchMedia(narrowQuery).matches, () => true);
-}
 
 /** Status label + colour for a Thing, matching the bucket-detail table design. */
 function thingStatusMeta(t: Thing): { label: string; color: string } {
@@ -193,7 +182,6 @@ function BucketDetailPage() {
   const [addTab, setAddTab] = useState<"things" | "lists">("things");
   const [addQ, setAddQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const narrowViewport = useNarrowViewport();
   const selectionOriginRef = useRef<HTMLElement | null>(null);
   const openThing = (thingId: string, origin?: HTMLElement | null) => {
     selectionOriginRef.current = origin ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
@@ -211,25 +199,8 @@ function BucketDetailPage() {
   const [renameValue, setRenameValue] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  // Notes (Apple-Notes style, opened in a dialog)
   const notesApi = useBucketNotes(bucketId);
-  const noteEditor = useBucketNoteEditor(bucketId, notesApi);
-  const {
-    noteOpen,
-    editingNoteId,
-    noteTitle,
-    setNoteTitle,
-    noteBody,
-    setNoteBody,
-    openNoteEditor,
-    requestCloseNoteEditor,
-    saveNote,
-    deleteNote,
-    isSaving: noteSaving,
-    isDeleting: noteDeleting,
-  } = noteEditor;
 
-  const liveThing = useThing(selectedId);
   const thingItemsAll = items.filter(
     (i): i is Extract<BucketItem, { kind: "thing"; availability: "available" }> =>
       i.kind === "thing" && i.availability === "available",
@@ -238,8 +209,7 @@ function BucketDetailPage() {
     (i): i is Extract<BucketItem, { kind: "list"; availability: "available" }> =>
       i.kind === "list" && i.availability === "available",
   );
-  const selectedThing =
-    liveThing.thing ?? thingItemsAll.find((i) => i.thingId === selectedId)?.thing ?? null;
+  const selectedThing = thingItemsAll.find((i) => i.thingId === selectedId)?.thing ?? things.find((thing) => thing.id === selectedId) ?? null;
 
   const referencedThingIds = new Set(thingItemsAll.map((i) => i.thingId));
   const referencedListIds = new Set(listItemsAll.map((i) => i.listId));
@@ -386,7 +356,7 @@ function BucketDetailPage() {
           <span>Add reference</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 rounded-2xl border border-border/80 bg-white p-3">
+      <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1.5rem))] rounded-2xl border border-border/80 bg-white p-3 shadow-[0_18px_48px_-20px_rgba(37,24,84,0.28)]">
         <div className="mb-2.5 flex gap-1 rounded-xl bg-muted p-1">
           <button
             type="button"
@@ -415,13 +385,13 @@ function BucketDetailPage() {
           placeholder={addTab === "things" ? "Search Things…" : "Search Lists…"}
           className="mb-2 h-8.5 w-full rounded-lg border border-border bg-background px-2.5 text-[12.5px] outline-none focus:ring-2 focus:ring-ring"
         />
-        <ul className="max-h-56 space-y-1 overflow-y-auto">
+        <ul className="max-h-72 space-y-0.5 overflow-y-auto pr-0.5">
           {addTab === "things"
             ? addThings.slice(0, 40).map((t) => (
                 <li key={t.id}>
                   <button
                     type="button"
-                    className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-medium hover:bg-muted transition-colors cursor-pointer"
+                    className="group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 text-left hover:bg-[#f7f3ff] focus-visible:bg-[#f7f3ff] focus-visible:outline-2 focus-visible:outline-[#975ee2] motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200 hover:shadow-[inset_0_0_0_1px_#e7d8ff] cursor-pointer"
                     onClick={() => {
                       void add.mutateAsync({ thingId: t.id }).then(
                         () => {
@@ -432,7 +402,18 @@ function BucketDetailPage() {
                       );
                     }}
                   >
-                    {t.title}
+                    <span className="min-w-0 flex-1 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out group-hover:motion-safe:translate-x-0.5 group-focus-visible:motion-safe:translate-x-0.5">
+                      <span className="block line-clamp-2 text-[12.5px] font-medium leading-4.5 text-[#11163b]">{t.title}</span>
+                      <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-[#7883a5]">
+                        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", laneOf(t) === "now" ? "bg-[#ff4747]" : laneOf(t) === "next" ? "bg-[#0661f9]" : "bg-[#7c33fd]")} />
+                        <span className="capitalize">{laneOf(t)}</span>
+                        <span aria-hidden="true">·</span>
+                        <PersonAvatar name={t.assignee.name} src={t.assignee.avatarUrl} initials={t.assignee.initials} size={18} />
+                        <span className="truncate">{t.assignee.name}</span>
+                        {t.dueAt ? <span className="ml-auto flex shrink-0 items-center gap-1"><CalendarDays className="h-3 w-3" />{formatDue(t.dueAt)}</span> : null}
+                      </span>
+                    </span>
+                    <Plus aria-hidden="true" className="h-4 w-4 shrink-0 text-[#975ee2] opacity-0 motion-safe:scale-75 motion-safe:transition-[opacity,transform] motion-safe:duration-200 group-hover:opacity-100 group-hover:motion-safe:scale-100 group-focus-visible:opacity-100 group-focus-visible:motion-safe:scale-100" />
                   </button>
                 </li>
               ))
@@ -440,7 +421,7 @@ function BucketDetailPage() {
                 <li key={l.id}>
                   <button
                     type="button"
-                    className="w-full rounded-lg px-2.5 py-1.5 text-left text-[12.5px] font-medium hover:bg-muted transition-colors cursor-pointer"
+                    className="group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 text-left hover:bg-[#f7f3ff] focus-visible:bg-[#f7f3ff] focus-visible:outline-2 focus-visible:outline-[#975ee2] motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200 hover:shadow-[inset_0_0_0_1px_#e7d8ff] cursor-pointer"
                     onClick={() => {
                       void add.mutateAsync({ listId: l.id }).then(
                         () => {
@@ -451,7 +432,14 @@ function BucketDetailPage() {
                       );
                     }}
                   >
-                    {l.name}
+                    <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[9px] bg-[#efeafe] text-[#6638ec] shadow-sm">
+                      {l.coverUrl ? <img src={l.coverUrl} alt="" className="h-full w-full object-cover motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out group-hover:motion-safe:scale-110 group-focus-visible:motion-safe:scale-110" /> : <span className="flex h-full w-full items-center justify-center text-[14px] font-semibold">{l.name.slice(0, 1).toUpperCase()}</span>}
+                    </span>
+                    <span className="min-w-0 flex-1 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out group-hover:motion-safe:translate-x-0.5 group-focus-visible:motion-safe:translate-x-0.5">
+                      <span className="block truncate text-[12.5px] font-semibold text-[#11163b]">{l.name}</span>
+                      <span className="mt-0.5 block truncate text-[11px] text-[#7883a5]">{l.thingCount} {l.thingCount === 1 ? "Thing" : "Things"} · {l.ownerLine}</span>
+                    </span>
+                    <Plus aria-hidden="true" className="h-4 w-4 shrink-0 text-[#975ee2] opacity-0 motion-safe:scale-75 motion-safe:transition-[opacity,transform] motion-safe:duration-200 group-hover:opacity-100 group-hover:motion-safe:scale-100 group-focus-visible:opacity-100 group-focus-visible:motion-safe:scale-100" />
                   </button>
                 </li>
               ))}
@@ -726,14 +714,6 @@ function BucketDetailPage() {
 
   return (
     <AppShell noPadding hideTopNav hideBottomNav>
-      <InlineThingDetailWorkspace
-        thing={narrowViewport ? null : selectedThing}
-        onClose={closeThing}
-        backLabel={bucket.name}
-        flatPanel
-        className={selectedThing ? "lg:h-[calc(100dvh-3.5rem)] lg:items-stretch lg:overflow-hidden" : undefined}
-        sourceClassName={selectedThing ? "lg:h-full lg:overflow-y-auto lg:overscroll-contain" : undefined}
-      >
       <div className="min-h-screen space-y-3 bg-[#edf2fe] px-4 py-3 pb-20">
         {/* Sub-header + tabs card */}
         <div className="rounded-[10px] bg-white">
@@ -875,68 +855,13 @@ function BucketDetailPage() {
                 </button>
               </div>
             ) : detailTab === "notes" ? (
-              <div>
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">
-                    Notes - {notesApi.notes.length}
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={() => openNoteEditor()}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-[9px] bg-[#975ee2] px-3.5 text-[13px] font-medium text-white transition hover:brightness-95"
-                  >
-                    <Plus className="h-4 w-4" />
-                    New Note
-                  </button>
-                </div>
-                {notesApi.isLoading ? (
-                  <p className="text-sm text-muted-foreground">Loading notes…</p>
-                ) : notesApi.error ? (
-                  // G-06: a rejected read used to fall through to
-                  // notes: [] and render identically to "no notes yet" --
-                  // indistinguishable from a genuinely empty Bucket.
-                  <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-destructive/40 text-center">
-                    <p className="text-[13px] font-semibold text-destructive">Couldn’t load notes</p>
-                    <p className="mt-1 text-[12px] text-[#6a769c]">{domainErrorMessage(notesApi.error)}</p>
-                    <button
-                      type="button"
-                      onClick={() => void notesApi.refetch()}
-                      className="mt-3 inline-flex h-8 items-center rounded-md border border-border px-3 text-[12.5px] font-medium hover:bg-muted"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                ) : notesApi.notes.length === 0 ? (
-                  <div className="flex min-h-[200px] flex-col items-center justify-center rounded-xl border border-dashed border-[#e3e5ef] text-center">
-                    <FileText className="h-8 w-8 text-[#c5cae0]" />
-                    <p className="mt-2 text-[13px] font-semibold text-[#000533]">No notes yet</p>
-                    <p className="mt-1 text-[12px] text-[#6a769c]">
-                      Use “New Note” above to jot down anything for this bucket.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {notesApi.notes.map((n) => (
-                      <button
-                        key={n.id}
-                        type="button"
-                        onClick={() => openNoteEditor(n)}
-                        className="flex h-40 flex-col rounded-[12px] border border-[#eef0f6] bg-[#fffdf5] p-4 text-left transition-all hover:-translate-y-0.5 hover:border-[#f0d888]"
-                      >
-                        <div className="truncate text-[13.5px] font-semibold text-[#000533]">
-                          {n.title.trim() || "Untitled note"}
-                        </div>
-                        <p className="mt-1.5 flex-1 overflow-hidden text-[12px] leading-relaxed text-[#6a769c] whitespace-pre-wrap">
-                          {n.body || "No additional text"}
-                        </p>
-                        <div className="mt-2 text-[12px] text-[#a3a9c9]">
-                          {format(new Date(n.updatedAt), "d MMM yyyy, h:mm a")}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <BucketNotesWorkspace
+                context={bucket.context}
+                myActorId={myActorId ?? ""}
+                notesApi={notesApi}
+                addThingToBucket={(thingId) => add.mutateAsync({ thingId })}
+                onOpenThing={(thing) => openThing(thing.id)}
+              />
             ) : itemsSurface === "empty" ? (
               <div className="rounded-2xl border border-dashed border-[#e3e5ef] px-5 py-12 text-center">
                 <p className="text-[15px] font-bold text-[#000533]">This Bucket is empty.</p>
@@ -958,71 +883,11 @@ function BucketDetailPage() {
             )}
         </div>
       </div>
-      </InlineThingDetailWorkspace>
-
-      <ThingDetailSheet
+      <CourtDetailModal
         thing={selectedThing}
-        open={narrowViewport && Boolean(selectedThing)}
-        onOpenChange={(open) => { if (!open) closeThing(); }}
+        isOpen={Boolean(selectedThing)}
+        onClose={closeThing}
       />
-
-      {/* Note editor dialog */}
-      <Dialog open={noteOpen} onOpenChange={(open) => { if (!open) requestCloseNoteEditor(); }}>
-        <DialogContent className="rounded-2xl bg-white p-5 sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-[15px] font-bold">
-              {editingNoteId ? "Edit note" : "New note"}
-            </DialogTitle>
-            <DialogDescription className="text-[12.5px]">
-              Private to this bucket. Only you can see it.
-            </DialogDescription>
-          </DialogHeader>
-          <input
-            value={noteTitle}
-            onChange={(e) => setNoteTitle(e.target.value)}
-            placeholder="Title"
-            className="mt-3 h-10 w-full rounded-xl border border-border px-3 text-[14px] font-semibold outline-none focus:border-primary focus:ring-2 focus:ring-ring"
-          />
-          <textarea
-            value={noteBody}
-            onChange={(e) => setNoteBody(e.target.value)}
-            placeholder="Start writing…"
-            rows={8}
-            className="mt-2.5 w-full resize-none rounded-xl border border-border px-3 py-1.5.5 text-[13px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-ring"
-          />
-          <DialogFooter className="mt-4 items-center justify-between gap-2 sm:justify-between">
-            <div>
-              {editingNoteId ? (
-                <button
-                  type="button"
-                  disabled={noteDeleting}
-                  className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={deleteNote}
-                >
-                  Delete
-                </button>
-              ) : null}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                className="rounded-lg px-3 py-1.5 text-[13px] font-medium text-muted-foreground hover:bg-muted"
-                onClick={requestCloseNoteEditor}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={noteSaving}
-                className="rounded-lg bg-primary px-4 py-1.5 text-[13px] font-medium text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-                onClick={saveNote}
-              >
-                Save
-              </button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Rename Dialog */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>

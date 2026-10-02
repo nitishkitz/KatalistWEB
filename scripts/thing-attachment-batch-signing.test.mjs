@@ -8,6 +8,7 @@ const rows = [
 ];
 
 let signingCalls = [];
+let signingFails = false;
 const tableRequest = {
   select: () => tableRequest,
   in: () => tableRequest,
@@ -15,11 +16,13 @@ const tableRequest = {
 };
 mock.module("@/integrations/supabase/client", {
   namedExports: { supabase: {
+    auth: { getSession: async () => ({ data: { session: { access_token: "test-token" } } }) },
     from: (table) => { assert.equal(table, "thing_attachments"); return tableRequest; },
     storage: { from: (bucket) => {
       assert.equal(bucket, "thing-attachments");
       return { createSignedUrls: async (paths, ttl) => {
         signingCalls.push({ paths, ttl });
+        if (signingFails) return { data: null, error: new Error("session not ready") };
         return { data: [
           { path: "things/t1/shared.pdf", signedUrl: "https://example.invalid/shared" },
           { path: "things/t2/missing.png", signedUrl: null, error: { message: "not found" } },
@@ -30,6 +33,26 @@ mock.module("@/integrations/supabase/client", {
 });
 
 const { fetchRealAttachments } = await import("@/features/things/attachments");
+
+test("server signer recovers previews when client signing races login", async () => {
+  signingFails = true;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    assert.equal(init.headers.get("Authorization"), "Bearer test-token");
+    return { ok: true, json: async () => ({ urls: {
+      "things/t1/shared.pdf": "https://example.invalid/recovered",
+    } }) };
+  };
+  try {
+    const result = await fetchRealAttachments(["t1", "t2"]);
+    assert.equal(result.get("t1")[0].url, "https://example.invalid/recovered");
+    assert.equal(result.get("t2")[0].url, "https://example.invalid/recovered");
+    assert.match(result.get("t2")[1].urlError, /preview unavailable/i);
+  } finally {
+    signingFails = false;
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test("signs distinct attachment paths in one bounded request and keeps per-file failure", async () => {
   signingCalls = [];

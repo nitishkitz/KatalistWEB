@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { isActiveThing, partitionCourt, theirStateFor } from "@/domain/thing";
@@ -30,6 +30,18 @@ export function useCourt() {
     staleTime: 15_000,
     enabled: liveAuth,
   });
+  const attachmentRecovery = useRef({ key: "", attempts: 0 });
+  useEffect(() => {
+    const key = `${user?.id ?? "none"}:${context}`;
+    if (attachmentRecovery.current.key !== key) attachmentRecovery.current = { key, attempts: 0 };
+    if (!liveAuth || !query.data?.things.some((thing) => thing.attachmentsUnavailable)) return;
+    if (attachmentRecovery.current.attempts >= 2) return;
+    const timer = window.setTimeout(() => {
+      attachmentRecovery.current.attempts += 1;
+      void query.refetch();
+    }, 2500);
+    return () => window.clearTimeout(timer);
+  }, [context, liveAuth, query.data, query.refetch, user?.id]);
 
   const source = useMemo(() => {
     if (preview) {

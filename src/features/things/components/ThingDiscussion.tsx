@@ -191,6 +191,7 @@ export type ThingDiscussionProps = {
   onCommentChange: (value: string) => void;
   onSubmitComment: () => void;
   postIsPending: boolean;
+  attachmentsUploading?: boolean;
   onOpenCommentFileDialog: () => void;
   commentFileInput: React.ReactNode;
   onFileSelect?: (file: ThingFile) => void;
@@ -225,6 +226,7 @@ export function ThingDiscussion({
   onCommentChange,
   onSubmitComment,
   postIsPending,
+  attachmentsUploading = false,
   onOpenCommentFileDialog,
   commentFileInput,
   onFileSelect,
@@ -401,7 +403,7 @@ export function ThingDiscussion({
               </button>
               <button
                 type="submit"
-                disabled={(!comment.trim() && commentAttachments.length === 0) || postIsPending}
+                disabled={(!comment.trim() && commentAttachments.length === 0) || postIsPending || attachmentsUploading}
                 className="rounded-[6px] bg-[#975ee2] hover:brightness-95 text-white font-medium text-[12px] px-3.5 py-1.5 transition disabled:opacity-50 cursor-pointer"
               >
                 Send
@@ -524,7 +526,7 @@ export function ThingDiscussion({
                 />
                 <button
                   type="submit"
-                  disabled={!canComment || (!comment.trim() && commentAttachments.length === 0) || postIsPending}
+                  disabled={!canComment || (!comment.trim() && commentAttachments.length === 0) || postIsPending || attachmentsUploading}
                   className="inline-flex items-center gap-1 h-7 rounded-md bg-primary px-2.5 text-[12px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                 >
                 {postIsPending ? (

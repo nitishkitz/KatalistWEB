@@ -1,5 +1,6 @@
 import type * as React from "react";
-import { Calendar, Check, ChevronDown, Folder, Lock, UserPlus } from "lucide-react";
+import { format } from "date-fns";
+import { Calendar, Check, ChevronDown, Folder, Lock, Moon, UserPlus, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +14,7 @@ import { PersonCell } from "@/components/katalist/PersonCell";
 import type { Pace, Person, Thing, WorkStatus } from "@/domain/thing";
 import type { getThingCapabilities } from "@/domain/capabilities";
 import type { BucketCard } from "@/features/buckets/fixtures";
+import { SNOOZE_OPTIONS, type SnoozeOption } from "../personal-snooze";
 import { cn } from "@/lib/utils";
 
 type Caps = ReturnType<typeof getThingCapabilities> | null;
@@ -65,9 +67,9 @@ export type ThingStatusControlsProps = {
   activePace: Pace;
   onSetPace: (pace: Pace) => void;
   onSetRequestedPace: (pace: Pace) => void;
-  currentBucket: BucketCard | null;
+  currentBuckets: BucketCard[];
   buckets: BucketCard[];
-  onSelectBucket: (bucketId: string) => void;
+  onToggleBucket: (bucketId: string) => void;
   /** court-only */
   ownerAvatar?: string | null;
   assigneeAvatar?: string | null;
@@ -75,6 +77,9 @@ export type ThingStatusControlsProps = {
   dueLabel?: string | null;
   onCatch?: () => void;
   onSort?: () => void;
+  snoozedUntil?: string | number | null;
+  onSnooze?: (option: SnoozeOption) => void;
+  onWake?: () => void;
   /** default-only */
   viewOnly?: boolean;
   assignableList?: Person[];
@@ -90,14 +95,17 @@ export function ThingStatusControls({
   busy,
   onSetPace,
   onSetRequestedPace,
-  currentBucket,
+  currentBuckets,
   buckets,
-  onSelectBucket,
+  onToggleBucket,
   ownerAvatar,
   assigneeAvatar,
   dueLabel,
   onCatch,
   onSort,
+  snoozedUntil,
+  onSnooze,
+  onWake,
   viewOnly,
   assignableList,
   onReassign,
@@ -106,6 +114,10 @@ export function ThingStatusControls({
 }: ThingStatusControlsProps): React.ReactNode {
   const selfAssigned = thing.owner.id === thing.assignee.id;
   const personalPaceLabel = caps?.isAssignee ? "Your pace" : "Assignee’s pace";
+  const snoozeControl = !viewOnly && caps?.canAddToBucket ? (
+    snoozedUntil ? <div className="inline-flex items-center gap-2 text-[12px] text-[#5d6786]"><Moon className="h-3.5 w-3.5" /><span>Until {format(new Date(snoozedUntil), "MMM d, h:mm a")}</span><button type="button" disabled={busy} onClick={onWake} className="rounded-lg border border-[#e6e8f2] px-2.5 py-1.5 font-medium text-[#64429a] hover:bg-[#f5efff] disabled:opacity-60">Wake now</button></div>
+      : <DropdownMenu><DropdownMenuTrigger asChild><button type="button" disabled={busy} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] border border-[#e6e8f2] bg-white px-3 text-[12px] font-medium text-[#3a4675] hover:bg-[#f5efff] disabled:opacity-60"><Moon className="h-3.5 w-3.5" />Snooze<ChevronDown className="h-3 w-3" /></button></DropdownMenuTrigger><DropdownMenuContent align="start" className="z-[90] min-w-40">{SNOOZE_OPTIONS.map((option) => <DropdownMenuItem key={option.id} onSelect={() => onSnooze?.(option.id)}>{option.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>
+  ) : null;
 
   const paceControl = (label: string, value: Pace | null, editable: boolean, onChange: (pace: Pace) => void) => editable ? (
     <div role="group" aria-label={label} className="inline-flex rounded-[6px] bg-[#f0f1f9] p-0.5">
@@ -146,7 +158,7 @@ export function ThingStatusControls({
           <ChevronDown className="h-3 w-3" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-64 overflow-y-auto">
+      <DropdownMenuContent align="start" className="z-[90] max-h-64 overflow-y-auto">
         {(assignableList ?? []).filter((person) => person.id !== thing.assignee.id).map((person) => (
           <DropdownMenuItem key={person.id} onSelect={() => onReassign?.(person.id)}>
             <PersonCell person={person} />
@@ -284,22 +296,24 @@ export function ThingStatusControls({
                 Mark Sorted
               </button>
             ) : null}
+            {snoozeControl}
           </div>
 
-          <DropdownMenu>
+          {caps?.canAddToBucket && !viewOnly ? <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 disabled={busy}
                 className="inline-flex items-center gap-1.5 text-[12px] font-medium text-[#3a4675] hover:text-[#000533] transition-colors cursor-pointer disabled:opacity-60"
-                title={currentBucket?.name ? `Bucket: ${currentBucket.name}` : "Add to bucket"}
+                title="Manage Buckets"
               >
                 <Folder className="h-3.5 w-3.5" />
-                <span>{currentBucket?.name || "Add to bucket"}</span>
+                <span>{currentBuckets.length === 1 ? currentBuckets[0].name : currentBuckets.length > 1 ? `Buckets (${currentBuckets.length})` : "Add to Bucket"}</span>
                 <ChevronDown className="h-3 w-3 text-[#5d6786]" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 bg-white border border-border/70 rounded-xl p-1 z-50">
+            <DropdownMenuContent align="end" className="z-[90] w-56 rounded-xl border border-border/70 bg-white p-1">
+              <p className="px-2.5 py-1.5 text-[11px] text-[#8188a4]">Select to add or remove</p>
               {buckets.length === 0 ? (
                 <DropdownMenuItem disabled className="text-[12px]">
                   No buckets yet
@@ -308,19 +322,19 @@ export function ThingStatusControls({
                 buckets.map((b) => (
                   <DropdownMenuItem
                     key={b.id}
-                    onClick={() => onSelectBucket(b.id)}
+                    onClick={() => onToggleBucket(b.id)}
                     className="flex items-center justify-between gap-2 text-[12px] rounded-lg px-2.5 py-1.5 cursor-pointer"
                   >
                     <span className="flex items-center gap-2 min-w-0">
                       <Folder className="h-3.5 w-3.5 text-[#975ee2]" />
                       <span className="truncate">{b.name}</span>
                     </span>
-                    {currentBucket?.id === b.id && <Check className="h-3.5 w-3.5 text-[#975ee2]" />}
+                    {currentBuckets.some((bucket) => bucket.id === b.id) && <Check className="h-3.5 w-3.5 text-[#975ee2]" />}
                   </DropdownMenuItem>
                 ))
               )}
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu> : currentBuckets.length ? <span className="inline-flex items-center gap-1.5 text-[12px] text-[#3a4675]"><Folder className="h-3.5 w-3.5" />{currentBuckets.length} {currentBuckets.length === 1 ? "Bucket" : "Buckets"}</span> : null}
         </div>
       </>
     );
@@ -355,35 +369,32 @@ export function ThingStatusControls({
       </section>
 
       {viewOnly ? (
-        currentBucket ? (
+        currentBuckets.length ? (
           <section className="space-y-1.5 xl:col-span-2">
-            <h3 className="katalist-section-title">Bucket</h3>
+            <h3 className="katalist-section-title">Buckets</h3>
             <p className="text-[12px] text-muted-foreground">
-              In <span className="font-medium text-foreground">{currentBucket.name}</span>
+              In <span className="font-medium text-foreground">{currentBuckets.map((bucket) => bucket.name).join(", ")}</span>
             </p>
           </section>
         ) : null
       ) : caps?.canAddToBucket ? (
         <section className="space-y-1.5 xl:col-span-2">
-          <h3 className="katalist-section-title">Add to Bucket</h3>
-          {currentBucket ? (
-            <p className="text-[12px] text-muted-foreground">
-              In <span className="font-medium text-foreground">{currentBucket.name}</span></p>
-          ) : null}
+          <h3 className="katalist-section-title">Buckets</h3>
+          {currentBuckets.length ? <div className="flex flex-wrap gap-1.5">{currentBuckets.map((bucket) => <span key={bucket.id} className="inline-flex items-center gap-1 rounded-lg border border-[#e8def8] bg-[#f8f4ff] px-2 py-1 text-[11px] text-[#624497]">{bucket.name}<button type="button" disabled={busy} onClick={() => onToggleBucket(bucket.id)} aria-label={`Remove from ${bucket.name}`} className="rounded p-0.5 hover:bg-[#eadbff] disabled:opacity-50"><X className="h-3 w-3" /></button></span>)}</div> : null}
           <select
             disabled={busy}
             className="h-8 w-full rounded-lg border border-border bg-white px-2 text-[12px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
             defaultValue=""
             onChange={(e) => {
               if (!e.target.value) return;
-              onSelectBucket(e.target.value);
+              onToggleBucket(e.target.value);
               e.target.value = "";
             }}
           >
             <option value="">
-              {currentBucket ? "Change bucket…" : "Choose a private bucket…"}
+              Add to a Bucket…
             </option>
-            {buckets.map((b) => (
+            {buckets.filter((bucket) => !currentBuckets.some((current) => current.id === bucket.id)).map((b) => (
               <option key={b.id} value={b.id}>
                 {b.name}
               </option>
@@ -391,6 +402,8 @@ export function ThingStatusControls({
           </select>
         </section>
       ) : null}
+
+      {snoozeControl ? <section className="space-y-1.5 xl:col-span-2"><h3 className="katalist-section-title">Snooze</h3>{snoozeControl}</section> : null}
 
       <section data-detail-region="controls" className="space-y-1.5">
         <h3 className="katalist-section-title">Acknowledgement &amp; Status</h3>

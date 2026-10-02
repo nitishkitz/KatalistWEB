@@ -8,6 +8,7 @@ import { usePresence } from "@/features/people/presence";
 import { useSession } from "@/hooks/useSession";
 import { cn } from "@/lib/utils";
 import { useConversations, type Conversation } from "@/features/hub/use-conversations";
+import { useAppContext } from "@/features/context/use-app-context";
 import { useConversationUnreadCount, useConversationMentionCount } from "@/features/hub/chat-read-state";
 import { useLists } from "@/features/lists/use-lists";
 import { useTeam } from "@/features/people/use-team";
@@ -130,6 +131,7 @@ export function HubSidebar() {
   const activeId = params.conversationId;
   const online = usePresence();
   const { user } = useSession();
+  const { context } = useAppContext();
   const { conversations, isLoading: conversationsLoading, error: conversationsError, refetch: refetchConversations, hasMore, loadMore, isLoadingMore } = useConversations();
   const { lists, isLoading: listsLoading } = useLists();
   const { members } = useTeam();
@@ -166,7 +168,7 @@ export function HubSidebar() {
     if (!isUuid(personId)) return;
     setBusyId(personId);
     try {
-      const dm = await rpcGetOrCreateDm(personId);
+      const dm = await rpcGetOrCreateDm(personId, context);
       setQuery("");
       navigate({ to: "/team/$conversationId", params: { conversationId: dm.id } });
     } catch (err) {

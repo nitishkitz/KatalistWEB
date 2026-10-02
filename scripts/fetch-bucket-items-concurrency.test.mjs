@@ -30,6 +30,7 @@ function makeTracker() {
 
 test("fetchBucketItems runs the Things and Lists lookups concurrently", async () => {
   const { events, track } = makeTracker();
+  let listColumns = "";
 
   const mapThingsMock = mock.module("@/features/things/map-thing-rows", {
     namedExports: {
@@ -50,7 +51,10 @@ test("fetchBucketItems runs the Things and Lists lookups concurrently", async ()
 
   const chainable = (name, result) => {
     const node = {
-      select: () => node,
+      select: (columns) => {
+        if (name === "lists-query") listColumns = columns;
+        return node;
+      },
       eq: () => node,
       in: () => node,
       abortSignal: () => node,
@@ -82,6 +86,7 @@ test("fetchBucketItems runs the Things and Lists lookups concurrently", async ()
   try {
     const { fetchBucketItems } = await import("@/features/buckets/fetch-bucket-items");
     const items = await fetchBucketItems({}, "b1", "profile-1");
+    assert.match(listColumns, /(?:^|,)cover_storage_path(?:,|$)/);
 
     // Deterministic concurrency proof: the Things query and Lists query
     // both start before either resolves.

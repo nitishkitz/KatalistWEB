@@ -22,7 +22,7 @@ async function fetchListsByIds(
   if (!listIds.length) return [];
   const { data: lists, error } = await supabase
     .from("lists")
-    .select("id,name,context,owner_profile_id,updated_at")
+    .select("id,name,context,owner_profile_id,updated_at,description,cover_storage_path")
     .in("id", listIds)
     .abortSignal(signal);
   if (error) throw error;

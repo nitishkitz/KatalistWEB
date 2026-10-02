@@ -27,10 +27,15 @@ export async function signThingAttachmentPaths(
   const signingByPath = new Map<string, SignedThingPath>();
   for (let offset = 0; offset < uniquePaths.length; offset += 100) {
     const batch = uniquePaths.slice(offset, offset + 100);
-    const { data, error: signingError } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrls(batch, SIGNED_URL_TTL_SECONDS);
-    if (signingError) throw signingError;
+    // Storage can race session hydration immediately after sign-in. Keep the
+    // attachment rows and let the authenticated server signer recover them.
+    let data: Awaited<ReturnType<ReturnType<typeof supabase.storage.from>["createSignedUrls"]>>["data"] = null;
+    try {
+      const signed = await supabase.storage.from(BUCKET).createSignedUrls(batch, SIGNED_URL_TTL_SECONDS);
+      if (!signed.error) data = signed.data;
+    } catch {
+      // The recovery endpoint below also covers a network failure here.
+    }
     for (const entry of data ?? []) {
       const item = entry as {
         path: string;
@@ -85,12 +90,18 @@ export async function fetchRealAttachments(thingIds: string[]): Promise<Map<stri
   const result = new Map<string, ThingFile[]>();
   if (!thingIds.length) return result;
 
-  const { data: rows, error } = await supabase
+  const readRows = () => supabase
     .from("thing_attachments")
     .select("id, thing_id, storage_key, file_name, mime_type, byte_size, created_at")
     .in("thing_id", thingIds)
     .order("created_at", { ascending: true });
-
+  let { data: rows, error } = await readRows();
+  if (error) {
+    // A newly restored auth session can briefly fail an RLS-scoped read.
+    // Retry once so Court does not cache an attachment-free success.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    ({ data: rows, error } = await readRows());
+  }
   if (error) throw error;
   if (!rows?.length) return result;
 

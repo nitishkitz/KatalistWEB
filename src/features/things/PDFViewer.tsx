@@ -302,7 +302,7 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
           <button
             type="button"
             onClick={() => void handleDownload()}
-            disabled={currentDownloadState === "pending"}
+            disabled={!file.url || currentDownloadState === "pending"}
             className={cn(
               "inline-flex items-center gap-1.5 text-[12px] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed",
               currentDownloadState === "failed" ? "text-destructive hover:text-destructive/80" : "text-[#434f80] hover:text-[#000533]",
@@ -369,7 +369,12 @@ export function PDFViewer({ file, addedByName, addedLabel }: PDFViewerProps) {
 
       {/* Main Preview Area */}
       <div className="flex-1 overflow-auto bg-[#f6f6fa] px-5 pb-4 flex flex-col items-center justify-center">
-        {isImage && file.url ? (
+        {!file.url && file.urlError ? (
+          <div className="flex min-h-[200px] w-full max-w-[420px] flex-col items-center justify-center rounded-lg border border-border/50 bg-white p-6 text-center">
+            <p className="text-[13px] font-medium text-foreground">Preview unavailable</p>
+            <p className="mt-1 text-[12px] text-muted-foreground">{file.urlError}</p>
+          </div>
+        ) : isImage && file.url ? (
           <div className="flex flex-col items-center justify-center max-w-full">
             <img
               src={file.url}

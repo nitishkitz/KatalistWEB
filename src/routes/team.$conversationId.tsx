@@ -1,4 +1,7 @@
+import { useEffect, useRef } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useAppContext } from "@/features/context/use-app-context";
+import { useConversation } from "@/features/hub/use-conversations";
 import { ConversationWorkspace, type HubTab } from "@/features/hub/components/ConversationWorkspace";
 
 type TeamConversationSearch = {
@@ -23,6 +26,23 @@ function ConversationRoute() {
   const { conversationId } = Route.useParams();
   const { tab, start, call } = Route.useSearch();
   const navigate = useNavigate();
+  const { context, setContext } = useAppContext();
+  const { conversation } = useConversation(conversationId);
+  const conversationContext = conversation?.context;
+  const alignedFor = useRef<string | null>(null);
+
+  // Conversations belong to one Work/Home mode. Arriving at a chat from the
+  // other mode (a notification, a link, a ring) switches mode once so the rail
+  // matches; toggling mode afterwards leaves the chat for that mode's Team home.
+  useEffect(() => {
+    if (!conversationContext) return;
+    if (alignedFor.current !== conversationId) {
+      alignedFor.current = conversationId;
+      if (conversationContext !== context) void setContext(conversationContext);
+      return;
+    }
+    if (conversationContext !== context) void navigate({ to: "/team" });
+  }, [conversationId, conversationContext, context, setContext, navigate]);
 
   const setTab = (next: HubTab) => {
     void navigate({

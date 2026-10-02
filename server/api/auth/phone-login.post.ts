@@ -1,32 +1,7 @@
 import { defineEventHandler, readBody, createError } from "h3";
-import { getSupabaseAdmin } from "../../lib/supabase-admin";
+import { getSupabaseAdmin, isTransientAuthFailure, withAuthNetworkRetry } from "../../lib/supabase-admin";
 import { serverFixedOtp } from "../../lib/fixed-otp";
-
-const USERS_PER_PAGE = 1_000;
-
-async function findUserByPhone(phone: string) {
-  const admin = getSupabaseAdmin();
-  const cleanDigits = phone.replace(/\D/g, "");
-
-  // Supabase returns only 50 users by default. A returning account that falls
-  // outside that first page used to look new and then failed during creation.
-  for (let page = 1; page <= 100; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: USERS_PER_PAGE });
-    if (error) throw error;
-    const user = data.users.find((candidate) => {
-      const metaPhone = candidate.user_metadata?.phone?.replace(/\D/g, "");
-      const rawPhone = candidate.phone?.replace(/\D/g, "");
-      return (
-        (metaPhone && metaPhone.endsWith(cleanDigits)) ||
-        (rawPhone && rawPhone.endsWith(cleanDigits))
-      );
-    });
-    if (user) return user;
-    if (data.users.length < USERS_PER_PAGE) return null;
-  }
-
-  return null;
-}
+import { findAuthUserByPhone } from "../../lib/find-phone-user";
 
 export default defineEventHandler(async (event) => {
   const fixedOtp = serverFixedOtp();
@@ -45,40 +20,60 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "Invalid or expired code." });
   }
 
-  const cleanDigits = phone.replace(/\D/g, "");
-  const admin = getSupabaseAdmin();
-  let user = await findUserByPhone(phone);
+  const startedAt = Date.now();
+  let stage = "lookup-user";
+  try {
+    const cleanDigits = phone.replace(/\D/g, "");
+    const admin = getSupabaseAdmin();
+    let user = await findAuthUserByPhone(admin, phone);
 
-  if (!user) {
-    const email = `user-${cleanDigits}@users.katalist.invalid`;
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      email_confirm: true,
-      user_metadata: {
-        phone,
-        display_name: "Katalist User",
-        full_name: "Katalist User",
-      },
-    });
-    if (createErr) {
-      // Two devices can submit the same number at almost the same moment.
-      // The second create races the first; load the account that just won.
-      user = await findUserByPhone(phone);
-      if (!user) throw createErr;
-    } else {
-      user = created.user;
+    if (!user) {
+      stage = "create-user";
+      const email = `user-${cleanDigits}@users.katalist.invalid`;
+      const { data: created, error: createErr } = await admin.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: {
+          phone,
+          display_name: "Katalist User",
+          full_name: "Katalist User",
+        },
+      });
+      if (createErr) {
+        // Two devices can submit the same number at almost the same moment.
+        // The second create races the first; load the account that just won.
+        user = await findAuthUserByPhone(admin, phone);
+        if (!user) throw createErr;
+      } else {
+        user = created.user;
+      }
     }
+
+    stage = "generate-link";
+    const userEmail = user.email || `user-${cleanDigits}@users.katalist.invalid`;
+    const linkData = await withAuthNetworkRetry(async () => {
+      const { data, error } = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email: userEmail,
+      });
+      if (error) throw error;
+      return data;
+    }, stage);
+    if (!linkData.properties?.hashed_token) {
+      throw new Error("Supabase did not return a verification token.");
+    }
+
+    console.info("[phone-auth] ready", { durationMs: Date.now() - startedAt });
+    return { token_hash: linkData.properties.hashed_token, email: userEmail };
+  } catch (error) {
+    console.error("[phone-auth] failed", {
+      stage,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+    if (isTransientAuthFailure(error)) {
+      throw createError({ statusCode: 503, message: "Supabase sign-in is temporarily unreachable. Try again." });
+    }
+    throw error;
   }
-
-  const userEmail = user.email || `user-${cleanDigits}@users.katalist.invalid`;
-  const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
-    type: "magiclink",
-    email: userEmail,
-  });
-  if (linkErr) throw linkErr;
-
-  return {
-    token_hash: linkData.properties.hashed_token,
-    email: userEmail,
-  };
 });

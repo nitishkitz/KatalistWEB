@@ -14,12 +14,14 @@ import { useTeam } from "@/features/people/use-team";
 import { isUuid } from "@/features/things/rpc";
 import { rpcCreateGroup } from "@/features/hub/rpc";
 import { useConversations } from "@/features/hub/use-conversations";
+import { useAppContext } from "@/features/context/use-app-context";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 
 export function NewGroupDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const navigate = useNavigate();
   const { members } = useTeam();
+  const { context } = useAppContext();
   const { refetch } = useConversations();
   const [name, setName] = useState("");
   const [query, setQuery] = useState("");
@@ -63,7 +65,7 @@ export function NewGroupDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     }
     setCreating(true);
     try {
-      const group = await rpcCreateGroup(clean, ids);
+      const group = await rpcCreateGroup(clean, ids, context);
       await refetch();
       onOpenChange(false);
       reset();

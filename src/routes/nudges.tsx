@@ -17,6 +17,7 @@ import { AsyncState } from "@/components/katalist/AsyncState";
 import { type NudgeGroup } from "@/features/nudges/fixtures";
 import { useNudges } from "@/features/nudges/use-nudges";
 import { useCourt } from "@/features/court/use-court";
+import { useLists } from "@/features/lists/use-lists";
 import { cn } from "@/lib/utils";
 import { rpcNudgeThing, type NudgeReason } from "@/features/things/rpc";
 import { toast } from "sonner";
@@ -119,10 +120,15 @@ function NudgesPage() {
     retryEligibility,
   } = useNudges();
   const court = useCourt();
+  const { lists } = useLists();
   const live = useThing(selectedId);
   const selected = live.thing;
 
   const thingById = useMemo(() => new Map(court.all.map((t) => [t.id, t])), [court.all]);
+  const listCoversById = useMemo(
+    () => new Map(lists.map((list) => [list.id, list.coverUrl ?? null] as const)),
+    [lists],
+  );
 
   // G05: the Lists available to filter by -- derived from the actually-
   // loaded, already-authorization-filtered rows (never a separate,
@@ -311,6 +317,7 @@ function NudgesPage() {
                         <tbody className="divide-y divide-[#eef0f6]">
                           {activeRows.map((row) => {
                             const thing = thingById.get(row.id);
+                            const listCoverUrl = row.listId ? listCoversById.get(row.listId) : null;
                             const pill = statusPill(row.group, thing);
                             const reasonText =
                               (row.group === "needs_a_tap" || row.group === "stale") && thing?.updatedAt
@@ -339,9 +346,13 @@ function NudgesPage() {
                                 <td className="px-2">
                                   {thing?.listName ? (
                                     <span className="inline-flex items-center gap-1.5 text-[12px] text-[#6a769c]">
-                                      <span className="flex h-6 w-6 items-center justify-center rounded-[5px] bg-[#ede9ff] text-[12px] font-medium text-[#975ee2]">
-                                        {thing.listName.slice(0, 2).toUpperCase()}
-                                      </span>
+                                      {listCoverUrl ? (
+                                        <img src={listCoverUrl} alt="" className="h-6 w-6 shrink-0 rounded-[5px] object-cover" />
+                                      ) : (
+                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[5px] bg-[#ede9ff] text-[12px] font-medium text-[#975ee2]">
+                                          {thing.listName.slice(0, 2).toUpperCase()}
+                                        </span>
+                                      )}
                                       {thing.listName}
                                     </span>
                                   ) : (

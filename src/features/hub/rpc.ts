@@ -24,22 +24,31 @@ function firstRow<T>(data: T | T[] | null): T {
 type LooseRpc = (name: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>;
 
 /**
- * Open (or create) the caller's canonical 1:1 conversation with another person.
- * Mode-independent: a single DM per pair regardless of Work/Home.
+ * Open (or create) the caller's 1:1 conversation with another person in the
+ * given Work/Home mode. A pair can have one DM per mode.
  */
-export async function rpcGetOrCreateDm(otherProfileId: string): Promise<ConversationRow> {
+export async function rpcGetOrCreateDm(
+  otherProfileId: string,
+  context: "work" | "home",
+): Promise<ConversationRow> {
   const { data, error } = await (supabase.rpc as unknown as LooseRpc)("get_or_create_dm", {
     p_other_profile_id: otherProfileId,
+    p_context: context,
   });
   if (error) throw error;
   return firstRow<ConversationRow>(data as ConversationRow | ConversationRow[] | null);
 }
 
-/** Create a named group conversation and add the given profiles as collaborators. */
-export async function rpcCreateGroup(name: string, memberIds: string[]): Promise<ConversationRow> {
+/** Create a named group conversation in the given mode and add the given profiles as collaborators. */
+export async function rpcCreateGroup(
+  name: string,
+  memberIds: string[],
+  context: "work" | "home",
+): Promise<ConversationRow> {
   const { data, error } = await (supabase.rpc as unknown as LooseRpc)("create_group", {
     p_name: name,
     p_member_ids: memberIds,
+    p_context: context,
   });
   if (error) throw error;
   return firstRow<ConversationRow>(data as ConversationRow | ConversationRow[] | null);

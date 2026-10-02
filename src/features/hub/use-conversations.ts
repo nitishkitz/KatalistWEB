@@ -2,6 +2,8 @@ import { useInfiniteQuery, useQuery, useQueryClient, type QueryClient } from "@t
 import { supabase } from "@/integrations/supabase/client";
 import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import { useSession } from "@/hooks/useSession";
+import { useAppContext } from "@/features/context/use-app-context";
+import type { ContextKind } from "@/domain/thing";
 import { isPreviewSession } from "@/lib/session-mode";
 import { fetchProfileIdentitiesByIds, matchAvatarByName } from "@/features/people/directory";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
@@ -19,6 +21,8 @@ export type ConversationParticipant = {
 export type Conversation = {
   id: string;
   kind: "dm" | "group";
+  /** Work/Home mode the conversation belongs to (set on the detail record). */
+  context?: ContextKind;
   /** DM: the other person's name. Group: the group's name. */
   title: string;
   /** DM: the other person's avatar. Group: null (UI stacks member avatars). */
@@ -67,7 +71,7 @@ const HUB_PAGE_SIZE = 100;
 type HubCursor = { at: string; id: string };
 
 export async function fetchConversations(
-  _qc: QueryClient, myId: string, cursor: HubCursor | null = null, querySignal?: AbortSignal,
+  _qc: QueryClient, myId: string, context: ContextKind, cursor: HubCursor | null = null, querySignal?: AbortSignal,
 ): Promise<{ conversations: Conversation[]; nextCursor?: HubCursor }> {
   // T01: the initial lists read plus its three dependent reads below are
   // one logical read operation -- bounded together under a single
@@ -77,9 +81,18 @@ export async function fetchConversations(
   const { lists, hasMore, memberRows, identities, unreadCounts, readWatermarks, coverUrlsByList } = await withReadDeadline(querySignal, async (signal) => {
     // RLS-scoped SQL returns at most 101 conversation summaries, each with
     // one latest message; full histories never cross the rail boundary.
-    const { data: listRows, error } = await callUngeneratedRpc("get_hub_conversation_page", {
+    let { data: listRows, error } = await callUngeneratedRpc("get_hub_conversation_page", {
       p_limit: HUB_PAGE_SIZE, p_cursor_at: cursor?.at ?? null, p_cursor_id: cursor?.id ?? null,
+      p_context: context,
     }).abortSignal(signal);
+    // The context-aware overload ships in a separate Supabase migration.
+    // Until it is applied, keep existing conversations visible through the
+    // previous RLS-scoped overload instead of failing the entire Team rail.
+    if (error && /could not find the function.*get_hub_conversation_page|function.*get_hub_conversation_page.*does not exist/i.test(error.message)) {
+      ({ data: listRows, error } = await callUngeneratedRpc("get_hub_conversation_page", {
+        p_limit: HUB_PAGE_SIZE, p_cursor_at: cursor?.at ?? null, p_cursor_id: cursor?.id ?? null,
+      }).abortSignal(signal));
+    }
     if (error) throw error;
     const summaries = (listRows ?? []) as HubSummaryRow[];
     const hasMore = summaries.length > HUB_PAGE_SIZE;
@@ -221,19 +234,25 @@ export async function fetchConversations(
   return { conversations, nextCursor: hasMore && last ? { at: last.sort_at, id: last.id } : undefined };
 }
 
-export function useConversations() {
+/**
+ * Conversations (DMs + groups) for one Work/Home mode -- the active mode by
+ * default. Contacts are shared across modes; conversations are not.
+ */
+export function useConversations(contextOverride?: ContextKind) {
   const { session, user } = useSession();
+  const { context: activeContext } = useAppContext();
+  const context = contextOverride ?? activeContext;
   const preview = isPreviewSession(session);
   const qc = useQueryClient();
 
   const query = useInfiniteQuery<{ conversations: Conversation[]; nextCursor?: HubCursor }, Error>({
-    queryKey: ["hub-conversations", user?.id],
+    queryKey: ["hub-conversations", user?.id, context],
     enabled: Boolean(user) && !preview,
     staleTime: 10_000,
     initialPageParam: null as HubCursor | null,
     getNextPageParam: (lastPage) => lastPage.nextCursor,
     queryFn: ({ pageParam, signal }) => fetchConversations(
-      qc, user!.id,
+      qc, user!.id, context,
       pageParam && typeof pageParam === "object" && "at" in pageParam && "id" in pageParam
         ? pageParam as HubCursor : null,
       signal,
@@ -246,7 +265,7 @@ export function useConversations() {
 
   const refetch = () => {
     const epoch = getIdentityEpoch(qc).epoch;
-    if (isEpochCurrent(qc, epoch)) void qc.invalidateQueries({ queryKey: ["hub-conversations", user?.id] });
+    if (isEpochCurrent(qc, epoch)) void qc.invalidateQueries({ queryKey: ["hub-conversations", user?.id, context] });
   };
 
   return {
@@ -277,17 +296,23 @@ export function useConversation(listId: string | undefined) {
     // still in flight.
     placeholderData: () => {
       if (!listId) return undefined;
-      const cached = qc.getQueryData<{
+      // Rail pages are cached per mode; look through both.
+      const cachedRails = qc.getQueriesData<{
         pages: Array<{ conversations: Conversation[] }>;
-      } | Conversation[]>(["hub-conversations", user?.id]);
-      if (Array.isArray(cached)) return cached.find((c) => c.id === listId);
-      return cached?.pages.flatMap((page) => page.conversations).find((c) => c.id === listId);
+      } | Conversation[]>({ queryKey: ["hub-conversations", user?.id] });
+      for (const [, cached] of cachedRails) {
+        const found = Array.isArray(cached)
+          ? cached.find((c) => c.id === listId)
+          : cached?.pages.flatMap((page) => page.conversations).find((c) => c.id === listId);
+        if (found) return found;
+      }
+      return undefined;
     },
     queryFn: async ({ signal }): Promise<Conversation | null> => {
       const { l, memberRows, identities } = await withReadDeadline(signal, async (combined) => {
         const { data: l, error } = await supabase
           .from("lists")
-          .select("id,name,kind,owner_profile_id,updated_at")
+          .select("id,name,kind,context,owner_profile_id,updated_at")
           .eq("id", listId!)
           .abortSignal(combined)
           .maybeSingle();
@@ -317,6 +342,7 @@ export function useConversation(listId: string | undefined) {
       return {
         id: l.id,
         kind,
+        context: l.context,
         title: kind === "dm" ? others[0]?.name ?? l.name : l.name,
         avatarUrl: kind === "dm" ? others[0]?.avatarUrl ?? null : null,
         ownerId: l.owner_profile_id,
@@ -344,4 +370,20 @@ export function useConversation(listId: string | undefined) {
     error: query.error,
     refetch: query.refetch,
   };
+}
+
+/**
+ * Unread messages waiting in the mode the viewer is NOT in, for the Work/Home
+ * toggle badge. Reuses the other mode's first rail page (same cache as the
+ * Team rail) so read watermarks stay device-local like the rest of the Hub.
+ */
+export function useOtherModeUnread(): { mode: ContextKind; unread: number } {
+  const { context } = useAppContext();
+  const other: ContextKind = context === "work" ? "home" : "work";
+  const { conversations } = useConversations(other);
+  const unread = conversations.reduce(
+    (sum, c) => sum + (typeof c.unreadCount === "number" ? c.unreadCount : 0),
+    0,
+  );
+  return { mode: other, unread };
 }

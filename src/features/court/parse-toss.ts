@@ -91,11 +91,11 @@ function resolveMentionCandidates(needle: string, people: Person[]): Person[] {
   return dedupePeopleByName(pool);
 }
 
-function dueFromToken(token: string): { dueAt: string; dueHasTime: boolean } | null {
-  const now = new Date();
+function dueFromToken(token: string, time: string | undefined, now: Date): { dueAt: string; dueHasTime: boolean } | null {
   const day = now.getDay();
   const start = new Date(now);
-  start.setHours(9, 0, 0, 0);
+  // A date without an explicit time means 10 PM local, never 9 AM in the past.
+  start.setHours(22, 0, 0, 0);
   const map: Record<string, number> = {
     sunday: 0,
     monday: 1,
@@ -105,25 +105,46 @@ function dueFromToken(token: string): { dueAt: string; dueHasTime: boolean } | n
     friday: 5,
     saturday: 6,
   };
-  const key = token.toLowerCase();
-  if (key === "today") return { dueAt: start.toISOString(), dueHasTime: false };
+  const key = token.toLowerCase().replace(/^next\s+/, "");
+  if (key === "today") return withTime(start, time);
   if (key === "tomorrow") {
     start.setDate(start.getDate() + 1);
-    return { dueAt: start.toISOString(), dueHasTime: false };
+    return withTime(start, time);
   }
   if (key in map) {
     const target = map[key]!;
     let delta = (target - day + 7) % 7;
     if (delta === 0) delta = 7;
     start.setDate(start.getDate() + delta);
-    return { dueAt: start.toISOString(), dueHasTime: false };
+    return withTime(start, time);
   }
   return null;
 }
 
+function withTime(date: Date, rawTime?: string) {
+  if (rawTime) {
+    const match = rawTime.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+    if (match) {
+      let hour = Number(match[1]);
+      const minute = Number(match[2] ?? 0);
+      const period = match[3]?.toLowerCase();
+      if (period) hour = (hour % 12) + (period === "pm" ? 12 : 0);
+      if (hour < 24 && minute < 60) date.setHours(hour, minute, 0, 0);
+    }
+  }
+  return { dueAt: date.toISOString(), dueHasTime: true };
+}
+
+const PACE_PHRASES: Array<{ importance: Importance; regex: RegExp }> = [
+  { importance: "later", regex: /\b(?:no rush|not urgent|when there(?:'s| is) time|whenever|someday|eventually|later)\b/i },
+  { importance: "now", regex: /\b(?:as soon as possible|right away|right now|top priority|immediately|urgently|urgent|asap|now)\b/i },
+  { importance: "next", regex: /\b(?:when (?:i'm|i am) done with this|up next|after this|next|soon)\b/i },
+];
+
 export function parseToss(
   raw: string,
   people: Person[],
+  now = new Date(),
 ): {
   title: string;
   chips: TossChip[];
@@ -133,12 +154,15 @@ export function parseToss(
   dueAt?: string;
   dueHasTime?: boolean;
   suggestedPerson?: { person: Person; matchedWord: string };
+  pacePhrase?: string;
+  duePhrase?: string;
 } {
   let title = raw.trim();
   const chips: TossChip[] = [];
   let importance: Importance = "next";
   const assigneeIds: string[] = [];
   let suggestedPerson: { person: Person; matchedWord: string } | undefined;
+  let pacePhrase: string | undefined;
 
   // Find all @mentions (global)
   const mentionRegex = /@([A-Za-z][\w.-]*)/g;
@@ -176,25 +200,23 @@ export function parseToss(
     }
   }
 
-  if (/\bnow\b/i.test(title)) {
-    importance = "now";
-    chips.push({ kind: "importance", label: "NOW", value: "now" });
-    title = title.replace(/\bnow\b/i, "").trim();
-  } else if (/\blater\b/i.test(title)) {
-    importance = "later";
-    chips.push({ kind: "importance", label: "LATER", value: "later" });
-    title = title.replace(/\blater\b/i, "").trim();
-  } else {
-    chips.push({ kind: "importance", label: "NEXT", value: "next" });
+  for (const phrase of PACE_PHRASES) {
+    const match = title.match(phrase.regex);
+    if (!match) continue;
+    importance = phrase.importance;
+    pacePhrase = match[0];
+    title = title.replace(match[0], "").trim();
+    break;
   }
+  chips.push({ kind: "importance", label: importance.toUpperCase(), value: importance });
 
-  const dateMatch = title.match(/\b(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i);
+  const dateMatch = title.match(/\b(?:by\s+)?(today|tomorrow|(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))(?:\s+at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?\b/i);
   let dueAt: string | undefined;
   let dueHasTime: boolean | undefined;
   if (dateMatch) {
-    chips.push({ kind: "due", label: dateMatch[1], value: dateMatch[1] });
+    chips.push({ kind: "due", label: dateMatch[0], value: dateMatch[0] });
     title = title.replace(dateMatch[0], "").trim();
-    const parsedDue = dueFromToken(dateMatch[1]);
+    const parsedDue = dueFromToken(dateMatch[1], dateMatch[2], now);
     if (parsedDue) {
       dueAt = parsedDue.dueAt;
       dueHasTime = parsedDue.dueHasTime;
@@ -228,7 +250,7 @@ export function parseToss(
   }
 
   return {
-    title: title || raw.trim(),
+    title: title.replace(/\s+/g, " ").trim() || raw.trim(),
     chips,
     importance,
     assigneeId: assigneeIds[0],
@@ -236,6 +258,8 @@ export function parseToss(
     dueAt,
     dueHasTime,
     suggestedPerson,
+    pacePhrase,
+    duePhrase: dateMatch?.[0],
   };
 }
 

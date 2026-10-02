@@ -34,11 +34,14 @@ import {
   rpcSetOwnerImportance,
   rpcSetWorkStatus,
   rpcShred,
+  rpcSnoozeThing,
   rpcSortThing,
+  rpcUnsnoozeThing,
 } from "./rpc";
 import { withOptimisticPatch } from "./query-updates";
 import { invalidatePersonalSurfaces } from "./personal-shred";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
+import { invalidateSnoozeSurfaces, snoozeUntilFor, usePersonalSnooze, type SnoozeOption } from "./personal-snooze";
 import { isPreviewMode } from "@/lib/session-mode";
 import { uploadThingAttachment } from "./attachments";
 import { getThingCapabilities } from "@/domain/capabilities";
@@ -50,7 +53,7 @@ import { useThingComments } from "./use-thing-comments";
 import { useAssignablePeople } from "@/features/people/use-assignable";
 import { useAvatarUrl } from "@/features/people/directory";
 import { useBuckets } from "@/features/buckets/use-buckets";
-import { getBucketRefs } from "./local-state";
+import { getBucketRefs, getSnoozedUntil } from "./local-state";
 import { useLocalVersion } from "./use-local-version";
 import { type ThingFile } from "@/features/things/PDFViewer";
 import { markThingAsRead } from "@/features/things/read-state";
@@ -181,6 +184,7 @@ export function ThingDetailContent({
   const localVersion = useLocalVersion();
   const { user } = useSession();
   const court = useCourt();
+  const personalSnooze = usePersonalSnooze();
   const people = useAssignablePeople();
   const live = useThing(initialThing?.id ?? null);
   const thing = live.thing ?? initialThing;
@@ -239,6 +243,7 @@ export function ThingDetailContent({
   const [comment, setComment] = useState(() => getDraft<string>(qc, "thing-comment", thing?.id ?? "")?.value ?? "");
   const [due, setDue] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [snoozeClock, setSnoozeClock] = useState(Date.now());
   const [commentAttachments, setCommentAttachments] = useState<ThingFile[]>(
     () => (getDraft<string>(qc, "thing-comment", thing?.id ?? "")?.attachments as ThingFile[] | undefined) ?? [],
   );
@@ -318,7 +323,9 @@ export function ThingDetailContent({
       const newFiles: ThingFile[] = [];
       for (let i = 0; i < files.length; i++) {
         try {
-          const processed = await processFileForUpload(files[i]);
+          const processed = !isPreviewMode() && isUuid(targetThingId)
+            ? await uploadThingAttachment(targetThingId, files[i])
+            : await processFileForUpload(files[i]);
           newFiles.push(processed);
         } catch (err) {
           if (isMountedRef.current && thingIdRef.current === targetThingId) {
@@ -483,6 +490,14 @@ export function ThingDetailContent({
   const creatorAvatar = useAvatarUrl(thing?.creator.name, null, thing?.creator.avatarUrl);
   const ownerAvatar = useAvatarUrl(thing?.owner.name, null, thing?.owner.avatarUrl);
   const assigneeAvatar = useAvatarUrl(thing?.assignee.name, null, thing?.assignee.avatarUrl);
+  const snoozeEnd = thing ? (isPreviewMode() ? getSnoozedUntil(thing.id) : personalSnooze.until.get(thing.id)) : null;
+  useEffect(() => {
+    if (!snoozeEnd) return;
+    const remaining = new Date(snoozeEnd).getTime() - Date.now();
+    if (remaining <= 0) { setSnoozeClock(Date.now()); return; }
+    const timer = window.setTimeout(() => setSnoozeClock(Date.now()), remaining);
+    return () => window.clearTimeout(timer);
+  }, [snoozeEnd]);
 
   if (!thing) return null;
 
@@ -503,7 +518,7 @@ export function ThingDetailContent({
   // visible input to update in that case anyway.
   const submitComment = () => {
     const text = comment.trim();
-    if ((!text && commentAttachments.length === 0) || thread.post.isPending) return;
+    if ((!text && commentAttachments.length === 0) || thread.post.isPending || processingCommentFiles > 0) return;
     const atts = [...commentAttachments];
     const submittedThingId = thing.id;
     setComment("");
@@ -550,7 +565,8 @@ export function ThingDetailContent({
     caps?.canShred,
   );
   const activePace: Pace = thing.personalPace ?? "next";
-  const currentBucket = currentBuckets[0] ?? null;
+  const snoozedUntil = snoozeEnd ?? null;
+  const activeSnoozedUntil = snoozedUntil && new Date(snoozedUntil).getTime() > snoozeClock ? snoozedUntil : null;
   const dueLabel = thing.dueAt ? formatCourtDue(thing).label : null;
 
   const isCreatorSameAsOwner = thing.creator.id === thing.owner.id;
@@ -603,12 +619,32 @@ export function ThingDetailContent({
       ),
     );
 
-  const handleSelectBucket = (bucketId: string) =>
+  const handleSnooze = (option: SnoozeOption) => {
+    const epoch = getIdentityEpoch(qc).epoch;
     run.mutate(async () => {
-      if (currentBucket && currentBucket.id === bucketId) return;
-      if (currentBucket) await rpcRemoveFromBucket(currentBucket.id, thing.id);
-      await rpcAddToBucket(bucketId, thing.id);
-      toast.success(currentBucket ? "Bucket changed." : "Added to bucket.");
+      await rpcSnoozeThing(thing.id, snoozeUntilFor(option));
+      await invalidateSnoozeSurfaces(qc, epoch);
+      setSnoozeClock(Date.now());
+      toast.success(option === "next_day" ? "Snoozed until tomorrow, 9 AM." : `Snoozed for ${option === "1h" ? "1 hour" : "6 hours"}.`);
+    });
+  };
+
+  const handleWake = () => {
+    const epoch = getIdentityEpoch(qc).epoch;
+    run.mutate(async () => {
+      await rpcUnsnoozeThing(thing.id);
+      await invalidateSnoozeSurfaces(qc, epoch);
+      setSnoozeClock(Date.now());
+      toast.success("Thing is back in your Court.");
+    });
+  };
+
+  const handleToggleBucket = (bucketId: string) =>
+    run.mutate(async () => {
+      const linked = currentBuckets.some((bucket) => bucket.id === bucketId);
+      if (linked) await rpcRemoveFromBucket(bucketId, thing.id);
+      else await rpcAddToBucket(bucketId, thing.id);
+      toast.success(linked ? "Removed from Bucket." : "Added to Bucket.");
     });
 
   const handleReassign = (targetId: string) => {
@@ -670,9 +706,9 @@ export function ThingDetailContent({
             activePace={activePace}
             onSetPace={handleSetPace}
             onSetRequestedPace={handleSetRequestedPace}
-            currentBucket={currentBucket}
+            currentBuckets={currentBuckets}
             buckets={buckets}
-            onSelectBucket={handleSelectBucket}
+            onToggleBucket={handleToggleBucket}
             ownerAvatar={ownerAvatar}
             assigneeAvatar={assigneeAvatar}
             isAssigneeSameAsOwner={isAssigneeSameAsOwner}
@@ -682,6 +718,9 @@ export function ThingDetailContent({
             onReassign={handleReassign}
             onCatch={handleCatchAndStart}
             onSort={handleSort}
+            snoozedUntil={activeSnoozedUntil}
+            onSnooze={handleSnooze}
+            onWake={handleWake}
           />
 
           {/* Description Section */}
@@ -742,6 +781,7 @@ export function ThingDetailContent({
             onCommentChange={setComment}
             onSubmitComment={submitComment}
             postIsPending={thread.post.isPending}
+            attachmentsUploading={processingCommentFiles > 0}
             onOpenCommentFileDialog={() => commentFileInputRef.current?.click()}
             commentFileInput={
               <input
@@ -968,14 +1008,17 @@ export function ThingDetailContent({
           activePace={activePace}
           onSetPace={handleSetPace}
             onSetRequestedPace={handleSetRequestedPace}
-          currentBucket={currentBucket}
+          currentBuckets={currentBuckets}
           buckets={buckets}
-          onSelectBucket={handleSelectBucket}
+          onToggleBucket={handleToggleBucket}
           viewOnly={viewOnly}
           assignableList={assignableList}
           onReassign={handleReassign}
           terminal={terminal}
           onSort={handleSort}
+          snoozedUntil={activeSnoozedUntil}
+          onSnooze={handleSnooze}
+          onWake={handleWake}
           onSetWorkStatus={handleSetWorkStatus}
         />
 
@@ -1038,6 +1081,7 @@ export function ThingDetailContent({
         onCommentChange={setComment}
         onSubmitComment={submitComment}
         postIsPending={thread.post.isPending}
+        attachmentsUploading={processingCommentFiles > 0}
         onOpenCommentFileDialog={() => commentFileInputRef.current?.click()}
         commentFileInput={null}
         onFileSelect={onFileSelect}

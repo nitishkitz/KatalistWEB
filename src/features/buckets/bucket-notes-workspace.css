@@ -1,0 +1,64 @@
+.bucket-notes-workspace{--note-ease:cubic-bezier(.23,1,.32,1);min-height:420px;color:#1c1d3d}
+.bucket-notes-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:18px}
+.bucket-note-create{display:inline-flex;align-items:center;gap:7px;border-radius:10px;background:#975ee2;padding:10px 14px;color:white;font-size:12px;font-weight:650;transition:transform 220ms var(--note-ease),box-shadow 220ms var(--note-ease);box-shadow:0 5px 16px #7548bb24}
+.bucket-note-create:hover{transform:translateY(-2px);box-shadow:0 9px 22px #7548bb30}
+.bucket-note-create:active{transform:translateY(0) scale(.98)}
+.bucket-notes-board{animation:note-enter 240ms var(--note-ease)}
+.bucket-note-capture{display:flex;align-items:center;gap:9px;width:100%;border:1px solid #ece8f5;border-radius:13px;background:#fff;padding:15px 18px;text-align:left;font-size:13px;color:#9a9fba;box-shadow:0 2px 10px #3524570b;transition:border-color 200ms var(--note-ease),box-shadow 200ms var(--note-ease),transform 200ms var(--note-ease)}
+.bucket-note-capture:hover{border-color:#cdb3f4;box-shadow:0 7px 20px #35245715;transform:translateY(-1px)}
+.bucket-note-search{display:flex;align-items:center;gap:8px;width:min(320px,100%);margin:18px 0;color:#959bb5}
+.bucket-note-search input{width:100%;border:0;background:transparent;font-size:12px;outline:0;color:#222244}
+.bucket-note-search:focus-within{color:#975ee2}
+.bucket-note-card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.bucket-note-card{position:relative;min-width:0;overflow:hidden;border:1px solid #e9e6f1;border-radius:16px;background:#fff;box-shadow:0 3px 14px #3524570d;transition:transform 260ms var(--note-ease),border-color 260ms var(--note-ease),box-shadow 260ms var(--note-ease)}
+.bucket-note-card:hover,.bucket-note-card:focus-within{transform:translateY(-3px);border-color:#d5bff6;box-shadow:0 14px 32px #35245719}
+.bucket-note-card:active{transform:translateY(-1px)}
+.bucket-note-card-main{display:flex;width:100%;height:100%;min-height:155px;flex-direction:column;text-align:left;outline:none}
+.bucket-note-card-main:focus-visible{outline:2px solid #975ee2;outline-offset:-3px;border-radius:16px}
+.bucket-note-card-body{display:flex;min-height:155px;flex:1;flex-direction:column;gap:7px;padding:16px 17px 15px}
+.bucket-note-card-title{display:block;overflow:hidden;padding-right:21px;color:#181939;font-size:13px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.bucket-note-card-excerpt{display:-webkit-box;overflow:hidden;color:#747d9b;font-size:12px;line-height:1.5;-webkit-box-orient:vertical;-webkit-line-clamp:3}
+.bucket-note-card-footer{display:flex;min-width:0;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto;padding-top:11px;color:#a0a5b8;font-size:10px}
+.bucket-note-card-footer time{flex-shrink:0;white-space:nowrap}
+.bucket-note-pin{position:absolute;top:10px;right:10px;z-index:1;display:grid;width:29px;height:29px;place-items:center;border:1px solid #eae5f2;border-radius:9px;background:#ffffffec;color:#a1a5ba;opacity:0;transition:opacity 180ms ease,color 180ms ease,background 180ms ease}
+.bucket-note-card:hover .bucket-note-pin,.bucket-note-card:focus-within .bucket-note-pin,.bucket-note-pin.is-pinned{opacity:1}
+.bucket-note-pin:hover,.bucket-note-pin.is-pinned{background:#f5edff;color:#7c33fd}
+.bucket-note-cover{position:relative;display:grid;height:162px;overflow:hidden;place-items:center;border-bottom:1px solid #eae6f2;background:#f6f3fc}
+.bucket-note-cover.is-image{background:#f2f0f8}.bucket-note-cover.is-pdf{background:linear-gradient(135deg,#e8e1f8,#f7f4fc)}.bucket-note-cover.is-video{background:#201a34}.bucket-note-cover.is-document{background:linear-gradient(135deg,#f0edff,#e7e9fb)}
+.bucket-note-cover>img,.bucket-note-cover>video{width:100%;height:100%;object-fit:cover}
+.bucket-note-cover.is-image>img{transition:transform 360ms var(--note-ease)}.bucket-note-card:hover .bucket-note-cover.is-image>img{transform:scale(1.035)}
+.bucket-note-pdf-page{width:75%;height:145px;overflow:hidden;border:1px solid #e1dce9;border-radius:6px 6px 0 0;background:white;box-shadow:0 8px 20px #251b4126;transform:translateY(15px)}
+.bucket-note-pdf-page canvas{width:100%!important;height:auto!important}
+.bucket-note-file-symbol{display:grid;width:58px;height:65px;place-items:center;border:1px solid #d6cff0;border-radius:12px;background:#fff;color:#7850bd;box-shadow:0 8px 22px #35245718}.bucket-note-file-symbol svg{width:29px;height:29px}
+.bucket-note-play{position:absolute;display:grid;width:34px;height:34px;place-items:center;border:1px solid #ffffff88;border-radius:50%;background:#ffffffd9;color:#30214b;box-shadow:0 4px 12px #0003}
+.bucket-note-cover-label{position:absolute;top:11px;left:12px;border-radius:6px;background:#ffffffec;padding:3px 6px;color:#654499;font-size:9px;font-weight:750;letter-spacing:.08em}
+.bucket-note-cover-name{position:absolute;right:14px;bottom:9px;left:14px;overflow:hidden;color:#675e7f;font-size:10px;font-weight:600;text-align:center;text-overflow:ellipsis;white-space:nowrap}.bucket-note-cover.is-video .bucket-note-cover-name{color:white}
+.bucket-note-meta{display:flex;min-width:0;flex-wrap:wrap;gap:5px 9px;color:#7d6f9e;font-size:10px;font-weight:600}.bucket-note-meta>span{display:inline-flex;align-items:center;gap:3px;white-space:nowrap}.bucket-note-meta svg{width:11px;height:11px}
+.bucket-note-mini-cover{display:grid;width:33px;height:36px;flex:none;overflow:hidden;place-items:center;border:1px solid #e1d9ef;border-radius:7px;background:#f1edfa;color:#7950ba}.bucket-note-mini-cover img{width:100%;height:100%;object-fit:cover}.bucket-note-mini-cover svg{width:16px;height:16px}
+.bucket-note-split{display:grid;grid-template-columns:220px minmax(0,1fr);min-height:560px;overflow:hidden;border:1px solid #eeebf5;border-radius:16px;background:#fff;box-shadow:0 10px 34px #32254e0d;animation:note-enter 260ms var(--note-ease)}
+.bucket-note-sidebar{border-right:1px solid #efecf6;background:#fcfbff}
+.bucket-note-sidebar-row{display:block;width:calc(100% - 16px);margin:3px 8px;border-radius:9px;padding:11px 12px;text-align:left;color:#343653;transition:background-color 180ms var(--note-ease),transform 180ms var(--note-ease)}
+.bucket-note-sidebar-row:hover{background:#f4eeff;transform:translateX(2px)}
+.bucket-note-sidebar-row.is-selected{background:#eee4ff;color:#5e2cae}
+.bucket-note-sidebar-row-top{display:flex;min-width:0;align-items:center;gap:8px}.bucket-note-sidebar-row-copy{display:block;min-width:0;flex:1}.bucket-note-sidebar-row-copy strong,.bucket-note-sidebar-row-copy>span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bucket-note-sidebar-row-copy strong{font-size:12px}.bucket-note-sidebar-row-copy>span{margin-top:3px;color:#8b91ab;font-size:10px}.bucket-note-sidebar-row .bucket-note-meta{margin-top:7px;padding-left:41px}.bucket-note-sidebar-row .bucket-note-meta.is-compact{font-size:9px}
+.bucket-note-editor-shell{position:relative;min-width:0;animation:note-enter 250ms var(--note-ease)}
+.bucket-note-editor{min-height:560px;padding:28px 32px 55px}
+.bucket-note-prose{min-height:260px;font-size:14px;line-height:1.8;color:#30324d;outline:0;overflow-wrap:anywhere}
+.bucket-note-prose p{margin:.45em 0}.bucket-note-prose h1{font-size:1.7em;font-weight:700}.bucket-note-prose h2{font-size:1.35em;font-weight:650}.bucket-note-prose ul{list-style:disc;padding-left:1.5em}.bucket-note-prose ol{list-style:decimal;padding-left:1.5em}.bucket-note-prose blockquote{border-left:3px solid #c4a0f3;padding-left:1em;color:#69627e}.bucket-note-prose a{color:#7542c5;text-decoration:underline}.bucket-note-prose .is-empty::before{content:attr(data-placeholder);float:left;height:0;color:#adb0c3;pointer-events:none}
+.bucket-note-tool{display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:7px 9px;font-size:12px;font-weight:600;color:#6f7290;transition:background-color 180ms var(--note-ease),color 180ms var(--note-ease)}
+.bucket-note-tool:hover{background:#f4efff;color:#703ac4}
+.bucket-note-popover{position:absolute;bottom:calc(100% + 8px);left:0;z-index:5;width:240px;border:1px solid #e8e0f4;border-radius:12px;background:#fff;padding:7px;box-shadow:0 16px 36px #31234522;animation:note-pop 190ms var(--note-ease);transform-origin:bottom left}
+@keyframes note-enter{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes note-pop{from{opacity:0;transform:translateY(5px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(max-width:700px){.bucket-note-split{grid-template-columns:1fr}.bucket-note-sidebar{border-right:0;border-bottom:1px solid #efecf6}.bucket-note-sidebar>div:last-child{display:flex;max-height:130px;overflow-x:auto}.bucket-note-sidebar-row{min-width:160px}.bucket-note-editor{padding:22px 18px 55px}}
+@media(hover:none){.bucket-note-card:hover,.bucket-note-capture:hover,.bucket-note-create:hover{transform:none}.bucket-note-pin{opacity:1}}
+@media(prefers-reduced-motion:reduce){.bucket-notes-workspace *{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+.bucket-note-link-popover{top:auto;bottom:calc(100% + 8px);left:76px;width:min(300px,calc(100vw - 52px));transform-origin:bottom left}
+.bucket-note-option-list{max-height:190px;overflow-y:auto;overscroll-behavior:contain}
+.bucket-note-linked-row{display:flex;align-items:center;gap:2px;overflow:hidden;border:1px solid #edeaf4;border-radius:12px;transition:border-color 180ms var(--note-ease),background-color 180ms var(--note-ease)}
+.bucket-note-linked-row:hover,.bucket-note-linked-row:focus-within{border-color:#d8c4fa;background:#fcfaff}
+.bucket-note-linked-open{display:flex;min-width:0;flex:1;align-items:center;gap:8px;padding:9px 12px;text-align:left;font-size:12px}
+.bucket-note-linked-remove{display:grid;width:32px;height:32px;flex:none;place-items:center;margin-right:3px;border-radius:8px;color:#9ba0b5;opacity:0;transition:opacity 180ms ease,background-color 180ms ease,color 180ms ease}
+.bucket-note-linked-row:hover .bucket-note-linked-remove,.bucket-note-linked-row:focus-within .bucket-note-linked-remove{opacity:1}
+.bucket-note-linked-remove:hover{background:#f7eeee;color:#c44152}
+@media(hover:none){.bucket-note-linked-remove{opacity:1}}

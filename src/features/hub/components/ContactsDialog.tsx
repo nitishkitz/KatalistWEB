@@ -17,6 +17,7 @@ import {
   rpcRevokeInvitation,
 } from "@/features/hub/rpc";
 import { useConversations } from "@/features/hub/use-conversations";
+import { useAppContext } from "@/features/context/use-app-context";
 import { useContacts, useContactRequests, useInvitations, useRefreshContacts } from "@/features/hub/use-contacts";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const navigate = useNavigate();
   const online = usePresence();
   const { members } = useTeam();
+  const { context } = useAppContext();
   const { refetch: refetchConversations } = useConversations();
   const { contacts } = useContacts();
   const { incoming, outgoing } = useContactRequests();
@@ -107,7 +109,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     }
     setBusyId(member.id);
     try {
-      const dm = await rpcGetOrCreateDm(member.id);
+      const dm = await rpcGetOrCreateDm(member.id, context);
       await refetchConversations();
       onOpenChange(false);
       navigate({ to: "/team/$conversationId", params: { conversationId: dm.id }, search: startCall ? { start: "call" } : {} });

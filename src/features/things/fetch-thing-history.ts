@@ -4,6 +4,7 @@ import { withReadDeadline } from "@/lib/read-request";
 import { resolveActorPeople } from "@/features/people/resolve-actors";
 import type { ThingActivity, ThingComment } from "./use-thing-comments";
 import type { ThingFile } from "@/domain/thing";
+import { signThingAttachmentPaths } from "./attachments";
 
 function parseCommentBody(rawBody: string): { body: string; attachments?: ThingFile[] } {
   const match = rawBody.match(/\n?<!--attachments:(.*?)-->/s);
@@ -12,7 +13,11 @@ function parseCommentBody(rawBody: string): { body: string; attachments?: ThingF
     const attachments: unknown = JSON.parse(match[1]);
     return {
       body: rawBody.replace(match[0], "").trim(),
-      attachments: Array.isArray(attachments) ? attachments as ThingFile[] : undefined,
+      attachments: Array.isArray(attachments) ? (attachments as ThingFile[]).map((file) =>
+        file.url?.startsWith("blob:") && !file.storageKey
+          ? { ...file, url: undefined, urlError: "This older attachment was saved with a temporary link. Reattach the file to preview it." }
+          : file,
+      ) : undefined,
     };
   } catch {
     return { body: rawBody };
@@ -40,9 +45,11 @@ export async function fetchThingCommentsPage(
   const rows = data ?? [];
   const actorIds = [...new Set(rows.map((row) => row.author_actor_id).filter(Boolean))];
   const people = await resolveActorPeople(actorIds);
-  return historyPage(rows.map((row) => {
+  const parsedRows = rows.map((row) => ({ row, parsed: parseCommentBody(row.body) }));
+  const storageKeys = parsedRows.flatMap(({ parsed }) => parsed.attachments?.map((file) => file.storageKey).filter((key): key is string => Boolean(key)) ?? []);
+  const signed = storageKeys.length ? await signThingAttachmentPaths(storageKeys) : new Map();
+  return historyPage(parsedRows.map(({ row, parsed }) => {
     const person = row.author_actor_id ? people.get(row.author_actor_id) : null;
-    const parsed = parseCommentBody(row.body);
     return {
       id: row.id,
       body: parsed.body,
@@ -50,7 +57,11 @@ export async function fetchThingCommentsPage(
       avatarUrl: person?.avatarUrl ?? null,
       at: row.created_at,
       authorActorId: row.author_actor_id,
-      attachments: parsed.attachments,
+      attachments: parsed.attachments?.map((file) => {
+        if (!file.storageKey) return file;
+        const result = signed.get(file.storageKey);
+        return { ...file, url: result?.url, urlError: result?.error };
+      }),
     };
   }));
 }

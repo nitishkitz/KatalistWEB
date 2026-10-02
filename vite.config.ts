@@ -5,7 +5,8 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
-import { getSupabaseAdmin } from "./server/lib/supabase-admin.ts";
+import { getSupabaseAdmin, isTransientAuthFailure, withAuthNetworkRetry } from "./server/lib/supabase-admin.ts";
+import { findAuthUserByPhone } from "./server/lib/find-phone-user.ts";
 import { resolvePersonToProfileId } from "./server/lib/resolve-person.ts";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { extractErrorMessage } from "./src/lib/domain-error.ts";
@@ -160,6 +161,8 @@ function phoneAuthPlugin(): Plugin {
     apply: "serve",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
+        const startedAt = Date.now();
+        let stage = "request";
         try {
           const rawUrl = req.url ?? "";
           const pathOnly = rawUrl.split("?", 1)[0] ?? "";
@@ -200,22 +203,14 @@ function phoneAuthPlugin(): Plugin {
             return;
           }
 
+          stage = "lookup-user";
           const admin = getSupabaseAdmin();
 
           const cleanDigits = phone.replace(/\D/g, "");
-          const { data: { users }, error: listErr } = await admin.auth.admin.listUsers();
-          if (listErr) throw listErr;
-
-          let user = users?.find((u) => {
-            const metaPhone = u.user_metadata?.phone?.replace(/\D/g, "");
-            const rawPhone = u.phone?.replace(/\D/g, "");
-            return (
-              (metaPhone && metaPhone.endsWith(cleanDigits)) ||
-              (rawPhone && rawPhone.endsWith(cleanDigits))
-            );
-          });
+          let user = await findAuthUserByPhone(admin, phone);
 
           if (!user) {
+            stage = "create-user";
             const email = `user-${cleanDigits}@users.katalist.invalid`;
             const { data: created, error: createErr } = await admin.auth.admin.createUser({
               email,
@@ -226,46 +221,52 @@ function phoneAuthPlugin(): Plugin {
                 full_name: "Katalist User",
               },
             });
-            if (createErr) throw createErr;
-            user = created.user;
+            if (createErr) {
+              // Another device may create the same phone account concurrently.
+              // Re-scan once so both requests can finish against that account.
+              user = await findAuthUserByPhone(admin, phone);
+              if (!user) throw createErr;
+            } else {
+              user = created.user;
+            }
           }
 
+          stage = "generate-link";
           const userEmail = user.email || `user-${cleanDigits}@users.katalist.invalid`;
-          const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
-            type: "magiclink",
-            email: userEmail,
-          });
-          if (linkErr) throw linkErr;
-
-          const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-          const anonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
-          if (!supabaseUrl || !anonKey) {
-            throw new Error("Supabase URL and publishable key must be configured for phone sign-in.");
+          const linkData = await withAuthNetworkRetry(async () => {
+            const { data, error } = await admin.auth.admin.generateLink({
+              type: "magiclink",
+              email: userEmail,
+            });
+            if (error) throw error;
+            return data;
+          }, stage);
+          if (!linkData.properties?.hashed_token) {
+            throw new Error("Supabase did not return a verification token.");
           }
-          const authClient = createSupabaseClient(supabaseUrl, anonKey, {
-            auth: { persistSession: false },
-          });
-          const { data: authData, error: verifyErr } = await authClient.auth.verifyOtp({
-            token_hash: linkData.properties.hashed_token,
-            type: "magiclink",
-          });
-          if (verifyErr) throw verifyErr;
-          if (!authData.session) throw new Error("Phone sign-in did not return an active session.");
 
           res.statusCode = 200;
           res.setHeader("content-type", "application/json");
           res.end(JSON.stringify({
-            access_token: authData.session.access_token,
-            refresh_token: authData.session.refresh_token,
-            user: authData.user,
+            token_hash: linkData.properties.hashed_token,
+            email: userEmail,
           }));
+          console.info("[phone-auth] ready", { durationMs: Date.now() - startedAt });
         } catch (err: unknown) {
-          console.error("[phone-auth] error:", err);
+          console.error("[phone-auth] failed", {
+            stage,
+            durationMs: Date.now() - startedAt,
+            error: extractErrorMessage(err) ?? "Unknown error",
+          });
           const message = extractErrorMessage(err);
           if (!res.headersSent) {
-            res.statusCode = 500;
+            const transient = isTransientAuthFailure(err);
+            res.statusCode = transient ? 503 : 500;
             res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: message || "Authentication failed" }));
+            res.end(JSON.stringify({
+              error: transient ? "Supabase sign-in is temporarily unreachable. Try again." : message || "Authentication failed",
+              stage,
+            }));
           }
         }
       });
