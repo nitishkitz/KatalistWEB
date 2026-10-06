@@ -109,6 +109,26 @@ function baseProps(overrides = {}) {
   };
 }
 
+test("sidebar search stays collapsed until its trailing toolbar button is activated", () => {
+  render(h(ListThingsSection, baseProps()));
+
+  const searchButton = screen.getByRole("button", { name: /^search things$/i });
+  assert.equal(searchButton.getAttribute("aria-expanded"), "false");
+  assert.equal(screen.queryByRole("searchbox", { name: /^search things$/i }), null);
+  assert.equal(screen.queryByText(/^0 things$/i), null, "the redundant lane total row should not render");
+
+  fireEvent.click(searchButton);
+
+  const searchInput = screen.getByRole("searchbox", { name: /^search things$/i });
+  assert.equal(searchInput, document.activeElement);
+  assert.equal(screen.getByRole("button", { name: /close thing search/i }).getAttribute("aria-expanded"), "true");
+
+  fireEvent.keyDown(searchInput, { key: "Escape" });
+  assert.equal(screen.queryByRole("searchbox", { name: /^search things$/i }), null);
+
+  cleanup();
+});
+
 test("selected-filtered-out: Thing exists but is hidden by the active filter -- shows Clear filters + Close, not the unavailable copy", () => {
   const onClearFilters = mock.fn();
   const onCloseSelected = mock.fn();

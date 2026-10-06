@@ -30,23 +30,6 @@ function formatCountdown(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-export function GatePath({ labels, index }: { labels: [string, string, string]; index: number }) {
-  return (
-    <ol className="kg-path" aria-label="Sign-in progress">
-      {labels.map((label, i) => (
-        <li
-          key={label}
-          className={cn(i < index && "is-done", i === index && "is-now")}
-          aria-current={i === index ? "step" : undefined}
-        >
-          <span className="kg-dot" />
-          {label}
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 export function GateButton({
   busy,
   disabled,

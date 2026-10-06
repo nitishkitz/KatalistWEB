@@ -9,7 +9,7 @@ import { contactProblem, OTP_TTL_MS, useOtpSignIn } from "../use-otp-sign-in";
 import { clearGateHandoff, peekGateHandoff, setGateHandoff } from "./gate-handoff";
 import { GateStage } from "./GateStage";
 import { useGateScene } from "./use-gate-scene";
-import { CodeStep, ContactStep, DemoStep, GateButton, GatePath, ProfileStep } from "./GateSteps";
+import { CodeStep, ContactStep, DemoStep, GateButton, ProfileStep } from "./GateSteps";
 import "./auth-gate.css";
 
 /**
@@ -69,8 +69,6 @@ export function AuthGate({ returnTo }: { returnTo: string }) {
   }, []);
 
   const view = auth.profileRequired ? "profile" : showDemo ? "demo" : step;
-  const pathIndex = phase === "unlocking" || view === "profile" ? 2 : view === "code" ? 1 : 0;
-  const contactLabel = auth.channel === "phone" ? "Number" : "Email";
 
   // Focus lands after the step it targets has rendered.
   useEffect(() => {
@@ -307,8 +305,6 @@ export function AuthGate({ returnTo }: { returnTo: string }) {
         hidden={welcome !== "hidden"}
         data-tall={view === "profile" || view === "demo" ? "true" : "false"}
       >
-        <GatePath labels={[contactLabel, "Code", "Unlock"]} index={pathIndex} />
-
         {view === "profile" ? (
           <ProfileStep auth={auth} saving={auth.profileSaving} onSubmit={() => void handleSaveProfile()} />
         ) : view === "demo" ? (

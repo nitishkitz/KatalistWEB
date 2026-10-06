@@ -1,4 +1,5 @@
-import { List, Search } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Search, X } from "lucide-react";
 import { format } from "date-fns";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { MagicBox } from "@/features/court/MagicBox";
@@ -75,6 +76,13 @@ export function ListThingsSection({
   selectedFile,
   onFileSelect,
 }: ListThingsSectionProps) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
   return (
     <div className="flex flex-col min-h-0 gap-3 h-[calc(100vh-9.5rem)]">
       <div className="flex min-h-0 flex-1 gap-3">
@@ -106,18 +114,35 @@ export function ListThingsSection({
                 </button>
               );
             })}
+            <button
+              type="button"
+              aria-label={searchOpen ? "Close Thing search" : "Search Things"}
+              aria-expanded={searchOpen}
+              onClick={() => setSearchOpen((open) => !open)}
+              className="ml-auto mb-2.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[#6a769c] transition-colors hover:bg-[#f4f5fb] hover:text-[#000533] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#975ee2] focus-visible:ring-offset-2"
+            >
+              {searchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+            </button>
           </div>
 
           <div className="px-4 pt-3 pb-2">
-            <div className="relative flex items-center">
-              <Search className="absolute left-3 h-4 w-4 text-[#8487a7] pointer-events-none" />
-              <input
-                value={navSearch}
-                onChange={(e) => onNavSearchChange(e.target.value)}
-                placeholder="Search Things..."
-                className="h-[40px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none focus:border-[#975ee2] transition-colors"
-              />
-            </div>
+            {searchOpen && (
+              <div className="relative flex items-center">
+                <Search className="pointer-events-none absolute left-3 h-4 w-4 text-[#8487a7]" />
+                <input
+                  ref={searchInputRef}
+                  type="search"
+                  aria-label="Search Things"
+                  value={navSearch}
+                  onChange={(e) => onNavSearchChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setSearchOpen(false);
+                  }}
+                  placeholder="Search Things..."
+                  className="h-[40px] w-full rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] pl-9 pr-3 text-[12px] text-[#000533] placeholder:text-[#8487a7] outline-none transition-colors focus:border-[#975ee2] focus-visible:ring-2 focus-visible:ring-[#975ee2]/30"
+                />
+              </div>
+            )}
             {/* G02: thingsFilter already drove filteredThings/grouped/
                 laneThings, but had no control to actually change it --
                 "all" (every Thing, including sorted/cancelled) stays
@@ -125,7 +150,10 @@ export function ListThingsSection({
             <div
               role="tablist"
               aria-label="Filter Things by status"
-              className="mt-2 flex items-center gap-1 rounded-[9px] bg-[#f4f5fb] p-1"
+              className={cn(
+                "flex items-center gap-1 rounded-[9px] bg-[#f4f5fb] p-1",
+                searchOpen && "mt-2",
+              )}
             >
               {(
                 [
@@ -150,13 +178,6 @@ export function ListThingsSection({
                   {label}
                 </button>
               ))}
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between border-b border-[#eef0f6] px-4 py-2 text-[12px]">
-            <div className="flex items-center gap-1.5 font-medium text-[#8487a7]">
-              <List className="h-3.5 w-3.5 text-[#5f5f90]" />
-              <span>{laneThings.length} Things</span>
             </div>
           </div>
 

@@ -290,6 +290,13 @@ export function ThingDetailContent({
     };
   }, []);
   const [processingCommentFiles, setProcessingCommentFiles] = useState(0);
+  const [thingUploadStatus, setThingUploadStatus] = useState<{
+    thingId: string;
+    current: number;
+    total: number;
+    fileName: string;
+  } | null>(null);
+  const thingUploadOperationRef = useRef<string | null>(null);
 
   // T05: only counts as "viewed" when the Comments tab is actually
   // selected, and only once that tab's own read has settled successfully
@@ -393,18 +400,27 @@ export function ThingDetailContent({
   const handleThingFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     // Captured before any await in this handler.
     const uploadEpoch = getIdentityEpoch(qc).epoch;
+    let operationId: string | null = null;
     try {
       const files = e.target.files;
       if (!files || files.length === 0 || !thing?.id) return;
-      const useRealStorage = !isPreviewMode() && isUuid(thing.id);
+      const targetThingId = thing.id;
+      operationId = crypto.randomUUID();
+      thingUploadOperationRef.current = operationId;
+      const useRealStorage = !isPreviewMode() && isUuid(targetThingId);
       for (let i = 0; i < files.length; i++) {
+        setThingUploadStatus({
+          thingId: targetThingId,
+          current: i + 1,
+          total: files.length,
+          fileName: files[i].name,
+        });
         try {
           const processed = useRealStorage
-            ? await uploadThingAttachment(thing.id, files[i])
+            ? await uploadThingAttachment(targetThingId, files[i])
             : await processFileForUpload(files[i]);
-          if (!useRealStorage) await rpcAddThingFile(thing.id, processed);
+          if (!useRealStorage) await rpcAddThingFile(targetThingId, processed);
           if (isEpochCurrent(qc, uploadEpoch)) {
-            onFileSelect?.(processed);
             toast.success(`Attached ${files[i].name}`);
           }
         } catch (err) {
@@ -414,9 +430,13 @@ export function ThingDetailContent({
         }
       }
       if (!isEpochCurrent(qc, uploadEpoch)) return;
-      await qc.invalidateQueries({ queryKey: ["thing", thing.id] });
+      await qc.invalidateQueries({ queryKey: ["thing", targetThingId] });
       await qc.invalidateQueries({ queryKey: ["court"] });
     } finally {
+      if (isMountedRef.current && thingUploadOperationRef.current === operationId) {
+        setThingUploadStatus(null);
+        thingUploadOperationRef.current = null;
+      }
       if (thingFileInputRef.current) thingFileInputRef.current.value = "";
     }
   };
@@ -772,6 +792,15 @@ export function ThingDetailContent({
             viewOnly={viewOnly}
             isLoading={thing.detailLevel === "overview" && live.isLoading}
             attachmentsUnavailable={Boolean(thing.attachmentsUnavailable)}
+            uploadStatus={
+              thingUploadStatus?.thingId === thing.id
+                ? {
+                    current: thingUploadStatus.current,
+                    total: thingUploadStatus.total,
+                    fileName: thingUploadStatus.fileName,
+                  }
+                : null
+            }
             onRetry={() => void live.refetch()}
             onSelectFile={(file) => {
               setSelectedFileId(file.id);

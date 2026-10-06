@@ -111,7 +111,7 @@ function PeekQueueCard({
   lane: CourtLaneId;
   depth: number;
   myActorId: string | null;
-  onOpen: () => void;
+  onOpen: (origin: HTMLButtonElement) => void;
 }) {
   const assignedByOther = Boolean(
     myActorId && thing.assignee.id === myActorId && thing.owner.id !== thing.assignee.id,
@@ -142,7 +142,7 @@ function PeekQueueCard({
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={(event) => onOpen(event.currentTarget)}
       draggable={true}
       onDragStart={(e) => {
         e.dataTransfer.setData(
@@ -157,8 +157,8 @@ function PeekQueueCard({
       }}
       className="group/queue relative z-0 flex max-h-[76px] min-h-[76px] w-full flex-col justify-center overflow-hidden rounded-b-xl border border-slate-200/80 bg-white px-3.5 py-2 text-left shadow-[0_3px_5px_rgba(15,23,42,0.14)] transition-[max-height,transform,box-shadow,border-color,margin] duration-[520ms] ease-[cubic-bezier(0.16,1,0.3,1)] hover:z-30 hover:mb-2.5 hover:max-h-[136px] hover:-translate-y-1 hover:scale-[1.012] hover:border-slate-300 hover:shadow-[0_18px_36px_-18px_rgba(15,23,42,0.38),0_7px_13px_-8px_rgba(15,23,42,0.2)] focus-visible:z-30 focus-visible:mb-2.5 focus-visible:max-h-[136px] focus-visible:-translate-y-1 focus-visible:scale-[1.012] focus-visible:border-slate-300 focus-visible:shadow-[0_18px_36px_-18px_rgba(15,23,42,0.38),0_7px_13px_-8px_rgba(15,23,42,0.2)] select-none outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none motion-reduce:hover:transform-none motion-reduce:focus-visible:transform-none [&:not(:first-child)]:-mt-1"
       style={{ zIndex: 10 - depth }}
-      title={`Jump to ${thing.title}`}
-      aria-label={`Jump to ${thing.title}`}
+      title={`Open ${thing.title}`}
+      aria-label={`Open ${thing.title}`}
     >
       <div className="flex min-w-0 items-center gap-2.5">
         <div className="min-w-0 flex-1">
@@ -416,32 +416,6 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       [activeThing, pendingAction, renderIndex, things],
     );
 
-    const navigateToIndex = useCallback(
-      (targetIndex: number) => {
-        if (!activeThing || things.length <= 1 || pendingAction || animatingRef.current) return;
-        const nextIndex = ((targetIndex % things.length) + things.length) % things.length;
-        const nextThing = things[nextIndex];
-        if (!nextThing || nextIndex === renderIndex) return;
-        navigationVersionRef.current += 1;
-
-        const reduceMotion = getEffectiveReducedMotion();
-
-        if (reduceMotion) {
-          setActiveIndex(nextIndex);
-          activeThingIdRef.current = nextThing.id;
-          setAnnouncement(`Card ${nextIndex + 1} of ${things.length}`);
-          return;
-        }
-
-        const direction: 1 | -1 = targetIndex > renderIndex ? 1 : -1;
-        animatingRef.current = true;
-        setAnim({ outgoing: activeThing, direction });
-        setActiveIndex(nextIndex);
-        activeThingIdRef.current = nextThing.id;
-        setAnnouncement(`Card ${nextIndex + 1} of ${things.length}`);
-      },
-      [activeThing, pendingAction, renderIndex, things],
-    );
     const startNavigationRef = useRef(startNavigation);
 
     useLayoutEffect(() => {
@@ -1113,7 +1087,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                       lane={lane}
                       depth={depth}
                       myActorId={myActorId}
-                      onOpen={() => navigateToIndex(targetIndex)}
+                      onOpen={(origin) => onOpen(depthThing, origin)}
                     />
                   );
                 })}

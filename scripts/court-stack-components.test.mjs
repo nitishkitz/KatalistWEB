@@ -106,6 +106,13 @@ test("Court lane stacks render one active Thing over a capped, hidden decorative
   assert.doesNotMatch(laneStack, /\{renderIndex \+ 1\} \/ \{things\.length\}/);
 });
 
+test("lower Court cards open their Thing dialog without promoting the card to the top", () => {
+  assert.match(laneStack, /onOpen=\{\(origin\) => onOpen\(depthThing, origin\)\}/);
+  assert.match(laneStack, /aria-label=\{`Open \$\{thing\.title\}`\}/);
+  assert.doesNotMatch(laneStack, /onOpen=\{\(\) => navigateToIndex\(targetIndex\)\}/);
+  assert.doesNotMatch(laneStack, /const navigateToIndex =/);
+});
+
 test("Court stack actions are capability-gated and route to canonical RPCs", () => {
   assert.match(laneStack, /getThingCapabilities\(activeThing, myActorId\)/);
   // The old (non-timed) "pace = later" RPC path lives in the lane's

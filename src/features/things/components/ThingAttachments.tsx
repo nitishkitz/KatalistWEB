@@ -20,6 +20,7 @@ export type ThingAttachmentsProps = {
   viewOnly: boolean;
   isLoading: boolean;
   attachmentsUnavailable: boolean;
+  uploadStatus?: { current: number; total: number; fileName: string } | null;
   onRetry: () => void;
   onSelectFile: (file: ThingFile) => void;
   onAddFileClick: () => void;
@@ -58,6 +59,7 @@ export function ThingAttachments({
   viewOnly,
   isLoading,
   attachmentsUnavailable,
+  uploadStatus = null,
   onRetry,
   onSelectFile,
   onAddFileClick,
@@ -83,12 +85,32 @@ export function ThingAttachments({
           <button
             type="button"
             onClick={onAddFileClick}
-            className="inline-flex items-center gap-1 text-[12px] font-medium text-[#975ee2] hover:opacity-80 transition-opacity cursor-pointer"
+            disabled={Boolean(uploadStatus)}
+            className="inline-flex items-center gap-1 text-[12px] font-medium text-[#975ee2] transition-opacity hover:opacity-80 disabled:cursor-wait disabled:opacity-60"
           >
-            + Add file
+            {uploadStatus ? "Uploading…" : "+ Add file"}
           </button>
         )}
       </div>
+      {uploadStatus ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-2.5 rounded-lg border border-[#ded1f2] bg-[#faf7ff] px-3 py-2"
+        >
+          <div className="flex items-center justify-between gap-3 text-[12px]">
+            <span className="min-w-0 truncate font-medium text-[#3a1260]">
+              Uploading {uploadStatus.fileName}
+            </span>
+            <span className="shrink-0 text-[#6a769c]">
+              {uploadStatus.current} of {uploadStatus.total}
+            </span>
+          </div>
+          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e9e1f5]">
+            <div className="h-full w-1/3 animate-pulse rounded-full bg-[#975ee2] motion-reduce:animate-none" />
+          </div>
+        </div>
+      ) : null}
       {(isLoading || attachmentsUnavailable) && (
         <div role="status" className="mb-2 text-xs text-amber-700">
           {attachmentsUnavailable ? "Files could not be loaded." : "Loading files…"}
