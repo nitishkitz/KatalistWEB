@@ -323,6 +323,18 @@
 .kg-well input::placeholder {
   color: rgba(79, 61, 92, 0.5);
 }
+/* Chrome/Safari paint autofilled controls with a blue user-agent surface.
+   Keep autocomplete enabled, but make that state match the surrounding well. */
+.kg-well input:-webkit-autofill,
+.kg-well input:-webkit-autofill:hover,
+.kg-well input:-webkit-autofill:focus,
+.kg-well input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--kg-ink);
+  caret-color: var(--kg-ink);
+  -webkit-box-shadow: 0 0 0 1000px #f0e2d5 inset;
+  box-shadow: 0 0 0 1000px #f0e2d5 inset;
+  transition: background-color 9999s ease-out 0s;
+}
 .kg-well--compact input {
   font-size: 17px;
   letter-spacing: 0.01em;
