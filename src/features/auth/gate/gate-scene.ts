@@ -58,6 +58,11 @@ export class GateScene {
   private raf = 0;
   private job = 0;
   private destroyed = false;
+  // Media time of the frame the compositor last presented. video.currentTime
+  // runs ahead of / out of step with what is on screen while playing, so a
+  // ring pinned to it visibly slips against the dock it should sit on.
+  private shownT: number | null = null;
+  private frameCb = 0;
   private geo = { s: 1, left: 0, top: 0, stacked: false };
   private fx = {
     ring: false,
@@ -87,6 +92,7 @@ export class GateScene {
     window.addEventListener("resize", this.layout);
     this.raf = requestAnimationFrame(this.tick);
     const { video } = this.els;
+    this.watchFrames();
     if (video.readyState > 0) this.seekToRest();
     else video.addEventListener("loadeddata", this.onLoaded, { once: true });
   }
@@ -95,12 +101,30 @@ export class GateScene {
     this.destroyed = true;
     this.job++;
     cancelAnimationFrame(this.raf);
+    if (this.frameCb) this.els.video.cancelVideoFrameCallback?.(this.frameCb);
     window.removeEventListener("resize", this.layout);
     this.els.video.removeEventListener("loadeddata", this.onLoaded);
   }
 
   setReducedMotion(reduce: boolean) {
     this.reduce = reduce;
+  }
+
+  private watchFrames() {
+    const { video } = this.els;
+    if (!video.requestVideoFrameCallback) return;
+    const onFrame: VideoFrameRequestCallback = (_now, meta) => {
+      this.shownT = meta.mediaTime;
+      this.frameCb = video.requestVideoFrameCallback(onFrame);
+    };
+    this.frameCb = video.requestVideoFrameCallback(onFrame);
+  }
+
+  /** The time of the frame actually on screen. */
+  private shownTime() {
+    const { video } = this.els;
+    if (video.paused || video.seeking || this.shownT === null) return video.currentTime || 0;
+    return this.shownT;
   }
 
   private onLoaded = () => {
@@ -181,7 +205,7 @@ export class GateScene {
     if (this.destroyed) return;
     const { video, ringPos, column, welcome, root } = this.els;
     const { fx, geo } = this;
-    const t = video.currentTime || 0;
+    const t = this.shownTime();
 
     if (fx.ring && t > 3.3) fx.ring = false;
     if (fx.ring) {
@@ -251,7 +275,12 @@ export class GateScene {
       const watch = () => {
         if (my !== this.job) return resolve();
         if (video.currentTime >= end || video.ended) {
-          this.seek(end);
+          // Stop on the frame we reached. Seeking back to `end` after a
+          // one-frame overshoot made the picture hop backwards and re-decode
+          // (a visible stutter); the tracking reads the real time, so the
+          // pose is still correct. Only correct a clearly late stop.
+          video.pause();
+          if (video.currentTime - end > 3 / GATE_FPS) this.seek(end);
           resolve();
         } else requestAnimationFrame(watch);
       };
@@ -315,13 +344,28 @@ export class GateScene {
 
   showRing() {
     const { ring } = this.els;
-    ring.classList.remove("is-fading", "is-error", "is-charging", "is-expired");
+    ring.classList.remove("is-fading", "is-error", "is-charging", "is-expired", "is-waiting");
     this.fx.ring = true;
     this.fx.spinAt = 0;
     requestAnimationFrame(() => ring.classList.add("is-shown"));
   }
 
+  /**
+   * While the visitor fills in their details the dock stays alive: the dial
+   * breathes slowly and one pair of segments lights per finished field, so
+   * the scene reads as "almost unlocked" instead of a frozen frame.
+   */
+  holdForProfile() {
+    const { ring } = this.els;
+    ring.classList.remove("is-fading", "is-error", "is-charging", "is-expired");
+    ring.classList.add("is-waiting");
+    this.setTimeLeft(0);
+    this.fx.ring = true;
+    requestAnimationFrame(() => ring.classList.add("is-shown"));
+  }
+
   hideRing() {
+    this.els.ring.classList.remove("is-waiting");
     this.els.ring.classList.remove("is-shown", "is-charging");
     this.fx.ring = false;
   }
@@ -384,7 +428,7 @@ export class GateScene {
    */
   async unlock(reveal: () => void) {
     const { ring, welcome, video } = this.els;
-    ring.classList.remove("is-charging");
+    ring.classList.remove("is-charging", "is-waiting");
     this.fx.spinAt = performance.now();
     ring.classList.add("is-fading");
     this.leaveColumn();

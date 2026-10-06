@@ -46,6 +46,8 @@ mock.module("@/integrations/supabase/client", {
           subscribe: () => node,
           track: async () => {},
           untrack: async () => {},
+          send: async () => "ok",
+          presenceState: () => ({}),
         };
         return node;
       },

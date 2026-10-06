@@ -150,6 +150,21 @@
     opacity: 0.35;
   }
 }
+.kg-ring.is-waiting .kg-ring-time {
+  opacity: 0;
+}
+.kg-ring.is-waiting .kg-ring-base {
+  stroke: rgba(255, 255, 255, 0.34);
+  animation: kg-wait 2.6s ease-in-out infinite;
+}
+@keyframes kg-wait {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
 .kg-ring.is-error .kg-ring-lit,
 .kg-ring.is-error .kg-ring-base {
   stroke: var(--kg-error-glow);
@@ -449,6 +464,11 @@
   font-size: 14.5px;
   line-height: 1.4;
   color: var(--kg-muted);
+}
+/* The code step's note can wrap to two lines ("…could not be reached. Check your connection").
+   Reserving both lines stops the button jumping when the note appears or clears while verifying. */
+#kg-code-note {
+  min-height: 42px;
 }
 .kg-note.is-error {
   color: var(--kg-error);

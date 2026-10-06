@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { toProxiedUrl } from "@/integrations/supabase/proxy";
 import { useAvatarUrl, matchAvatarByName } from "@/features/people/directory";
 
 const AVATAR_COLORS = [
@@ -40,7 +41,9 @@ export function PersonAvatar({
 }) {
   const safeName = name && name.trim() && name.toLowerCase() !== "someone" ? name.trim() : "Priya";
   const directoryAvatar = useAvatarUrl(safeName, null, src);
-  const resolvedSrc = src || directoryAvatar || matchAvatarByName(safeName);
+  const rawSrc = src || directoryAvatar || matchAvatarByName(safeName);
+  // Stored avatar URLs carry the Supabase host; route them through the same-origin proxy.
+  const resolvedSrc = rawSrc ? toProxiedUrl(rawSrc, (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_SUPABASE_URL ?? "") : rawSrc;
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   useEffect(() => {

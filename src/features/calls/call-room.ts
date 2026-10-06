@@ -100,6 +100,12 @@ type PeerSlot = {
   sessionId: string | null;
   /** ICE candidates that arrived before the remote description was applied. */
   pendingIce: RTCIceCandidateInit[];
+  /** Identifies this side's RTCPeerConnection in every SDP/ICE message. */
+  localConn: string;
+  /** The remote RTCPeerConnection this slot is paired with, once known. */
+  remoteConn: string | null;
+  /** When the peer vanished from presence; dropped only if it stays gone. */
+  missingSince: number | null;
   stream: MediaStream;
   muted: boolean;
   cameraOff: boolean;
@@ -176,6 +182,15 @@ async function loadIceServers(): Promise<RTCIceServer[]> {
   return iceServers();
 }
 
+/**
+ * Supabase presence can briefly omit a peer while it applies that peer's
+ * metadata update (the leave of the old meta lands before the join of the
+ * new one). Tearing the connection down on that blip rebuilt it on one side
+ * only and left the pair stuck. Real leaves are announced with a "bye"
+ * broadcast, so only an unannounced disappearance waits this long.
+ */
+const PRESENCE_GRACE_MS = 6000;
+
 export class CallRoom {
   private readonly listId: string;
   private readonly selfId: string;
@@ -185,6 +200,11 @@ export class CallRoom {
   private readonly onState: (state: CallRoomState) => void;
   private channel: RealtimeChannel | null = null;
   private readonly peers = new Map<string, PeerSlot>();
+  private graceTimer: ReturnType<typeof setTimeout> | null = null;
+  private stateTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly pendingState = new Map<string, Partial<PeerState>>();
+  /** Per-peer chain so each peer's SDP/ICE messages are applied strictly in order. */
+  private readonly signalQueues = new Map<string, Promise<void>>();
   private localStream: MediaStream | null = null;
   private cameraTrack: MediaStreamTrack | null = null;
   private screenStream: MediaStream | null = null;
@@ -267,8 +287,8 @@ export class CallRoom {
     this.channel = channel;
 
     channel
-      .on("broadcast", { event: "sdp" }, ({ payload }) => void this.onSdp(payload as SdpMsg))
-      .on("broadcast", { event: "ice" }, ({ payload }) => void this.onIce(payload as IceMsg))
+      .on("broadcast", { event: "sdp" }, ({ payload }) => this.enqueue(payload as SdpMsg, () => this.onSdp(payload as SdpMsg)))
+      .on("broadcast", { event: "ice" }, ({ payload }) => this.enqueue(payload as IceMsg, () => this.onIce(payload as IceMsg)))
       // R-05: removeChannel() in leave() is not synchronous -- an event
       // already queued by Realtime before unsubscribe completes can still
       // reach these handlers after `this.closed` is set. Guard each one
@@ -285,11 +305,26 @@ export class CallRoom {
         if (this.closed) return;
         this.onDocPage?.((payload as { page: number }).page);
       })
+      .on("broadcast", { event: "bye" }, ({ payload }) => {
+        if (this.closed) return;
+        const from = (payload as { from?: string }).from;
+        if (from && this.peers.has(from)) {
+          this.dropPeer(from);
+          this.emit();
+        }
+      })
+      .on("broadcast", { event: "state" }, ({ payload }) => this.onPeerState(payload as { from?: string; state?: Partial<PeerState> }))
       .on("presence", { event: "sync" }, () => this.syncPeers())
+      .on("system", {}, (payload: { status?: string; message?: string }) => {
+        if (this.closed || payload?.status !== "error") return;
+        console.warn("[call] realtime system error", payload.message);
+        this.onSignalingError?.("CHANNEL_ERROR");
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           // Also runs after a silent re-subscribe, which re-announces us.
           void channel.track(this.presenceMeta());
+          this.publishState();
         } else if ((status === "CHANNEL_ERROR" || status === "TIMED_OUT") && !this.closed) {
           // Without this a dead signalling channel just looks like "nobody joined".
           this.onSignalingError?.(status);
@@ -299,6 +334,14 @@ export class CallRoom {
     return this.localStream;
   }
 
+  /**
+   * Presence carries identity only and is tracked once per subscription.
+   * Supabase allows a client roughly five presence updates before it starts
+   * rejecting them ("Client presence rate limit exceeded") and drops that
+   * client from everyone's roster, so anything that changes during a call
+   * (mute, camera, hand, whiteboard, document, screen share) travels as a
+   * "state" broadcast instead -- see publishState().
+   */
   private presenceMeta() {
     return {
       id: this.selfId,
@@ -306,6 +349,11 @@ export class CallRoom {
       profileId: this.selfId.split(":")[0] || null,
       avatarUrl: this.selfAvatarUrl,
       sessionId: this.sessionId,
+    };
+  }
+
+  private selfState(): PeerState {
+    return {
       muted: this.selfMuted,
       cameraOff: this.selfCameraOff,
       sharing: this.selfSharing,
@@ -318,21 +366,38 @@ export class CallRoom {
     };
   }
 
+  /** Broadcast our call state, coalescing bursts of toggles into one message. */
+  private publishState() {
+    if (this.stateTimer || this.closed) return;
+    this.stateTimer = setTimeout(() => {
+      this.stateTimer = null;
+      if (this.closed || !this.channel) return;
+      void this.channel.send({
+        type: "broadcast",
+        event: "state",
+        payload: { from: this.selfId, sessionId: this.sessionId, state: this.selfState() },
+      });
+    }, 60);
+  }
+
+  private onPeerState(msg: { from?: string; sessionId?: string; state?: Partial<PeerState> }) {
+    if (this.closed || !msg.from || !msg.state || msg.from === this.selfId) return;
+    const slot = this.peers.get(msg.from);
+    // State can arrive before the sender shows up in presence; keep the latest.
+    if (!slot) {
+      this.pendingState.set(msg.from, msg.state);
+      return;
+    }
+    Object.assign(slot, normalizeState(msg.state));
+    this.emit();
+  }
+
   private presentPeerIds(): {
     id: string;
     name: string;
     profileId: string | null;
     avatarUrl: string | null;
     sessionId: string | null;
-    muted: boolean;
-    cameraOff: boolean;
-    sharing: boolean;
-    whiteboardOpen: boolean;
-    docUrl: string | null;
-    docName: string | null;
-    docKind: "pdf" | "docx" | "excel" | "image" | null;
-    raisedHand: boolean;
-    raisedSince: number;
   }[] {
     if (!this.channel) return [];
     const state = this.channel.presenceState<{
@@ -341,35 +406,11 @@ export class CallRoom {
       profileId?: string | null;
       avatarUrl?: string | null;
       sessionId?: string | null;
-      muted?: boolean;
-      cameraOff?: boolean;
-      sharing?: boolean;
-      whiteboardOpen?: boolean;
-      docUrl?: string | null;
-      docName?: string | null;
-      docKind?: "pdf" | "docx" | "excel" | "image" | null;
-      raisedHand?: boolean;
-      raisedSince?: number;
     }>();
-    const out: {
-      id: string;
-      name: string;
-      profileId: string | null;
-      avatarUrl: string | null;
-      sessionId: string | null;
-      muted: boolean;
-      cameraOff: boolean;
-      sharing: boolean;
-      whiteboardOpen: boolean;
-      docUrl: string | null;
-      docName: string | null;
-      docKind: "pdf" | "docx" | "excel" | "image" | null;
-      raisedHand: boolean;
-      raisedSince: number;
-    }[] = [];
+    const out: { id: string; name: string; profileId: string | null; avatarUrl: string | null; sessionId: string | null }[] = [];
     for (const key of Object.keys(state)) {
       const metas = state[key];
-      const meta = metas?.[0];
+      const meta = metas?.[metas.length - 1];
       if (meta && meta.id !== this.selfId) {
         out.push({
           id: meta.id,
@@ -377,15 +418,6 @@ export class CallRoom {
           profileId: meta.profileId ?? meta.id.split(":")[0] ?? null,
           avatarUrl: meta.avatarUrl ?? null,
           sessionId: meta.sessionId ?? null,
-          muted: Boolean(meta.muted),
-          cameraOff: Boolean(meta.cameraOff),
-          sharing: Boolean(meta.sharing),
-          whiteboardOpen: Boolean(meta.whiteboardOpen),
-          docUrl: meta.docUrl ?? null,
-          docName: meta.docName ?? null,
-          docKind: meta.docKind ?? null,
-          raisedHand: Boolean(meta.raisedHand),
-          raisedSince: meta.raisedSince ?? 0,
         });
       }
     }
@@ -397,11 +429,27 @@ export class CallRoom {
     const present = this.presentPeerIds();
     const presentIds = new Set(present.map((p) => p.id));
 
-    // Remove peers that left.
-    for (const id of [...this.peers.keys()]) {
-      if (!presentIds.has(id)) this.dropPeer(id);
+    // Remove peers that left -- after a grace period, see PRESENCE_GRACE_MS.
+    const now = Date.now();
+    let waiting = false;
+    for (const [id, slot] of [...this.peers.entries()]) {
+      if (presentIds.has(id)) {
+        slot.missingSince = null;
+        continue;
+      }
+      slot.missingSince ??= now;
+      const dead = slot.pc.connectionState === "failed" || slot.pc.connectionState === "closed";
+      if (dead || now - slot.missingSince >= PRESENCE_GRACE_MS) this.dropPeer(id);
+      else waiting = true;
     }
-    // Add peers that joined, and refresh mute/camera state for peers already
+    if (waiting && !this.graceTimer && !this.closed) {
+      this.graceTimer = setTimeout(() => {
+        this.graceTimer = null;
+        if (!this.closed) this.syncPeers();
+      }, PRESENCE_GRACE_MS);
+    }
+    let joined = false;
+    // Add peers that joined, and refresh identity for peers already
     // connected (presence re-syncs whenever anyone updates their metadata).
     // Adding local tracks in createPeer triggers onnegotiationneeded on both
     // sides; perfect negotiation resolves the glare.
@@ -419,19 +467,15 @@ export class CallRoom {
         existing.profileId = p.profileId;
         existing.avatarUrl = p.avatarUrl;
         existing.sessionId = p.sessionId ?? existing.sessionId;
-        existing.muted = p.muted;
-        existing.cameraOff = p.cameraOff;
-        existing.sharing = p.sharing;
-        existing.whiteboardOpen = p.whiteboardOpen;
-        existing.docUrl = p.docUrl;
-        existing.docName = p.docName;
-        existing.docKind = p.docKind;
-        existing.raisedHand = p.raisedHand;
-        existing.raisedSince = p.raisedSince;
       } else {
-        this.createPeer(p.id, p.name, p);
+        const pending = this.pendingState.get(p.id);
+        this.pendingState.delete(p.id);
+        this.createPeer(p.id, p.name, { ...p, ...(pending ? normalizeState(pending) : {}) });
+        joined = true;
       }
     }
+    // Someone new: tell them where we stand (they missed earlier broadcasts).
+    if (joined) this.publishState();
     this.emit();
   }
 
@@ -480,6 +524,9 @@ export class CallRoom {
       avatarUrl,
       sessionId,
       pendingIce: [],
+      localConn: crypto.randomUUID(),
+      remoteConn: null,
+      missingSince: null,
       stream: new MediaStream(),
       muted,
       cameraOff,
@@ -505,14 +552,20 @@ export class CallRoom {
       this.emit();
     };
     pc.onicecandidate = (e) => {
-      if (e.candidate) this.send("ice", { from: this.selfId, to: peerId, candidate: e.candidate.toJSON() });
+      if (e.candidate) {
+        this.send("ice", { from: this.selfId, to: peerId, conn: slot.localConn, candidate: e.candidate.toJSON() });
+      }
     };
     pc.onnegotiationneeded = async () => {
       try {
         slot.makingOffer = true;
         await pc.setLocalDescription();
-        this.send("sdp", { from: this.selfId, to: peerId, description: pc.localDescription!.toJSON() });
-      } catch {
+        this.send("sdp", {
+          from: this.selfId, to: peerId, conn: slot.localConn, toConn: slot.remoteConn,
+          description: pc.localDescription!.toJSON(),
+        });
+      } catch (err) {
+        console.warn("[call] offer failed", err);
         // negotiation will be retried on the next event
       } finally {
         slot.makingOffer = false;
@@ -543,25 +596,65 @@ export class CallRoom {
     return slot;
   }
 
+  /**
+   * Handlers are async (setRemoteDescription/setLocalDescription). Running
+   * them concurrently let an offer be judged against a connection that was
+   * still applying the previous answer, so a valid renegotiation was
+   * discarded as a "collision" and that pair never exchanged video.
+   */
+  private enqueue(msg: { from?: string; to?: string }, run: () => Promise<void>) {
+    if (msg.to !== this.selfId || !msg.from) return;
+    const key = msg.from;
+    const next = (this.signalQueues.get(key) ?? Promise.resolve()).then(run).catch((err) => {
+      console.warn("[call] signalling step failed", err);
+    });
+    this.signalQueues.set(key, next);
+    void next.then(() => {
+      if (this.signalQueues.get(key) === next) this.signalQueues.delete(key);
+    });
+  }
+
   private async onSdp(msg: SdpMsg) {
-    if (msg.to !== this.selfId) return;
-    let slot = this.peers.get(msg.from);
-    if (!slot) slot = this.createPeer(msg.from, "Participant");
-    const pc = slot.pc;
+    if (msg.to !== this.selfId || this.closed) return;
     const description = msg.description;
+    let slot = this.peers.get(msg.from);
+    if (slot && msg.conn && slot.remoteConn && msg.conn !== slot.remoteConn) {
+      // The other side rebuilt its connection (rejoin, failure recovery).
+      // Ours is paired with a connection that no longer exists: rebuild to
+      // match an offer, and ignore answers meant for an older negotiation.
+      if (description.type !== "offer") return;
+      const keep = { name: slot.name, profileId: slot.profileId, avatarUrl: slot.avatarUrl, sessionId: slot.sessionId };
+      this.dropPeer(msg.from);
+      slot = this.createPeer(msg.from, keep.name, keep);
+    }
+    // An answer addressed to one of our earlier connections is stale.
+    if (slot && description.type === "answer" && msg.toConn && msg.toConn !== slot.localConn) return;
+    if (!slot) {
+      // The offer can beat the sender's presence entry; use it if it's there.
+      const known = this.presentPeerIds().find((p) => p.id === msg.from);
+      slot = this.createPeer(msg.from, known?.name ?? "Participant", known ?? {});
+    }
+    const pc = slot.pc;
     const polite = this.selfId < msg.from;
     const offerCollision = description.type === "offer" && (slot.makingOffer || pc.signalingState !== "stable");
     slot.ignoreOffer = !polite && offerCollision;
-    if (slot.ignoreOffer) return;
+    if (slot.ignoreOffer) {
+      console.debug("[call] ignored colliding offer", msg.from);
+      return;
+    }
     try {
       await pc.setRemoteDescription(description);
+      if (msg.conn) slot.remoteConn = msg.conn;
       await this.flushPendingIce(slot);
       if (description.type === "offer") {
         await pc.setLocalDescription();
-        this.send("sdp", { from: this.selfId, to: msg.from, description: pc.localDescription!.toJSON() });
+        this.send("sdp", {
+          from: this.selfId, to: msg.from, conn: slot.localConn, toConn: slot.remoteConn,
+          description: pc.localDescription!.toJSON(),
+        });
       }
-    } catch {
-      /* ignore */
+    } catch (err) {
+      console.warn("[call] remote description failed", description.type, err);
     }
   }
 
@@ -569,6 +662,9 @@ export class CallRoom {
     if (msg.to !== this.selfId) return;
     const slot = this.peers.get(msg.from);
     if (!slot) return;
+    // A candidate from a connection this slot is not paired with would
+    // poison the pairing; drop it.
+    if (msg.conn && slot.remoteConn && msg.conn !== slot.remoteConn) return;
     // Candidates routinely beat their SDP over the broadcast channel. Adding
     // one before setRemoteDescription throws and the candidate is lost for
     // good, which leaves the pair stuck on "connecting" with no media.
@@ -603,11 +699,21 @@ export class CallRoom {
   /** Replace the outgoing video track on all peers (camera <-> screen). */
   private async replaceVideoTrack(track: MediaStreamTrack | null) {
     for (const slot of this.peers.values()) {
-      const sender = slot.pc.getTransceivers().find((t) => t.sender.track?.kind === "video" || t.receiver.track.kind === "video")?.sender;
-      if (sender) await sender.replaceTrack(track);
-      // Joined audio-only: no video sender exists yet, so publish the screen
-      // as a new track (triggers renegotiation) instead of silently dropping it.
-      else if (track) slot.pc.addTrack(track, this.screenStream ?? new MediaStream([track]));
+      const transceiver = slot.pc
+        .getTransceivers()
+        .find((t) => t.currentDirection !== "stopped" && (t.sender.track?.kind === "video" || t.receiver.track.kind === "video"));
+      if (transceiver) {
+        await transceiver.sender.replaceTrack(track);
+        // An audio-only participant only has a receive-only video slot (it
+        // was created to receive the other side's camera). Sending a screen
+        // through it needs the direction opened, which renegotiates.
+        if (track && (transceiver.direction === "recvonly" || transceiver.direction === "inactive")) {
+          transceiver.direction = "sendrecv";
+        }
+      } else if (track) {
+        // No video slot at all yet: publish the screen as a new track.
+        slot.pc.addTrack(track, this.screenStream ?? new MediaStream([track]));
+      }
     }
   }
 
@@ -625,7 +731,7 @@ export class CallRoom {
     await this.replaceVideoTrack(track);
     track.onended = () => void this.stopScreenShare();
     this.selfSharing = true;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
     return screen;
   }
 
@@ -634,7 +740,7 @@ export class CallRoom {
     this.screenStream = null;
     await this.replaceVideoTrack(this.cameraTrack);
     this.selfSharing = false;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
   }
 
   /** Open the standalone whiteboard — usable without anyone screen-sharing,
@@ -642,13 +748,13 @@ export class CallRoom {
    *  the raise-hand/take-control flags: anyone can open or close it. */
   openWhiteboard() {
     this.selfWhiteboardOpen = true;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
     this.emit();
   }
 
   closeWhiteboard() {
     this.selfWhiteboardOpen = false;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
     this.emit();
   }
 
@@ -660,7 +766,7 @@ export class CallRoom {
     this.selfDocUrl = doc.url;
     this.selfDocName = doc.name;
     this.selfDocKind = doc.kind;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
     this.emit();
   }
 
@@ -668,7 +774,7 @@ export class CallRoom {
     this.selfDocUrl = null;
     this.selfDocName = null;
     this.selfDocKind = null;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
     this.emit();
   }
 
@@ -700,26 +806,26 @@ export class CallRoom {
   raiseHand() {
     this.selfRaisedHand = true;
     this.selfRaisedSince = Date.now();
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
     this.emit();
   }
 
   lowerHand() {
     this.selfRaisedHand = false;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
     this.emit();
   }
 
   setMuted(muted: boolean) {
     this.localStream?.getAudioTracks().forEach((t) => (t.enabled = !muted));
     this.selfMuted = muted;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
   }
 
   setCameraOff(off: boolean) {
     this.localStream?.getVideoTracks().forEach((t) => (t.enabled = !off));
     this.selfCameraOff = off;
-    void this.channel?.track(this.presenceMeta());
+    this.publishState();
   }
 
   private dropPeer(id: string) {
@@ -729,6 +835,7 @@ export class CallRoom {
       slot.pc.ontrack = null;
       slot.pc.onicecandidate = null;
       slot.pc.onnegotiationneeded = null;
+      slot.pc.onconnectionstatechange = null;
       slot.pc.close();
     } catch {
       /* ignore */
@@ -769,7 +876,15 @@ export class CallRoom {
   }
 
   leave() {
+    if (this.channel && !this.closed) {
+      // Lets everyone drop us now instead of after the presence grace period.
+      void this.channel.send({ type: "broadcast", event: "bye", payload: { from: this.selfId } });
+    }
     this.closed = true;
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.graceTimer = null;
+    if (this.stateTimer) clearTimeout(this.stateTimer);
+    this.stateTimer = null;
     for (const id of [...this.peers.keys()]) this.dropPeer(id);
     this.screenStream?.getTracks().forEach((t) => t.stop());
     this.localStream?.getTracks().forEach((t) => t.stop());
@@ -782,5 +897,42 @@ export class CallRoom {
   }
 }
 
-type SdpMsg = { from: string; to: string; description: RTCSessionDescriptionInit };
-type IceMsg = { from: string; to: string; candidate: RTCIceCandidateInit };
+type PeerState = {
+  muted: boolean;
+  cameraOff: boolean;
+  sharing: boolean;
+  whiteboardOpen: boolean;
+  docUrl: string | null;
+  docName: string | null;
+  docKind: "pdf" | "docx" | "excel" | "image" | null;
+  raisedHand: boolean;
+  raisedSince: number;
+};
+
+const DOC_KINDS = new Set(["pdf", "docx", "excel", "image"]);
+
+/** Coerce an untrusted state payload to well-typed slot fields. */
+function normalizeState(state: Partial<PeerState>): PeerState {
+  const docUrl = typeof state.docUrl === "string" && /^https?:\/\//i.test(state.docUrl) ? state.docUrl : null;
+  return {
+    muted: Boolean(state.muted),
+    cameraOff: Boolean(state.cameraOff),
+    sharing: Boolean(state.sharing),
+    whiteboardOpen: Boolean(state.whiteboardOpen),
+    docUrl,
+    docName: docUrl && typeof state.docName === "string" ? state.docName.slice(0, 200) : null,
+    docKind: docUrl && state.docKind && DOC_KINDS.has(state.docKind) ? state.docKind : null,
+    raisedHand: Boolean(state.raisedHand),
+    raisedSince: typeof state.raisedSince === "number" ? state.raisedSince : 0,
+  };
+}
+
+type SdpMsg = {
+  from: string;
+  to: string;
+  /** Sender's connection id; `toConn` is the receiver connection it answers. */
+  conn?: string;
+  toConn?: string | null;
+  description: RTCSessionDescriptionInit;
+};
+type IceMsg = { from: string; to: string; conn?: string; candidate: RTCIceCandidateInit };

@@ -122,6 +122,17 @@ export function AuthGate({ returnTo }: { returnTo: string }) {
     if (codeVisible) sceneRef.current?.setTimeLeft(auth.otpRemainingMs / OTP_TTL_MS);
   }, [sceneRef, codeVisible, auth.otpRemainingMs]);
 
+  // On the details step each finished field lights a pair of dial segments.
+  const profileProgress =
+    view === "profile"
+      ? (auth.fullName.trim().length >= 2 ? 2 : 0) +
+        (auth.profilePhone.replace(/\D/g, "").length >= 8 ? 2 : 0) +
+        (/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(auth.profileEmail.trim()) ? 2 : 0)
+      : 0;
+  useEffect(() => {
+    if (view === "profile") sceneRef.current?.setLit(profileProgress);
+  }, [sceneRef, view, profileProgress]);
+
   const { setOtp, setNote } = auth;
   useEffect(() => {
     if (!codeVisible) return;
@@ -199,7 +210,7 @@ export function AuthGate({ returnTo }: { returnTo: string }) {
     }
     if (outcome === "profile") {
       await glow;
-      scene.hideRing();
+      scene.holdForProfile();
       setPhase("idle");
       announce("Signed in. Add your details to finish.");
       return;
