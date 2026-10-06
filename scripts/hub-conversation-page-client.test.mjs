@@ -47,7 +47,7 @@ mock.module("@/features/people/directory", {
     matchAvatarByName: () => null,
   },
 });
-mock.module("@/hooks/useSession", { namedExports: { useSession: () => ({ user: { id: owner } }) } });
+mock.module("@/hooks/useSession", { namedExports: { useSession: () => ({ user: { id: owner } }), getStoredDemoSession: () => null } });
 mock.module("@/lib/session-mode", { namedExports: { isPreviewSession: () => false } });
 
 const { fetchConversations } = await import("@/features/hub/use-conversations");
@@ -55,13 +55,13 @@ const { fetchConversations } = await import("@/features/hub/use-conversations");
 test("Hub client requests bounded pages, maps one latest preview per List, and exposes next page", async () => {
   fixtureRows = 101;
   calls.length = 0;
-  const first = await fetchConversations({}, owner);
+  const first = await fetchConversations({}, owner, "work");
   assert.equal(first.conversations.length, 100);
   assert.deepEqual(first.nextCursor, { at: latest(99).sort_at, id: "list-99" });
   assert.equal(first.conversations[0].lastMessage, "Latest 0");
   assert.equal(first.conversations[0].unreadCount, 2);
   assert.equal(first.conversations[0].mentionCount, 1);
-  const next = await fetchConversations({}, owner, first.nextCursor);
+  const next = await fetchConversations({}, owner, "work", first.nextCursor);
   assert.equal(next.conversations.length, 1);
   assert.equal(next.nextCursor, undefined);
   assert.deepEqual(calls.filter((call) => call.name === "get_hub_conversation_page").map((call) => [call.name, call.p_limit, call.p_cursor_id]), [
@@ -77,7 +77,7 @@ for (const count of [0, 10, 100]) {
     memberRequests = 0;
     identityRequests = 0;
     const started = performance.now();
-    const page = await fetchConversations({}, owner);
+    const page = await fetchConversations({}, owner, "work");
     const elapsed = performance.now() - started;
     assert.equal(page.conversations.length, count);
     assert.equal(page.nextCursor, undefined);
@@ -92,7 +92,7 @@ test("failed Hub aggregate preserves conversations but marks counts unknown", as
   fixtureRows = 10;
   countsShouldFail = true;
   try {
-    const page = await fetchConversations({}, owner);
+    const page = await fetchConversations({}, owner, "work");
     assert.equal(page.conversations.length, 10);
     assert.equal(page.conversations[0].unreadCount, "unknown");
     assert.equal(page.conversations[0].mentionCount, "unknown");

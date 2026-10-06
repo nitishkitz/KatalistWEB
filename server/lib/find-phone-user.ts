@@ -1,5 +1,5 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { withAuthNetworkRetry } from "./supabase-admin";
+import { withAuthNetworkRetry } from "./supabase-admin.ts";
 
 const USERS_PER_PAGE = 1_000;
 const MAX_USER_PAGES = 100;

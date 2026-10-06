@@ -208,7 +208,7 @@ export function useListMessages(listId: string) {
   });
   const messages: ListChatMessage[] = hidden || accessLost ? [] : preview ? getListMessages(listId).map((m) => ({
     id: m.id, body: m.body, author: m.author, authorId: null, avatarUrl: null, at: m.at,
-    kind: "message" as const, attachment: null, pinnedAt: m.pinnedAt, mentionedProfileIds: [], delivery: "sent" as const,
+    kind: m.kind ?? "message", attachment: m.attachment ?? null, pinnedAt: m.pinnedAt, mentionedProfileIds: [], delivery: "sent" as const,
   })) : merged;
 
   return {

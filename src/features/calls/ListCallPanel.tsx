@@ -1,4 +1,6 @@
-import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useProfileDirectory } from "@/features/people/directory";
+import { findCallProfile, isGenericName, useSelfCallIdentity } from "./call-identity";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -36,6 +38,7 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { detectFileType } from "@/lib/file-utils";
+import { describeUploadError } from "@/lib/upload-errors";
 import { PdfCanvas } from "@/features/things/PdfCanvas";
 import { useListMessages } from "@/features/lists/use-list-messages";
 import { useSessionDraft } from "@/features/drafts/use-session-draft";
@@ -68,6 +71,7 @@ const VideoTile = forwardRef<
   {
     stream: MediaStream | null | undefined;
     name: string;
+    avatarUrl?: string | null;
     muted?: boolean;
     cameraOff?: boolean;
     self?: boolean;
@@ -75,7 +79,7 @@ const VideoTile = forwardRef<
     compact?: boolean;
     raisedHand?: boolean;
   }
->(function VideoTile({ stream, name, muted, cameraOff, self, compact, raisedHand }, forwardedRef) {
+>(function VideoTile({ stream, name, avatarUrl, muted, cameraOff, self, compact, raisedHand }, forwardedRef) {
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     const el = ref.current;
@@ -101,7 +105,7 @@ const VideoTile = forwardRef<
       />
       {!hasVideo ? (
         <div className="absolute inset-0 flex items-center justify-center">
-          <PersonAvatar name={name} initials={name.slice(0, 2)} size={compact ? 28 : 56} />
+          <PersonAvatar name={name} src={avatarUrl} size={compact ? 28 : 56} />
         </div>
       ) : null}
       {raisedHand ? (
@@ -123,18 +127,20 @@ const VideoTile = forwardRef<
 /** One row in the "In this call (N)" dock — mirrors the Figma participants list. */
 function ParticipantRow({
   name,
+  avatarUrl,
   roleLabel,
   muted,
   raisedHand,
 }: {
   name: string;
+  avatarUrl?: string | null;
   roleLabel?: string;
   muted?: boolean;
   raisedHand?: boolean;
 }) {
   return (
     <div className="flex items-center gap-2.5 px-1 py-1.5">
-      <PersonAvatar name={name} initials={name.slice(0, 2).toUpperCase()} size={30} />
+      <PersonAvatar name={name} src={avatarUrl} size={30} />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[12.5px] font-medium text-[#000128]">{name}</p>
         {roleLabel ? <p className="text-[12px] text-black/60">{roleLabel}</p> : null}
@@ -164,6 +170,22 @@ export function ListCallPanel({
   /** Opens the shared invite picker (parent owns announce/ring wiring). */
   onInvite?: () => void;
 }) {
+  const directory = useProfileDirectory();
+  const selfIdentity = useSelfCallIdentity(selfName);
+  const selfAvatarUrl = selfIdentity.avatarUrl;
+  // Presence carries a display name and avatar, but the profile directory is
+  // the source of truth (uploaded avatar, current name) -- prefer it, and fall
+  // back to what the peer announced.
+  const participants = useMemo(
+    () =>
+      call.participants.map((p) => {
+        const profile = findCallProfile(directory, p.profileId);
+        const directoryName = profile?.display_name;
+        const name = directoryName && !isGenericName(directoryName) ? directoryName : p.name;
+        return { ...p, name, avatarUrl: profile?.avatar_url ?? p.avatarUrl ?? null };
+      }),
+    [call.participants, directory],
+  );
   const [minimized, setMinimized] = useState(false);
   const [dock, setDock] = useState<"none" | "chat" | "participants">("participants");
   const qc = useQueryClient();
@@ -316,8 +338,9 @@ export function ListCallPanel({
         .createSignedUrl(attachment.key, SIGNED_URL_TTL_SECONDS);
       if (error || !data?.signedUrl) throw error ?? new Error("No signed URL");
       call.openDoc({ url: data.signedUrl, name: file.name, kind });
-    } catch {
-      toast.error("Couldn't share that document.");
+    } catch (err) {
+      console.error("[call] document share failed", err);
+      toast.error(describeUploadError(err, "Couldn't share that document."));
     } finally {
       setUploadingDoc(false);
       if (docFileInputRef.current) docFileInputRef.current.value = "";
@@ -422,7 +445,7 @@ export function ListCallPanel({
 
   if (!call.joined && !call.connecting) return null;
 
-  const count = call.participants.length + 1;
+  const count = participants.length + 1;
   const cols = count <= 1 ? "grid-cols-1" : count <= 4 ? "grid-cols-2" : "grid-cols-3";
   const localStream = call.sharing && call.screenStream ? call.screenStream : call.localStream;
 
@@ -443,18 +466,20 @@ export function ListCallPanel({
               kind: "video" as const,
               stream: localStream,
               name: selfName,
+              avatarUrl: selfAvatarUrl,
               self: true,
               muted: call.muted,
               cameraOff: false,
               raisedHand: call.handRaised,
             }
           : (() => {
-              const p = call.participants.find((x) => x.id === presenting);
+              const p = participants.find((x) => x.id === presenting);
               return p
                 ? {
                     kind: "video" as const,
                     stream: p.stream,
                     name: p.name,
+                    avatarUrl: p.avatarUrl,
                     self: false,
                     muted: p.muted,
                     cameraOff: p.cameraOff,
@@ -471,6 +496,7 @@ export function ListCallPanel({
                 id: "self",
                 stream: localStream,
                 name: selfName,
+                avatarUrl: selfAvatarUrl,
                 self: true,
                 muted: call.muted,
                 cameraOff: call.cameraOff,
@@ -478,12 +504,13 @@ export function ListCallPanel({
               },
             ]
           : []),
-        ...call.participants
+        ...participants
           .filter((p) => p.id !== presenting)
           .map((p) => ({
             id: p.id,
             stream: p.stream,
             name: p.name,
+            avatarUrl: p.avatarUrl,
             self: false,
             muted: p.muted,
             cameraOff: p.cameraOff,
@@ -700,6 +727,7 @@ export function ListCallPanel({
                     ref={presenterVideoRef}
                     stream={presenterTile.stream}
                     name={presenterTile.name}
+                    avatarUrl={"avatarUrl" in presenterTile ? presenterTile.avatarUrl : null}
                     self={presenterTile.self}
                     muted={presenterTile.muted}
                     cameraOff={presenterTile.cameraOff}
@@ -782,6 +810,7 @@ export function ListCallPanel({
                       <VideoTile
                         stream={t.stream}
                         name={t.name}
+                        avatarUrl={t.avatarUrl}
                         self={t.self}
                         muted={t.muted}
                         cameraOff={t.cameraOff}
@@ -798,16 +827,18 @@ export function ListCallPanel({
               <VideoTile
                 stream={localStream}
                 name={call.sharing ? `${selfName} (screen)` : selfName}
+                avatarUrl={selfAvatarUrl}
                 self
                 muted={call.muted}
                 cameraOff={call.cameraOff && !call.sharing}
                 raisedHand={call.handRaised}
               />
-              {call.participants.map((p) => (
+              {participants.map((p) => (
                 <VideoTile
                   key={p.id}
                   stream={p.stream}
                   name={p.name}
+                  avatarUrl={p.avatarUrl}
                   muted={p.muted}
                   cameraOff={p.cameraOff}
                   raisedHand={p.raisedHand}
@@ -824,9 +855,9 @@ export function ListCallPanel({
               In this call ({count})
             </div>
             <div className="flex-1 space-y-0.5 overflow-y-auto px-2 py-1.5" style={{ maxHeight: 220 }}>
-              <ParticipantRow name={selfName} roleLabel="You" muted={call.muted} raisedHand={call.handRaised} />
-              {call.participants.map((p) => (
-                <ParticipantRow key={p.id} name={p.name} muted={p.muted} raisedHand={p.raisedHand} />
+              <ParticipantRow name={selfName} avatarUrl={selfAvatarUrl} roleLabel="You" muted={call.muted} raisedHand={call.handRaised} />
+              {participants.map((p) => (
+                <ParticipantRow key={p.id} name={p.name} avatarUrl={p.avatarUrl} muted={p.muted} raisedHand={p.raisedHand} />
               ))}
             </div>
           </div>

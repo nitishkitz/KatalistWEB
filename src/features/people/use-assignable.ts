@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLists } from "@/features/lists/use-lists";
+import { mergeAssignablePeople, memberToPerson } from "./merge-people";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
@@ -7,8 +10,15 @@ import { demoDirectory } from "@/features/demo/identities";
 import { matchAvatarByName } from "./directory";
 import type { Person } from "@/domain/thing";
 
-export function useAssignablePeople() {
+/**
+ * Everyone who can be assigned a Thing. Pass `listId` to also include that
+ * List's members (flagged `listMember`): the global set is RLS-scoped and can
+ * lag behind newly added members, but anyone on the List must be selectable.
+ */
+export function useAssignablePeople(listId?: string | null) {
   const { session, user } = useSession();
+  const { lists } = useLists();
+  const members = listId ? lists.find((l) => l.id === listId)?.members : undefined;
   const preview = isPreviewSession(session);
 
   const query = useQuery({
@@ -67,6 +77,8 @@ export function useAssignablePeople() {
                 if (prof?.display_name && prof.display_name !== "Someone") {
                   map.set(a.id, {
                     id: a.id,
+                    actorId: a.id,
+                    profileId: a.profile_id ?? undefined,
                     name: prof.display_name,
                     initials: prof.display_name
                       .split(" ")
@@ -96,5 +108,9 @@ export function useAssignablePeople() {
     },
   });
 
-  return preview ? directoryPeople() : (query.data && query.data.length > 0 ? query.data : directoryPeople());
+  const base = preview ? directoryPeople() : (query.data && query.data.length > 0 ? query.data : directoryPeople());
+  return useMemo(
+    () => (members?.length ? mergeAssignablePeople(base, members.map(memberToPerson)) : base),
+    [base, members],
+  );
 }

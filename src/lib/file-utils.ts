@@ -10,6 +10,22 @@ export type ThingFile = {
   isNew?: boolean;
 };
 
+/** Files copied into the system clipboard (some browsers expose both paths). */
+export function getClipboardFiles(clipboard: Pick<DataTransfer, "files" | "items">): File[] {
+  // `DataTransfer.files` is the canonical file list. Some browsers also expose
+  // each same file through `items`; merging both lists can duplicate one paste.
+  const files = Array.from(clipboard.files);
+  if (files.length) return files;
+
+  const itemFiles: File[] = [];
+  for (const item of Array.from(clipboard.items)) {
+    if (item.kind !== "file") continue;
+    const file = item.getAsFile();
+    if (file && !itemFiles.includes(file)) itemFiles.push(file);
+  }
+  return itemFiles;
+}
+
 export function detectFileType(fileName: string, mimeType?: string): ThingFileType {
   const ext = fileName.split(".").pop()?.toLowerCase() || "";
   const mime = (mimeType || "").toLowerCase();

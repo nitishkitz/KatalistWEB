@@ -7,6 +7,7 @@ import {
   ChevronDown,
   FileText,
   Lock,
+  Loader2,
   MessageSquare,
   MoreVertical,
   Paperclip,
@@ -181,6 +182,7 @@ function BucketDetailPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [addTab, setAddTab] = useState<"things" | "lists">("things");
   const [addQ, setAddQ] = useState("");
+  const [pendingReference, setPendingReference] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectionOriginRef = useRef<HTMLElement | null>(null);
   const openThing = (thingId: string, origin?: HTMLElement | null) => {
@@ -343,10 +345,25 @@ function BucketDetailPage() {
     return new Date(b.thing.updatedAt).getTime() - new Date(a.thing.updatedAt).getTime();
   });
 
+  const addBucketReference = async (input: { thingId?: string; listId?: string }, label: string) => {
+    if (pendingReference) return;
+    const key = input.thingId ? `thing:${input.thingId}` : `list:${input.listId}`;
+    setPendingReference(key);
+    try {
+      await add.mutateAsync(input);
+      toast.success(label);
+      setAddOpen(false);
+    } catch (err) {
+      toast.error(domainErrorMessage(err));
+    } finally {
+      setPendingReference(null);
+    }
+  };
+
   // Buckets are private reference groupings; this picker never creates or
   // changes the source Thing/List's permissions.
   const addReference = (
-    <Popover open={addOpen} onOpenChange={setAddOpen}>
+    <Popover open={addOpen} onOpenChange={(next) => { if (!pendingReference) setAddOpen(next); }}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -364,6 +381,7 @@ function BucketDetailPage() {
               "flex-1 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
               addTab === "things" ? "bg-white text-foreground font-semibold" : "text-muted-foreground",
             )}
+            disabled={Boolean(pendingReference)}
             onClick={() => setAddTab("things")}
           >
             Things
@@ -374,6 +392,7 @@ function BucketDetailPage() {
               "flex-1 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors",
               addTab === "lists" ? "bg-white text-foreground font-semibold" : "text-muted-foreground",
             )}
+            disabled={Boolean(pendingReference)}
             onClick={() => setAddTab("lists")}
           >
             Lists
@@ -382,25 +401,20 @@ function BucketDetailPage() {
         <input
           value={addQ}
           onChange={(e) => setAddQ(e.target.value)}
+          disabled={Boolean(pendingReference)}
           placeholder={addTab === "things" ? "Search Things…" : "Search Lists…"}
           className="mb-2 h-8.5 w-full rounded-lg border border-border bg-background px-2.5 text-[12.5px] outline-none focus:ring-2 focus:ring-ring"
         />
-        <ul className="max-h-72 space-y-0.5 overflow-y-auto pr-0.5">
+        {pendingReference ? <p role="status" className="mb-2 flex items-center gap-1.5 rounded-lg bg-[#f7f3ff] px-2.5 py-2 text-[12px] font-medium text-[#6638ec]"><Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />Adding reference…</p> : null}
+        <ul className="max-h-72 space-y-0.5 overflow-y-auto pr-0.5" aria-busy={Boolean(pendingReference)}>
           {addTab === "things"
             ? addThings.slice(0, 40).map((t) => (
                 <li key={t.id}>
                   <button
                     type="button"
-                    className="group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 text-left hover:bg-[#f7f3ff] focus-visible:bg-[#f7f3ff] focus-visible:outline-2 focus-visible:outline-[#975ee2] motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200 hover:shadow-[inset_0_0_0_1px_#e7d8ff] cursor-pointer"
-                    onClick={() => {
-                      void add.mutateAsync({ thingId: t.id }).then(
-                        () => {
-                          toast.success("Referenced. The Thing itself did not change.");
-                          setAddOpen(false);
-                        },
-                        (err) => toast.error(domainErrorMessage(err)),
-                      );
-                    }}
+                    disabled={Boolean(pendingReference)}
+                    className="group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 text-left hover:bg-[#f7f3ff] focus-visible:bg-[#f7f3ff] focus-visible:outline-2 focus-visible:outline-[#975ee2] motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200 hover:shadow-[inset_0_0_0_1px_#e7d8ff] cursor-pointer disabled:cursor-wait disabled:opacity-60"
+                    onClick={() => void addBucketReference({ thingId: t.id }, "Referenced. The Thing itself did not change.")}
                   >
                     <span className="min-w-0 flex-1 motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out group-hover:motion-safe:translate-x-0.5 group-focus-visible:motion-safe:translate-x-0.5">
                       <span className="block line-clamp-2 text-[12.5px] font-medium leading-4.5 text-[#11163b]">{t.title}</span>
@@ -413,7 +427,7 @@ function BucketDetailPage() {
                         {t.dueAt ? <span className="ml-auto flex shrink-0 items-center gap-1"><CalendarDays className="h-3 w-3" />{formatDue(t.dueAt)}</span> : null}
                       </span>
                     </span>
-                    <Plus aria-hidden="true" className="h-4 w-4 shrink-0 text-[#975ee2] opacity-0 motion-safe:scale-75 motion-safe:transition-[opacity,transform] motion-safe:duration-200 group-hover:opacity-100 group-hover:motion-safe:scale-100 group-focus-visible:opacity-100 group-focus-visible:motion-safe:scale-100" />
+                    {pendingReference === `thing:${t.id}` ? <Loader2 aria-label="Adding reference" className="h-4 w-4 shrink-0 animate-spin text-[#975ee2] motion-reduce:animate-none" /> : <Plus aria-hidden="true" className="h-4 w-4 shrink-0 text-[#975ee2] opacity-0 motion-safe:scale-75 motion-safe:transition-[opacity,transform] motion-safe:duration-200 group-hover:opacity-100 group-hover:motion-safe:scale-100 group-focus-visible:opacity-100 group-focus-visible:motion-safe:scale-100" />}
                   </button>
                 </li>
               ))
@@ -421,16 +435,9 @@ function BucketDetailPage() {
                 <li key={l.id}>
                   <button
                     type="button"
-                    className="group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 text-left hover:bg-[#f7f3ff] focus-visible:bg-[#f7f3ff] focus-visible:outline-2 focus-visible:outline-[#975ee2] motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200 hover:shadow-[inset_0_0_0_1px_#e7d8ff] cursor-pointer"
-                    onClick={() => {
-                      void add.mutateAsync({ listId: l.id }).then(
-                        () => {
-                          toast.success("List referenced. Ownership unchanged.");
-                          setAddOpen(false);
-                        },
-                        (err) => toast.error(domainErrorMessage(err)),
-                      );
-                    }}
+                    disabled={Boolean(pendingReference)}
+                    className="group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 text-left hover:bg-[#f7f3ff] focus-visible:bg-[#f7f3ff] focus-visible:outline-2 focus-visible:outline-[#975ee2] motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200 hover:shadow-[inset_0_0_0_1px_#e7d8ff] cursor-pointer disabled:cursor-wait disabled:opacity-60"
+                    onClick={() => void addBucketReference({ listId: l.id }, "List referenced. Ownership unchanged.")}
                   >
                     <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-[9px] bg-[#efeafe] text-[#6638ec] shadow-sm">
                       {l.coverUrl ? <img src={l.coverUrl} alt="" className="h-full w-full object-cover motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out group-hover:motion-safe:scale-110 group-focus-visible:motion-safe:scale-110" /> : <span className="flex h-full w-full items-center justify-center text-[14px] font-semibold">{l.name.slice(0, 1).toUpperCase()}</span>}
@@ -439,7 +446,7 @@ function BucketDetailPage() {
                       <span className="block truncate text-[12.5px] font-semibold text-[#11163b]">{l.name}</span>
                       <span className="mt-0.5 block truncate text-[11px] text-[#7883a5]">{l.thingCount} {l.thingCount === 1 ? "Thing" : "Things"} · {l.ownerLine}</span>
                     </span>
-                    <Plus aria-hidden="true" className="h-4 w-4 shrink-0 text-[#975ee2] opacity-0 motion-safe:scale-75 motion-safe:transition-[opacity,transform] motion-safe:duration-200 group-hover:opacity-100 group-hover:motion-safe:scale-100 group-focus-visible:opacity-100 group-focus-visible:motion-safe:scale-100" />
+                    {pendingReference === `list:${l.id}` ? <Loader2 aria-label="Adding reference" className="h-4 w-4 shrink-0 animate-spin text-[#975ee2] motion-reduce:animate-none" /> : <Plus aria-hidden="true" className="h-4 w-4 shrink-0 text-[#975ee2] opacity-0 motion-safe:scale-75 motion-safe:transition-[opacity,transform] motion-safe:duration-200 group-hover:opacity-100 group-hover:motion-safe:scale-100 group-focus-visible:opacity-100 group-focus-visible:motion-safe:scale-100" />}
                   </button>
                 </li>
               ))}

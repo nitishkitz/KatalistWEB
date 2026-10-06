@@ -10,6 +10,7 @@ import {
   type Identity,
 } from "@/features/realtime/identity-cache-policy";
 import { IdentityContext } from "@/features/realtime/use-current-identity";
+import { useIdentityTransitionHeld } from "@/features/realtime/identity-transition-hold";
 
 type GateStatus =
   | { status: "pending" }
@@ -59,6 +60,7 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
   const preview = isPreviewSession(session);
   const nextIdentity = computeIdentity(loading, session, preview);
   const qc = useQueryClient();
+  const transitionHeld = useIdentityTransitionHeld();
 
   const [gate, setGate] = useState<GateStatus>(() =>
     nextIdentity.kind === "pending" ? { status: "pending" } : { status: "aligning", identity: nextIdentity },
@@ -72,6 +74,12 @@ export function IdentityBoundary({ children }: { children: ReactNode }) {
   const committedIdentity = gate.status === "ready" ? gate.identity : null;
   if (nextIdentity.kind === "pending") {
     if (gate.status !== "pending") setGate({ status: "pending" });
+  } else if (transitionHeld && gate.status === "ready" && gate.identity.kind === "none") {
+    // A screen is finishing its own sign-in transition (see
+    // identity-transition-hold.ts); keep the signed-out subtree until it
+    // releases, then the swap below runs as normal. Only ever from "none":
+    // there is no previous identity's data to keep exclusive, and a switch
+    // between two real identities is never deferred.
   } else if (
     !identityEquals(committedIdentity, nextIdentity) &&
     !(gate.status === "aligning" && identityEquals(gate.identity, nextIdentity))

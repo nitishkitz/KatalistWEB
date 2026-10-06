@@ -10,6 +10,13 @@ import { rpcRestore } from "@/features/things/rpc";
 import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
 import { keys } from "@/domain/query-keys";
 import { getIdentityEpoch } from "@/features/realtime/identity-cache-policy";
+import { computeStreak } from "@/features/nudges/escalation-logic";
+
+/** Demo streak from the seeded sorted history, formatted like the live stat. */
+function demoStreakLabel(things: { sortedAt: string | null }[]): string {
+  const days = computeStreak(things.flatMap((t) => (t.sortedAt ? [t.sortedAt] : [])));
+  return days > 0 ? `${days}d` : "—";
+}
 
 export type TrophyStats = {
   sorted: number;
@@ -131,7 +138,7 @@ export function useTrophy() {
         caught: mineAssigned.filter((t) => t.acknowledgement === "caught").length,
         inProgress: mineAssigned.filter((t) => t.workStatus === "under_progress").length,
         waiting: mineAssigned.filter((t) => t.acknowledgement === "waiting_for_catch").length,
-        streak: "—",
+        streak: demoStreakLabel(mineAssigned),
         weekly: mineAssigned.filter((t) => t.workStatus === "under_progress").length,
         achievement: mineAssigned.some((t) => t.workStatus === "sorted") ? "Movement on the board" : "—",
         shredded: getShredded().map((s) => ({ id: s.id, title: s.title, kind: s.kind })),

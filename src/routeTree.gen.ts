@@ -30,6 +30,7 @@ import { Route as ApiHubNotifyMessageRouteImport } from './routes/api/hub/notify
 import { Route as ApiJobsDailyMaintenanceRouteImport } from './routes/api/jobs/daily-maintenance'
 import { Route as ApiJobsEscalateNudgesRouteImport } from './routes/api/jobs/escalate-nudges'
 import { Route as ApiNudgesNotifyRouteImport } from './routes/api/nudges/notify'
+import { Route as ApiThingsNotifyMentionRouteImport } from './routes/api/things/notify-mention'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
 import { Route as ApiPublicBridgeCommentRouteImport } from './routes/api/public/bridge/comment'
 import { Route as ApiPublicBridgeRedeemRouteImport } from './routes/api/public/bridge/redeem'
@@ -140,6 +141,11 @@ const ApiNudgesNotifyRoute = ApiNudgesNotifyRouteImport.update({
   path: '/api/nudges/notify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiThingsNotifyMentionRoute = ApiThingsNotifyMentionRouteImport.update({
+  id: '/api/things/notify-mention',
+  path: '/api/things/notify-mention',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicBridgeActRoute = ApiPublicBridgeActRouteImport.update({
   id: '/api/public/bridge/act',
   path: '/api/public/bridge/act',
@@ -183,6 +189,7 @@ export interface FileRoutesByFullPath {
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
+  '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -207,6 +214,7 @@ export interface FileRoutesByTo {
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
+  '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -235,6 +243,7 @@ export interface FileRoutesById {
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
+  '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
@@ -264,6 +273,7 @@ export interface FileRouteTypes {
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
+    | '/api/things/notify-mention'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -288,6 +298,7 @@ export interface FileRouteTypes {
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
+    | '/api/things/notify-mention'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -315,6 +326,7 @@ export interface FileRouteTypes {
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
+    | '/api/things/notify-mention'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
@@ -337,6 +349,7 @@ export interface RootRouteChildren {
   ApiJobsDailyMaintenanceRoute: typeof ApiJobsDailyMaintenanceRoute
   ApiJobsEscalateNudgesRoute: typeof ApiJobsEscalateNudgesRoute
   ApiNudgesNotifyRoute: typeof ApiNudgesNotifyRoute
+  ApiThingsNotifyMentionRoute: typeof ApiThingsNotifyMentionRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
   ApiPublicBridgeCommentRoute: typeof ApiPublicBridgeCommentRoute
   ApiPublicBridgeRedeemRoute: typeof ApiPublicBridgeRedeemRoute
@@ -492,6 +505,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNudgesNotifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/things/notify-mention': {
+      id: '/api/things/notify-mention'
+      path: '/api/things/notify-mention'
+      fullPath: '/api/things/notify-mention'
+      preLoaderRoute: typeof ApiThingsNotifyMentionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/bridge/act': {
       id: '/api/public/bridge/act'
       path: '/api/public/bridge/act'
@@ -576,6 +596,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiJobsDailyMaintenanceRoute: ApiJobsDailyMaintenanceRoute,
   ApiJobsEscalateNudgesRoute: ApiJobsEscalateNudgesRoute,
   ApiNudgesNotifyRoute: ApiNudgesNotifyRoute,
+  ApiThingsNotifyMentionRoute: ApiThingsNotifyMentionRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,
   ApiPublicBridgeCommentRoute: ApiPublicBridgeCommentRoute,
   ApiPublicBridgeRedeemRoute: ApiPublicBridgeRedeemRoute,

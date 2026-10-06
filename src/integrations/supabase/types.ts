@@ -1741,6 +1741,7 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           id: string
+          mention_ids: string[]
           thing_id: string
           updated_at: string
         }
@@ -1750,6 +1751,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           id?: string
+          mention_ids?: string[]
           thing_id: string
           updated_at?: string
         }
@@ -1759,6 +1761,7 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           id?: string
+          mention_ids?: string[]
           thing_id?: string
           updated_at?: string
         }

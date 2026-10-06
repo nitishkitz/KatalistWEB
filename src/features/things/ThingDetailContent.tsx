@@ -44,6 +44,7 @@ import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-c
 import { invalidateSnoozeSurfaces, snoozeUntilFor, usePersonalSnooze, type SnoozeOption } from "./personal-snooze";
 import { isPreviewMode } from "@/lib/session-mode";
 import { uploadThingAttachment } from "./attachments";
+import { describeUploadError } from "@/lib/upload-errors";
 import { getThingCapabilities } from "@/domain/capabilities";
 import { useCourt } from "@/features/court/use-court";
 import { formatCourtDue } from "@/features/court/court-view-model";
@@ -60,6 +61,10 @@ import { markThingAsRead } from "@/features/things/read-state";
 import { processFileForUpload } from "@/lib/file-utils";
 import { acquireBlobUrl, releaseBlobUrl } from "@/lib/owned-file-resources";
 import { ThingIdentityHeader } from "./components/ThingIdentityHeader";
+import { LinkPreviewCards } from "./components/LinkPreviewCards";
+import { mergeMentionPeople, type MentionPerson } from "@/features/mentions/mention-trigger";
+import type { SelectedMention } from "@/features/lists/chat-mentions";
+import { Linkified } from "@/components/katalist/Linkified";
 import { ThingStatusControls } from "./components/ThingStatusControls";
 import { ThingAttachments } from "./components/ThingAttachments";
 import { ThingDiscussion } from "./components/ThingDiscussion";
@@ -185,7 +190,7 @@ export function ThingDetailContent({
   const { user } = useSession();
   const court = useCourt();
   const personalSnooze = usePersonalSnooze();
-  const people = useAssignablePeople();
+  const people = useAssignablePeople(initialThing?.listId);
   const live = useThing(initialThing?.id ?? null);
   const thing = live.thing ?? initialThing;
 
@@ -231,6 +236,21 @@ export function ThingDetailContent({
     }
     return list;
   }, [people, thing?.assignee]);
+  // Who can be @mentioned: the people on this Thing plus its List's members
+  // (the database only notifies people connected to the Thing). Never yourself.
+  const mentionPeople = useMemo<MentionPerson[]>(() => {
+    if (!thing) return [];
+    const candidates: MentionPerson[] = [
+      ...[thing.owner, thing.assignee, thing.creator],
+      ...people.filter((p) => p.listMember),
+    ].map((p) => ({
+      id: p.actorId ?? p.id, name: p.name, initials: p.initials, avatarUrl: p.avatarUrl, profileId: p.profileId,
+    }));
+    return mergeMentionPeople(candidates).filter(
+      (p) => p.id !== myActorId && p.id !== user?.id && p.profileId !== user?.id && !p.id.startsWith("p-"),
+    );
+  }, [thing, people, myActorId, user?.id]);
+
   const { buckets, preview: bucketsPreview } = useBuckets();
   // E-03: comment/commentAttachments are a per-Thing draft, not component
   // state that happens to be cleared on Thing change. Initialized from
@@ -241,6 +261,7 @@ export function ThingDetailContent({
   // by thing.id, so this same component instance can be handed a different
   // Thing without unmounting).
   const [comment, setComment] = useState(() => getDraft<string>(qc, "thing-comment", thing?.id ?? "")?.value ?? "");
+  const [commentMentions, setCommentMentions] = useState<SelectedMention[]>([]);
   const [due, setDue] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
   const [snoozeClock, setSnoozeClock] = useState(Date.now());
@@ -329,7 +350,7 @@ export function ThingDetailContent({
           newFiles.push(processed);
         } catch (err) {
           if (isMountedRef.current && thingIdRef.current === targetThingId) {
-            toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
+            toast.error(`${files[i].name}: ${describeUploadError(err, "could not be attached.")}`);
           }
         }
       }
@@ -388,7 +409,7 @@ export function ThingDetailContent({
           }
         } catch (err) {
           if (isEpochCurrent(qc, uploadEpoch)) {
-            toast.error(err instanceof Error ? err.message : `Could not attach ${files[i].name}`);
+            toast.error(`${files[i].name}: ${describeUploadError(err, "could not be attached.")}`);
           }
         }
       }
@@ -517,11 +538,19 @@ export function ThingDetailContent({
   // to mirror into if unmounted, which is fine, since there is no
   // visible input to update in that case anyway.
   const submitComment = () => {
+    const mentionIds = [
+      ...new Set(
+        commentMentions
+          .filter((m) => comment.slice(m.start, m.end) === m.label && mentionPeople.some((p) => p.id === m.id))
+          .map((m) => m.id),
+      ),
+    ];
     const text = comment.trim();
     if ((!text && commentAttachments.length === 0) || thread.post.isPending || processingCommentFiles > 0) return;
     const atts = [...commentAttachments];
     const submittedThingId = thing.id;
     setComment("");
+    setCommentMentions([]);
     setCommentAttachments([]);
     // T02: clear the draft store synchronously, HERE, rather than relying
     // on the write-through effect below to eventually do it once this
@@ -538,6 +567,7 @@ export function ThingDetailContent({
       {
         thingId: submittedThingId,
         body: text,
+        mentionIds: mentionIds.length > 0 ? mentionIds : undefined,
         attachments: atts.length > 0 ? atts : undefined,
         draftRevision: submittedRevision,
         epoch: getIdentityEpoch(qc).epoch,
@@ -728,10 +758,12 @@ export function ThingDetailContent({
             <div className="py-3 border-b border-[#eef0f6]">
               <h3 className="text-[13px] font-medium text-[#000533] mb-1.5">Description</h3>
               <p className="text-[12px] leading-relaxed text-[#6a769c] whitespace-pre-wrap">
-                {thing.description}
+                <Linkified text={thing.description} />
               </p>
             </div>
           ) : null}
+
+          <LinkPreviewCards texts={[thing.title, thing.description]} />
 
           <ThingAttachments
             files={displayFiles}
@@ -780,6 +812,9 @@ export function ThingDetailContent({
             comment={comment}
             onCommentChange={setComment}
             onSubmitComment={submitComment}
+            mentionPeople={mentionPeople}
+            mentions={commentMentions}
+            onMentionsChange={(value, next) => { setComment(value); setCommentMentions(next); }}
             postIsPending={thread.post.isPending}
             attachmentsUploading={processingCommentFiles > 0}
             onOpenCommentFileDialog={() => commentFileInputRef.current?.click()}
@@ -1080,6 +1115,9 @@ export function ThingDetailContent({
         comment={comment}
         onCommentChange={setComment}
         onSubmitComment={submitComment}
+        mentionPeople={mentionPeople}
+        mentions={commentMentions}
+        onMentionsChange={(value, next) => { setComment(value); setCommentMentions(next); }}
         postIsPending={thread.post.isPending}
         attachmentsUploading={processingCommentFiles > 0}
         onOpenCommentFileDialog={() => commentFileInputRef.current?.click()}

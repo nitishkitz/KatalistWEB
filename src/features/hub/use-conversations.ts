@@ -10,6 +10,9 @@ import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-c
 import { withReadDeadline } from "@/lib/read-request";
 import { signCoverUrls } from "@/features/lists/map-list-rows";
 import { getConversationLastReadAt } from "./chat-read-state";
+import { getListMessages, getLists } from "@/features/things/local-state";
+import { currentDemoActorId } from "@/features/demo/identities";
+import { useLocalVersion } from "@/features/things/use-local-version";
 
 export type ConversationParticipant = {
   id: string;
@@ -234,6 +237,45 @@ export async function fetchConversations(
   return { conversations, nextCursor: hasMore && last ? { at: last.sort_at, id: last.id } : undefined };
 }
 
+/** Demo sessions: every visible List with chat history appears as a group conversation. */
+function previewConversations(context?: ContextKind): Conversation[] {
+  const me = currentDemoActorId();
+  return getLists()
+    .filter((list) => !context || list.context === context)
+    .flatMap((list): Conversation[] => {
+      const messages = getListMessages(list.id);
+      const last = messages.at(-1);
+      if (!last) return [];
+      const others = list.members
+        .filter((m) => m.actorId !== me)
+        .map((m) => ({
+          id: m.actorId ?? m.name,
+          name: m.name,
+          initials: m.initials,
+          avatarUrl: m.avatarUrl ?? matchAvatarByName(m.name),
+        }));
+      return [{
+        id: list.id,
+        kind: "group",
+        context: list.context,
+        title: list.name,
+        avatarUrl: null,
+        coverUrl: list.coverUrl ?? null,
+        ownerId: list.ownerActorId ?? "",
+        others,
+        memberCount: list.members.length,
+        lastMessage: last.kind === "system" ? `${last.author} ${last.body}` : last.body || "Sent an attachment",
+        lastAt: last.at,
+        lastAuthor: last.author,
+        lastAuthorId: null,
+        unreadCount: list.unread,
+        mentionCount: list.unread > 0 ? 1 : 0,
+        readWatermark: 0,
+      }];
+    })
+    .sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""));
+}
+
 /**
  * Conversations (DMs + groups) for one Work/Home mode -- the active mode by
  * default. Contacts are shared across modes; conversations are not.
@@ -244,6 +286,7 @@ export function useConversations(contextOverride?: ContextKind) {
   const context = contextOverride ?? activeContext;
   const preview = isPreviewSession(session);
   const qc = useQueryClient();
+  useLocalVersion();
 
   const query = useInfiniteQuery<{ conversations: Conversation[]; nextCursor?: HubCursor }, Error>({
     queryKey: ["hub-conversations", user?.id, context],
@@ -269,7 +312,7 @@ export function useConversations(contextOverride?: ContextKind) {
   };
 
   return {
-    conversations: query.data?.pages.flatMap((page) => page.conversations) ?? [],
+    conversations: preview ? previewConversations(context) : query.data?.pages.flatMap((page) => page.conversations) ?? [],
     isLoading: !preview && query.isLoading,
     error: query.error,
     refetch,
@@ -355,6 +398,11 @@ export function useConversation(listId: string | undefined) {
       };
     },
   });
+
+  if (preview) {
+    const conversation = previewConversations().find((c) => c.id === listId) ?? null;
+    return { conversation, isLoading: false, error: null, refetch: query.refetch };
+  }
 
   return {
     conversation: query.data ?? null,

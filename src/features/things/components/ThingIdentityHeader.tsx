@@ -1,3 +1,4 @@
+import { Linkified } from "@/components/katalist/Linkified";
 import type * as React from "react";
 import { format } from "date-fns";
 import { ThingViewOnlyBanner } from "./ThingViewOnlyBanner";
@@ -55,7 +56,7 @@ export function ThingIdentityHeader({
         {/* Title */}
         <div className="flex items-start justify-between gap-3 pr-9">
           <h1 className="text-[25px] font-medium leading-tight tracking-tight text-[#000533] break-words flex-1">
-            {title}
+            <Linkified text={title} />
           </h1>
         </div>
 
@@ -85,7 +86,7 @@ export function ThingIdentityHeader({
   return (
     <header className="border-b border-border/70 px-5 py-4 text-left">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-[18px] font-semibold leading-snug text-foreground">{title}</h2>
+        <h2 className="text-[18px] font-semibold leading-snug text-foreground break-words"><Linkified text={title} /></h2>
         {headerAction}
       </div>
       <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">

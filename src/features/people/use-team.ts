@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { fetchProfileIdentities, matchAvatarByName } from "@/features/people/directory";
+import { DEMO_ROSTER } from "@/features/demo/seed";
 
 export type TeamMember = {
   id: string;
@@ -87,5 +88,5 @@ export function useTeam() {
     },
   });
 
-  return { members: query.data ?? [], isLoading: !preview && query.isLoading };
+  return { members: preview ? DEMO_ROSTER : query.data ?? [], isLoading: !preview && query.isLoading };
 }

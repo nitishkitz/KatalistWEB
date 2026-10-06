@@ -1,3 +1,4 @@
+import { describeUploadError } from "@/lib/upload-errors";
 import { useRef, useState } from "react";
 import {
   Folder,
@@ -103,7 +104,7 @@ export function HubFilesPanel({
     try {
       await upload.mutateAsync(file);
     } catch (err) {
-      toast.error(domainErrorMessage(err));
+      toast.error(describeUploadError(err));
     } finally {
       setBusy(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

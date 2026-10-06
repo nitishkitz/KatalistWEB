@@ -46,7 +46,7 @@ export type ThingActivity = { id: string; event: string; at: string };
 // the latter is also true when the user typed something new and then
 // deliberately cleared it back to empty, which must NOT be treated as
 // "unchanged" and overwritten by a stale failed-submit restore.
-export type PostCommentInput = { thingId: string; body: string; attachments?: ThingFile[]; draftRevision?: number; epoch?: number };
+export type PostCommentInput = { thingId: string; body: string; mentionIds?: string[]; attachments?: ThingFile[]; draftRevision?: number; epoch?: number };
 
 /**
  * `loadActivity` defers the (usually unopened) Activity tab's own fetch
@@ -100,7 +100,7 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         addCommentLocal(targetThingId, bodyText, currentDemoPerson().name, attachments);
         return;
       }
-      await rpcComment(targetThingId, bodyText, attachments);
+      await rpcComment(targetThingId, bodyText, attachments, input.mentionIds);
     },
     onMutate: async (input: PostCommentInput) => {
       const { thingId: targetThingId, body: bodyText, attachments, draftRevision } = input;
@@ -131,13 +131,12 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         attachments,
       };
 
+      // Preview sessions write the comment once, in mutationFn.
       if (!preview) {
         qc.setQueryData<InfiniteData<HistoryPage<ThingComment>, HistoryCursor | null>>(pageKey, (old) => {
           if (!old?.pages.length) return { pages: [{ rows: [optimisticComment], nextCursor: null }], pageParams: [null] };
           return { ...old, pages: [{ ...old.pages[0], rows: [optimisticComment, ...old.pages[0].rows] }, ...old.pages.slice(1)] };
         });
-      } else if (targetThingId) {
-        addCommentLocal(targetThingId, bodyText, currentDemoPerson().name, attachments);
       }
 
       // R-01: captured here (context, not the outer `thingId` closure) so

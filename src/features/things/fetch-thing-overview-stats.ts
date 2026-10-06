@@ -1,6 +1,7 @@
 import type { Thing, ThingFile } from "@/domain/thing";
 import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import { detectFileType, formatFileSize } from "@/lib/file-utils";
+import { supabase } from "@/integrations/supabase/client";
 import { getThingLastReadAt } from "./read-state";
 import { signThingAttachmentPaths, type SignedThingPath } from "./attachments";
 import type { DbThingRow } from "./map-thing-rows";
@@ -81,6 +82,49 @@ export async function fetchThingOverviewStats(
       attachmentCount: row.attachment_count,
       previewFile,
     });
+  }
+
+  // Older Magic Box tosses saved small images inline in things.notes rather
+  // than thing_attachments. Detail still supports those legacy files, so
+  // preserve the same preview in Court until the Thing is re-uploaded through
+  // the storage-backed attachment flow. Limit this compatibility read to
+  // zero-real-attachment Things and JSON notes, avoiding ordinary descriptions.
+  const legacyCandidates = raw.filter((row) => row.attachment_count === 0).map((row) => row.thing_id);
+  if (legacyCandidates.length) {
+    const { data: legacyRows, error } = await supabase
+      .from("things")
+      .select("id,notes")
+      .in("id", legacyCandidates)
+      .like("notes", '{"files":%');
+    if (!error) {
+      for (const row of legacyRows ?? []) {
+        try {
+          const parsed = JSON.parse(row.notes ?? "") as { files?: Array<Partial<ThingFile>> };
+          const image = parsed.files?.find((file) =>
+            typeof file.name === "string" &&
+            typeof file.url === "string" && file.url.startsWith("data:image/") &&
+            ["image", "png", "jpg"].includes(detectFileType(file.name, file.mimeType)),
+          );
+          if (image && typeof image.name === "string" && typeof image.url === "string") {
+            const current = stats.get(row.id);
+            if (current) {
+              current.attachmentCount = parsed.files?.length ?? 0;
+              current.previewFile = {
+                id: typeof image.id === "string" ? image.id : `legacy-${row.id}`,
+                name: image.name,
+                type: detectFileType(image.name, image.mimeType),
+                url: image.url,
+                mimeType: image.mimeType,
+                sizeLabel: image.sizeLabel,
+              };
+            }
+          }
+        } catch {
+          // Malformed legacy notes remain viewable in Thing detail, but do not
+          // prevent Court from loading its other Things.
+        }
+      }
+    }
   }
   return stats;
 }

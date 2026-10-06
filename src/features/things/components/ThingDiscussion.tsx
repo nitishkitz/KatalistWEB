@@ -1,4 +1,8 @@
+import { useRef } from "react";
 import type * as React from "react";
+import { MentionInput, type MentionInputHandle } from "@/features/mentions/MentionInput";
+import type { MentionPerson } from "@/features/mentions/mention-trigger";
+import type { SelectedMention } from "@/features/lists/chat-mentions";
 import { format } from "date-fns";
 import { AtSign, Loader2, Lock, Paperclip, Play, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -190,6 +194,10 @@ export type ThingDiscussionProps = {
   comment: string;
   onCommentChange: (value: string) => void;
   onSubmitComment: () => void;
+  /** People who can be @mentioned (Thing participants + List members). */
+  mentionPeople?: MentionPerson[];
+  mentions?: SelectedMention[];
+  onMentionsChange?: (value: string, mentions: SelectedMention[]) => void;
   postIsPending: boolean;
   attachmentsUploading?: boolean;
   onOpenCommentFileDialog: () => void;
@@ -225,6 +233,9 @@ export function ThingDiscussion({
   comment,
   onCommentChange,
   onSubmitComment,
+  mentionPeople = [],
+  mentions = [],
+  onMentionsChange,
   postIsPending,
   attachmentsUploading = false,
   onOpenCommentFileDialog,
@@ -235,6 +246,11 @@ export function ThingDiscussion({
   moreActionsButton,
   moreActionsPanel,
 }: ThingDiscussionProps): React.ReactNode {
+  const mentionRef = useRef<MentionInputHandle | null>(null);
+  const changeComment = (value: string, next: SelectedMention[]) => {
+    if (onMentionsChange) onMentionsChange(value, next);
+    else onCommentChange(value);
+  };
   if (variant === "court") {
     return (
       <div className="pt-3">
@@ -386,18 +402,25 @@ export function ThingDiscussion({
               >
                 <Paperclip className="h-4 w-4" />
               </button>
-              <input
+              <MentionInput
+                ref={mentionRef}
                 value={comment}
-                onChange={(e) => onCommentChange(e.target.value)}
+                mentions={mentions}
+                people={mentionPeople}
+                onChange={changeComment}
                 placeholder="Reply to this Thing..."
                 disabled={postIsPending}
-                className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground outline-none py-1"
+                ariaLabel="Reply to this Thing"
+                className="w-full bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground outline-none py-1"
               />
               <button
                 type="button"
-                className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => mentionRef.current?.openMention()}
+                disabled={postIsPending || mentionPeople.length === 0}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring rounded disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label="Mention someone"
-                title="Mention someone"
+                title={mentionPeople.length === 0 ? "No one to mention yet" : "Mention someone"}
               >
                 <AtSign className="h-4 w-4" />
               </button>
@@ -517,12 +540,16 @@ export function ThingDiscussion({
                 >
                   <Paperclip className="h-3.5 w-3.5" />
                 </button>
-                <input
+                <MentionInput
+                  ref={mentionRef}
                   value={comment}
+                  mentions={mentions}
+                  people={mentionPeople}
+                  onChange={changeComment}
                   disabled={!canComment || postIsPending}
-                  onChange={(e) => onCommentChange(e.target.value)}
-                  placeholder={postIsPending ? "Sending…" : "Write a comment…"}
-                  className="h-7 flex-1 rounded-md border border-border bg-white px-2 text-[12px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  placeholder={postIsPending ? "Sending…" : "Write a comment… (@ to mention)"}
+                  ariaLabel="Write a comment"
+                  className="h-7 w-full rounded-md border border-border bg-white px-2 text-[12px] outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
                 />
                 <button
                   type="submit"

@@ -64,9 +64,12 @@ function dedupePeopleByName(list: Person[]): Person[] {
       byName.set(key, p);
       continue;
     }
-    if (existing.id.startsWith("p-") && !p.id.startsWith("p-")) {
-      byName.set(key, p);
-    }
+    // Prefer an entry that already carries a resolved actor id (assignment
+    // RPCs reject profile ids), then any non-demo id over a demo `p-` id.
+    const better =
+      (!existing.actorId && Boolean(p.actorId)) ||
+      (existing.id.startsWith("p-") && !p.id.startsWith("p-") && !existing.actorId);
+    if (better) byName.set(key, p);
   }
   return Array.from(byName.values());
 }
@@ -105,7 +108,7 @@ function dueFromToken(token: string, time: string | undefined, now: Date): { due
     friday: 5,
     saturday: 6,
   };
-  const key = token.toLowerCase().replace(/^next\s+/, "");
+  const key = token.toLowerCase().replace(/^(?:this|next|coming)\s+/, "");
   if (key === "today") return withTime(start, time);
   if (key === "tomorrow") {
     start.setDate(start.getDate() + 1);
@@ -119,6 +122,60 @@ function dueFromToken(token: string, time: string | undefined, now: Date): { due
     return withTime(start, time);
   }
   return null;
+}
+
+const MONTHS: Record<string, number> = {
+  january: 0, jan: 0,
+  february: 1, feb: 1,
+  march: 2, mar: 2,
+  april: 3, apr: 3,
+  may: 4,
+  june: 5, jun: 5,
+  july: 6, jul: 6,
+  august: 7, aug: 7,
+  september: 8, sept: 8, sep: 8,
+  october: 9, oct: 9,
+  november: 10, nov: 10,
+  december: 11, dec: 11,
+};
+const MONTH_PATTERN = "january|february|march|april|may|june|july|august|september|sept|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec";
+
+function endOfMonthDue(year: number, month: number, time: string | undefined, now: Date) {
+  const due = new Date(now);
+  due.setFullYear(year, month + 1, 0);
+  due.setHours(22, 0, 0, 0);
+  return withTime(due, time);
+}
+
+function calendarPeriodDue(kind: "month" | "year", offset: number, now: Date) {
+  if (kind === "year") return endOfMonthDue(now.getFullYear() + offset, 11, undefined, now);
+  const target = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
+  return endOfMonthDue(target.getFullYear(), target.getMonth(), undefined, now);
+}
+
+function dueFromCalendarDate(monthToken: string, dayToken: string | undefined, yearToken: string | undefined, time: string | undefined, now: Date) {
+  const month = MONTHS[monthToken.toLowerCase()];
+  if (month === undefined) return null;
+
+  if (!dayToken) {
+    const requestedYear = yearToken ? Number(yearToken) : undefined;
+    if (requestedYear !== undefined) return endOfMonthDue(requestedYear, month, time, now);
+    const year = month < now.getMonth() ? now.getFullYear() + 1 : now.getFullYear();
+    return endOfMonthDue(year, month, time, now);
+  }
+
+  const day = Number(dayToken.replace(/(?:st|nd|rd|th)$/i, ""));
+  let year = yearToken ? Number(yearToken) : now.getFullYear();
+  const due = new Date(now);
+  due.setFullYear(year, month, day);
+  // Reject impossible dates (e.g. February 31) instead of silently rolling forward.
+  if (due.getMonth() !== month || due.getDate() !== day) return null;
+  due.setHours(22, 0, 0, 0);
+  if (!yearToken && due.getTime() < now.getTime()) {
+    year += 1;
+    due.setFullYear(year, month, day);
+  }
+  return withTime(due, time);
 }
 
 function withTime(date: Date, rawTime?: string) {
@@ -138,8 +195,24 @@ function withTime(date: Date, rawTime?: string) {
 const PACE_PHRASES: Array<{ importance: Importance; regex: RegExp }> = [
   { importance: "later", regex: /\b(?:no rush|not urgent|when there(?:'s| is) time|whenever|someday|eventually|later)\b/i },
   { importance: "now", regex: /\b(?:as soon as possible|right away|right now|top priority|immediately|urgently|urgent|asap|now)\b/i },
-  { importance: "next", regex: /\b(?:when (?:i'm|i am) done with this|up next|after this|next|soon)\b/i },
+  { importance: "next", regex: /\b(?!(?:next\s+(?:month|year|yr)\b))(?:when (?:i'm|i am) done with this|up next|after this|next|soon)\b/i },
 ];
+
+const URL_OPEN = "\uE000";
+const URL_CLOSE = "\uE001";
+const URL_PATTERN = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+const URL_PLACEHOLDER = new RegExp(`${URL_OPEN}(\\d+)${URL_CLOSE}`, "g");
+
+/** Trim and force a scheme so the URL is always a valid, clickable absolute link. */
+export function normalizeUrl(url: string): string {
+  const trimmed = url.trim();
+  const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  try {
+    return new URL(withScheme).toString();
+  } catch {
+    return withScheme;
+  }
+}
 
 export function parseToss(
   raw: string,
@@ -157,7 +230,15 @@ export function parseToss(
   pacePhrase?: string;
   duePhrase?: string;
 } {
-  let title = raw.trim();
+  // URLs are lifted out before any @/#// token or date parsing runs, so the
+  // slashes, dots and path segments inside a link are never read as a bucket,
+  // List or date. They are restored verbatim (minus trailing punctuation) at the end.
+  const urls: string[] = [];
+  let title = raw.trim().replace(URL_PATTERN, (match) => {
+    const url = match.replace(/[),.;:!?'"]+$/, "");
+    urls.push(normalizeUrl(url));
+    return `${URL_OPEN}${urls.length - 1}${URL_CLOSE}${match.slice(url.length)}`;
+  });
   const chips: TossChip[] = [];
   let importance: Importance = "next";
   const assigneeIds: string[] = [];
@@ -210,20 +291,43 @@ export function parseToss(
   }
   chips.push({ kind: "importance", label: importance.toUpperCase(), value: importance });
 
-  const dateMatch = title.match(/\b(?:by\s+)?(today|tomorrow|(?:next\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))(?:\s+at\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?\b/i);
+  const dateMatch = title.match(new RegExp(
+    `\\b(?:(?:by|on|before|until)\\s+)?(today|tomorrow|(?:(?:this|next|coming)\\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))(?:\\s+at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?))?\\b|` +
+    `\\b((?:(?:by|in|before|until)\\s+)?(?:(?:this|next)\\s+)?(?:the\\s+)?(${MONTH_PATTERN})\\s+(\\d{1,2}(?:st|nd|rd|th)?)(?:,?\\s+(\\d{4}))?(?:\\s+at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?))?)\\b|` +
+    `\\b((?:(?:by|in|before|until)\\s+)?(?:(?:this|next)\\s+)?(?:the\\s+)?(\\d{1,2}(?:st|nd|rd|th)?)\\s+(?:of\\s+)?(${MONTH_PATTERN})(?:,?\\s+(\\d{4}))?(?:\\s+at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?))?)\\b|` +
+    `\\b((?:by\\s+)?(?:this|next)\\s+(month|year|yr))\\b`,
+    "i",
+  ));
   let dueAt: string | undefined;
   let dueHasTime: boolean | undefined;
   if (dateMatch) {
-    chips.push({ kind: "due", label: dateMatch[0], value: dateMatch[0] });
-    title = title.replace(dateMatch[0], "").trim();
-    const parsedDue = dueFromToken(dateMatch[1], dateMatch[2], now);
+    const phrase = dateMatch[0];
+    let parsedDue: { dueAt: string; dueHasTime: boolean } | null = null;
+    if (dateMatch[1]) {
+      parsedDue = dueFromToken(dateMatch[1], dateMatch[2], now);
+    } else if (dateMatch[3]) {
+      parsedDue = dueFromCalendarDate(dateMatch[4]!, dateMatch[5], dateMatch[6], dateMatch[7], now);
+    } else if (dateMatch[8]) {
+      parsedDue = dueFromCalendarDate(dateMatch[10]!, dateMatch[9], dateMatch[11], dateMatch[12], now);
+    } else if (dateMatch[13]) {
+      const kind = dateMatch[14]?.toLowerCase() === "month" ? "month" : "year";
+      parsedDue = calendarPeriodDue(kind, dateMatch[13].toLowerCase().includes("next") ? 1 : 0, now);
+    }
+
     if (parsedDue) {
+      chips.push({ kind: "due", label: phrase, value: phrase });
+      title = title.replace(phrase, "").trim();
       dueAt = parsedDue.dueAt;
       dueHasTime = parsedDue.dueHasTime;
+    } else {
+      chips.push({ kind: "unresolved", label: "Check date", value: "ambiguous" });
     }
   }
 
-  if (/\b\d{1,2}\/\d{1,2}\b/.test(raw) && !dateMatch) {
+  // A connector left dangling by a removed due phrase ("finish this by") reads as a broken title.
+  title = title.replace(/\s+(?:by|before|until|due)\s*$/i, "").trim();
+
+  if (/\b\d{1,2}\/\d{1,2}\b/.test(raw.replace(URL_PATTERN, "")) && !dateMatch) {
     chips.push({ kind: "unresolved", label: "Check date", value: "ambiguous" });
   }
 
@@ -248,6 +352,9 @@ export function parseToss(
       value: "multi",
     });
   }
+
+  const restoreUrls = (text: string) => text.replace(URL_PLACEHOLDER, (_m, i: string) => urls[Number(i)] ?? "");
+  title = restoreUrls(title);
 
   return {
     title: title.replace(/\s+/g, " ").trim() || raw.trim(),

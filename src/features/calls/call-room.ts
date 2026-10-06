@@ -18,6 +18,9 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 export type CallParticipant = {
   id: string;
   name: string;
+  /** Auth user id behind this participant (the call id carries a per-device suffix). */
+  profileId?: string | null;
+  avatarUrl?: string | null;
   stream?: MediaStream;
   connection?: RTCPeerConnectionState;
   muted?: boolean;
@@ -92,6 +95,11 @@ type PeerSlot = {
   makingOffer: boolean;
   ignoreOffer: boolean;
   name: string;
+  profileId: string | null;
+  avatarUrl: string | null;
+  sessionId: string | null;
+  /** ICE candidates that arrived before the remote description was applied. */
+  pendingIce: RTCIceCandidateInit[];
   stream: MediaStream;
   muted: boolean;
   cameraOff: boolean;
@@ -172,6 +180,8 @@ export class CallRoom {
   private readonly listId: string;
   private readonly selfId: string;
   private readonly selfName: string;
+  private readonly selfAvatarUrl: string | null;
+  private readonly sessionId = crypto.randomUUID();
   private readonly onState: (state: CallRoomState) => void;
   private channel: RealtimeChannel | null = null;
   private readonly peers = new Map<string, PeerSlot>();
@@ -200,23 +210,28 @@ export class CallRoom {
   private readonly onReaction?: (p: { from: string; emoji: string }) => void;
   private readonly onDraw?: (op: DrawOp) => void;
   private readonly onDocPage?: (page: number) => void;
+  private readonly onSignalingError?: (status: "CHANNEL_ERROR" | "TIMED_OUT") => void;
 
   constructor(opts: {
     listId: string;
     selfId: string;
     selfName: string;
+    selfAvatarUrl?: string | null;
     onState: (state: CallRoomState) => void;
     onReaction?: (p: { from: string; emoji: string }) => void;
     onDraw?: (op: DrawOp) => void;
     onDocPage?: (page: number) => void;
+    onSignalingError?: (status: "CHANNEL_ERROR" | "TIMED_OUT") => void;
   }) {
     this.listId = opts.listId;
     this.selfId = opts.selfId;
     this.selfName = opts.selfName;
+    this.selfAvatarUrl = opts.selfAvatarUrl ?? null;
     this.onState = opts.onState;
     this.onReaction = opts.onReaction;
     this.onDraw = opts.onDraw;
     this.onDocPage = opts.onDocPage;
+    this.onSignalingError = opts.onSignalingError;
   }
 
   /** Acquire local media and join the room. */
@@ -273,7 +288,11 @@ export class CallRoom {
       .on("presence", { event: "sync" }, () => this.syncPeers())
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
+          // Also runs after a silent re-subscribe, which re-announces us.
           void channel.track(this.presenceMeta());
+        } else if ((status === "CHANNEL_ERROR" || status === "TIMED_OUT") && !this.closed) {
+          // Without this a dead signalling channel just looks like "nobody joined".
+          this.onSignalingError?.(status);
         }
       });
 
@@ -284,6 +303,9 @@ export class CallRoom {
     return {
       id: this.selfId,
       name: this.selfName,
+      profileId: this.selfId.split(":")[0] || null,
+      avatarUrl: this.selfAvatarUrl,
+      sessionId: this.sessionId,
       muted: this.selfMuted,
       cameraOff: this.selfCameraOff,
       sharing: this.selfSharing,
@@ -299,6 +321,9 @@ export class CallRoom {
   private presentPeerIds(): {
     id: string;
     name: string;
+    profileId: string | null;
+    avatarUrl: string | null;
+    sessionId: string | null;
     muted: boolean;
     cameraOff: boolean;
     sharing: boolean;
@@ -313,6 +338,9 @@ export class CallRoom {
     const state = this.channel.presenceState<{
       id: string;
       name: string;
+      profileId?: string | null;
+      avatarUrl?: string | null;
+      sessionId?: string | null;
       muted?: boolean;
       cameraOff?: boolean;
       sharing?: boolean;
@@ -326,6 +354,9 @@ export class CallRoom {
     const out: {
       id: string;
       name: string;
+      profileId: string | null;
+      avatarUrl: string | null;
+      sessionId: string | null;
       muted: boolean;
       cameraOff: boolean;
       sharing: boolean;
@@ -343,6 +374,9 @@ export class CallRoom {
         out.push({
           id: meta.id,
           name: meta.name,
+          profileId: meta.profileId ?? meta.id.split(":")[0] ?? null,
+          avatarUrl: meta.avatarUrl ?? null,
+          sessionId: meta.sessionId ?? null,
           muted: Boolean(meta.muted),
           cameraOff: Boolean(meta.cameraOff),
           sharing: Boolean(meta.sharing),
@@ -372,8 +406,19 @@ export class CallRoom {
     // Adding local tracks in createPeer triggers onnegotiationneeded on both
     // sides; perfect negotiation resolves the glare.
     for (const p of present) {
-      const existing = this.peers.get(p.id);
+      let existing = this.peers.get(p.id);
+      // A peer that left and rejoined under the same call id arrives with a
+      // new session id. Its old RTCPeerConnection belongs to a dead DTLS
+      // session, so rebuild instead of renegotiating onto it.
+      if (existing && p.sessionId && existing.sessionId && existing.sessionId !== p.sessionId) {
+        this.dropPeer(p.id);
+        existing = undefined;
+      }
       if (existing) {
+        existing.name = p.name;
+        existing.profileId = p.profileId;
+        existing.avatarUrl = p.avatarUrl;
+        existing.sessionId = p.sessionId ?? existing.sessionId;
         existing.muted = p.muted;
         existing.cameraOff = p.cameraOff;
         existing.sharing = p.sharing;
@@ -394,6 +439,9 @@ export class CallRoom {
     peerId: string,
     name: string,
     meta: Partial<{
+      profileId: string | null;
+      avatarUrl: string | null;
+      sessionId: string | null;
       muted: boolean;
       cameraOff: boolean;
       sharing: boolean;
@@ -406,6 +454,9 @@ export class CallRoom {
     }> = {},
   ): PeerSlot {
     const {
+      profileId = peerId.split(":")[0] ?? null,
+      avatarUrl = null,
+      sessionId = null,
       muted = false,
       cameraOff = false,
       sharing = false,
@@ -425,6 +476,10 @@ export class CallRoom {
       makingOffer: false,
       ignoreOffer: false,
       name,
+      profileId,
+      avatarUrl,
+      sessionId,
+      pendingIce: [],
       stream: new MediaStream(),
       muted,
       cameraOff,
@@ -491,7 +546,7 @@ export class CallRoom {
   private async onSdp(msg: SdpMsg) {
     if (msg.to !== this.selfId) return;
     let slot = this.peers.get(msg.from);
-    if (!slot) slot = this.createPeer(msg.from, msg.from);
+    if (!slot) slot = this.createPeer(msg.from, "Participant");
     const pc = slot.pc;
     const description = msg.description;
     const polite = this.selfId < msg.from;
@@ -500,6 +555,7 @@ export class CallRoom {
     if (slot.ignoreOffer) return;
     try {
       await pc.setRemoteDescription(description);
+      await this.flushPendingIce(slot);
       if (description.type === "offer") {
         await pc.setLocalDescription();
         this.send("sdp", { from: this.selfId, to: msg.from, description: pc.localDescription!.toJSON() });
@@ -513,11 +569,29 @@ export class CallRoom {
     if (msg.to !== this.selfId) return;
     const slot = this.peers.get(msg.from);
     if (!slot) return;
+    // Candidates routinely beat their SDP over the broadcast channel. Adding
+    // one before setRemoteDescription throws and the candidate is lost for
+    // good, which leaves the pair stuck on "connecting" with no media.
+    if (!slot.pc.remoteDescription) {
+      slot.pendingIce.push(msg.candidate);
+      return;
+    }
     try {
       await slot.pc.addIceCandidate(msg.candidate);
     } catch {
       if (!slot.ignoreOffer) {
         /* ignore benign candidate errors */
+      }
+    }
+  }
+
+  private async flushPendingIce(slot: PeerSlot) {
+    const queued = slot.pendingIce.splice(0);
+    for (const candidate of queued) {
+      try {
+        await slot.pc.addIceCandidate(candidate);
+      } catch {
+        /* stale candidate from a superseded negotiation */
       }
     }
   }
@@ -529,8 +603,11 @@ export class CallRoom {
   /** Replace the outgoing video track on all peers (camera <-> screen). */
   private async replaceVideoTrack(track: MediaStreamTrack | null) {
     for (const slot of this.peers.values()) {
-      const sender = slot.pc.getSenders().find((s) => s.track?.kind === "video" || s.track === null);
+      const sender = slot.pc.getTransceivers().find((t) => t.sender.track?.kind === "video" || t.receiver.track.kind === "video")?.sender;
       if (sender) await sender.replaceTrack(track);
+      // Joined audio-only: no video sender exists yet, so publish the screen
+      // as a new track (triggers renegotiation) instead of silently dropping it.
+      else if (track) slot.pc.addTrack(track, this.screenStream ?? new MediaStream([track]));
     }
   }
 
@@ -664,6 +741,8 @@ export class CallRoom {
     const participants: CallParticipant[] = [...this.peers.entries()].map(([id, slot]) => ({
       id,
       name: slot.name,
+      profileId: slot.profileId,
+      avatarUrl: slot.avatarUrl,
       stream: slot.stream,
       connection: slot.pc.connectionState,
       muted: slot.muted,

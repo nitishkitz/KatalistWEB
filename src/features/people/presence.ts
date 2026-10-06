@@ -3,6 +3,8 @@ import { useSyncExternalStore } from "react";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
+import { isPreviewSession } from "@/lib/session-mode";
+import { DEMO_ONLINE_IDS } from "@/features/demo/seed";
 
 /**
  * App-wide online presence over a shared Supabase Realtime presence channel.
@@ -47,14 +49,16 @@ function releaseChannel() {
 
 /** Track this client as online and subscribe to the live set of online ids. */
 export function usePresence(): Set<string> {
-  const { user } = useSession();
+  const { user, session } = useSession();
+  const preview = isPreviewSession(session);
   const selfId = user?.id;
   useEffect(() => {
-    if (!selfId) return;
+    // Demo sessions have no Realtime backend; they use the seeded roster's presence.
+    if (!selfId || preview) return;
     ensureChannel(selfId);
     return () => releaseChannel();
-  }, [selfId]);
-  return useSyncExternalStore(
+  }, [selfId, preview]);
+  const live = useSyncExternalStore(
     (cb) => {
       listeners.add(cb);
       return () => listeners.delete(cb);
@@ -62,4 +66,5 @@ export function usePresence(): Set<string> {
     () => onlineIds,
     () => onlineIds,
   );
+  return preview ? (DEMO_ONLINE_IDS as Set<string>) : live;
 }

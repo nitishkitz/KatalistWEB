@@ -98,7 +98,7 @@ export type ListCallControls = {
 };
 
 /** Full-mesh audio/video call for a List, scoped to the current members. */
-export function useListCall(listId: string, selfId: string, selfName: string): ListCallControls {
+export function useListCall(listId: string, selfId: string, selfName: string, selfAvatarUrl: string | null = null): ListCallControls {
   const roomRef = useRef<CallRoom | null>(null);
   // H-05 (audit): join() is async -- its own getUserMedia/signaling wait
   // (join A pending -> leave A -> join B) means A's catch/finally can
@@ -187,6 +187,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       listId,
       selfId,
       selfName,
+      selfAvatarUrl,
       onState: (s) => {
         if (!isActiveRoom()) return;
         setParticipants(s.participants);
@@ -209,6 +210,10 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
       onDocPage: (page) => {
         if (!isActiveRoom()) return;
         setDocPageState(page);
+      },
+      onSignalingError: () => {
+        if (!isActiveRoom()) return;
+        toast.error("Lost connection to the call service. Trying to reconnect…");
       },
     });
     roomRef.current = room;
@@ -254,7 +259,7 @@ export function useListCall(listId: string, selfId: string, selfName: string): L
     } finally {
       if (joinGenerationRef.current === myGeneration) setConnecting(false);
     }
-  }, [connecting, listId, selfId, selfName]);
+  }, [connecting, listId, selfId, selfName, selfAvatarUrl]);
 
   const toggleMute = useCallback(() => {
     setMuted((m) => {

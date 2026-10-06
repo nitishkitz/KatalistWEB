@@ -6,6 +6,8 @@ import { currentDemoActorId, currentDemoPerson, demoDirectory } from "@/features
 import { canDemoActorViewThing, projectDemoList, roleForDemoList } from "@/features/demo/visibility";
 import { listFixtures, type ListRow } from "@/features/lists/fixtures";
 import { bucketFixtures, type BucketCard } from "@/features/buckets/fixtures";
+import { SEED_LIST_MESSAGES, SEED_NOTIFICATIONS } from "@/features/demo/seed";
+import type { ChatAttachment } from "@/features/lists/use-list-messages";
 
 export type LocalComment = {
   id: string;
@@ -15,7 +17,15 @@ export type LocalComment = {
   attachments?: ThingFile[];
 };
 export type LocalActivity = { id: string; event: string; at: string; detail?: string };
-export type LocalMessage = { id: string; body: string; author: string; at: string; pinnedAt: string | null };
+export type LocalMessage = {
+  id: string;
+  body: string;
+  author: string;
+  at: string;
+  pinnedAt: string | null;
+  kind?: "message" | "system";
+  attachment?: ChatAttachment | null;
+};
 export type LocalMeeting = {
   id: string;
   listId: string;
@@ -535,7 +545,8 @@ export function addListMessage(listId: string, body: string, author = "Me") {
 
 export function getListMessages(listId: string): LocalMessage[] {
   if (!getListById(listId)) return [];
-  return listMessages.get(listId) ?? [];
+  const seeded = (SEED_LIST_MESSAGES[listId] ?? []).map((m) => ({ ...m, pinnedAt: null }));
+  return [...seeded, ...(listMessages.get(listId) ?? [])];
 }
 
 export function pinListMessageLocal(listId: string, messageId: string, pinned: boolean) {
@@ -851,7 +862,8 @@ export function pushNotification(input: {
 export function getNotifications(): LocalNotification[] {
   const me = currentDemoActorId();
   const reads = readSetFor(me);
-  return extraNotifications
+  const seeded: LocalNotification[] = SEED_NOTIFICATIONS.map((n) => ({ ...n, read: false }));
+  return [...extraNotifications, ...seeded]
     .filter((n) => n.recipientActorId === me)
     .map((n) => ({ ...n, read: n.read || reads.has(n.id) }));
 }

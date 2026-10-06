@@ -1,3 +1,4 @@
+import { describeUploadError } from "@/lib/upload-errors";
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
@@ -416,9 +417,10 @@ function ListsPage() {
         .upload(path, coverFile, { cacheControl: "3600", upsert: false, contentType: coverFile.type });
       if (upErr) throw upErr;
       await rpcSetListCover(listId, path);
-    } catch {
-      // The cover is optional — never fail the whole flow on an upload issue.
-      toast("Saved, but the cover image could not be uploaded.");
+    } catch (err) {
+      // The cover is optional — never fail the whole flow on an upload issue,
+      // but say why it failed (permission, size, type) so it can be fixed.
+      toast(`Saved, but the cover image could not be uploaded. ${describeUploadError(err, "")}`.trim());
     }
   };
 

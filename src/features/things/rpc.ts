@@ -98,10 +98,54 @@ async function resolveToActorUuid(actorOrProfileOrKey: string): Promise<string |
   return null;
 }
 
+type DirectoryPerson = { profile_id?: string | null; actor_id?: string | null };
+
+/**
+ * Assignment RPCs only accept actor ids, but List members, mentions and the
+ * team directory frequently carry the person's profile id instead. Resolve
+ * whatever id we were handed to the actor id the database expects; if nothing
+ * resolves, return the original id and let the RPC report the real error.
+ */
+export async function resolveAssigneeActorId(id: string): Promise<string> {
+  const raw = (id || "").trim();
+  if (!raw) return raw;
+  if (!isUuid(raw)) return (await resolveToActorUuid(raw)) ?? raw;
+  try {
+    const { data: assignable } = await supabase.rpc("list_assignable_people");
+    if (assignable?.some((a) => a.actor_id === raw)) return raw;
+  } catch {
+    // fall through to direct lookups
+  }
+  try {
+    const { data: actor } = await supabase.from("actors").select("id").eq("id", raw).maybeSingle();
+    if (actor?.id) return actor.id;
+    const { data: byProfile } = await supabase.from("actors").select("id").eq("profile_id", raw).maybeSingle();
+    if (byProfile?.id) return byProfile.id;
+  } catch {
+    // actors is RLS-scoped to the caller; the server directory covers other people
+  }
+  try {
+    const res = await authedFetch("/api/people/directory");
+    if (res.ok) {
+      const json = (await res.json()) as { people?: DirectoryPerson[] };
+      const hit = json.people?.find((p) => p.profile_id === raw || p.actor_id === raw);
+      if (hit?.actor_id) return hit.actor_id;
+    }
+  } catch {
+    // fall through
+  }
+  return raw;
+}
+
 async function liveRpc<T>(fn: () => PromiseLike<{ data: T; error: { message: string } | null }>): Promise<T> {
   const { data, error } = await fn();
   if (error) throw error;
   return data;
+}
+
+/** The local demo store is only a legitimate fallback in builds that explicitly enable demo mode. */
+function demoBackendAllowed(): boolean {
+  return (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_KATALIST_DEMO_MODE === "true";
 }
 
 async function runDomainMutation<T>(handlers: {
@@ -118,6 +162,10 @@ async function runDomainMutation<T>(handlers: {
   try {
     return await handlers.live();
   } catch (error: unknown) {
+    // Against a real backend the local demo store knows nothing about the
+    // caller's data, so falling back to it replaced the real failure (e.g.
+    // "unknown assignee") with a misleading "That List isn't available."
+    if (!demoBackendAllowed()) throw error;
     const msg = extractErrorMessage(error) ?? "";
     if (
       msg.includes("Thing not found") ||
@@ -355,13 +403,16 @@ export async function rpcCreateThing(input: {
 }) {
   return runDomainMutation({
     live: async () => {
+      const assigneeActorId = input.assigneeActorId
+        ? await resolveAssigneeActorId(input.assigneeActorId)
+        : undefined;
       const created = await liveRpc(() =>
         supabase.rpc("create_thing", {
           p_title: input.title,
           p_context: input.context,
           p_owner_importance: input.ownerImportance ?? "next",
           p_list_id: input.listId,
-          p_assignee_actor_id: input.assigneeActorId,
+          p_assignee_actor_id: assigneeActorId,
           p_due_at: input.dueAt,
           p_due_has_time: input.dueHasTime,
           p_notes: input.files?.length ? JSON.stringify({ files: input.files }) : undefined,
@@ -394,29 +445,7 @@ export async function rpcReassignThing(thingId: string, assigneeActorId: string)
   return runDomainMutation({
     thingId,
     live: async () => {
-      let targetActorId = assigneeActorId;
-      if (!isUuid(targetActorId)) {
-        const resolved = await resolveToActorUuid(targetActorId);
-        if (resolved) targetActorId = resolved;
-      } else {
-        try {
-          const { data: actor } = await supabase
-            .from("actors")
-            .select("id")
-            .eq("id", targetActorId)
-            .maybeSingle();
-          if (!actor?.id) {
-            const { data: actorByProfile } = await supabase
-              .from("actors")
-              .select("id")
-              .eq("profile_id", targetActorId)
-              .maybeSingle();
-            if (actorByProfile?.id) targetActorId = actorByProfile.id;
-          }
-        } catch {
-          // ignore
-        }
-      }
+      const targetActorId = await resolveAssigneeActorId(assigneeActorId);
 
       if (!isUuid(targetActorId)) {
         reassignLocal(thingId, assigneeActorId);
@@ -441,29 +470,7 @@ export async function rpcAssignThing(thingId: string, assigneeActorId: string) {
   return runDomainMutation({
     thingId,
     live: async () => {
-      let targetActorId = assigneeActorId;
-      if (!isUuid(targetActorId)) {
-        const resolved = await resolveToActorUuid(targetActorId);
-        if (resolved) targetActorId = resolved;
-      } else {
-        try {
-          const { data: actor } = await supabase
-            .from("actors")
-            .select("id")
-            .eq("id", targetActorId)
-            .maybeSingle();
-          if (!actor?.id) {
-            const { data: actorByProfile } = await supabase
-              .from("actors")
-              .select("id")
-              .eq("profile_id", targetActorId)
-              .maybeSingle();
-            if (actorByProfile?.id) targetActorId = actorByProfile.id;
-          }
-        } catch {
-          // ignore
-        }
-      }
+      const targetActorId = await resolveAssigneeActorId(assigneeActorId);
 
       if (!isUuid(targetActorId)) {
         reassignLocal(thingId, assigneeActorId);
@@ -710,7 +717,7 @@ export async function rpcAddThingFile(thingId: string, file: ThingFile) {
   }
 }
 
-export async function rpcComment(thingId: string, body: string, attachments?: ThingFile[]) {
+export async function rpcComment(thingId: string, body: string, attachments?: ThingFile[], mentionIds?: string[]) {
   if (isPreviewMode()) {
     addCommentLocal(thingId, body, undefined, attachments);
     return;
@@ -746,12 +753,27 @@ export async function rpcComment(thingId: string, body: string, attachments?: Th
     ? `${body}\n<!--attachments:${JSON.stringify(persistedAttachments)}-->`
     : body;
 
-  const { error } = await supabase.from("thing_comments").insert({
-    thing_id: thingId,
-    body: fullBody,
-    author_actor_id: actorId,
-  });
+  const { data: inserted, error } = await supabase
+    .from("thing_comments")
+    .insert({
+      thing_id: thingId,
+      body: fullBody,
+      author_actor_id: actorId,
+      ...(mentionIds?.length ? { mention_ids: [...new Set(mentionIds)] } : {}),
+    })
+    .select("id")
+    .single();
   if (error) throw error;
+  // The in-app notification is created by a database trigger in the same
+  // transaction as the comment. This only asks the server to deliver the push
+  // for it; best effort, and the server claims each notification once.
+  if (mentionIds?.length && inserted?.id) {
+    void authedFetch("/api/things/notify-mention", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commentId: inserted.id }),
+    }).catch(() => {});
+  }
 }
 
 export function starLocal(thingId: string, starred: boolean) {

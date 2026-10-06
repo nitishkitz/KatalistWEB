@@ -38,24 +38,17 @@ import { useSessionDraft } from "@/features/drafts/use-session-draft";
 import { getDraft, getDraftRevision, setDraft } from "@/features/drafts/session-drafts";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { reconcileMentions, type SelectedMention } from "@/features/lists/chat-mentions";
-import { useConversation, type ConversationParticipant } from "@/features/hub/use-conversations";
+import { MentionMenu, handleMentionKey } from "@/features/mentions/MentionMenu";
+import { filterMentionPeople, findMentionTrigger, type MentionPerson, type MentionTrigger } from "@/features/mentions/mention-trigger";
+import { useChatMentionPeople } from "@/features/mentions/use-chat-mention-people";
+import type { ConversationParticipant } from "@/features/hub/use-conversations";
 import { useSession } from "@/hooks/useSession";
 import { formatFileSize } from "@/lib/file-utils";
+import { describeUploadError } from "@/lib/upload-errors";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 
 const MAX_CHAT_FILE_BYTES = 50 * 1024 * 1024;
-
-/** Finds the "@partial-name" being typed right at the caret, if any — a
- *  space or the start of the string ends the trigger. */
-function findMentionTrigger(text: string, caret: number): { start: number; query: string } | null {
-  const upTo = text.slice(0, caret);
-  const at = upTo.lastIndexOf("@");
-  if (at === -1) return null;
-  const between = upTo.slice(at + 1);
-  if (/\s/.test(between)) return null;
-  return { start: at, query: between };
-}
 
 /** Renders a message body with any "@Name" mention of an actual member
  *  highlighted — bold + tinted, more strongly if it's you. */
@@ -66,7 +59,7 @@ function MessageBody({
   mine = false,
 }: {
   body: string;
-  people: ConversationParticipant[];
+  people: Array<Pick<ConversationParticipant, "id" | "name">>;
   myId: string | undefined;
   mine?: boolean;
 }) {
@@ -186,8 +179,7 @@ export const ListChatPanel = forwardRef<
   const stagedAttachment = draft.attachments?.[0] as ChatAttachment | undefined;
   const setMsg = (value: string) => draft.write(value, draft.attachments, selectedMentions);
   const { user } = useSession();
-  const { conversation } = useConversation(listId);
-  const mentionable = useMemo(() => conversation?.others ?? [], [conversation]);
+  const mentionable = useChatMentionPeople(listId);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -197,9 +189,8 @@ export const ListChatPanel = forwardRef<
     Boolean(msg.trim()) || Boolean(stagedAttachment) || uploading || chat.send.isPending,
     "list-chat-draft",
   );
-  const [mentionTrigger, setMentionTrigger] = useState<{ start: number; query: string } | null>(
-    null,
-  );
+  const [mentionTrigger, setMentionTrigger] = useState<MentionTrigger | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const msgInputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -233,13 +224,13 @@ export const ListChatPanel = forwardRef<
   }, []);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  const mentionMatches = useMemo(() => {
-    if (!mentionTrigger) return [];
-    const q = mentionTrigger.query.toLowerCase();
-    return mentionable.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 6);
-  }, [mentionTrigger, mentionable]);
+  const mentionMatches = useMemo(
+    () => (mentionTrigger ? filterMentionPeople(mentionable, mentionTrigger.query) : []),
+    [mentionTrigger, mentionable],
+  );
+  const activeMentionIndex = Math.min(mentionIndex, Math.max(mentionMatches.length - 1, 0));
 
-  const insertMention = (person: ConversationParticipant) => {
+  const insertMention = (person: MentionPerson) => {
     if (!mentionTrigger) return;
     const before = msg.slice(0, mentionTrigger.start);
     const after = msg.slice(mentionTrigger.start + 1 + mentionTrigger.query.length);
@@ -250,6 +241,7 @@ export const ListChatPanel = forwardRef<
       { id: person.id, label, start: before.length, end: before.length + label.length },
     ]);
     setMentionTrigger(null);
+    setMentionIndex(0);
     requestAnimationFrame(() => msgInputRef.current?.focus());
   };
 
@@ -258,6 +250,7 @@ export const ListChatPanel = forwardRef<
     draft.write(value, draft.attachments, reconcileMentions(msg, value, selectedMentions));
     const caret = e.target.selectionStart ?? value.length;
     setMentionTrigger(findMentionTrigger(value, caret));
+    setMentionIndex(0);
   };
 
   const scrollToMessage = (id: string) => {
@@ -374,7 +367,7 @@ export const ListChatPanel = forwardRef<
         metadata: current?.metadata,
       });
     } catch (err) {
-      toast.error(domainErrorMessage(err));
+      toast.error(describeUploadError(err));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -707,20 +700,13 @@ export const ListChatPanel = forwardRef<
             </div>
           ) : null}
           {mentionTrigger && mentionMatches.length > 0 ? (
-            <div className="absolute bottom-full left-0 z-10 mb-1 w-56 overflow-hidden rounded-[10px] border border-[#ebecf7] bg-white katalist-elevation-popover">
-              {mentionMatches.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => insertMention(p)}
-                  className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-[#f6f7fc]"
-                >
-                  <PersonAvatar name={p.name} initials={p.initials} src={p.avatarUrl} size={22} />
-                  <span className="truncate text-[12px] font-medium text-[#000533]">{p.name}</span>
-                  <span className="ml-auto text-[12px] text-[#8487a7]">{p.id.slice(-6)}</span>
-                </button>
-              ))}
-            </div>
+            <MentionMenu
+              id="list-chat-mention-menu"
+              people={mentionMatches}
+              activeIndex={activeMentionIndex}
+              onSelect={insertMention}
+              onHover={setMentionIndex}
+            />
           ) : null}
           <form
             className="flex items-center gap-2 rounded-[18px] border border-[#e7e1ee] bg-[#faf8fc] px-3 py-2 shadow-[0_3px_12px_rgba(45,28,68,0.05)] transition focus-within:border-[#a77ae2] focus-within:bg-white"
@@ -771,8 +757,24 @@ export const ListChatPanel = forwardRef<
               ref={msgInputRef}
               value={msg}
               onChange={onMsgChange}
+              role="combobox"
+              aria-expanded={Boolean(mentionTrigger && mentionMatches.length > 0)}
+              aria-controls="list-chat-mention-menu"
+              aria-activedescendant={mentionTrigger && mentionMatches.length > 0 ? `list-chat-mention-menu-option-${activeMentionIndex}` : undefined}
               onKeyDown={(e) => {
-                if (e.key === "Escape") setMentionTrigger(null);
+                if (!mentionTrigger) return;
+                handleMentionKey(
+                  e,
+                  { count: mentionMatches.length, activeIndex: activeMentionIndex },
+                  {
+                    setActiveIndex: setMentionIndex,
+                    select: (index) => {
+                      const person = mentionMatches[index];
+                      if (person) insertMention(person);
+                    },
+                    close: () => setMentionTrigger(null),
+                  },
+                );
               }}
               placeholder={uploading ? "Uploading file…" : "Write a message…"}
               className="min-w-0 flex-1 bg-transparent text-[13px] text-[#000533] outline-none placeholder:text-[#6a6b8e]"

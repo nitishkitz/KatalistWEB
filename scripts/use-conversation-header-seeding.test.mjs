@@ -20,7 +20,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 mock.module("@/hooks/useSession", {
-  namedExports: { useSession: () => ({ session: { user: { id: "profile-1" } }, user: { id: "profile-1" } }) },
+  namedExports: { useSession: () => ({ session: { user: { id: "profile-1" } }, user: { id: "profile-1" } }), getStoredDemoSession: () => null },
 });
 mock.module("@/lib/session-mode", { namedExports: { isPreviewSession: () => false } });
 

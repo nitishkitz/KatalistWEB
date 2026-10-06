@@ -74,7 +74,7 @@ const COVER_THEMES: { key: string; label: string; className: string }[] = [
 
 const settingsRows = [
   { id: "preferences", title: "Work / Home Context", body: "Set your default workspace and context", icon: Home, tint: "bg-[#f3ebfe] text-[#975ee2]" },
-  { id: "notifications", title: "Notification", body: "Choose what you want to be notified about", icon: Bell, tint: "bg-[#fef4ec] text-[#fd983f]" },
+  { id: "notifications", title: "Notifications", body: "Manage push delivery on this device", icon: Bell, tint: "bg-[#fef4ec] text-[#fd983f]" },
   { id: "appearance", title: "Appearance", body: "Theme, reduced motion, and display preferences", icon: Palette, tint: "bg-[#e4fcee] text-[#12a15f]" },
   { id: "privacy", title: "Privacy", body: "Manage what others can see", icon: Shield, tint: "bg-[#f3ebfe] text-[#975ee2]" },
   { id: "integrations", title: "Integrations", body: "Connect your favourite tools", icon: Plug, tint: "bg-[#e9f4ff] text-[#2874f4]" },

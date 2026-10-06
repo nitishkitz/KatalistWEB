@@ -4,6 +4,18 @@ import { performance } from "node:perf_hooks";
 
 let rpcCalls = 0;
 let signedBatches = 0;
+let legacyRows = [];
+mock.module("@/integrations/supabase/client", {
+  namedExports: {
+    supabase: {
+      from: () => ({
+        select: () => ({
+          in: () => ({ like: async () => ({ data: legacyRows, error: null }) }),
+        }),
+      }),
+    },
+  },
+});
 mock.module("@/integrations/supabase/rpcs", {
   namedExports: {
     callUngeneratedRpc: (_name, args) => {
@@ -46,3 +58,15 @@ for (const count of [0, 30, 300]) {
     t.diagnostic(`fixture=${count} aggregateRequests=${rpcCalls} signingRequests=${signedBatches} adapterMs=${elapsedMs.toFixed(2)} (mocked transport, not live latency)`);
   });
 }
+
+test("overview falls back to an image embedded by legacy Magic Box tosses", async () => {
+  legacyRows = [{
+    id: "legacy-thing",
+    notes: JSON.stringify({ files: [{ id: "legacy-file", name: "image.png", type: "image", url: "data:image/png;base64,AAAA" }] }),
+  }];
+  const [stats] = await fetchThingOverviewStats([{ id: "legacy-thing", context: "work" }], "actor-1").then((map) => [...map.values()]);
+  assert.equal(stats.attachmentCount, 1);
+  assert.equal(stats.previewFile?.name, "image.png");
+  assert.equal(stats.previewFile?.url, "data:image/png;base64,AAAA");
+  legacyRows = [];
+});

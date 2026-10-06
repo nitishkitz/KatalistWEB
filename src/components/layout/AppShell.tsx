@@ -10,6 +10,7 @@ import { GhostCard } from "@/features/doorman/GhostCard";
 import { MeetingReminderCard } from "@/features/lists/MeetingReminderCard";
 import { ChatHeadsDock } from "@/features/hub/ChatHeadsDock";
 import { usePresence } from "@/features/people/presence";
+import { requestMagicBoxFocus } from "@/features/court/magic-box-entry";
 
 interface AppShellProps {
   title?: ReactNode;
@@ -38,6 +39,17 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
       navigate({ to: "/auth", replace: true });
     }
   }, [loading, session, navigate]);
+
+  useEffect(() => {
+    const focusMagicBox = async (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
+      event.preventDefault();
+      await navigate({ to: "/" });
+      requestMagicBoxFocus();
+    };
+    window.addEventListener("keydown", focusMagicBox);
+    return () => window.removeEventListener("keydown", focusMagicBox);
+  }, [navigate]);
 
   if (loading || !session) {
     return (

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { formatDistanceToNowStrict } from "date-fns";
-import { ArrowRight, Bell, Check, CheckCheck, Clock, Loader2, MessageCircle, Sparkles, Sunrise, UserPlus } from "lucide-react";
+import { ArrowRight, AtSign, Bell, Check, CheckCheck, Clock, Loader2, MessageCircle, Sparkles, Sunrise, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -20,6 +20,7 @@ import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-c
 import { useNotifications } from "./use-notifications";
 import { useNotificationTargets } from "./use-notification-targets";
 import { groupNotifications, notificationActions, type NotificationGroup } from "./notification-model";
+import { requestCatchupOpen } from "@/features/catchup/catchup-entry";
 
 const actionClass = "inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-[#ded8f1] px-3 text-[12px] font-medium text-[#6541ad] transition-colors hover:bg-[#eee8fb] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50";
 
@@ -60,7 +61,11 @@ export function NotificationBell() {
     markRead(item); setOpen(false); setExpanded(false);
   };
   const reviewCourt = async (item: NotificationGroup) => {
-    await navigate({ to: "/" }); markRead(item); setOpen(false); setExpanded(false);
+    setOpen(false);
+    setExpanded(false);
+    requestCatchupOpen();
+    await navigate({ to: "/" });
+    markRead(item);
   };
   const mutation = useMutation({
     mutationFn: async ({ item, assigneeId }: { item: NotificationGroup; assigneeId?: string }) => {
@@ -101,7 +106,8 @@ export function NotificationBell() {
     const brief = item.kind === "morning_brief";
     const sorted = item.kind === "thing_sorted";
     const attentionRow = actions.needsAttention;
-    const Icon = brief ? Sunrise : chat ? MessageCircle : sorted ? Check : attentionRow ? Clock : Sparkles;
+    const mention = item.kind === "mention";
+    const Icon = brief ? Sunrise : mention ? AtSign : chat ? MessageCircle : sorted ? Check : attentionRow ? Clock : Sparkles;
     const title = chat && item.count > 1 ? item.title.replace(/^New message in /, `${item.count} new messages in `)
       : sorted && person ? `${person.name} sorted your Thing`
       : item.kind === "thing_caught" && person ? `${person.name} caught your Thing`

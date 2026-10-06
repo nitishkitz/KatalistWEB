@@ -12,6 +12,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { ThingStatusCapsule } from "@/features/catchup/ThingStatusCapsule";
 import { useListCall } from "@/features/calls/use-list-call";
+import { useSelfCallIdentity } from "@/features/calls/call-identity";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
 import { useListMeetings } from "@/features/lists/use-list-meetings";
@@ -80,12 +81,10 @@ function ListDetailPage() {
     [],
   );
   const selfId = `${user?.id || myActorId || "anon"}:${sessionSuffix}`;
-  const selfName =
-    list?.members?.find((m) => m.actorId === myActorId)?.name ||
-    (user?.user_metadata?.display_name as string | undefined) ||
-    user?.email?.split("@")[0] ||
-    "You";
-  const call = useListCall(listId, selfId, selfName);
+  const { name: selfName, avatarUrl: selfAvatarUrl } = useSelfCallIdentity(
+    list?.members?.find((m) => m.actorId === myActorId)?.name,
+  );
+  const call = useListCall(listId, selfId, selfName, selfAvatarUrl);
   const meetingsHook = useListMeetings(listId);
   const [scheduleMeetingOpen, setScheduleMeetingOpen] = useState(false);
   const [showAllMeetings, setShowAllMeetings] = useState(false);
@@ -747,62 +746,45 @@ function ListDetailPage() {
               className="min-h-0 flex-1 rounded-[10px] bg-white"
             />
             {/* Right: List info sidebar */}
-            <div className="w-full shrink-0 min-h-0 overflow-y-auto rounded-[10px] bg-white p-5 lg:w-[440px]">
-              <h2 className="text-[22px] font-medium text-[#000533]">{list.name}</h2>
-
-              <div className="mt-4 flex items-stretch">
-                <div className="flex-1 pr-4">
-                  <div className="text-[22px] font-medium text-[#000533]">{list.members.length}</div>
-                  <div className="text-[12px] text-[#6a769c]">members</div>
+            <aside
+              aria-label="List overview"
+              className="w-full shrink-0 min-h-0 overflow-y-auto rounded-[10px] bg-white p-4 lg:w-[400px]"
+            >
+              <div className="grid grid-cols-2 gap-2" aria-label="List totals">
+                <div className="rounded-[8px] bg-[#f7f8fd] px-3 py-2.5">
+                  <div className="text-[20px] font-semibold leading-none text-[#000533]">{list.members.length}</div>
+                  <div className="mt-1 text-[11.5px] text-[#6a769c]">Members</div>
                 </div>
-                <div className="flex-1 border-l border-[#eef0f6] pl-4">
-                  <div className="text-[22px] font-medium text-[#000533]">{listThings.length}</div>
-                  <div className="text-[12px] text-[#6a769c]">Things</div>
+                <div className="rounded-[8px] bg-[#f7f8fd] px-3 py-2.5">
+                  <div className="text-[20px] font-semibold leading-none text-[#000533]">{listThings.length}</div>
+                  <div className="mt-1 text-[11.5px] text-[#6a769c]">Things</div>
                 </div>
-              </div>
-
-              <div className="mt-4 flex items-center -space-x-2">
-                {list.members.slice(0, 4).map((m) => (
-                  <PersonAvatar
-                    key={m.profileId || m.actorId || m.name}
-                    name={m.name}
-                    initials={m.initials}
-                    src={m.avatarUrl}
-                    size={40}
-                    className="ring-2 ring-white"
-                  />
-                ))}
-                {list.members.length > 4 && (
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#f0effe] text-[13px] font-medium text-[#975ee2] ring-2 ring-white">
-                    +{list.members.length - 4}
-                  </span>
-                )}
               </div>
 
               {/* Members */}
-              <div className="mt-6 flex items-center justify-between border-t border-[#eef0f6] pt-4">
-                <span className="text-[14.5px] font-medium text-[#000128]">Members</span>
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-[13.5px] font-semibold text-[#000128]">Members</span>
                 <button
                   type="button"
                   onClick={() => setTab("members")}
-                  className="text-[12.5px] font-medium text-[#975ee2] hover:opacity-80 cursor-pointer"
+                  className="rounded-md px-1.5 py-1 text-[12px] font-medium text-[#975ee2] hover:bg-[#f7f3fe] cursor-pointer"
                 >
                   See all {list.members.length}
                 </button>
               </div>
-              <div className="mt-3 space-y-3">
+              <div className="mt-1.5 space-y-1">
                 {list.members.slice(0, 3).map((m) => (
                   <div
                     key={m.profileId || m.actorId || m.name}
-                    className="flex items-center justify-between"
+                    className="flex items-center justify-between rounded-[8px] bg-[#fafafe] px-2.5 py-2"
                   >
                     <div className="flex items-center gap-2.5">
-                      <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={32} />
-                      <span className="text-[14px] font-medium text-[#000128]">{m.name}</span>
+                      <PersonAvatar name={m.name} initials={m.initials} src={m.avatarUrl} size={28} />
+                      <span className="text-[13px] font-medium text-[#000128]">{m.name}</span>
                     </div>
                     <span
                       className={cn(
-                        "text-[12.5px]",
+                        "text-[11.5px]",
                         m.role === "owner" ? "font-medium text-[#975ee2]" : "text-[#717793]",
                       )}
                     >
@@ -813,48 +795,42 @@ function ListDetailPage() {
               </div>
 
               {/* Quick Actions */}
-              <div className="mt-6 border-t border-[#eef0f6] pt-4">
-                <span className="text-[14.5px] font-medium text-[#000128]">Quick Actions</span>
-                <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="mt-4">
+                <span className="text-[13.5px] font-semibold text-[#000128]">Quick actions</span>
+                <div className="mt-1.5 grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => (call.joined ? void startOrJoinCall() : openStartCall(false))}
                     disabled={call.connecting}
-                    className="flex flex-col items-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] py-3 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer disabled:opacity-60"
+                    className="flex min-h-10 items-center justify-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] px-2 py-2 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer disabled:opacity-60"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
-                      <Phone className="h-4 w-4" />
-                    </span>
-                    <span className="text-[12px] font-medium text-[#000533]">Start Audio Call</span>
+                    <Phone className="h-3.5 w-3.5 text-[#975ee2]" />
+                    <span className="text-[11.5px] font-medium text-[#000533]">Audio</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => (call.joined ? void startOrJoinCall() : openStartCall(true))}
                     disabled={call.connecting}
-                    className="flex flex-col items-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] py-3 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer disabled:opacity-60"
+                    className="flex min-h-10 items-center justify-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] px-2 py-2 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer disabled:opacity-60"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
-                      <Video className="h-4 w-4" />
-                    </span>
-                    <span className="text-[12px] font-medium text-[#000533]">Start Video Call</span>
+                    <Video className="h-3.5 w-3.5 text-[#975ee2]" />
+                    <span className="text-[11.5px] font-medium text-[#000533]">Video</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setScheduleMeetingOpen(true)}
-                    className="flex flex-col items-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] py-3 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer"
+                    className="flex min-h-10 items-center justify-center gap-1.5 rounded-[8px] border border-[#ebecf7] bg-[#f9f9fe] px-2 py-2 text-center hover:border-[#975ee2]/40 hover:bg-white transition-colors cursor-pointer"
                   >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-[#f0effe] text-[#975ee2]">
-                      <Calendar className="h-4 w-4" />
-                    </span>
-                    <span className="text-[12px] font-medium text-[#000533]">Schedule Meeting</span>
+                    <Calendar className="h-3.5 w-3.5 text-[#975ee2]" />
+                    <span className="text-[11.5px] font-medium text-[#000533]">Schedule</span>
                   </button>
                 </div>
               </div>
 
               {/* Upcoming Meetings */}
-              <div className="mt-6 border-t border-[#eef0f6] pt-4">
+              <div className="mt-4 border-t border-[#eef0f6] pt-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[14.5px] font-medium text-[#000128]">Upcoming Meetings</span>
+                  <span className="text-[13.5px] font-semibold text-[#000128]">Upcoming meetings</span>
                   {meetingsHook.meetings.length > 3 && (
                     <button
                       type="button"
@@ -873,9 +849,9 @@ function ListDetailPage() {
                     </button>
                   </div>
                 ) : meetingsHook.meetings.length === 0 ? (
-                  <p className="mt-3 text-[12px] text-[#8487a7]">No meetings scheduled yet.</p>
+                  <p className="mt-1.5 text-[11.5px] text-[#8487a7]">No meetings scheduled.</p>
                 ) : (
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-2 space-y-1.5">
                     {(showAllMeetings ? meetingsHook.meetings : meetingsHook.meetings.slice(0, 3)).map((meeting) => {
                       const starts = new Date(meeting.startsAt);
                       const ends = new Date(meeting.endsAt);
@@ -945,8 +921,8 @@ function ListDetailPage() {
               </div>
 
               {/* Recent Things */}
-              <div className="mt-6 flex items-center justify-between border-t border-[#eef0f6] pt-4">
-                <span className="text-[14.5px] font-medium text-[#000128]">Recent Things</span>
+              <div className="mt-4 flex items-center justify-between border-t border-[#eef0f6] pt-3">
+                <span className="text-[13.5px] font-semibold text-[#000128]">Recent Things</span>
                 <button
                   type="button"
                   onClick={() => setTab("things")}
@@ -955,7 +931,7 @@ function ListDetailPage() {
                   See all
                 </button>
               </div>
-              <div className="mt-3 space-y-2.5">
+              <div className="mt-1.5 space-y-1.5">
                 {listThings.slice(0, 2).map((thing) => {
                   const due = formatCourtDue(thing);
                   return (
@@ -993,10 +969,10 @@ function ListDetailPage() {
                   );
                 })}
                 {listThings.length === 0 && (
-                  <p className="text-[12px] text-[#6a769c]">No Things yet.</p>
+                  <p className="text-[11.5px] text-[#6a769c]">No Things yet.</p>
                 )}
               </div>
-            </div>
+            </aside>
           </div>
         )}
 

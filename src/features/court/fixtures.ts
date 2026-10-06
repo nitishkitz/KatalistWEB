@@ -1,5 +1,15 @@
 import type { Thing } from "@/domain/thing";
 
+const avatarById: Record<string, string> = {
+  "p-priya": "/avatars/priya.jpg",
+  "p-arjun": "/avatars/arjun.jpg",
+  "p-rahul": "/avatars/rahul.jpg",
+  "p-sai": "/avatars/sai.jpg",
+  "p-sarah": "/avatars/sarah.jpg",
+  "p-mike": "/avatars/mike.jpg",
+  "p-neha": "/avatars/neha.jpg",
+};
+
 const person = (id: string, name: string) => ({
   id,
   name,
@@ -7,7 +17,7 @@ const person = (id: string, name: string) => ({
     .split(" ")
     .map((n) => n[0])
     .join(""),
-  avatarUrl: null as string | null,
+  avatarUrl: avatarById[id] ?? null,
 });
 
 const rahul = person("p-rahul", "Rahul Mehta");
@@ -17,6 +27,10 @@ const arjun = person("p-arjun", "Arjun Mehta");
 const nithesh = person("p-nithesh", "Nithesh");
 const sudheer = person("p-sudheer", "Sudheer");
 const rohit = person("p-rohit", "Rohit");
+const sarah = person("p-sarah", "Sarah Kapoor");
+const mike = person("p-mike", "Mike Fernandes");
+const neha = person("p-neha", "Neha Rao");
+const workOwners = [rahul, sai, arjun, sarah, mike, neha];
 
 const pdfBrief = {
   id: "f1",
@@ -33,9 +47,9 @@ const docxCopy = {
 };
 const pngRefs = {
   id: "f3",
-  name: "References.png",
+  name: "Release-flow.svg",
   type: "png" as const,
-  url: "https://picsum.photos/seed/katalist-refs/640/420",
+  url: "/demo/release-flow-preview.svg",
 };
 const docxNotes = {
   id: "f4",
@@ -282,10 +296,11 @@ export const courtFixtures: Thing[] = [
     assignee: priya,
     ownerImportance: "next",
     personalPace: "now",
-    workStatus: "not_started",
+    workStatus: "under_progress",
     dueAt: at(18, 0),
     listId: "l1",
     listName: "Android Release",
+    description: "Walk through the staged Android update with QA. Confirm the progress prompt, background download, relaunch state, and rollback copy before the 6 PM release review.",
   }),
   thing({
     id: "t5",
@@ -334,34 +349,87 @@ export const courtFixtures: Thing[] = [
     listId: "l3",
     listName: "Website Launch",
   }),
-  ...Array.from({ length: 18 }, (_, i) =>
+  ...[
+    "Approve the final release checklist",
+    "Resolve the checkout analytics gap",
+    "Review the support handoff notes",
+    "Confirm launch-day ownership",
+    "Sign off the incident response rota",
+  ].map((title, i) =>
     thing({
       id: `now-more-${i}`,
-      title: `Additional NOW item ${i + 1}`,
+      title,
+      creator: workOwners[i % workOwners.length],
+      owner: workOwners[i % workOwners.length],
       personalPace: "now",
       ownerImportance: i % 2 === 0 ? "now" : "next",
+      workStatus: i < 2 ? "under_progress" : "not_started",
+      dueAt: at(14 + i, i % 2 ? 30 : 0),
+      dueHasTime: true,
+      description: i === 0 ? "One final pass across release owners, dependencies, escalation paths, and customer-facing notes." : undefined,
+      files: i === 0 ? [pdfBrief, docxCopy, pngRefs] : i === 1 ? [docxNotes] : undefined,
+      attachmentCount: i === 0 ? 3 : i === 1 ? 1 : undefined,
     }),
   ),
-  ...Array.from({ length: 38 }, (_, i) =>
+  ...[
+    "Publish the beta feedback summary",
+    "Prepare Monday's growth review",
+    "Validate subscription renewal emails",
+    "Schedule the partner enablement call",
+    "Tighten the onboarding success metrics",
+    "Review the accessibility audit fixes",
+    "Draft the October product update",
+  ].map((title, i) =>
     thing({
       id: `next-more-${i}`,
-      title: `Additional NEXT item ${i + 1}`,
+      title,
+      creator: workOwners[(i + 3) % workOwners.length],
+      owner: workOwners[(i + 3) % workOwners.length],
       personalPace: "next",
       ownerImportance: "next",
+      workStatus: i % 3 === 0 ? "under_progress" : "not_started",
+      dueAt: days(1 + Math.floor(i / 2)),
+      listId: i % 2 === 0 ? "l2" : "l3",
+      listName: i % 2 === 0 ? "Mobile App Launch" : "Website Launch",
+      files: i === 0 ? [pngRefs, pdfBrief] : undefined,
+      attachmentCount: i === 0 ? 2 : undefined,
     }),
   ),
-  ...Array.from({ length: 128 }, (_, i) =>
+  ...[
+    "Map the next quarter research themes",
+    "Refresh the customer advisory board plan",
+    "Consolidate legacy help-centre articles",
+    "Explore a lighter approval workflow",
+    "Review vendor contracts before renewal",
+    "Plan the annual team offsite",
+    "Revisit activation email experiments",
+    "Document the design critique format",
+    "Archive superseded launch assets",
+    "Outline the 2027 hiring forecast",
+    "Collect ideas for the mobile dashboard",
+  ].map((title, i) =>
     thing({
       id: `later-${i}`,
-      title: `Later item ${i + 1}`,
+      title,
+      creator: workOwners[(i + 1) % workOwners.length],
+      owner: workOwners[(i + 1) % workOwners.length],
       personalPace: "later",
       ownerImportance: "later",
+      dueAt: days(7 + i * 2),
+      listId: i % 2 === 0 ? "l4" : "l3",
+      listName: i % 2 === 0 ? "Q4 Marketing Plan" : "Website Launch",
+      files: i === 0 ? [docxNotes] : undefined,
+      attachmentCount: i === 0 ? 1 : undefined,
     }),
   ),
-  ...Array.from({ length: 8 }, (_, i) =>
+  ...[
+    "Confirm the Play Store rollout window",
+    "Share the final QA evidence",
+    "Approve the launch email sequence",
+  ].map((title, i) =>
     thing({
       id: `theirs-wait-${i}`,
-      title: `Waiting catch ${i + 1}`,
+      title,
       owner: priya,
       assignee: rahul,
       acknowledgement: "waiting_for_catch",
@@ -369,10 +437,15 @@ export const courtFixtures: Thing[] = [
       ownerImportance: "now",
     }),
   ),
-  ...Array.from({ length: 24 }, (_, i) =>
+  ...[
+    "Fix the tablet navigation regression",
+    "Complete release candidate testing",
+    "Prepare the customer support macros",
+    "Update the partner rollout tracker",
+  ].map((title, i) =>
     thing({
       id: `theirs-move-${i}`,
-      title: `Moving ${i + 1}`,
+      title,
       owner: priya,
       assignee: sai,
       acknowledgement: "caught",
@@ -380,16 +453,65 @@ export const courtFixtures: Thing[] = [
       personalPace: "now",
     }),
   ),
-  ...Array.from({ length: 5 }, (_, i) =>
+  ...[
+    "Resolve the blocked payment verification",
+    "Confirm the legal copy changes",
+  ].map((title, i) =>
     thing({
       id: `theirs-attn-${i}`,
-      title: `Needs attention ${i + 1}`,
+      title,
       owner: priya,
       assignee: arjun,
       acknowledgement: "caught",
       workStatus: "not_started",
       dueAt: days(-2),
       personalPace: "now",
+    }),
+  ),
+  // Home context: life admin shares the same Court as work.
+  ...([
+    { title: "Call Mom about Sunday lunch", owner: neha, pace: "now", due: at(19, 0), list: null },
+    { title: "Book Goa flights for December", owner: neha, pace: "now", due: days(2), list: "l6" },
+    { title: "Pick up groceries on the way home", owner: arjun, pace: "now", due: at(20, 0), list: null },
+    { title: "Pick the hotel for the Goa trip", owner: arjun, pace: "next", due: days(3), list: "l6" },
+    { title: "Get the painter's quote", owner: mike, pace: "next", due: days(4), list: "l7" },
+    { title: "Renew the car insurance", owner: priya, pace: "next", due: days(6), list: null },
+    { title: "Plan Ananya's birthday dinner", owner: neha, pace: "later", due: days(12), list: null },
+    { title: "Choose kitchen lights", owner: mike, pace: "later", due: days(15), list: "l7" },
+  ] as const).map(({ title, owner, pace, due, list }, i) =>
+    thing({
+      id: `home-${i}`,
+      title,
+      creator: owner,
+      owner,
+      assignee: priya,
+      context: "home",
+      personalPace: pace,
+      // Owner importance stays below NOW so these never compete for the Doorman.
+      ownerImportance: pace === "now" ? "next" : pace,
+      workStatus: i % 3 === 0 ? "under_progress" : "not_started",
+      dueAt: due,
+      dueHasTime: i === 0 || i === 2,
+      listId: list,
+      listName: list === "l6" ? "Family Trip to Goa" : list === "l7" ? "Home Renovation" : null,
+    }),
+  ),
+  // Recently sorted history, so the Me screen shows a real streak.
+  ...[
+    "Send the venue deposit",
+    "Pick tiles for the bathroom",
+    "Share the beta invite list",
+    "Confirm the photographer",
+  ].map((title, i) =>
+    thing({
+      id: `sorted-${i}`,
+      title,
+      assignee: priya,
+      workStatus: "sorted",
+      sortedAt: days(-i),
+      context: i === 1 ? "home" : "work",
+      listId: i === 1 ? "l7" : "l3",
+      listName: i === 1 ? "Home Renovation" : "Website Launch",
     }),
   ),
 ];

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { rpcAddToBucket, rpcCreateThing } from "@/features/things/rpc";
 import { useAssignablePeople } from "@/features/people/use-assignable";
+import { mergeAssignablePeople } from "@/features/people/merge-people";
 import { useLists } from "@/features/lists/use-lists";
 import { useBuckets } from "@/features/buckets/use-buckets";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -15,13 +16,14 @@ import { isPreviewMode } from "@/lib/session-mode";
 import { parseToss, tossBlockedByPerson } from "./parse-toss";
 import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
 import type { ThingFile, Person } from "@/domain/thing";
-import { processFileForUpload, formatFileSize } from "@/lib/file-utils";
+import { processFileForUpload, formatFileSize, getClipboardFiles } from "@/lib/file-utils";
 import { acquireBlobUrl, releaseBlobUrl, releaseAllBlobUrlsForOwner } from "@/lib/owned-file-resources";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Importance } from "@/domain/thing";
+import { MAGIC_BOX_FOCUS_EVENT } from "./magic-box-entry";
 
 type MagicBoxMotionState = "idle" | "hover" | "focused" | "typing" | "submitting" | "processing" | "success" | "error";
 
@@ -33,6 +35,12 @@ function MagicBoxGlow() {
       <span className="magic-box-fill" aria-hidden="true" />
     </>
   );
+}
+
+/** Sentence-case the first letter of a parsed title, leaving links and handles alone. */
+function capitalizeTitle(title: string): string {
+  if (!title || /^(?:https?:\/\/|www\.)/i.test(title)) return title;
+  return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 export function MagicBox({
@@ -82,6 +90,7 @@ export function MagicBox({
   const epochRef = useRef(0);
 
   const [value, setValue] = useState(() => getDraft<string>(qc, "magic-box", draftEntityId)?.value ?? "");
+  const suppressPasteTextRef = useRef(false);
   const [paceOverride, setPaceOverride] = useState<Importance | null>(null);
   // undefined follows parsed text; null explicitly clears the inferred date.
   const [dueOverride, setDueOverride] = useState<string | null | undefined>(undefined);
@@ -149,15 +158,10 @@ export function MagicBox({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const assignablePeople = useAssignablePeople();
-  const people = useMemo(() => {
-    if (!extraPeople?.length) return assignablePeople;
-    const byKey = new Map<string, Person>();
-    for (const p of [...extraPeople, ...assignablePeople]) {
-      const key = (p.id || p.name).toLowerCase();
-      if (!byKey.has(key)) byKey.set(key, p);
-    }
-    return [...byKey.values()];
-  }, [assignablePeople, extraPeople]);
+  const people = useMemo(
+    () => (extraPeople?.length ? mergeAssignablePeople(assignablePeople, extraPeople) : assignablePeople),
+    [assignablePeople, extraPeople],
+  );
   const { lists } = useLists();
   const { buckets } = useBuckets();
 
@@ -252,9 +256,8 @@ export function MagicBox({
     }
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const processFiles = async (files: File[]) => {
+    if (files.length === 0) return;
     // Captured once, before any await, so every file from this pick shares
     // the destination it was picked for, regardless of how long processing
     // takes or whether the user switches destinations before it resolves.
@@ -263,12 +266,37 @@ export function MagicBox({
     // validating->ready|failed transition, entirely independent of the
     // others -- one slow/failing file never blocks or drops another that
     // already succeeded.
-    const picked = Array.from(files).map((file) => ({
+    const picked = files.map((file) => ({
       id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       file,
     }));
-    if (fileInputRef.current) fileInputRef.current.value = "";
     await Promise.all(picked.map(({ id, file }) => processOneFile(id, file, opEpoch)));
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    await processFiles(Array.from(files));
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const files = getClipboardFiles(e.clipboardData);
+    if (!files.length) return;
+    // When the clipboard contains a file, its plain-text entry is often only
+    // an image's alt label or filename (e.g. "image"). Treat this as an attach
+    // action; ordinary text-only clipboard paste still uses the browser default.
+    e.preventDefault();
+    e.stopPropagation();
+    // Some browsers expose both an image file and its alt label (often just
+    // "image") as separate paste payloads. Suppress the follow-up text input
+    // explicitly as well as preventing the paste default.
+    suppressPasteTextRef.current = true;
+    setValue(e.currentTarget.value);
+    window.setTimeout(() => {
+      suppressPasteTextRef.current = false;
+    }, 0);
+    void processFiles(files);
   };
 
   const removeAttachedFile = (fileId: string) => {
@@ -296,16 +324,14 @@ export function MagicBox({
   const isMac = typeof navigator !== "undefined" && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }
+    const focusInput = () => {
+      const input = inputRef.current;
+      if (!input || input.getClientRects().length === 0) return;
+      input.focus();
+      input.select();
     };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener(MAGIC_BOX_FOCUS_EVENT, focusInput);
+    return () => window.removeEventListener(MAGIC_BOX_FOCUS_EVENT, focusInput);
   }, []);
 
   const parsed = useMemo(() => parseToss(value, people), [value, people]);
@@ -465,7 +491,7 @@ export function MagicBox({
       const assigneeIds = retryAssigneeIds ?? parsedAssigneeIds;
 
       const titleToUse =
-        parsed.title.trim() ||
+        capitalizeTitle(parsed.title.trim()) ||
         (attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "New Thing");
 
       // Multi-toss: one Thing per assignee in parallel. E04: uses
@@ -972,6 +998,12 @@ export function MagicBox({
           <input
             ref={inputRef}
             value={value}
+            onPaste={handlePaste}
+            onBeforeInput={(e) => {
+              if (!suppressPasteTextRef.current) return;
+              e.preventDefault();
+              suppressPasteTextRef.current = false;
+            }}
             onChange={(e) => {
               const next = e.target.value;
               if (!value && next) flashMotion("first-character", 280);

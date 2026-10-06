@@ -32,6 +32,7 @@ mock.module("@/features/things/rpc", {
 let shouldFail = true;
 mock.module("@/lib/file-utils", {
   namedExports: {
+    getClipboardFiles: () => [],
     formatFileSize: () => "2 KB",
     processFileForUpload: async (file) => {
       if (shouldFail) throw new Error(`${file.name} could not be processed`);

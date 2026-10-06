@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useListMessages, useListMessageSearch, useListSystemHistory, type ListChatMessage } from "@/features/lists/use-list-messages";
 import { ListChatPanel, type ListChatPanelHandle } from "@/features/lists/ListChatPanel";
 import { useListCall } from "@/features/calls/use-list-call";
+import { useSelfCallIdentity } from "@/features/calls/call-identity";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
 import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
 import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
@@ -82,9 +83,8 @@ export function ConversationWorkspace({
     [],
   );
   const selfId = `${user?.id || "anon"}:${sessionSuffix}`;
-  const selfName =
-    (user?.user_metadata?.display_name as string | undefined) || user?.email?.split("@")[0] || "You";
-  const call = useListCall(listId, selfId, selfName);
+  const { name: selfName, avatarUrl: selfAvatarUrl } = useSelfCallIdentity();
+  const call = useListCall(listId, selfId, selfName, selfAvatarUrl);
 
   const callHistory = systemHistory.messages;
   const chatAttachments = useMemo(

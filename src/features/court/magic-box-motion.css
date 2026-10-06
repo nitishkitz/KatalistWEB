@@ -19,8 +19,8 @@
 /* Active states -- effects switch on. */
 .magic-box-root[data-state="focused"],
 .magic-box-root[data-state="typing"] { --magic-aura-opacity: .8; --magic-orbit: 7s; }
-.magic-box-root[data-state="submitting"] { --magic-aura-opacity: .92; --magic-orbit: 3s; }
-.magic-box-root[data-state="processing"] { --magic-aura-opacity: .88; --magic-orbit: 3.1s; }
+.magic-box-root[data-state="submitting"] { --magic-aura-opacity: 1; --magic-orbit: 1.15s; }
+.magic-box-root[data-state="processing"] { --magic-aura-opacity: 1; --magic-orbit: 1.15s; }
 .magic-box-root[data-state="success"] { --magic-aura-opacity: .76; }
 .magic-box-root[data-state="error"] { --magic-aura-opacity: .76; }
 
@@ -103,6 +103,19 @@
   animation: magic-box-orbit calc(var(--magic-orbit) * 1.25) linear infinite;
 }
 
+.magic-box-root[data-state="submitting"] .magic-box-frame,
+.magic-box-root[data-state="processing"] .magic-box-frame {
+  inset: -3px;
+  filter: saturate(1.75) brightness(1.08);
+  box-shadow: 0 0 18px rgba(124, 108, 255, .55);
+}
+
+.magic-box-root[data-state="submitting"] .magic-box-aura,
+.magic-box-root[data-state="processing"] .magic-box-aura {
+  inset: -18px;
+  filter: blur(20px) saturate(1.65);
+}
+
 @keyframes magic-box-orbit { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
 @keyframes magic-box-breathe {
   0%, 100% { opacity: calc(var(--magic-aura-opacity) * .78); }
@@ -153,4 +166,8 @@
   .magic-box-root, .magic-box-toss { transition: none !important; transform: none !important; }
   .magic-box-frame-light, .magic-box-aura-light, .magic-box-frame, .magic-box-sparkle, .magic-box-root::after { animation: none !important; }
   .magic-box-aura { animation: none !important; }
+  .magic-box-root[data-state="submitting"] .magic-box-frame,
+  .magic-box-root[data-state="processing"] .magic-box-frame {
+    box-shadow: 0 0 18px rgba(124, 108, 255, .55);
+  }
 }

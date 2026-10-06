@@ -1,3 +1,4 @@
+import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import { useEffect, useState, useCallback } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 
@@ -143,6 +144,27 @@ export async function signOutAll() {
  * Client-side session state. Supports both Supabase Auth sessions
  * and 1-click Demo Persona sessions for instant development/testing.
  */
+const deviceLimitChecked = new Set<string>();
+
+/**
+ * Each account may be signed in on two devices. Right after a new sign-in the
+ * server drops the oldest other sessions beyond that. SIGNED_IN also fires on
+ * tab refocus, so this runs once per access-token session per page load.
+ */
+function enforceDeviceLimitOnce(accessToken: string) {
+  let sessionId = "";
+  try {
+    sessionId = JSON.parse(atob(accessToken.split(".")[1]!.replace(/-/g, "+").replace(/_/g, "/"))).session_id ?? "";
+  } catch {
+    return;
+  }
+  if (!sessionId || deviceLimitChecked.has(sessionId)) return;
+  deviceLimitChecked.add(sessionId);
+  void Promise.resolve(callUngeneratedRpc("enforce_device_limit", { p_max: 2 })).catch(() => {
+    // Best effort: a missing migration or a network blip must never block sign-in.
+  });
+}
+
 export function useSession() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -165,8 +187,9 @@ export function useSession() {
     let active = true;
 
     // Listen to Supabase auth events
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, next) => {
       if (!active) return;
+      if (event === "SIGNED_IN" && next && !getStoredDemoSession()) enforceDeviceLimitOnce(next.access_token);
       const demo = getStoredDemoSession();
       if (demo) {
         setSession(demo);

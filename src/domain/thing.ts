@@ -11,6 +11,8 @@ export type Person = {
   avatarUrl?: string | null;
   actorId?: string;
   profileId?: string;
+  /** Set when this person was resolved from the Thing's List membership. */
+  listMember?: boolean;
 };
 
 export type Thing = {

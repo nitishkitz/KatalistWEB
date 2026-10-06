@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Android release flow reference</title>
+  <desc id="desc">A product flow showing staged rollout, monitoring, and full release.</desc>
+  <rect width="1200" height="760" rx="36" fill="#f6f3ff"/>
+  <text x="70" y="92" fill="#24134f" font-family="Inter,Arial,sans-serif" font-size="38" font-weight="700">Android 8.4 · staged rollout</text>
+  <text x="70" y="138" fill="#6d6188" font-family="Inter,Arial,sans-serif" font-size="22">Release control flow · updated Oct 5</text>
+  <g font-family="Inter,Arial,sans-serif">
+    <rect x="70" y="218" width="280" height="250" rx="24" fill="white" stroke="#ded5f4" stroke-width="3"/>
+    <circle cx="112" cy="263" r="18" fill="#6d3bd1"/>
+    <text x="145" y="272" fill="#26134f" font-size="26" font-weight="700">10% rollout</text>
+    <text x="102" y="335" fill="#6d6188" font-size="20">Internal + beta cohort</text>
+    <text x="102" y="382" fill="#2f9b68" font-size="19" font-weight="700">✓ Crash-free 99.8%</text>
+    <text x="102" y="420" fill="#2f9b68" font-size="19" font-weight="700">✓ No payment regressions</text>
+
+    <path d="M370 343h105" stroke="#9b7ad9" stroke-width="6" stroke-linecap="round"/>
+    <path d="m460 325 22 18-22 18" fill="none" stroke="#9b7ad9" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="500" y="218" width="280" height="250" rx="24" fill="white" stroke="#ded5f4" stroke-width="3"/>
+    <circle cx="542" cy="263" r="18" fill="#2f75e8"/>
+    <text x="575" y="272" fill="#26134f" font-size="26" font-weight="700">Monitor 2h</text>
+    <text x="532" y="335" fill="#6d6188" font-size="20">QA + Support watch</text>
+    <text x="532" y="382" fill="#2f75e8" font-size="19" font-weight="700">• Track update success</text>
+    <text x="532" y="420" fill="#2f75e8" font-size="19" font-weight="700">• Review support volume</text>
+
+    <path d="M800 343h105" stroke="#9b7ad9" stroke-width="6" stroke-linecap="round"/>
+    <path d="m890 325 22 18-22 18" fill="none" stroke="#9b7ad9" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="930" y="218" width="200" height="250" rx="24" fill="#5d2fb4"/>
+    <circle cx="972" cy="263" r="18" fill="#d8ff53"/>
+    <text x="1005" y="272" fill="white" font-size="26" font-weight="700">100%</text>
+    <text x="962" y="335" fill="#e8ddff" font-size="20">Full production</text>
+    <text x="962" y="382" fill="white" font-size="19" font-weight="700">Release approved</text>
+    <text x="962" y="420" fill="#d8ff53" font-size="19" font-weight="700">6:00 PM IST</text>
+
+    <rect x="70" y="540" width="1060" height="130" rx="24" fill="#ebe4fb"/>
+    <text x="108" y="598" fill="#493675" font-size="20" font-weight="700">Rollback rule</text>
+    <text x="108" y="638" fill="#6d6188" font-size="20">Pause automatically if crash-free sessions fall below 99.5% or payment errors rise above baseline.</text>
+  </g>
+</svg>

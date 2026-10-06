@@ -42,6 +42,7 @@ mock.module("@/features/things/rpc", {
 let resolveProcessFile;
 mock.module("@/lib/file-utils", {
   namedExports: {
+    getClipboardFiles: () => [],
     formatFileSize: () => "1 KB",
     processFileForUpload: () =>
       new Promise((resolve) => {
