@@ -210,7 +210,7 @@ export function ConversationWorkspace({
           void fetch("/api/calls/ring", {
             method: "POST",
             headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
-            body: JSON.stringify({ listId, memberIds: selectedIds }),
+            body: JSON.stringify({ listId, memberIds: selectedIds, callType: withVideo ? "video" : "audio" }),
           });
         }
       } catch {

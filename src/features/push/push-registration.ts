@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { requestAutojoin } from "@/features/calls/autojoin-signal";
+import { deliverLocalRing } from "@/features/calls/call-lobby";
 import { firebaseConfig, VAPID_KEY } from "./push-config";
 
 /**
@@ -66,6 +67,18 @@ export async function registerPushForUser(
       if (data.kind === "incoming_call" && data.listId) {
         const listId = data.listId;
         const isHub = data.hub === "1";
+        const kind = data.listKind === "dm" || data.listKind === "group" ? data.listKind : isHub ? "group" : "list";
+        const shownAsCard = deliverLocalRing({
+          listId,
+          listName: data.listName || "",
+          fromDeviceId: "push",
+          fromName: data.fromName || body.split(" started a call")[0] || "Someone",
+          fromAvatarUrl: data.fromAvatarUrl || null,
+          memberIds: [],
+          callType: data.callType === "audio" || data.callType === "video" ? data.callType : undefined,
+          kind,
+        });
+        if (shownAsCard) return;
         toast(title, {
           description: body,
           duration: 30000,

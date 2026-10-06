@@ -106,6 +106,12 @@ type PeerSlot = {
   remoteConn: string | null;
   /** When the peer vanished from presence; dropped only if it stays gone. */
   missingSince: number | null;
+  /** Polite side waits briefly for the other side's offer (see createPeer). */
+  holdOffer: boolean;
+  offerPending: boolean;
+  /** Timers owned by this slot, cleared in dropPeer. */
+  timers: ReturnType<typeof setTimeout>[];
+  iceRestarts: number;
   stream: MediaStream;
   muted: boolean;
   cameraOff: boolean;
@@ -527,6 +533,10 @@ export class CallRoom {
       localConn: crypto.randomUUID(),
       remoteConn: null,
       missingSince: null,
+      holdOffer: this.selfId < peerId,
+      offerPending: false,
+      timers: [],
+      iceRestarts: 0,
       stream: new MediaStream(),
       muted,
       cameraOff,
@@ -556,7 +566,7 @@ export class CallRoom {
         this.send("ice", { from: this.selfId, to: peerId, conn: slot.localConn, candidate: e.candidate.toJSON() });
       }
     };
-    pc.onnegotiationneeded = async () => {
+    const negotiate = async () => {
       try {
         slot.makingOffer = true;
         await pc.setLocalDescription();
@@ -571,6 +581,53 @@ export class CallRoom {
         slot.makingOffer = false;
       }
     };
+    // Both sides create their connection the moment they see each other, so
+    // both used to send an opening offer at once. When the polite side then
+    // rolled its offer back to answer, Chrome sometimes never emitted its ICE
+    // candidates and the pair sat at iceConnectionState "new" (~1 in 5 calls,
+    // reproduced in two-browser tests). The polite side now lets the other
+    // side open, and only offers itself if nothing arrives (e.g. an older
+    // client that behaves differently).
+    pc.onnegotiationneeded = () => {
+      if (slot.holdOffer) {
+        slot.offerPending = true;
+        return;
+      }
+      void negotiate();
+    };
+    if (slot.holdOffer) {
+      slot.timers.push(setTimeout(() => {
+        if (!slot.holdOffer || this.peers.get(peerId) !== slot) return;
+        slot.holdOffer = false;
+        if (slot.offerPending && pc.signalingState === "stable" && !pc.remoteDescription) void negotiate();
+      }, 1500));
+    }
+    // Watchdog: negotiation finished but the connection never got going.
+    const watch = () => {
+      slot.timers.push(setTimeout(() => {
+        if (this.closed || this.peers.get(peerId) !== slot) return;
+        const stuck = pc.iceConnectionState === "new" || pc.iceConnectionState === "checking";
+        if (!stuck) return;
+        if (pc.signalingState !== "stable" || !pc.remoteDescription) return watch();
+        if (slot.iceRestarts < 2) {
+          slot.iceRestarts += 1;
+          slot.holdOffer = false;
+          console.warn("[call] connection stuck, restarting ICE", peerId, slot.iceRestarts);
+          try {
+            pc.restartIce();
+          } catch {
+            // restartIce is unsupported in very old browsers; rebuild below next time.
+          }
+          return watch();
+        }
+        console.warn("[call] connection still stuck, rebuilding", peerId);
+        const keep = { name: slot.name, profileId: slot.profileId, avatarUrl: slot.avatarUrl, sessionId: slot.sessionId };
+        this.dropPeer(peerId);
+        this.createPeer(peerId, keep.name, keep);
+        this.emit();
+      }, 6000));
+    };
+    watch();
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "disconnected") {
         // Often a brief network blip (Wi-Fi handoff, a dropped packet burst) —
@@ -644,6 +701,7 @@ export class CallRoom {
     }
     try {
       await pc.setRemoteDescription(description);
+      slot.holdOffer = false;
       if (msg.conn) slot.remoteConn = msg.conn;
       await this.flushPendingIce(slot);
       if (description.type === "offer") {
@@ -837,6 +895,7 @@ export class CallRoom {
       slot.pc.onnegotiationneeded = null;
       slot.pc.onconnectionstatechange = null;
       slot.pc.close();
+      slot.timers.forEach(clearTimeout);
     } catch {
       /* ignore */
     }

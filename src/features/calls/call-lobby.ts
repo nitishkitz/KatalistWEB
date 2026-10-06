@@ -23,6 +23,20 @@ export type RingPayload = {
 
 const LOBBY = "calls-lobby";
 
+/**
+ * Rings handed over in-process, e.g. from a foreground push message. The
+ * Realtime ring and the push travel separately; if the websocket is down the
+ * push is the only one that arrives, and it should still show the call card.
+ */
+const localRingListeners = new Set<(p: RingPayload) => void>();
+
+/** Returns false when nothing is listening (no signed-in app shell mounted). */
+export function deliverLocalRing(payload: RingPayload): boolean {
+  if (localRingListeners.size === 0) return false;
+  localRingListeners.forEach((listener) => listener(payload));
+  return true;
+}
+
 let deviceId: string | null = null;
 /** Stable-per-tab device id, used to distinguish devices of the same account. */
 export function getDeviceId(): string {
@@ -85,7 +99,13 @@ export function subscribeToRings(
       onRing(p);
     })
     .subscribe();
+  // Already addressed to us by the server; only skip our own device.
+  const local = (p: RingPayload) => {
+    if (p.fromDeviceId !== selfDeviceId) onRing(p);
+  };
+  localRingListeners.add(local);
   return () => {
+    localRingListeners.delete(local);
     void supabase.removeChannel(channel);
   };
 }

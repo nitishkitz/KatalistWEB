@@ -14,9 +14,9 @@ export const Route = createFileRoute("/api/calls/ring")({
         const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
         if (!token) return json({ error: "unauthorized" }, 401);
 
-        let body: { listId?: string; memberIds?: string[] } = {};
+        let body: { listId?: string; memberIds?: string[]; callType?: string } = {};
         try {
-          body = (await request.json()) as { listId?: string; memberIds?: string[] };
+          body = (await request.json()) as { listId?: string; memberIds?: string[]; callType?: string };
         } catch {
           body = {};
         }
@@ -49,10 +49,11 @@ export const Route = createFileRoute("/api/calls/ring")({
 
         const { data: caller } = await supabaseAdmin
           .from("profiles")
-          .select("display_name")
+          .select("display_name, avatar_url")
           .eq("id", uid)
           .maybeSingle();
         const fromName = caller?.display_name || "Someone";
+        const callType = body.callType === "audio" || body.callType === "video" ? body.callType : "";
 
         // If the caller picked a subset of people to ring, only push to those —
         // but always intersect with actual list membership so a client can
@@ -78,6 +79,13 @@ export const Route = createFileRoute("/api/calls/ring")({
             kind: "incoming_call",
             hub: isHub ? "1" : "0",
             listId,
+            // Lets an open app render the full incoming-call card from the
+            // push alone when its Realtime ring never arrived.
+            listName: list.name ?? "",
+            fromName,
+            fromAvatarUrl: caller?.avatar_url ?? "",
+            callType,
+            listKind: list.kind ?? "list",
           },
         );
         return json({ sent });
