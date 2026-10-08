@@ -67,6 +67,7 @@ import type { SelectedMention } from "@/features/lists/chat-mentions";
 import { Linkified } from "@/components/katalist/Linkified";
 import { ThingStatusControls } from "./components/ThingStatusControls";
 import { ThingAttachments } from "./components/ThingAttachments";
+import { LinkedDesigns } from "@/features/designs/LinkedDesigns";
 import { ThingDiscussion } from "./components/ThingDiscussion";
 import { getDraft, setDraft, clearDraft, getDraftRevision } from "@/features/drafts/session-drafts";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
@@ -785,6 +786,10 @@ export function ThingDetailContent({
 
           <LinkPreviewCards texts={[thing.title, thing.description]} />
 
+          <div className="py-3 empty:hidden">
+            <LinkedDesigns thingId={thing.id} listId={thing.listId} />
+          </div>
+
           <ThingAttachments
             files={displayFiles}
             activeFileId={activeFileId}
@@ -1106,6 +1111,10 @@ export function ThingDetailContent({
               </p>
             </section>
           ) : null}
+
+          <div className="col-span-2 empty:hidden">
+            <LinkedDesigns thingId={thing.id} listId={thing.listId} />
+          </div>
 
           {thing.listName ? (
             <section className="space-y-2">

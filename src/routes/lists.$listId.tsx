@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   ArrowLeft,
   Users,
@@ -59,8 +59,11 @@ export const Route = createFileRoute("/lists/$listId")({
   component: ListDetailPage,
 });
 
-type TabType = "things" | "chat" | "members";
+type TabType = "things" | "chat" | "designs" | "members";
 type DueFilterType = "all" | "today" | "overdue" | "no_due";
+
+import { DesignsBoundary } from "@/features/designs/DesignsBoundary";
+const DesignsRoot = lazy(() => import("@/features/designs/DesignsRoot"));
 
 function ListDetailPage() {
   const { listId } = Route.useParams();
@@ -198,6 +201,24 @@ function ListDetailPage() {
   const assignablePeople = useAssignablePeople();
 
   const [tab, setTab] = useState<TabType>("things");
+  // Deep link from a Thing's "View in Designs": ?tab=designs&design=<id>. Reacts to search changes on
+  // this already-mounted route (navigating from a Thing on this same List does not remount it), then
+  // clears the params so the same link works again later.
+  const navigate = useNavigate();
+  const searchStr = useRouterState({ select: (state) => state.location.searchStr });
+  const [designDeepLink, setDesignDeepLink] = useState<string | null>(null);
+  useEffect(() => {
+    const params = new URLSearchParams(searchStr);
+    if (params.get("tab") !== "designs") return;
+    setTab("designs");
+    const design = params.get("design");
+    setDesignDeepLink(design && /^[0-9a-f-]{36}$/i.test(design) ? design : null);
+    void navigate({ to: "/lists/$listId", params: { listId }, search: {} as never, replace: true });
+  }, [listId, searchStr, navigate]);
+  // A deep link is consumed once: leaving the Designs tab forgets it, so reopening the tab starts clean.
+  useEffect(() => {
+    if (tab !== "designs") setDesignDeepLink(null);
+  }, [tab]);
   const [selectedState, setSelectedState] = useState<{ listId: string; thingId: string | null }>(() => ({
     listId,
     thingId: null,
@@ -676,11 +697,12 @@ function ListDetailPage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex items-center gap-8 border-t border-[#eef0f6] px-5">
+          <div className="flex items-center gap-4 overflow-x-auto border-t border-[#eef0f6] px-5">
             {(
               [
                 ["things", "Things"],
                 ["chat", "Chat"],
+                ["designs", "Designs"],
                 ["members", "Members & Permissions"],
               ] as const
             ).map(([id, label]) => {
@@ -691,7 +713,7 @@ function ListDetailPage() {
                   type="button"
                   onClick={() => setTab(id)}
                   className={cn(
-                    "relative py-3 text-[13.5px] transition-colors outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
+                    "relative min-h-11 shrink-0 py-3 text-[13.5px] transition-colors outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
                     active ? "text-[#000533] font-medium" : "text-[#6a769c] hover:text-[#000533] font-normal",
                   )}
                 >
@@ -973,6 +995,35 @@ function ListDetailPage() {
                 )}
               </div>
             </aside>
+          </div>
+        )}
+
+        {/* Designs: Katalist-authored library of Figma links (no Figma API). */}
+        {tab === "designs" && (
+          <div className="pb-8 pt-1">
+            <DesignsBoundary resetKey={listId}>
+              <Suspense
+                fallback={
+                  <div role="status" aria-label="Loading Designs" className="rounded-[10px] bg-white p-4 text-[13px] text-[#6a769c]">
+                    Loading Designs…
+                  </div>
+                }
+              >
+                <DesignsRoot
+                  listId={listId}
+                  listRole={list.role}
+                  members={list.members.flatMap((m) =>
+                    m.profileId ? [{ profileId: m.profileId, name: m.name, initials: m.initials, avatarUrl: m.avatarUrl }] : [],
+                  )}
+                  things={listThings.map((t) => ({ id: t.id, title: t.title }))}
+                  initialDesignId={designDeepLink}
+                  onOpenThing={(thingId) => {
+                    setSelectedId(thingId);
+                    setTab("things");
+                  }}
+                />
+              </Suspense>
+            </DesignsBoundary>
           </div>
         )}
 

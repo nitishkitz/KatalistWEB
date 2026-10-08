@@ -88,6 +88,10 @@ export async function load(url, context, nextLoad) {
   // tiny synthetic ES module (a plain `export default {...}`) sidesteps
   // the attribute requirement entirely, matching how Vite's real JSON
   // handling already behaves for these imports in the app itself.
+  // Plain stylesheets imported for their side effect (Vite handles them in the app): an empty module is enough under test.
+  if (urlPath.endsWith(".css") && url.startsWith("file:")) {
+    return { format: "module", source: "export default {};", shortCircuit: true };
+  }
   if (urlPath.endsWith(".json") && url.startsWith("file:")) {
     const filePath = fileURLToPath(urlPath);
     const source = readFileSync(filePath, "utf8");
