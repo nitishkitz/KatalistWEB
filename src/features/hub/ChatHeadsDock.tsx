@@ -12,6 +12,7 @@ import { useNotifications } from "@/features/notifications/use-notifications";
 import { useThing } from "@/features/things/use-thing";
 import { cn } from "@/lib/utils";
 import { CoeyChatHeadArtwork } from "./CoeyChatHeadArtwork";
+import { useCoeyAnchor } from "./coey-anchor";
 import { useConversations, type Conversation } from "./use-conversations";
 import { markConversationAsRead, useConversationUnreadCount } from "./chat-read-state";
 
@@ -330,6 +331,7 @@ export function ChatHeadsDock() {
   const notifications = useNotifications();
   const { toasts } = useSonner();
   const [pos, setPos] = useState(loadPosition);
+  const anchor = useCoeyAnchor();
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<"updates" | "chats">("chats");
   const [activity, setActivity] = useState<ActivityToast[]>(() => activityForUser(user?.id));
@@ -569,6 +571,8 @@ export function ChatHeadsDock() {
     setOpen((o) => !o);
   };
 
+  // Docking is a transform on top of the resting left/top, so the chat head glides on the compositor and the saved position is never touched.
+  const dock = anchor && !open ? { dx: Math.round(anchor.x - pos.x), dy: Math.round(anchor.y - pos.y) } : null;
   const badgeCount = totalUnread + unreadActivity;
   const preview = !open ? activity.find((item) => item.id === previewId) : null;
   const viewportWidth = typeof window === "undefined" ? 1024 : window.innerWidth;
@@ -611,8 +615,11 @@ export function ChatHeadsDock() {
               width: BUBBLE_SIZE,
               height: BUBBLE_SIZE,
               touchAction: "none",
+              transform: dock ? `translate3d(${dock.dx}px, ${dock.dy}px, 0)` : "translate3d(0, 0, 0)",
+              transition: "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)",
+              willChange: "transform",
             }}
-            className="fixed z-40 flex items-center justify-center rounded-full outline-none cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[#7b56fd] focus-visible:ring-offset-2"
+            className="coey-dockable fixed z-40 flex items-center justify-center rounded-full outline-none cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[#7b56fd] focus-visible:ring-offset-2"
           >
             <CoeyChatHeadArtwork size={BUBBLE_SIZE} />
             {badgeCount > 0 || hasUnknownUnread ? (

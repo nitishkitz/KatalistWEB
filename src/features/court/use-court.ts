@@ -13,13 +13,18 @@ import { excludeSnoozedThings, usePersonalSnooze } from "@/features/things/perso
 import { calculateCommentCounts, getThingLastReadAt, useThingReadState } from "@/features/things/read-state";
 import { fetchCourt } from "./fetch-court";
 
+// Preview data is local, so a refetch has nothing to fetch.
+const previewRefetch = () => Promise.resolve(undefined);
+
 export function useCourt() {
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
   const liveAuth = Boolean(session) && !preview;
   const { context } = useAppContext();
   const qc = useQueryClient();
-  useLocalVersion();
+  // Preview Courts read the local store; this version must feed the memo below
+  // so a Toss, catch, pace change or snooze re-derives the lanes.
+  const localVersion = useLocalVersion();
   const shred = usePersonalShred();
   const snooze = usePersonalSnooze();
   const readVersion = useThingReadState();
@@ -103,7 +108,7 @@ export function useCourt() {
     // module-level read-state changes; the memo doesn't reference
     // readVersion directly, so the linter can't see it's a real dependency.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [preview, query.data, query.dataUpdatedAt, context, shred, snooze, readVersion]);
+  }, [preview, query.data, query.dataUpdatedAt, context, shred, snooze, readVersion, localVersion]);
 
   const parts = partitionCourt(source.things, source.myActorId ?? "");
   const theirs = parts.theirs;
@@ -120,7 +125,9 @@ export function useCourt() {
     // confirmed empty Court. query.data persists across later
     // pauses/errors once populated.
     hasFetchedOnce: preview || query.data !== undefined,
-    error: query.error,
+    // Preview Courts are local data: an explicit refetch (e.g. the Catch Up
+    // overlay's refresh) must never surface a live-fetch failure here.
+    error: preview ? null : query.error,
     live: source.live,
     preview,
     now: parts.now,
@@ -135,7 +142,7 @@ export function useCourt() {
       moving: theirs.filter((t) => theirStateFor(t) === "moving"),
       needs_attention: theirs.filter((t) => theirStateFor(t) === "needs_attention"),
     },
-    refetch: query.refetch,
+    refetch: preview ? previewRefetch : query.refetch,
     context,
   };
 }

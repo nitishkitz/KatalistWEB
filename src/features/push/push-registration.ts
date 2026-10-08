@@ -48,6 +48,7 @@ export async function registerPushForUser(
 
     const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
     const reg = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    await navigator.serviceWorker.ready;
     const permission = await Notification.requestPermission();
     if (permission !== "granted") return { ok: false, reason: "denied" };
 
@@ -58,7 +59,13 @@ export async function registerPushForUser(
     });
     if (!token) return { ok: false, reason: "error" };
 
-    await supabase.from("device_tokens").upsert({ profile_id: uid, token }, { onConflict: "token" });
+    const { error: tokenError } = await supabase
+      .from("device_tokens")
+      .upsert({ profile_id: uid, token }, { onConflict: "token" });
+    if (tokenError) {
+      console.error("[push] Could not save this browser's notification token", tokenError);
+      return { ok: false, reason: "error" };
+    }
 
     onMessage(messaging, (payload) => {
       const title = payload.notification?.title || payload.data?.title || "Katalist";
@@ -104,6 +111,15 @@ export async function registerPushForUser(
           },
         });
       } else {
+        // FCM does not display system notifications for foreground pages.
+        // Explicitly use the registered worker so Chrome behaves consistently
+        // whether Katalist is focused, in another tab, or in the background.
+        void reg.showNotification(title, {
+          body,
+          icon: "/katalist-mark-app.png",
+          badge: "/katalist-mark-app.png",
+          data,
+        });
         toast(title, { description: body });
       }
     });
@@ -111,5 +127,22 @@ export async function registerPushForUser(
     return { ok: true };
   } catch {
     return { ok: false, reason: "error" };
+  }
+}
+
+export async function sendTestPush(): Promise<{ ok: true } | { ok: false; message: string }> {
+  const { data } = await supabase.auth.getSession();
+  const accessToken = data.session?.access_token;
+  if (!accessToken) return { ok: false, message: "Sign in again, then retry." };
+  try {
+    const response = await fetch("/api/push/test", {
+      method: "POST",
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    const result = await response.json() as { sent?: number; error?: string };
+    if (response.ok && result.sent && result.sent > 0) return { ok: true };
+    return { ok: false, message: result.error || "The test notification was not accepted by Chrome." };
+  } catch {
+    return { ok: false, message: "The notification test could not reach the server." };
   }
 }

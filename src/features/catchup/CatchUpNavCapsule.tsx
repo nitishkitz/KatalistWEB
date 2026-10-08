@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertCircle, ArrowRight, ChevronDown, Sparkles } from "lucide-react";
+import { AlertCircle, ArrowRight, ChevronDown, Pin, Sparkles } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { requestCatchupOpen } from "./catchup-entry";
 import { cn } from "@/lib/utils";
 import coeyAvatar from "@/assets/coey-catchup.png";
 import { useAppContext } from "@/features/context/use-app-context";
@@ -27,6 +29,7 @@ function momentLabel(moment: CatchUpMoment) {
 }
 
 export function CatchUpNavCapsule() {
+  const navigate = useNavigate();
   const { context } = useAppContext();
   const catchup = useCatchup();
   const { reduceMotion } = useMotionPreference();
@@ -124,6 +127,7 @@ export function CatchUpNavCapsule() {
       >
         <button
           ref={triggerRef}
+          data-brief-anchor
           type="button"
           onClick={() => setIsPinned((current) => !current)}
           aria-expanded={isExpanded}
@@ -131,7 +135,7 @@ export function CatchUpNavCapsule() {
           aria-label={isChecking ? "Checking Catch Up" : count && activeMoment ? `Catch Up, ${activeIndex + 1} of ${count}: ${momentLabel(activeMoment)} about ${activeMoment.thing.title}` : "All caught up"}
           className={cn("flex w-full items-center gap-2 px-2 text-left outline-none transition-[height,padding] duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8b5cf6] motion-reduce:transition-none", isExpanded ? "h-14 px-3" : "h-[42px]", count > 0 && "bg-[linear-gradient(110deg,#fbf9ff_0%,#f4edff_52%,#fff9f3_100%)]")}
         >
-          <span className={cn("relative inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#eee5ff] shadow-sm transition-transform duration-300 group-hover/catchup:scale-105", count > 0 && "ring-2 ring-[#e7d9ff] ring-offset-1 ring-offset-[#faf8ff]")}>
+          <span data-brief-origin-avatar className={cn("relative inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#eee5ff] shadow-sm transition-transform duration-300 group-hover/catchup:scale-105", count > 0 && "ring-2 ring-[#e7d9ff] ring-offset-1 ring-offset-[#faf8ff]")}>
             <img src={coeyAvatar} alt="" className="h-full w-full object-cover" aria-hidden="true" />
             {count > 0 ? <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white bg-[#f04438]" aria-hidden="true" /> : null}
           </span>
@@ -150,7 +154,22 @@ export function CatchUpNavCapsule() {
         </button>
         <div id="catchup-island-details" aria-hidden={!isExpanded} inert={!isExpanded} className={cn("w-[min(440px,calc(100vw-32px))] transition-[opacity,transform] duration-[180ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none", isExpanded ? "translate-y-0 opacity-100 delay-[40ms]" : "-translate-y-1 opacity-0 delay-0")}>
           <div ref={detailsRef} className="border-t border-[#eee8fa] px-4 pb-4 pt-3">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.09em] text-[#6941c6]">{isChecking ? "Checking your Court" : count > 0 ? `${count} ${count === 1 ? "moment" : "moments"} need you` : "You’re all caught up"}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPinned(false);
+                  setAutoExpanded(false);
+                  requestCatchupOpen();
+                  void navigate({ to: "/" });
+                }}
+                className="float-right ml-3 mb-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e5d7ec] bg-[#faf4ed] px-2.5 text-[#3a1259] transition-colors hover:bg-[#f3e9f5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5cf6]"
+                aria-label={`Open Morning Brief, ${count} ${count === 1 ? "moment" : "moments"}`}
+                title="Morning Brief"
+              >
+                <Pin className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="text-[11px] font-semibold tabular-nums" aria-hidden="true">{count}</span>
+              </button>
+              <p className="mb-2 flex min-h-8 items-center text-[11px] font-semibold uppercase tracking-[0.09em] text-[#6941c6]">{isChecking ? "Checking your Court" : count > 0 ? `${count} ${count === 1 ? "moment" : "moments"} need you` : "You’re all caught up"}</p>
               {isChecking ? <p className="text-xs text-slate-500">Looking for updates…</p> : count === 0 ? <p className="text-xs leading-relaxed text-slate-600">No nudges, snoozes, or follow-ups need your attention right now.</p> : (
                 <div className="max-h-[300px] space-y-1 overflow-y-auto">
                   {catchup.moments.map((moment) => {

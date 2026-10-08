@@ -48,3 +48,14 @@
   left: -3.12%;
   top: -9.71%;
 }
+
+/* No travel animation when the person asks for reduced motion: Coey simply appears at the new place. */
+@media (prefers-reduced-motion: reduce) {
+  .coey-dockable {
+    transition: none !important;
+  }
+}
+/* While Coey is being dragged by hand it follows the pointer exactly, with no easing. */
+.coey-dockable:active {
+  transition: none !important;
+}

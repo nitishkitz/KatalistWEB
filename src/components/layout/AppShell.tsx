@@ -10,7 +10,7 @@ import { GhostCard } from "@/features/doorman/GhostCard";
 import { MeetingReminderCard } from "@/features/lists/MeetingReminderCard";
 import { ChatHeadsDock } from "@/features/hub/ChatHeadsDock";
 import { usePresence } from "@/features/people/presence";
-import { requestMagicBoxFocus } from "@/features/court/magic-box-entry";
+import { requestMagicBoxFocus, tryHandleMagicBoxCapture } from "@/features/court/magic-box-entry";
 
 interface AppShellProps {
   title?: ReactNode;
@@ -44,6 +44,8 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
     const focusMagicBox = async (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "k") return;
       event.preventDefault();
+      // A screen with its own List-scoped composer (Code Activity) handles this in place; otherwise open Court.
+      if (await tryHandleMagicBoxCapture()) return;
       await navigate({ to: "/" });
       requestMagicBoxFocus();
     };

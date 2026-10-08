@@ -1,0 +1,204 @@
+/*
+ * Code Activity workspace. Every rule is scoped to [data-code-activity-workspace], so nothing here can restyle the rest of
+ * the app. Colors are oklch tokens; the brand violet comes from the app's own --primary.
+ */
+[data-code-activity-workspace] {
+  --ca-surface: oklch(1 0 0);
+  --ca-surface-soft: oklch(0.985 0.004 275);
+  --ca-line: oklch(0.94 0.01 270);
+  --ca-line-strong: oklch(0.88 0.015 270);
+  --ca-ink: oklch(0.2 0.06 270);
+  --ca-ink-2: oklch(0.4 0.05 270);
+  --ca-muted: oklch(0.55 0.04 270);
+  --ca-accent: var(--primary, oklch(0.55 0.21 285));
+  --ca-accent-soft: oklch(0.96 0.025 285);
+  --ca-accent-ink: oklch(0.38 0.14 285);
+  --ca-add-bg: oklch(0.95 0.06 155);
+  --ca-add-ink: oklch(0.42 0.12 155);
+  --ca-del-bg: oklch(0.95 0.04 20);
+  --ca-del-ink: oklch(0.45 0.18 22);
+  --ca-ok-bg: oklch(0.95 0.05 155);
+  --ca-ok-ink: oklch(0.4 0.11 155);
+  --ca-bad-bg: oklch(0.95 0.04 20);
+  --ca-bad-ink: oklch(0.44 0.17 22);
+  --ca-warn-bg: oklch(0.96 0.05 85);
+  --ca-warn-ink: oklch(0.42 0.09 70);
+  --ca-radius: 12px;
+  --ca-control: 36px;
+  --ca-code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ca-ink);
+  background: var(--ca-surface);
+  border: 1px solid var(--ca-line);
+  border-radius: var(--ca-radius);
+  overflow: hidden;
+}
+
+[data-code-activity-workspace] .ca-split {
+  display: grid;
+  grid-template-columns: minmax(340px, 35.8%) minmax(0, 1fr);
+  height: max(360px, calc(100dvh - 304px));
+  min-height: 360px;
+  border-top: 1px solid var(--ca-line);
+}
+[data-code-activity-workspace] .ca-feed {
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--ca-line);
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+[data-code-activity-workspace] .ca-detail {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+/* Keep the workspace inside a laptop viewport; the panes, not the document, own history scrolling. */
+@media (min-width: 1024px) {
+  [data-code-activity-workspace] { display: flex; flex-direction: column; height: max(400px, calc(100dvh - 144px)); }
+  [data-code-activity-workspace] > :not(.ca-split) { flex-shrink: 0; }
+  [data-code-activity-workspace] .ca-split { flex: 1; height: auto; min-height: 160px; overflow: hidden; }
+}
+/* Portaled outside the workspace's clipping/transform ancestors. Hidden composers keep drafts, never occupy space. */
+.ca-capture-dock {
+  --ca-muted: oklch(0.55 0.04 270);
+  --ca-surface-soft: oklch(0.985 0.004 275);
+  --ca-accent: var(--primary);
+  position: fixed;
+  z-index: 45;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(704px, calc(100% - 32px));
+  padding: 8px 12px 12px;
+  border: 1px solid oklch(0.94 0.01 270);
+  border-radius: 16px;
+  background: oklch(1 0 0);
+  color: oklch(0.2 0.06 270);
+  box-shadow: 0 8px 32px oklch(0.2 0.06 270 / 0.12);
+}
+.ca-capture-dock[hidden] { display: none; }
+[data-code-activity-workspace] .ca-files {
+  display: grid;
+  grid-template-columns: minmax(200px, 34%) minmax(0, 1fr);
+  min-height: 320px;
+}
+[data-code-activity-workspace] .ca-files > :first-child {
+  border-right: 1px solid var(--ca-line);
+}
+[data-code-activity-workspace] .ca-back {
+  display: none;
+}
+
+/* 1024 to 1199: a narrower feed; the file list moves above the diff */
+@media (max-width: 1199px) {
+  [data-code-activity-workspace] .ca-split {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+  [data-code-activity-workspace] .ca-files {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  [data-code-activity-workspace] .ca-files > :first-child {
+    border-right: 0;
+    border-bottom: 1px solid var(--ca-line);
+    max-height: 220px;
+    overflow: auto;
+  }
+}
+
+/* Below 1024: one pane at a time, with a real Back action */
+@media (max-width: 1023px) {
+  [data-code-activity-workspace] .ca-split {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  [data-code-activity-workspace] .ca-feed {
+    border-right: 0;
+    max-height: max(280px, calc(100dvh - 260px));
+  }
+  [data-code-activity-workspace][data-view="list"] .ca-detail,
+  [data-code-activity-workspace][data-view="detail"] .ca-feed {
+    display: none;
+  }
+  [data-code-activity-workspace] .ca-back {
+    display: inline-flex;
+  }
+  /* The detail view replaces the list view, including the category, filter and notice rows that belong to the list. */
+  [data-code-activity-workspace][data-view="detail"] .ca-list-chrome {
+    display: none;
+  }
+}
+
+/* One compact status line. Explanations remain keyboard-accessible without displacing the work. */
+[data-code-activity-workspace] .ca-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  padding: 4px 16px;
+  border-top: 1px solid var(--ca-line);
+  color: var(--ca-muted);
+  font-size: 12px;
+}
+[data-code-activity-workspace] .ca-status-strip:empty { display: none; }
+[data-code-activity-workspace] .ca-status-strip > div {
+  margin-top: 0;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 6px;
+}
+[data-code-activity-workspace] .ca-status-disclosure > summary { cursor: pointer; padding: 4px 0; }
+[data-code-activity-workspace] .ca-status-disclosure > summary:focus-visible { outline: 2px solid var(--ca-accent); outline-offset: 2px; border-radius: 4px; }
+[data-code-activity-workspace] .ca-status-disclosure > p { max-width: 64ch; padding: 4px 0 8px; line-height: 1.5; }
+[data-code-activity-workspace] .ca-status-strip > .ca-source-error { display: inline-flex; align-items: baseline; gap: 8px; padding: 0; color: var(--ca-bad-ink); }
+
+/* Below 768: wrapped toolbars, a scrollable category rail, filters in one popover */
+@media (max-width: 767px) {
+  [data-code-activity-workspace] .ca-rail {
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  [data-code-activity-workspace] .ca-filter-row {
+    display: none;
+  }
+  [data-code-activity-workspace] .ca-filter-compact {
+    display: inline-flex;
+  }
+  [data-code-activity-workspace] .ca-control {
+    min-height: 44px;
+  }
+}
+@media (min-width: 768px) {
+  [data-code-activity-workspace] .ca-filter-compact {
+    display: none;
+  }
+}
+
+[data-code-activity-workspace] .ca-row[data-selected="true"] {
+  background: var(--ca-accent-soft);
+  border-radius: 8px;
+}
+[data-code-activity-workspace] .ca-row[data-selected="true"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--ca-accent);
+}
+[data-code-activity-workspace] .ca-code {
+  font-family: var(--ca-code);
+}
+[data-code-activity-workspace] .ca-scroll-x {
+  overflow-x: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-code-activity-workspace] * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}

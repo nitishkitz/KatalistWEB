@@ -37,6 +37,10 @@ mock.module("@/features/doorman/use-doorman", {
   },
 });
 
+mock.module("@/features/things/ThingDetailContent", {
+  namedExports: { ThingDetailContent: ({ initialThing }) => h("h1", { "data-testid": "inline-thing-detail" }, initialThing.title) },
+});
+
 const { CatchUpStack } = await import("@/features/catchup/CatchUpStack");
 
 function makeThing(id, overrides = {}) {
@@ -248,21 +252,17 @@ test("A03: a successful action with a successful receipt advances to the next mo
   cleanup();
 });
 
-test("Q04: Open Thing closes the review, transfers to the Thing by its own data, and never mutates or surfaces a receipt", async () => {
+test("Q04: selected Thing detail stays inside the review without opening or acknowledging it", async () => {
   resetShared();
-  const a = makeMoment("a");
-  const view = renderStack({ moments: [a] });
-
-  await act(async () => {
-    fireEvent.click(screen.getByText("Open"));
-  });
-
-  assert.equal(view.onOpenThing.mock.calls.length, 1);
-  assert.equal(view.onOpenThing.mock.calls[0].arguments[0].id, "a");
-  assert.equal(view.onClose.mock.calls.length, 1);
+  const view = renderStack({ moments: [makeMoment("a"), makeMoment("b")] });
+  assert.equal(screen.getByTestId("inline-thing-detail").textContent, "Thing a");
+  assert.equal(screen.queryByText("Open"), null);
+  await act(async () => { fireEvent.click(screen.getByLabelText("Next")); });
+  assert.equal(screen.getByTestId("inline-thing-detail").textContent, "Thing b");
+  assert.equal(view.onOpenThing.mock.calls.length, 0);
+  assert.equal(view.onClose.mock.calls.length, 0);
   assert.equal(runCalls.length, 0);
   assert.equal(surfaceCalls.length, 0);
-
   cleanup();
 });
 
@@ -336,5 +336,16 @@ test("T10-06: clicking a queue item jumps directly to that moment (not just Prev
   assert.ok(screen.getByRole("heading", { name: "Thing c" }), "jumped directly to the third moment");
   assert.match(screen.getByTestId("catchup-pager-position").textContent, /3 of 3/);
 
+  cleanup();
+});
+
+test('the brief hides standalone context but retains a real list name', () => {
+  resetShared();
+  renderStack({ moments: [makeMoment('a')] });
+  assert.equal(screen.queryByText('Standalone'), null);
+  assert.equal(screen.queryByText('Standalone task'), null);
+  cleanup();
+  renderStack({ moments: [makeMoment('b', { thing: makeThing('b', { listName: 'Design review' }) })] });
+  assert.ok(screen.getByText('Design review'));
   cleanup();
 });

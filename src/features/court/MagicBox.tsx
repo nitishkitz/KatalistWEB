@@ -24,6 +24,10 @@ import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Importance } from "@/domain/thing";
 import { MAGIC_BOX_FOCUS_EVENT } from "./magic-box-entry";
+import { setCoeyAnchor } from "@/features/hub/coey-anchor";
+
+/** Coey's chat head is 52 px; it docks at the start of the box, vertically centred. */
+const COEY_SIZE = 52;
 
 type MagicBoxMotionState = "idle" | "hover" | "focused" | "typing" | "submitting" | "processing" | "success" | "error";
 
@@ -334,6 +338,32 @@ export function MagicBox({
     return () => window.removeEventListener(MAGIC_BOX_FOCUS_EVENT, focusInput);
   }, []);
 
+  // While this box has focus Coey docks at its start; it is released on blur or Escape, and when the box goes away.
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!motionFocused) return;
+    let frame = 0;
+    const place = () => {
+      frame = 0;
+      const el = boxRef.current;
+      if (!el || el.getClientRects().length === 0) return setCoeyAnchor(null);
+      const r = el.getBoundingClientRect();
+      setCoeyAnchor({ x: r.left + 4, y: r.top + (r.height - COEY_SIZE) / 2 });
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(place);
+    };
+    place();
+    window.addEventListener("resize", schedule);
+    window.addEventListener("scroll", schedule, true);
+    return () => {
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("scroll", schedule, true);
+      if (frame) cancelAnimationFrame(frame);
+      setCoeyAnchor(null);
+    };
+  }, [motionFocused]);
+
   const parsed = useMemo(() => parseToss(value, people), [value, people]);
   const effectivePace = paceOverride ?? parsed.importance;
   const effectiveDueAt = dueOverride === undefined ? parsed.dueAt : dueOverride ?? undefined;
@@ -580,6 +610,19 @@ export function MagicBox({
       // now would wipe out whatever the NEW destination's draft already
       // holds, and the retry-only-failed-assignees state belongs to the
       // old destination too.
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
+      await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
+      await qc.invalidateQueries({ queryKey: ["court"] });
+      if (effectiveListId) {
+        await qc.invalidateQueries({ queryKey: ["list-things", effectiveListId] });
+        await qc.invalidateQueries({ queryKey: ["lists"] });
+      }
+      if (effectiveBucketId) {
+        await qc.invalidateQueries({ queryKey: ["buckets"] });
+      }
+      // Keep the draft visible through the refresh, until the toss finishes.
+      // Recheck the destination after awaiting: navigation may have changed it.
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       const stillSameDestination = epochRef.current === mutationContext.opEpoch;
 
       if (stillSameDestination) {
@@ -603,16 +646,6 @@ export function MagicBox({
         setTrigger(null);
         setDismissedSuggestionId(null);
         window.setTimeout(() => setTossed(false), 240);
-      }
-      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
-      await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
-      await qc.invalidateQueries({ queryKey: ["court"] });
-      if (effectiveListId) {
-        await qc.invalidateQueries({ queryKey: ["list-things", effectiveListId] });
-        await qc.invalidateQueries({ queryKey: ["lists"] });
-      }
-      if (effectiveBucketId) {
-        await qc.invalidateQueries({ queryKey: ["buckets"] });
       }
       if (stillSameDestination) {
         flashMotion(hasPartialFailure ? "error" : "success", hasPartialFailure ? 650 : 380);
@@ -935,6 +968,7 @@ export function MagicBox({
         data-handoff={submitHandoff}
         onMouseEnter={() => setMotionHovered(true)}
         onMouseLeave={() => setMotionHovered(false)}
+        ref={boxRef}
         onFocusCapture={() => setMotionFocused(true)}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setMotionFocused(false);

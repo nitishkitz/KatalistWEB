@@ -485,10 +485,23 @@ function getListsRaw(): ListRow[] {
 
 export function getLists(): ListRow[] {
   const me = currentDemoActorId();
+  // Counts come from the local Things, matching get_list_overview_counts
+  // (all Things in the List; sorted; under progress), so a Toss into a List
+  // visibly updates its row.
+  const counts = new Map<string, { thingCount: number; doneCount: number; inProgressCount: number }>();
+  for (const t of getMergedThings(me)) {
+    if (!t.listId) continue;
+    const c = counts.get(t.listId) ?? { thingCount: 0, doneCount: 0, inProgressCount: 0 };
+    c.thingCount += 1;
+    if (t.workStatus === "sorted") c.doneCount += 1;
+    if (t.workStatus === "under_progress") c.inProgressCount += 1;
+    counts.set(t.listId, c);
+  }
   return getListsRaw()
     .map((l) => projectDemoList(l, me))
     .filter((l): l is ListRow => l != null)
-    .filter((l) => !shreddedSetFor(me).has(`list:${l.id}`));
+    .filter((l) => !shreddedSetFor(me).has(`list:${l.id}`))
+    .map((l) => ({ ...l, ...(counts.get(l.id) ?? { thingCount: 0, doneCount: 0, inProgressCount: 0 }) }));
 }
 
 /** Access-based Thing set for demo (includes Sorted/Cancelled). Independent of Court lanes. */

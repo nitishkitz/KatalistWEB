@@ -84,11 +84,11 @@ export function ListThingsSection({
   }, [searchOpen]);
 
   return (
-    <div className="flex flex-col min-h-0 gap-3 h-[calc(100vh-9.5rem)]">
+    <div data-list-things className="flex flex-col min-h-0 gap-3 h-[calc(100vh-9.5rem)]">
       <div className="flex min-h-0 flex-1 gap-3">
         {/* Navigator card */}
         <aside className="flex w-[340px] shrink-0 flex-col min-h-0 overflow-hidden rounded-[10px] bg-white">
-          <div className="flex items-center gap-5 border-b border-[#e2e4f5] px-5 pt-4">
+          <div className="flex items-center gap-5 border-b border-[#e2e4f5] px-4 pt-2">
             {laneTabs.map((lt) => {
               const active = navLane === lt.id;
               return (
@@ -293,8 +293,8 @@ export function ListThingsSection({
         {/* Right: detail | preview */}
         <div className="flex flex-1 flex-col min-h-0 overflow-hidden rounded-[10px] bg-white">
           <div className="flex flex-1 flex-row min-h-0 overflow-hidden">
-            <div className="flex-1 min-h-0 overflow-auto bg-[#fefdfd] px-8 pt-6 pb-8">
-              <div className="mx-auto w-full max-w-3xl">
+            <div className="list-thing-detail flex-1 min-h-0 overflow-auto bg-[#fefdfd] p-4">
+              <div className="w-full">
                 {selectedId && selected && !selectedIsVisible ? (
                   <div role="status" className="flex min-h-[320px] flex-col items-center justify-center text-center">
                     <p className="text-[14px] font-semibold text-[#000533]">This Thing is hidden by your filters.</p>

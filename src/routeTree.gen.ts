@@ -26,15 +26,39 @@ import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
 import { Route as TeamIndexRouteImport } from './routes/team.index'
 import { Route as TeamConversationIdRouteImport } from './routes/team.$conversationId'
 import { Route as ApiCallsRingRouteImport } from './routes/api/calls/ring'
+import { Route as ApiCodeActivityAssigneeCandidatesRouteImport } from './routes/api/code-activity/assignee-candidates'
+import { Route as ApiCodeActivityBranchesRouteImport } from './routes/api/code-activity/branches'
+import { Route as ApiCodeActivityCapabilitiesRouteImport } from './routes/api/code-activity/capabilities'
+import { Route as ApiCodeActivityChangeStatsRouteImport } from './routes/api/code-activity/change-stats'
+import { Route as ApiCodeActivityCommitDetailRouteImport } from './routes/api/code-activity/commit-detail'
+import { Route as ApiCodeActivityCommitsRouteImport } from './routes/api/code-activity/commits'
+import { Route as ApiCodeActivityCompareRouteImport } from './routes/api/code-activity/compare'
+import { Route as ApiCodeActivityConnectionRouteImport } from './routes/api/code-activity/connection'
+import { Route as ApiCodeActivityConsentRouteImport } from './routes/api/code-activity/consent'
+import { Route as ApiCodeActivityDeploymentsRouteImport } from './routes/api/code-activity/deployments'
+import { Route as ApiCodeActivityFeedRouteImport } from './routes/api/code-activity/feed'
+import { Route as ApiCodeActivityRefreshRouteImport } from './routes/api/code-activity/refresh'
+import { Route as ApiCodeActivityWorkspaceConfirmRouteImport } from './routes/api/code-activity/workspace-confirm'
+import { Route as ApiCodeActivityWorkspaceSourceRouteImport } from './routes/api/code-activity/workspace-source'
 import { Route as ApiHubNotifyMessageRouteImport } from './routes/api/hub/notify-message'
+import { Route as ApiJobsCodeActivityDrainRouteImport } from './routes/api/jobs/code-activity-drain'
 import { Route as ApiJobsDailyMaintenanceRouteImport } from './routes/api/jobs/daily-maintenance'
 import { Route as ApiJobsEscalateNudgesRouteImport } from './routes/api/jobs/escalate-nudges'
 import { Route as ApiNudgesNotifyRouteImport } from './routes/api/nudges/notify'
+import { Route as ApiPushTestRouteImport } from './routes/api/push/test'
 import { Route as ApiThingsNotifyMentionRouteImport } from './routes/api/things/notify-mention'
+import { Route as ApiCodeActivityChangesDetailRouteImport } from './routes/api/code-activity/changes/detail'
+import { Route as ApiCodeActivityChangesDraftRouteImport } from './routes/api/code-activity/changes/draft'
+import { Route as ApiCodeActivityChangesSummaryRouteImport } from './routes/api/code-activity/changes/summary'
+import { Route as ApiCodeActivityDraftsConfirmRouteImport } from './routes/api/code-activity/drafts/confirm'
+import { Route as ApiCodeActivityGithubRepositoriesRouteImport } from './routes/api/code-activity/github/repositories'
 import { Route as ApiPublicBridgeActRouteImport } from './routes/api/public/bridge/act'
 import { Route as ApiPublicBridgeCommentRouteImport } from './routes/api/public/bridge/comment'
 import { Route as ApiPublicBridgeRedeemRouteImport } from './routes/api/public/bridge/redeem'
 import { Route as ApiPublicBridgeThingRouteImport } from './routes/api/public/bridge/thing'
+import { Route as ApiCodeActivityGithubAuthorizeCallbackRouteImport } from './routes/api/code-activity/github/authorize/callback'
+import { Route as ApiCodeActivityGithubAuthorizeStartRouteImport } from './routes/api/code-activity/github/authorize/start'
+import { Route as ApiPublicCodeActivityGithubWebhookRouteImport } from './routes/api/public/code-activity/github/webhook'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -121,11 +145,95 @@ const ApiCallsRingRoute = ApiCallsRingRouteImport.update({
   path: '/api/calls/ring',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCodeActivityAssigneeCandidatesRoute =
+  ApiCodeActivityAssigneeCandidatesRouteImport.update({
+    id: '/api/code-activity/assignee-candidates',
+    path: '/api/code-activity/assignee-candidates',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityBranchesRoute = ApiCodeActivityBranchesRouteImport.update({
+  id: '/api/code-activity/branches',
+  path: '/api/code-activity/branches',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCodeActivityCapabilitiesRoute =
+  ApiCodeActivityCapabilitiesRouteImport.update({
+    id: '/api/code-activity/capabilities',
+    path: '/api/code-activity/capabilities',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityChangeStatsRoute =
+  ApiCodeActivityChangeStatsRouteImport.update({
+    id: '/api/code-activity/change-stats',
+    path: '/api/code-activity/change-stats',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityCommitDetailRoute =
+  ApiCodeActivityCommitDetailRouteImport.update({
+    id: '/api/code-activity/commit-detail',
+    path: '/api/code-activity/commit-detail',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityCommitsRoute = ApiCodeActivityCommitsRouteImport.update({
+  id: '/api/code-activity/commits',
+  path: '/api/code-activity/commits',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCodeActivityCompareRoute = ApiCodeActivityCompareRouteImport.update({
+  id: '/api/code-activity/compare',
+  path: '/api/code-activity/compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCodeActivityConnectionRoute =
+  ApiCodeActivityConnectionRouteImport.update({
+    id: '/api/code-activity/connection',
+    path: '/api/code-activity/connection',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityConsentRoute = ApiCodeActivityConsentRouteImport.update({
+  id: '/api/code-activity/consent',
+  path: '/api/code-activity/consent',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCodeActivityDeploymentsRoute =
+  ApiCodeActivityDeploymentsRouteImport.update({
+    id: '/api/code-activity/deployments',
+    path: '/api/code-activity/deployments',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityFeedRoute = ApiCodeActivityFeedRouteImport.update({
+  id: '/api/code-activity/feed',
+  path: '/api/code-activity/feed',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCodeActivityRefreshRoute = ApiCodeActivityRefreshRouteImport.update({
+  id: '/api/code-activity/refresh',
+  path: '/api/code-activity/refresh',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCodeActivityWorkspaceConfirmRoute =
+  ApiCodeActivityWorkspaceConfirmRouteImport.update({
+    id: '/api/code-activity/workspace-confirm',
+    path: '/api/code-activity/workspace-confirm',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityWorkspaceSourceRoute =
+  ApiCodeActivityWorkspaceSourceRouteImport.update({
+    id: '/api/code-activity/workspace-source',
+    path: '/api/code-activity/workspace-source',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiHubNotifyMessageRoute = ApiHubNotifyMessageRouteImport.update({
   id: '/api/hub/notify-message',
   path: '/api/hub/notify-message',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiJobsCodeActivityDrainRoute =
+  ApiJobsCodeActivityDrainRouteImport.update({
+    id: '/api/jobs/code-activity-drain',
+    path: '/api/jobs/code-activity-drain',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiJobsDailyMaintenanceRoute = ApiJobsDailyMaintenanceRouteImport.update({
   id: '/api/jobs/daily-maintenance',
   path: '/api/jobs/daily-maintenance',
@@ -141,11 +249,46 @@ const ApiNudgesNotifyRoute = ApiNudgesNotifyRouteImport.update({
   path: '/api/nudges/notify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPushTestRoute = ApiPushTestRouteImport.update({
+  id: '/api/push/test',
+  path: '/api/push/test',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiThingsNotifyMentionRoute = ApiThingsNotifyMentionRouteImport.update({
   id: '/api/things/notify-mention',
   path: '/api/things/notify-mention',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCodeActivityChangesDetailRoute =
+  ApiCodeActivityChangesDetailRouteImport.update({
+    id: '/api/code-activity/changes/detail',
+    path: '/api/code-activity/changes/detail',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityChangesDraftRoute =
+  ApiCodeActivityChangesDraftRouteImport.update({
+    id: '/api/code-activity/changes/draft',
+    path: '/api/code-activity/changes/draft',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityChangesSummaryRoute =
+  ApiCodeActivityChangesSummaryRouteImport.update({
+    id: '/api/code-activity/changes/summary',
+    path: '/api/code-activity/changes/summary',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityDraftsConfirmRoute =
+  ApiCodeActivityDraftsConfirmRouteImport.update({
+    id: '/api/code-activity/drafts/confirm',
+    path: '/api/code-activity/drafts/confirm',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityGithubRepositoriesRoute =
+  ApiCodeActivityGithubRepositoriesRouteImport.update({
+    id: '/api/code-activity/github/repositories',
+    path: '/api/code-activity/github/repositories',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicBridgeActRoute = ApiPublicBridgeActRouteImport.update({
   id: '/api/public/bridge/act',
   path: '/api/public/bridge/act',
@@ -166,6 +309,24 @@ const ApiPublicBridgeThingRoute = ApiPublicBridgeThingRouteImport.update({
   path: '/api/public/bridge/thing',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCodeActivityGithubAuthorizeCallbackRoute =
+  ApiCodeActivityGithubAuthorizeCallbackRouteImport.update({
+    id: '/api/code-activity/github/authorize/callback',
+    path: '/api/code-activity/github/authorize/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiCodeActivityGithubAuthorizeStartRoute =
+  ApiCodeActivityGithubAuthorizeStartRouteImport.update({
+    id: '/api/code-activity/github/authorize/start',
+    path: '/api/code-activity/github/authorize/start',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiPublicCodeActivityGithubWebhookRoute =
+  ApiPublicCodeActivityGithubWebhookRouteImport.update({
+    id: '/api/public/code-activity/github/webhook',
+    path: '/api/public/code-activity/github/webhook',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -185,15 +346,39 @@ export interface FileRoutesByFullPath {
   '/lists/': typeof ListsIndexRoute
   '/team/': typeof TeamIndexRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
+  '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
+  '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
+  '/api/code-activity/capabilities': typeof ApiCodeActivityCapabilitiesRoute
+  '/api/code-activity/change-stats': typeof ApiCodeActivityChangeStatsRoute
+  '/api/code-activity/commit-detail': typeof ApiCodeActivityCommitDetailRoute
+  '/api/code-activity/commits': typeof ApiCodeActivityCommitsRoute
+  '/api/code-activity/compare': typeof ApiCodeActivityCompareRoute
+  '/api/code-activity/connection': typeof ApiCodeActivityConnectionRoute
+  '/api/code-activity/consent': typeof ApiCodeActivityConsentRoute
+  '/api/code-activity/deployments': typeof ApiCodeActivityDeploymentsRoute
+  '/api/code-activity/feed': typeof ApiCodeActivityFeedRoute
+  '/api/code-activity/refresh': typeof ApiCodeActivityRefreshRoute
+  '/api/code-activity/workspace-confirm': typeof ApiCodeActivityWorkspaceConfirmRoute
+  '/api/code-activity/workspace-source': typeof ApiCodeActivityWorkspaceSourceRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
+  '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
+  '/api/push/test': typeof ApiPushTestRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
+  '/api/code-activity/changes/detail': typeof ApiCodeActivityChangesDetailRoute
+  '/api/code-activity/changes/draft': typeof ApiCodeActivityChangesDraftRoute
+  '/api/code-activity/changes/summary': typeof ApiCodeActivityChangesSummaryRoute
+  '/api/code-activity/drafts/confirm': typeof ApiCodeActivityDraftsConfirmRoute
+  '/api/code-activity/github/repositories': typeof ApiCodeActivityGithubRepositoriesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/code-activity/github/authorize/callback': typeof ApiCodeActivityGithubAuthorizeCallbackRoute
+  '/api/code-activity/github/authorize/start': typeof ApiCodeActivityGithubAuthorizeStartRoute
+  '/api/public/code-activity/github/webhook': typeof ApiPublicCodeActivityGithubWebhookRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -210,15 +395,39 @@ export interface FileRoutesByTo {
   '/lists': typeof ListsIndexRoute
   '/team': typeof TeamIndexRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
+  '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
+  '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
+  '/api/code-activity/capabilities': typeof ApiCodeActivityCapabilitiesRoute
+  '/api/code-activity/change-stats': typeof ApiCodeActivityChangeStatsRoute
+  '/api/code-activity/commit-detail': typeof ApiCodeActivityCommitDetailRoute
+  '/api/code-activity/commits': typeof ApiCodeActivityCommitsRoute
+  '/api/code-activity/compare': typeof ApiCodeActivityCompareRoute
+  '/api/code-activity/connection': typeof ApiCodeActivityConnectionRoute
+  '/api/code-activity/consent': typeof ApiCodeActivityConsentRoute
+  '/api/code-activity/deployments': typeof ApiCodeActivityDeploymentsRoute
+  '/api/code-activity/feed': typeof ApiCodeActivityFeedRoute
+  '/api/code-activity/refresh': typeof ApiCodeActivityRefreshRoute
+  '/api/code-activity/workspace-confirm': typeof ApiCodeActivityWorkspaceConfirmRoute
+  '/api/code-activity/workspace-source': typeof ApiCodeActivityWorkspaceSourceRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
+  '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
+  '/api/push/test': typeof ApiPushTestRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
+  '/api/code-activity/changes/detail': typeof ApiCodeActivityChangesDetailRoute
+  '/api/code-activity/changes/draft': typeof ApiCodeActivityChangesDraftRoute
+  '/api/code-activity/changes/summary': typeof ApiCodeActivityChangesSummaryRoute
+  '/api/code-activity/drafts/confirm': typeof ApiCodeActivityDraftsConfirmRoute
+  '/api/code-activity/github/repositories': typeof ApiCodeActivityGithubRepositoriesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/code-activity/github/authorize/callback': typeof ApiCodeActivityGithubAuthorizeCallbackRoute
+  '/api/code-activity/github/authorize/start': typeof ApiCodeActivityGithubAuthorizeStartRoute
+  '/api/public/code-activity/github/webhook': typeof ApiPublicCodeActivityGithubWebhookRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -239,15 +448,39 @@ export interface FileRoutesById {
   '/lists/': typeof ListsIndexRoute
   '/team/': typeof TeamIndexRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
+  '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
+  '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
+  '/api/code-activity/capabilities': typeof ApiCodeActivityCapabilitiesRoute
+  '/api/code-activity/change-stats': typeof ApiCodeActivityChangeStatsRoute
+  '/api/code-activity/commit-detail': typeof ApiCodeActivityCommitDetailRoute
+  '/api/code-activity/commits': typeof ApiCodeActivityCommitsRoute
+  '/api/code-activity/compare': typeof ApiCodeActivityCompareRoute
+  '/api/code-activity/connection': typeof ApiCodeActivityConnectionRoute
+  '/api/code-activity/consent': typeof ApiCodeActivityConsentRoute
+  '/api/code-activity/deployments': typeof ApiCodeActivityDeploymentsRoute
+  '/api/code-activity/feed': typeof ApiCodeActivityFeedRoute
+  '/api/code-activity/refresh': typeof ApiCodeActivityRefreshRoute
+  '/api/code-activity/workspace-confirm': typeof ApiCodeActivityWorkspaceConfirmRoute
+  '/api/code-activity/workspace-source': typeof ApiCodeActivityWorkspaceSourceRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
+  '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
+  '/api/push/test': typeof ApiPushTestRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
+  '/api/code-activity/changes/detail': typeof ApiCodeActivityChangesDetailRoute
+  '/api/code-activity/changes/draft': typeof ApiCodeActivityChangesDraftRoute
+  '/api/code-activity/changes/summary': typeof ApiCodeActivityChangesSummaryRoute
+  '/api/code-activity/drafts/confirm': typeof ApiCodeActivityDraftsConfirmRoute
+  '/api/code-activity/github/repositories': typeof ApiCodeActivityGithubRepositoriesRoute
   '/api/public/bridge/act': typeof ApiPublicBridgeActRoute
   '/api/public/bridge/comment': typeof ApiPublicBridgeCommentRoute
   '/api/public/bridge/redeem': typeof ApiPublicBridgeRedeemRoute
   '/api/public/bridge/thing': typeof ApiPublicBridgeThingRoute
+  '/api/code-activity/github/authorize/callback': typeof ApiCodeActivityGithubAuthorizeCallbackRoute
+  '/api/code-activity/github/authorize/start': typeof ApiCodeActivityGithubAuthorizeStartRoute
+  '/api/public/code-activity/github/webhook': typeof ApiPublicCodeActivityGithubWebhookRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -269,15 +502,39 @@ export interface FileRouteTypes {
     | '/lists/'
     | '/team/'
     | '/api/calls/ring'
+    | '/api/code-activity/assignee-candidates'
+    | '/api/code-activity/branches'
+    | '/api/code-activity/capabilities'
+    | '/api/code-activity/change-stats'
+    | '/api/code-activity/commit-detail'
+    | '/api/code-activity/commits'
+    | '/api/code-activity/compare'
+    | '/api/code-activity/connection'
+    | '/api/code-activity/consent'
+    | '/api/code-activity/deployments'
+    | '/api/code-activity/feed'
+    | '/api/code-activity/refresh'
+    | '/api/code-activity/workspace-confirm'
+    | '/api/code-activity/workspace-source'
     | '/api/hub/notify-message'
+    | '/api/jobs/code-activity-drain'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
+    | '/api/push/test'
     | '/api/things/notify-mention'
+    | '/api/code-activity/changes/detail'
+    | '/api/code-activity/changes/draft'
+    | '/api/code-activity/changes/summary'
+    | '/api/code-activity/drafts/confirm'
+    | '/api/code-activity/github/repositories'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/code-activity/github/authorize/callback'
+    | '/api/code-activity/github/authorize/start'
+    | '/api/public/code-activity/github/webhook'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -294,15 +551,39 @@ export interface FileRouteTypes {
     | '/lists'
     | '/team'
     | '/api/calls/ring'
+    | '/api/code-activity/assignee-candidates'
+    | '/api/code-activity/branches'
+    | '/api/code-activity/capabilities'
+    | '/api/code-activity/change-stats'
+    | '/api/code-activity/commit-detail'
+    | '/api/code-activity/commits'
+    | '/api/code-activity/compare'
+    | '/api/code-activity/connection'
+    | '/api/code-activity/consent'
+    | '/api/code-activity/deployments'
+    | '/api/code-activity/feed'
+    | '/api/code-activity/refresh'
+    | '/api/code-activity/workspace-confirm'
+    | '/api/code-activity/workspace-source'
     | '/api/hub/notify-message'
+    | '/api/jobs/code-activity-drain'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
+    | '/api/push/test'
     | '/api/things/notify-mention'
+    | '/api/code-activity/changes/detail'
+    | '/api/code-activity/changes/draft'
+    | '/api/code-activity/changes/summary'
+    | '/api/code-activity/drafts/confirm'
+    | '/api/code-activity/github/repositories'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/code-activity/github/authorize/callback'
+    | '/api/code-activity/github/authorize/start'
+    | '/api/public/code-activity/github/webhook'
   id:
     | '__root__'
     | '/'
@@ -322,15 +603,39 @@ export interface FileRouteTypes {
     | '/lists/'
     | '/team/'
     | '/api/calls/ring'
+    | '/api/code-activity/assignee-candidates'
+    | '/api/code-activity/branches'
+    | '/api/code-activity/capabilities'
+    | '/api/code-activity/change-stats'
+    | '/api/code-activity/commit-detail'
+    | '/api/code-activity/commits'
+    | '/api/code-activity/compare'
+    | '/api/code-activity/connection'
+    | '/api/code-activity/consent'
+    | '/api/code-activity/deployments'
+    | '/api/code-activity/feed'
+    | '/api/code-activity/refresh'
+    | '/api/code-activity/workspace-confirm'
+    | '/api/code-activity/workspace-source'
     | '/api/hub/notify-message'
+    | '/api/jobs/code-activity-drain'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
+    | '/api/push/test'
     | '/api/things/notify-mention'
+    | '/api/code-activity/changes/detail'
+    | '/api/code-activity/changes/draft'
+    | '/api/code-activity/changes/summary'
+    | '/api/code-activity/drafts/confirm'
+    | '/api/code-activity/github/repositories'
     | '/api/public/bridge/act'
     | '/api/public/bridge/comment'
     | '/api/public/bridge/redeem'
     | '/api/public/bridge/thing'
+    | '/api/code-activity/github/authorize/callback'
+    | '/api/code-activity/github/authorize/start'
+    | '/api/public/code-activity/github/webhook'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -345,15 +650,39 @@ export interface RootRouteChildren {
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
   ApiCallsRingRoute: typeof ApiCallsRingRoute
+  ApiCodeActivityAssigneeCandidatesRoute: typeof ApiCodeActivityAssigneeCandidatesRoute
+  ApiCodeActivityBranchesRoute: typeof ApiCodeActivityBranchesRoute
+  ApiCodeActivityCapabilitiesRoute: typeof ApiCodeActivityCapabilitiesRoute
+  ApiCodeActivityChangeStatsRoute: typeof ApiCodeActivityChangeStatsRoute
+  ApiCodeActivityCommitDetailRoute: typeof ApiCodeActivityCommitDetailRoute
+  ApiCodeActivityCommitsRoute: typeof ApiCodeActivityCommitsRoute
+  ApiCodeActivityCompareRoute: typeof ApiCodeActivityCompareRoute
+  ApiCodeActivityConnectionRoute: typeof ApiCodeActivityConnectionRoute
+  ApiCodeActivityConsentRoute: typeof ApiCodeActivityConsentRoute
+  ApiCodeActivityDeploymentsRoute: typeof ApiCodeActivityDeploymentsRoute
+  ApiCodeActivityFeedRoute: typeof ApiCodeActivityFeedRoute
+  ApiCodeActivityRefreshRoute: typeof ApiCodeActivityRefreshRoute
+  ApiCodeActivityWorkspaceConfirmRoute: typeof ApiCodeActivityWorkspaceConfirmRoute
+  ApiCodeActivityWorkspaceSourceRoute: typeof ApiCodeActivityWorkspaceSourceRoute
   ApiHubNotifyMessageRoute: typeof ApiHubNotifyMessageRoute
+  ApiJobsCodeActivityDrainRoute: typeof ApiJobsCodeActivityDrainRoute
   ApiJobsDailyMaintenanceRoute: typeof ApiJobsDailyMaintenanceRoute
   ApiJobsEscalateNudgesRoute: typeof ApiJobsEscalateNudgesRoute
   ApiNudgesNotifyRoute: typeof ApiNudgesNotifyRoute
+  ApiPushTestRoute: typeof ApiPushTestRoute
   ApiThingsNotifyMentionRoute: typeof ApiThingsNotifyMentionRoute
+  ApiCodeActivityChangesDetailRoute: typeof ApiCodeActivityChangesDetailRoute
+  ApiCodeActivityChangesDraftRoute: typeof ApiCodeActivityChangesDraftRoute
+  ApiCodeActivityChangesSummaryRoute: typeof ApiCodeActivityChangesSummaryRoute
+  ApiCodeActivityDraftsConfirmRoute: typeof ApiCodeActivityDraftsConfirmRoute
+  ApiCodeActivityGithubRepositoriesRoute: typeof ApiCodeActivityGithubRepositoriesRoute
   ApiPublicBridgeActRoute: typeof ApiPublicBridgeActRoute
   ApiPublicBridgeCommentRoute: typeof ApiPublicBridgeCommentRoute
   ApiPublicBridgeRedeemRoute: typeof ApiPublicBridgeRedeemRoute
   ApiPublicBridgeThingRoute: typeof ApiPublicBridgeThingRoute
+  ApiCodeActivityGithubAuthorizeCallbackRoute: typeof ApiCodeActivityGithubAuthorizeCallbackRoute
+  ApiCodeActivityGithubAuthorizeStartRoute: typeof ApiCodeActivityGithubAuthorizeStartRoute
+  ApiPublicCodeActivityGithubWebhookRoute: typeof ApiPublicCodeActivityGithubWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -477,11 +806,116 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCallsRingRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/code-activity/assignee-candidates': {
+      id: '/api/code-activity/assignee-candidates'
+      path: '/api/code-activity/assignee-candidates'
+      fullPath: '/api/code-activity/assignee-candidates'
+      preLoaderRoute: typeof ApiCodeActivityAssigneeCandidatesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/branches': {
+      id: '/api/code-activity/branches'
+      path: '/api/code-activity/branches'
+      fullPath: '/api/code-activity/branches'
+      preLoaderRoute: typeof ApiCodeActivityBranchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/capabilities': {
+      id: '/api/code-activity/capabilities'
+      path: '/api/code-activity/capabilities'
+      fullPath: '/api/code-activity/capabilities'
+      preLoaderRoute: typeof ApiCodeActivityCapabilitiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/change-stats': {
+      id: '/api/code-activity/change-stats'
+      path: '/api/code-activity/change-stats'
+      fullPath: '/api/code-activity/change-stats'
+      preLoaderRoute: typeof ApiCodeActivityChangeStatsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/commit-detail': {
+      id: '/api/code-activity/commit-detail'
+      path: '/api/code-activity/commit-detail'
+      fullPath: '/api/code-activity/commit-detail'
+      preLoaderRoute: typeof ApiCodeActivityCommitDetailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/commits': {
+      id: '/api/code-activity/commits'
+      path: '/api/code-activity/commits'
+      fullPath: '/api/code-activity/commits'
+      preLoaderRoute: typeof ApiCodeActivityCommitsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/compare': {
+      id: '/api/code-activity/compare'
+      path: '/api/code-activity/compare'
+      fullPath: '/api/code-activity/compare'
+      preLoaderRoute: typeof ApiCodeActivityCompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/connection': {
+      id: '/api/code-activity/connection'
+      path: '/api/code-activity/connection'
+      fullPath: '/api/code-activity/connection'
+      preLoaderRoute: typeof ApiCodeActivityConnectionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/consent': {
+      id: '/api/code-activity/consent'
+      path: '/api/code-activity/consent'
+      fullPath: '/api/code-activity/consent'
+      preLoaderRoute: typeof ApiCodeActivityConsentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/deployments': {
+      id: '/api/code-activity/deployments'
+      path: '/api/code-activity/deployments'
+      fullPath: '/api/code-activity/deployments'
+      preLoaderRoute: typeof ApiCodeActivityDeploymentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/feed': {
+      id: '/api/code-activity/feed'
+      path: '/api/code-activity/feed'
+      fullPath: '/api/code-activity/feed'
+      preLoaderRoute: typeof ApiCodeActivityFeedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/refresh': {
+      id: '/api/code-activity/refresh'
+      path: '/api/code-activity/refresh'
+      fullPath: '/api/code-activity/refresh'
+      preLoaderRoute: typeof ApiCodeActivityRefreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/workspace-confirm': {
+      id: '/api/code-activity/workspace-confirm'
+      path: '/api/code-activity/workspace-confirm'
+      fullPath: '/api/code-activity/workspace-confirm'
+      preLoaderRoute: typeof ApiCodeActivityWorkspaceConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/workspace-source': {
+      id: '/api/code-activity/workspace-source'
+      path: '/api/code-activity/workspace-source'
+      fullPath: '/api/code-activity/workspace-source'
+      preLoaderRoute: typeof ApiCodeActivityWorkspaceSourceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/hub/notify-message': {
       id: '/api/hub/notify-message'
       path: '/api/hub/notify-message'
       fullPath: '/api/hub/notify-message'
       preLoaderRoute: typeof ApiHubNotifyMessageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/jobs/code-activity-drain': {
+      id: '/api/jobs/code-activity-drain'
+      path: '/api/jobs/code-activity-drain'
+      fullPath: '/api/jobs/code-activity-drain'
+      preLoaderRoute: typeof ApiJobsCodeActivityDrainRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/jobs/daily-maintenance': {
@@ -505,11 +939,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiNudgesNotifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/push/test': {
+      id: '/api/push/test'
+      path: '/api/push/test'
+      fullPath: '/api/push/test'
+      preLoaderRoute: typeof ApiPushTestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/things/notify-mention': {
       id: '/api/things/notify-mention'
       path: '/api/things/notify-mention'
       fullPath: '/api/things/notify-mention'
       preLoaderRoute: typeof ApiThingsNotifyMentionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/changes/detail': {
+      id: '/api/code-activity/changes/detail'
+      path: '/api/code-activity/changes/detail'
+      fullPath: '/api/code-activity/changes/detail'
+      preLoaderRoute: typeof ApiCodeActivityChangesDetailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/changes/draft': {
+      id: '/api/code-activity/changes/draft'
+      path: '/api/code-activity/changes/draft'
+      fullPath: '/api/code-activity/changes/draft'
+      preLoaderRoute: typeof ApiCodeActivityChangesDraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/changes/summary': {
+      id: '/api/code-activity/changes/summary'
+      path: '/api/code-activity/changes/summary'
+      fullPath: '/api/code-activity/changes/summary'
+      preLoaderRoute: typeof ApiCodeActivityChangesSummaryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/drafts/confirm': {
+      id: '/api/code-activity/drafts/confirm'
+      path: '/api/code-activity/drafts/confirm'
+      fullPath: '/api/code-activity/drafts/confirm'
+      preLoaderRoute: typeof ApiCodeActivityDraftsConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/github/repositories': {
+      id: '/api/code-activity/github/repositories'
+      path: '/api/code-activity/github/repositories'
+      fullPath: '/api/code-activity/github/repositories'
+      preLoaderRoute: typeof ApiCodeActivityGithubRepositoriesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/bridge/act': {
@@ -538,6 +1014,27 @@ declare module '@tanstack/react-router' {
       path: '/api/public/bridge/thing'
       fullPath: '/api/public/bridge/thing'
       preLoaderRoute: typeof ApiPublicBridgeThingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/github/authorize/callback': {
+      id: '/api/code-activity/github/authorize/callback'
+      path: '/api/code-activity/github/authorize/callback'
+      fullPath: '/api/code-activity/github/authorize/callback'
+      preLoaderRoute: typeof ApiCodeActivityGithubAuthorizeCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/code-activity/github/authorize/start': {
+      id: '/api/code-activity/github/authorize/start'
+      path: '/api/code-activity/github/authorize/start'
+      fullPath: '/api/code-activity/github/authorize/start'
+      preLoaderRoute: typeof ApiCodeActivityGithubAuthorizeStartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/code-activity/github/webhook': {
+      id: '/api/public/code-activity/github/webhook'
+      path: '/api/public/code-activity/github/webhook'
+      fullPath: '/api/public/code-activity/github/webhook'
+      preLoaderRoute: typeof ApiPublicCodeActivityGithubWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -592,15 +1089,44 @@ const rootRouteChildren: RootRouteChildren = {
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
   ApiCallsRingRoute: ApiCallsRingRoute,
+  ApiCodeActivityAssigneeCandidatesRoute:
+    ApiCodeActivityAssigneeCandidatesRoute,
+  ApiCodeActivityBranchesRoute: ApiCodeActivityBranchesRoute,
+  ApiCodeActivityCapabilitiesRoute: ApiCodeActivityCapabilitiesRoute,
+  ApiCodeActivityChangeStatsRoute: ApiCodeActivityChangeStatsRoute,
+  ApiCodeActivityCommitDetailRoute: ApiCodeActivityCommitDetailRoute,
+  ApiCodeActivityCommitsRoute: ApiCodeActivityCommitsRoute,
+  ApiCodeActivityCompareRoute: ApiCodeActivityCompareRoute,
+  ApiCodeActivityConnectionRoute: ApiCodeActivityConnectionRoute,
+  ApiCodeActivityConsentRoute: ApiCodeActivityConsentRoute,
+  ApiCodeActivityDeploymentsRoute: ApiCodeActivityDeploymentsRoute,
+  ApiCodeActivityFeedRoute: ApiCodeActivityFeedRoute,
+  ApiCodeActivityRefreshRoute: ApiCodeActivityRefreshRoute,
+  ApiCodeActivityWorkspaceConfirmRoute: ApiCodeActivityWorkspaceConfirmRoute,
+  ApiCodeActivityWorkspaceSourceRoute: ApiCodeActivityWorkspaceSourceRoute,
   ApiHubNotifyMessageRoute: ApiHubNotifyMessageRoute,
+  ApiJobsCodeActivityDrainRoute: ApiJobsCodeActivityDrainRoute,
   ApiJobsDailyMaintenanceRoute: ApiJobsDailyMaintenanceRoute,
   ApiJobsEscalateNudgesRoute: ApiJobsEscalateNudgesRoute,
   ApiNudgesNotifyRoute: ApiNudgesNotifyRoute,
+  ApiPushTestRoute: ApiPushTestRoute,
   ApiThingsNotifyMentionRoute: ApiThingsNotifyMentionRoute,
+  ApiCodeActivityChangesDetailRoute: ApiCodeActivityChangesDetailRoute,
+  ApiCodeActivityChangesDraftRoute: ApiCodeActivityChangesDraftRoute,
+  ApiCodeActivityChangesSummaryRoute: ApiCodeActivityChangesSummaryRoute,
+  ApiCodeActivityDraftsConfirmRoute: ApiCodeActivityDraftsConfirmRoute,
+  ApiCodeActivityGithubRepositoriesRoute:
+    ApiCodeActivityGithubRepositoriesRoute,
   ApiPublicBridgeActRoute: ApiPublicBridgeActRoute,
   ApiPublicBridgeCommentRoute: ApiPublicBridgeCommentRoute,
   ApiPublicBridgeRedeemRoute: ApiPublicBridgeRedeemRoute,
   ApiPublicBridgeThingRoute: ApiPublicBridgeThingRoute,
+  ApiCodeActivityGithubAuthorizeCallbackRoute:
+    ApiCodeActivityGithubAuthorizeCallbackRoute,
+  ApiCodeActivityGithubAuthorizeStartRoute:
+    ApiCodeActivityGithubAuthorizeStartRoute,
+  ApiPublicCodeActivityGithubWebhookRoute:
+    ApiPublicCodeActivityGithubWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

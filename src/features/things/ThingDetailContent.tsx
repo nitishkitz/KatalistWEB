@@ -75,6 +75,8 @@ import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 export type ThingDetailContentProps = {
   initialThing: Thing | null;
   headerAction?: React.ReactNode;
+  /** Morning Brief owns Catch and Snooze so they keep their review receipts. */
+  reviewActionsExternal?: boolean;
   onAfterTerminalAction?: () => void;
   variant?: "default" | "court";
   viewOnly?: boolean;
@@ -181,6 +183,7 @@ function AssignOutsideBlock({
 export function ThingDetailContent({
   initialThing,
   headerAction,
+  reviewActionsExternal = false,
   onAfterTerminalAction,
   variant = "default",
   viewOnly = false,
@@ -751,6 +754,7 @@ export function ThingDetailContent({
         <div className="space-y-4 pt-4">
           <ThingStatusControls
             variant="court"
+            reviewActionsExternal={reviewActionsExternal}
             thing={thing}
             caps={caps}
             busy={busy}

@@ -75,6 +75,7 @@ export type ThingStatusControlsProps = {
   assigneeAvatar?: string | null;
   isAssigneeSameAsOwner?: boolean;
   dueLabel?: string | null;
+  reviewActionsExternal?: boolean;
   onCatch?: () => void;
   onSort?: () => void;
   snoozedUntil?: string | number | null;
@@ -106,6 +107,7 @@ export function ThingStatusControls({
   snoozedUntil,
   onSnooze,
   onWake,
+  reviewActionsExternal = false,
   viewOnly,
   assignableList,
   onReassign,
@@ -114,7 +116,7 @@ export function ThingStatusControls({
 }: ThingStatusControlsProps): React.ReactNode {
   const selfAssigned = thing.owner.id === thing.assignee.id;
   const personalPaceLabel = caps?.isAssignee ? "Your pace" : "Assignee’s pace";
-  const snoozeControl = !viewOnly && caps?.canAddToBucket ? (
+  const snoozeControl = !reviewActionsExternal && !viewOnly && caps?.canAddToBucket ? (
     snoozedUntil ? <div className="inline-flex items-center gap-2 text-[12px] text-[#5d6786]"><Moon className="h-3.5 w-3.5" /><span>Until {format(new Date(snoozedUntil), "MMM d, h:mm a")}</span><button type="button" disabled={busy} onClick={onWake} className="rounded-lg border border-[#e6e8f2] px-2.5 py-1.5 font-medium text-[#64429a] hover:bg-[#f5efff] disabled:opacity-60">Wake now</button></div>
       : <DropdownMenu><DropdownMenuTrigger asChild><button type="button" disabled={busy} className="inline-flex h-[34px] items-center gap-1.5 rounded-[7px] border border-[#e6e8f2] bg-white px-3 text-[12px] font-medium text-[#3a4675] hover:bg-[#f5efff] disabled:opacity-60"><Moon className="h-3.5 w-3.5" />Snooze<ChevronDown className="h-3 w-3" /></button></DropdownMenuTrigger><DropdownMenuContent align="start" className="z-[90] min-w-40">{SNOOZE_OPTIONS.map((option) => <DropdownMenuItem key={option.id} onSelect={() => onSnooze?.(option.id)}>{option.label}</DropdownMenuItem>)}</DropdownMenuContent></DropdownMenu>
   ) : null;
@@ -276,7 +278,7 @@ export function ThingStatusControls({
         <div className="flex flex-wrap items-center justify-between gap-3 py-2.5 border-b border-[#eef0f6]">
           <div className="flex flex-wrap items-center gap-2">
             {reassignControl}
-            {caps?.canCatch ? (
+            {caps?.canCatch && !reviewActionsExternal ? (
               <button
                 type="button"
                 disabled={busy}

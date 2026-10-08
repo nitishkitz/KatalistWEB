@@ -1,3 +1,6 @@
+import { useBriefGenie } from "./use-brief-genie";
+import { useProfile } from "@/features/me/use-profile";
+import { briefGreeting } from "./brief-greeting";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AsyncState } from "@/components/katalist/AsyncState";
 import type { Thing } from "@/domain/thing";
@@ -48,11 +51,16 @@ export function CatchUpOverlay({
   isEmpty,
   hasFetchedOnce,
 }: Props) {
+  const { panelRef, capture } = useBriefGenie(open);
+  const closeBrief = () => { capture(); onClose(); };
+  const openThing = (thing: Thing) => { capture(); onOpenThing(thing); };
+  const { data: profile } = useProfile();
+  const greeting = briefGreeting(new Date(), profile?.display_name, profile?.timezone);
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) onClose();
+        if (!next) closeBrief();
       }}
     >
       {/* T10-06: ~960px max width on desktop (this codebase's breakpoints
@@ -61,17 +69,19 @@ export function CatchUpOverlay({
           responsive layout off of); full-height, edge-to-edge on mobile so
           the sticky action row at the bottom of CatchUpStack stays
           reachable without the dialog itself needing to scroll. */}
-      <DialogContent className="flex h-dvh max-h-dvh w-full flex-col gap-0 overflow-hidden rounded-none border-none bg-slate-50 p-0 lg:h-auto lg:max-h-[85vh] lg:max-w-[960px] lg:gap-5 lg:rounded-2xl lg:border lg:p-6">
-        <div className="shrink-0 border-b border-slate-200/70 px-4 pb-3 pt-4 lg:border-none lg:p-0">
-          {/* F03: internal name (CatchUp*) stays -- only the user-visible label changes. */}
-          <DialogTitle className="text-[18px] font-bold text-slate-900 lg:text-[20px]">Morning Brief</DialogTitle>
-          <DialogDescription className="text-[12.5px] text-slate-500">
-            {hasFetchedOnce
-              ? `${moments.length} ${moments.length === 1 ? "moment needs" : "moments need"} you`
-              : "Checking for updates…"}
-          </DialogDescription>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:overflow-visible lg:p-0">
+      <DialogContent data-brief-motion={open ? "pending" : undefined} ref={panelRef} overlayClassName="morning-brief-backdrop" className="morning-brief flex h-dvh max-h-dvh w-full flex-col gap-0 overflow-hidden rounded-none border-none bg-slate-50 p-0 lg:h-auto lg:max-h-[85vh] lg:max-w-[960px] lg:gap-5 lg:rounded-2xl lg:border lg:p-6">
+        <header className="brief-header">
+          <div>
+            <span className="sr-only">Morning Brief</span>
+            <DialogTitle className="brief-greeting">{greeting}</DialogTitle>
+            <DialogDescription className="brief-description">
+              {hasFetchedOnce
+                ? `${moments.length} ${moments.length === 1 ? "moment needs" : "moments need"} your attention`
+                : "Checking for updates…"}
+            </DialogDescription>
+          </div>
+        </header>
+        <div className="brief-body min-h-0 flex-1 overflow-y-auto px-4 py-4 lg:overflow-visible lg:p-0">
           <AsyncState
             isLoading={isLoading}
             data={moments}
@@ -89,8 +99,8 @@ export function CatchUpOverlay({
                   moments={data}
                   myActorId={myActorId}
                   surfaceMoment={surfaceMoment}
-                  onOpenThing={onOpenThing}
-                  onClose={onClose}
+                  onOpenThing={openThing}
+                  onClose={closeBrief}
                   onRefresh={onRefresh}
                 />
               ) : null

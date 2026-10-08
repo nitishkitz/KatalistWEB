@@ -10,6 +10,7 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
+import "@/features/lists/list-workspace.css";
 import { ThingStatusCapsule } from "@/features/catchup/ThingStatusCapsule";
 import { useListCall } from "@/features/calls/use-list-call";
 import { useSelfCallIdentity } from "@/features/calls/call-identity";
@@ -48,6 +49,9 @@ import { useAssignablePeople } from "@/features/people/use-assignable";
 import { rpcAddListMember, rpcChangeListRole, rpcRemoveListMember } from "@/features/things/rpc";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { CodeActivityBoundary } from "@/features/code-activity/CodeActivityBoundary";
+import { useCodeActivityEnabled } from "@/features/code-activity/use-code-activity-enabled";
+import { DesignsBoundary } from "@/features/designs/DesignsBoundary";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -59,10 +63,12 @@ export const Route = createFileRoute("/lists/$listId")({
   component: ListDetailPage,
 });
 
-type TabType = "things" | "chat" | "designs" | "members";
+type TabType = "things" | "chat" | "designs" | "code" | "members";
 type DueFilterType = "all" | "today" | "overdue" | "no_due";
 
-import { DesignsBoundary } from "@/features/designs/DesignsBoundary";
+// Code Activity is loaded only when its tab is first shown. Development preview only.
+const CodeActivityRoot = lazy(() => import("@/features/code-activity/CodeActivityRoot"));
+// Designs is loaded only when its tab is first shown.
 const DesignsRoot = lazy(() => import("@/features/designs/DesignsRoot"));
 
 function ListDetailPage() {
@@ -201,6 +207,7 @@ function ListDetailPage() {
   const assignablePeople = useAssignablePeople();
 
   const [tab, setTab] = useState<TabType>("things");
+  const codeActivityEnabled = useCodeActivityEnabled();
   // Deep link from a Thing's "View in Designs": ?tab=designs&design=<id>. Reacts to search changes on
   // this already-mounted route (navigating from a Thing on this same List does not remount it), then
   // clears the params so the same link works again later.
@@ -219,6 +226,10 @@ function ListDetailPage() {
   useEffect(() => {
     if (tab !== "designs") setDesignDeepLink(null);
   }, [tab]);
+  useEffect(() => {
+    // Returning from GitHub: the callback appends ?codeActivity=<outcome> to this List. Open that tab.
+    if (codeActivityEnabled && new URLSearchParams(window.location.search).has("codeActivity")) setTab("code");
+  }, [codeActivityEnabled, listId]);
   const [selectedState, setSelectedState] = useState<{ listId: string; thingId: string | null }>(() => ({
     listId,
     thingId: null,
@@ -589,10 +600,10 @@ function ListDetailPage() {
 
   return (
     <AppShell noPadding hideTopNav>
-      <div className="min-h-screen bg-[#edf2fe] px-4 py-3 space-y-3 pb-20">
+      <div data-list-workspace className="min-h-screen bg-[#edf2fe] px-4 py-3 space-y-3 pb-20">
         {/* List sub-header + tabs card */}
-        <div className="rounded-[10px] bg-white">
-          <div className="flex flex-wrap items-center justify-between gap-4 px-5 pt-4 pb-3">
+        <div className="list-workspace-header rounded-[10px] bg-white">
+          <div className="list-workspace-identity flex flex-wrap items-center justify-between gap-3 px-4 py-2">
             <div className="flex flex-wrap items-center gap-4">
               <Link
                 to="/lists"
@@ -607,12 +618,12 @@ function ListDetailPage() {
                   <img
                     src={list.coverUrl}
                     alt=""
-                    className="h-11 w-11 shrink-0 rounded-[6px] object-cover"
+                    className="h-8 w-8 shrink-0 rounded-[6px] object-cover"
                     style={{ viewTransitionName: `list-cover-${list.id}` }}
                   />
                 ) : (
                   <span
-                    className="flex h-11 w-11 items-center justify-center rounded-[6px] bg-[#fee19c] text-[12px] font-medium text-black"
+                    className="flex h-8 w-8 items-center justify-center rounded-[6px] bg-[#fee19c] text-[12px] font-medium text-black"
                     style={{ viewTransitionName: `list-cover-${list.id}` }}
                   >
                     {listInitials}
@@ -651,10 +662,11 @@ function ListDetailPage() {
                         setPersonFilter((cur) => (cur === person.id ? null : person.id))
                       }
                       className={cn(
-                        "inline-flex items-center gap-1.5 text-[12px] font-medium transition-opacity cursor-pointer",
+                        "list-workspace-person inline-flex items-center gap-1.5 text-[12px] font-medium transition-opacity cursor-pointer",
                         personFilter && personFilter !== person.id ? "opacity-50 hover:opacity-100" : "text-black",
                       )}
                       title={`Filter by ${person.name}`}
+                      aria-label={`Filter by ${person.name}`}
                     >
                       <PersonAvatar
                         name={person.name}
@@ -662,7 +674,7 @@ function ListDetailPage() {
                         src={person.avatarUrl}
                         size={24}
                       />
-                      <span>{person.name.split(" ")[0]}</span>
+                      <span className="sr-only">{person.name.split(" ")[0]}</span>
                     </button>
                   ))}
                 </div>
@@ -683,7 +695,7 @@ function ListDetailPage() {
                 onClick={() => (call.joined ? void startOrJoinCall() : openStartCall(true))}
                 disabled={call.connecting}
                 className={cn(
-                  "inline-flex h-[42px] items-center gap-2 rounded-[9px] px-4 text-[14px] font-medium transition cursor-pointer disabled:opacity-60",
+                  "list-workspace-call inline-flex h-9 items-center gap-2 rounded-[9px] px-3 text-[13px] font-medium transition cursor-pointer disabled:opacity-60",
                   call.joined
                     ? "bg-[#fc404d] text-white hover:brightness-95"
                     : "border border-[#eaeffa] bg-white text-[#1d1d1d] hover:bg-muted/40",
@@ -697,14 +709,15 @@ function ListDetailPage() {
           </div>
 
           {/* Tabs */}
-          <div className="flex items-center gap-4 overflow-x-auto border-t border-[#eef0f6] px-5">
+          <div className="list-workspace-tabs flex items-center gap-6 border-t border-[#eef0f6] px-4">
             {(
               [
                 ["things", "Things"],
                 ["chat", "Chat"],
                 ["designs", "Designs"],
+                ...(codeActivityEnabled ? ([["code", "Code Activity"]] as const) : []),
                 ["members", "Members & Permissions"],
-              ] as const
+              ] as ReadonlyArray<readonly [TabType, string]>
             ).map(([id, label]) => {
               const active = tab === id;
               return (
@@ -713,7 +726,7 @@ function ListDetailPage() {
                   type="button"
                   onClick={() => setTab(id)}
                   className={cn(
-                    "relative min-h-11 shrink-0 py-3 text-[13.5px] transition-colors outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
+                    "relative py-2 text-[13.5px] transition-colors outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-ring rounded-sm",
                     active ? "text-[#000533] font-medium" : "text-[#6a769c] hover:text-[#000533] font-normal",
                   )}
                 >
@@ -1024,6 +1037,41 @@ function ListDetailPage() {
                 />
               </Suspense>
             </DesignsBoundary>
+          </div>
+        )}
+
+        {/* Code Activity: safe connection shell, enabled in development only. */}
+        {tab === "code" && codeActivityEnabled && (
+          <div className="pb-8 pt-1">
+            {/* The boundary sits outside the lazy root so a rejected chunk is contained here too. */}
+            <CodeActivityBoundary resetKey={listId}>
+              <Suspense
+                fallback={
+                  <div role="status" aria-label="Loading Code Activity" className="rounded-[10px] bg-white p-4 text-[13px] text-[#6a769c]">
+                    <p>Loading Code Activity…</p>
+                    <div aria-hidden="true" className="mt-3 grid gap-3 md:grid-cols-[35%_1fr]">
+                      <div className="space-y-2">{[0, 1, 2].map((i) => <div key={i} className="h-[72px] animate-pulse rounded-lg bg-[#f4f5fb] motion-reduce:animate-none" />)}</div>
+                      <div className="h-[232px] animate-pulse rounded-lg bg-[#f4f5fb] motion-reduce:animate-none" />
+                    </div>
+                  </div>
+                }
+              >
+                <CodeActivityRoot
+                  listId={listId}
+                  listName={list.name}
+                  listRole={list.role}
+                  onOpenThings={() => setTab("things")}
+                  people={list.members.map((m) => ({
+                    id: m.actorId || m.profileId || m.name,
+                    name: m.name,
+                    initials: m.initials,
+                    avatarUrl: m.avatarUrl,
+                    actorId: m.actorId,
+                    profileId: m.profileId,
+                  }))}
+                />
+              </Suspense>
+            </CodeActivityBoundary>
           </div>
         )}
 

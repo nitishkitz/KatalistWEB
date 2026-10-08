@@ -1,0 +1,29 @@
+/* List detail density only. Court, Buckets and the expanded Coey panel keep their own layouts. */
+[data-list-workspace] .list-workspace-identity { min-height: 56px; }
+[data-list-workspace] .list-workspace-person { min-width: 32px; min-height: 32px; justify-content: center; border-radius: 50%; }
+[data-list-workspace] .list-workspace-person:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+[data-list-workspace] .list-workspace-tabs { overflow-x: auto; }
+[data-list-workspace] .list-workspace-tabs > button { flex-shrink: 0; }
+[data-list-workspace] .list-workspace-header .coey-capsule-anchor { height: 40px; width: clamp(224px, 20vw, 280px); }
+[data-list-workspace] .list-workspace-header .coey-capsule:not([data-expanded="true"]) .coey-capsule-header { height: 40px; padding: 0 8px; }
+[data-list-workspace] .list-workspace-header .coey-capsule:not([data-expanded="true"]) .coey-capsule-avatar { width: 28px; height: 28px; }
+/* The component owns expanded height inline. Only its collapsed List trigger is overridden. */
+[data-list-workspace] .list-workspace-header .coey-capsule:not([data-expanded="true"]) { height: 40px !important; }
+[data-list-workspace] [data-list-things] { height: calc(100dvh - 132px); min-height: 420px; }
+[data-list-workspace] .list-thing-detail h1 { font-size: 22px; }
+[data-list-workspace] .list-thing-detail .space-y-4 { padding-top: 12px; }
+[data-list-workspace] .list-thing-detail .space-y-4 > :not([hidden]) ~ :not([hidden]) { margin-block: 12px 0; }
+[data-list-workspace] .list-thing-detail .space-y-4 > div:first-child { padding-block: 4px; }
+
+@media (max-width: 767px) {
+  [data-list-workspace] .list-workspace-person,
+  [data-list-workspace] .list-workspace-call,
+  [data-list-workspace] .list-workspace-tabs > button { min-height: 44px; }
+  [data-list-workspace] .list-workspace-person { min-width: 44px; }
+  [data-list-workspace] .list-workspace-header .coey-capsule-anchor { height: 44px; }
+  [data-list-workspace] .list-workspace-header .coey-capsule:not([data-expanded="true"]) .coey-capsule-header { height: 44px; }
+  [data-list-workspace] .list-workspace-header .coey-capsule:not([data-expanded="true"]) { height: 44px !important; }
+  [data-list-workspace] [data-list-things] { height: auto; }
+  [data-list-workspace] [data-list-things] > div:first-child { flex-direction: column; }
+  [data-list-workspace] [data-list-things] aside { width: 100%; max-height: 280px; }
+}

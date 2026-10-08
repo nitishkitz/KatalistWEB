@@ -1,4 +1,5 @@
 import { ArrowUp, Bell, Clock, EyeOff, Gauge, Play, SquareArrowOutUpRight } from "lucide-react";
+import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { KatalistIcon } from "@/features/court/KatalistIcon";
 import { formatCourtDue } from "@/features/court/court-view-model";
@@ -46,11 +47,12 @@ type Props = {
   moment: CatchUpMoment;
   actions: CatchUpActionId[];
   busy: boolean;
+  inlineDetail?: boolean;
   /** arg carries a SnoozeOption for "snooze" and a Pace for "set_pace". */
   onAction: (id: CatchUpActionId, arg?: string) => void;
 };
 
-export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
+export function CatchUpStackCard({ moment, actions, busy, onAction, inlineDetail = false }: Props) {
   const { thing } = moment;
   const chip = KIND_CHIP[moment.kind];
   const facePerson = moment.actor ?? thing.assignee;
@@ -60,19 +62,19 @@ export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
   const triggerLabel = `${reasonLabelFor(moment.kind, moment.reason)} · ${relativeTimeLabel(moment.occurredAt)}`;
 
   return (
-    <div className="relative z-10 flex flex-col gap-4 rounded-[16px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
+    <div className="brief-card relative z-10 flex flex-col gap-4 rounded-[16px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
       {/* Header: who + trigger */}
-      <div className="flex items-center gap-2.5">
+      <div className="brief-card-sender flex items-center gap-2.5">
         <PersonAvatar
           name={facePerson.name}
           initials={facePerson.initials}
           src={faceAvatar}
-          size={30}
+          size={36}
         />
-        <span className="text-[13px] font-semibold text-slate-800">{facePerson.name}</span>
+        <span className="text-[13px] font-semibold text-slate-800">{facePerson.name}<span className="brief-sender-context">{moment.actor ? " sent you an update" : " · your task"}</span></span>
         <span
           className={cn(
-            "ml-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold",
+            "brief-status ml-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold",
             chip.bg,
             chip.text,
           )}
@@ -82,19 +84,20 @@ export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
         </span>
       </div>
 
+      {!inlineDetail && <>
       {/* Title */}
-      <h3 className="text-[22px] font-bold leading-tight tracking-[-0.01em] text-slate-900 break-words">
+      <h3 className="brief-task-title text-[22px] font-bold leading-tight tracking-[-0.01em] text-slate-900 break-words">
         {thing.title}
       </h3>
 
       {/* Meta row */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12.5px] text-slate-500">
-        <span className="inline-flex items-center gap-1.5">
-          <KatalistIcon name="list" className="h-3.5 w-3.5" />
-          {thing.listName && thing.listName.toLowerCase() !== "standalone"
-            ? thing.listName
-            : "Standalone"}
-        </span>
+      <div className="brief-task-meta flex flex-wrap items-center gap-x-5 gap-y-1.5 text-[12.5px] text-slate-500">
+        {thing.listName && thing.listName.trim().toLowerCase() !== "standalone" ? (
+          <span className="inline-flex items-center gap-1.5">
+            <KatalistIcon name="list" className="h-3.5 w-3.5" />
+            {thing.listName}
+          </span>
+        ) : null}
         {dueLabel ? (
           <span
             className={cn("inline-flex items-center gap-1.5", due.urgent ? "text-red-600 font-semibold" : "")}
@@ -127,9 +130,11 @@ export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
         <div className="border-t border-slate-100" />
       )}
 
-      {/* Contextual actions */}
-      <div className="flex flex-wrap items-center gap-2.5">
-        {actions.map((id, index) => {
+      </>}
+
+      {/* Contextual actions retain Morning Brief receipt handling. */}
+      <div className="brief-actions flex flex-wrap items-center gap-2.5">
+        {actions.filter((id) => !inlineDetail || id !== "open").map((id, index) => {
           const meta = ACTION_META[id];
           const Icon = meta.icon;
           const primary = index === 0;
@@ -145,8 +150,9 @@ export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
                   <button
                     type="button"
                     disabled={busy}
+                    data-primary={primary}
                     className={cn(
-                      "inline-flex h-10 items-center gap-2 rounded-[10px] border px-4 text-[13px] font-semibold outline-none transition disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer",
+                      "brief-action inline-flex h-10 items-center gap-2 rounded-[10px] border px-4 text-[13px] font-semibold outline-none transition disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer",
                       primary
                         ? "border-transparent bg-primary text-primary-foreground hover:brightness-95"
                         : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
@@ -177,9 +183,11 @@ export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
               key={id}
               type="button"
               disabled={busy}
+              data-primary={primary}
+              data-action={id}
               onClick={() => onAction(id)}
               className={cn(
-                "inline-flex h-10 items-center gap-2 rounded-[10px] border px-4 text-[13px] font-semibold outline-none transition disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer",
+                "brief-action inline-flex h-10 items-center gap-2 rounded-[10px] border px-4 text-[13px] font-semibold outline-none transition disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer",
                 primary
                   ? "border-transparent bg-primary text-primary-foreground hover:brightness-95"
                   : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
@@ -191,6 +199,14 @@ export function CatchUpStackCard({ moment, actions, busy, onAction }: Props) {
           );
         })}
       </div>
+      {inlineDetail && (
+        <div className="brief-thing-content">
+          {thing.listName && thing.listName.trim().toLowerCase() !== "standalone" && (
+            <p className="mb-3 text-xs text-muted-foreground">{thing.listName}</p>
+          )}
+          <ThingDetailContent key={thing.id} initialThing={thing} variant="court" reviewActionsExternal />
+        </div>
+      )}
     </div>
   );
 }

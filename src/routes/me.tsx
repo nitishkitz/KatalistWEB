@@ -43,7 +43,7 @@ import { isDoormanEnabled } from "@/features/doorman/use-doorman";
 import { cn } from "@/lib/utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useStoredMotionPreference } from "@/hooks/use-motion-preference";
-import { getPushPermissionState, registerPushForUser, type PushPermissionState } from "@/features/push/push-registration";
+import { getPushPermissionState, registerPushForUser, sendTestPush, type PushPermissionState } from "@/features/push/push-registration";
 import coverImage from "@/assets/profile/cover.png";
 import { LoggedInDevices } from "@/features/me/devices/LoggedInDevices";
 
@@ -109,6 +109,7 @@ function MePage() {
   // control and auto-prompted for permission on every sign-in instead).
   const [pushPermission, setPushPermission] = useState<PushPermissionState>(() => getPushPermissionState());
   const [pushEnabling, setPushEnabling] = useState(false);
+  const [pushTesting, setPushTesting] = useState(false);
   const [doorman, setDoorman] = useState(() => isDoormanEnabled());
 
   const name =
@@ -175,6 +176,18 @@ function MePage() {
       }
     } finally {
       setPushEnabling(false);
+    }
+  }
+
+  async function handleTestPush() {
+    if (pushTesting) return;
+    setPushTesting(true);
+    try {
+      const result = await sendTestPush();
+      if (result.ok) toast.success("Test sent. Chrome should show it now.");
+      else toast.error(result.message);
+    } finally {
+      setPushTesting(false);
     }
   }
 
@@ -759,6 +772,15 @@ function MePage() {
                           className="h-8 shrink-0 rounded-lg bg-primary px-3 text-[12px] font-medium text-primary-foreground disabled:opacity-60"
                         >
                           {pushEnabling ? "Enabling…" : "Enable"}
+                        </button>
+                      ) : pushPermission === "granted" ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleTestPush()}
+                          disabled={pushTesting}
+                          className="h-8 shrink-0 rounded-lg border border-border bg-background px-3 text-[12px] font-medium text-foreground disabled:opacity-60"
+                        >
+                          {pushTesting ? "Sending…" : "Send test"}
                         </button>
                       ) : null}
                     </div>

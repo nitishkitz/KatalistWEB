@@ -1,5 +1,5 @@
 import type { Plugin } from "vite";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -759,11 +759,24 @@ function completeAttachmentPlugin(): Plugin {
 // Start's preview plugin cannot serve a Nitro build on its own.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
-export default defineConfig(({ command, isPreview }) => ({
+export default defineConfig(({ command, isPreview, mode }) => ({
   server: {
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
+    proxy: {
+      // Match the production Nitro proxy, which is absent from vite dev.
+      "^/supabase/(auth|rest|storage|functions)/v1(/|$)": {
+        target: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL ||
+          loadEnv(mode, process.cwd(), "").SUPABASE_URL ||
+          loadEnv(mode, process.cwd(), "").VITE_SUPABASE_URL,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/supabase/, ""),
+        configure: (proxy) => {
+          proxy.on("proxyReq", (request) => request.removeHeader("cookie"));
+        },
+      },
+    },
   },
   preview: {
     host: "0.0.0.0",

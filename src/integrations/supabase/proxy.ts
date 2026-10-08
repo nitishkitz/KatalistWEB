@@ -1,6 +1,6 @@
 /**
  * Same-origin proxy for Supabase HTTP traffic (see server/routes/supabase).
- * Enabled in production browsers only; set VITE_SUPABASE_PROXY=false to turn
+ * Enabled in browsers in development and production; set VITE_SUPABASE_PROXY=false to turn
  * it off. Realtime websockets are not proxied (Vercel functions cannot hold
  * a websocket), so they still connect to Supabase directly.
  */
@@ -11,7 +11,7 @@ const MAX_PROXIED_BODY_BYTES = 4_000_000;
 export function supabaseProxyBase(): string | null {
   if (typeof window === "undefined") return null;
   const env = import.meta.env as Record<string, string | boolean | undefined>;
-  if (!env.PROD || env.VITE_SUPABASE_PROXY === "false") return null;
+  if (env.VITE_SUPABASE_PROXY === "false") return null;
   return `${window.location.origin}/supabase`;
 }
 

@@ -1,3 +1,4 @@
+import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -365,8 +366,8 @@ export function CatchUpStack({
   const busy = busyKey === currentEntry.key;
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
+    <div className="brief-stack flex flex-col gap-5">
+      <div className="brief-columns flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
         {/* T10-06: bounded queue (~280px on desktop) -- native buttons with
           accessible selected state and visible focus, titles wrap rather
           than truncate unreadably, and the list itself scrolls once it
@@ -374,40 +375,40 @@ export function CatchUpStack({
         {order.length > 1 ? (
           <nav
             aria-label="Moments in this review"
-            className="order-2 flex gap-2 overflow-x-auto pb-1 lg:order-1 lg:w-[280px] lg:shrink-0 lg:flex-col lg:gap-1.5 lg:overflow-x-visible lg:overflow-y-auto lg:pb-0 lg:max-h-[60vh]"
+            className="brief-queue order-2 flex gap-2 overflow-x-auto pb-1 lg:order-1 lg:w-[280px] lg:shrink-0 lg:flex-col lg:gap-1.5 lg:overflow-x-visible lg:overflow-y-auto lg:pb-0 lg:max-h-[60vh]"
           >
-            {order.map((key, i) => {
+            <span className="brief-queue-label">Your queue</span>
+            {order.map((key) => {
               const entry = entries.get(key);
               if (!entry) return null;
               const m = entry.live ?? entry.lastKnown;
               const selected = key === currentEntry.key;
+              const person = m.actor ?? m.thing.assignee;
               return (
                 <button
                   key={key}
                   type="button"
                   onClick={() => selectKey(key)}
                   aria-current={selected ? "true" : undefined}
+                  data-resolved={entry.status === "resolved" || undefined}
                   className={cn(
-                    "flex shrink-0 items-center gap-2 rounded-[10px] border px-3 py-2 text-left text-[12.5px] outline-none transition focus-visible:ring-2 focus-visible:ring-ring cursor-pointer lg:w-full lg:shrink",
+                    "brief-queue-row flex shrink-0 items-center gap-2 rounded-[10px] border px-3 py-2 text-left text-[12.5px] outline-none transition focus-visible:ring-2 focus-visible:ring-ring cursor-pointer lg:w-full lg:shrink",
                     selected
                       ? "border-primary/40 bg-primary/[0.06] text-slate-900"
                       : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
                     entry.status === "unavailable" && "opacity-50",
                   )}
                 >
-                  {entry.status === "resolved" ? (
-                    <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                  ) : (
-                    <span className="w-3.5 shrink-0 text-center text-[12px] text-slate-400">
-                      {i + 1}
-                    </span>
-                  )}
+                  <span className="brief-avatar">
+                    <PersonAvatar name={person.name} initials={person.initials} src={person.avatarUrl} size={40} />
+                    {entry.status === "resolved" ? <Check className="brief-avatar-check" aria-label="Action saved" /> : null}
+                  </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium lg:whitespace-normal lg:break-words">
                       {m.thing.title}
                     </span>
                     <span className="hidden text-[12px] text-slate-400 lg:block">
-                      {reasonLabelFor(m.kind, m.reason)} · {relativeTimeLabel(m.occurredAt)}
+                      {person.name} · {reasonLabelFor(m.kind, m.reason)} · {relativeTimeLabel(m.occurredAt)}
                     </span>
                   </span>
                 </button>
@@ -416,13 +417,7 @@ export function CatchUpStack({
           </nav>
         ) : null}
 
-        <div className="relative order-1 min-w-0 flex-1 lg:order-2">
-          {order.length > 1 ? (
-            <div className="pointer-events-none absolute -top-2 left-3 right-3 h-full rounded-[16px] border border-slate-200/70 bg-white/80" />
-          ) : null}
-          {order.length > 2 ? (
-            <div className="pointer-events-none absolute -top-4 left-6 right-6 h-full rounded-[16px] border border-slate-200/50 bg-white/60" />
-          ) : null}
+        <div key={displayMoment.thing.id} className="brief-detail relative order-1 min-w-0 flex-1 lg:order-2">
           {!isActive ? (
             <div className="relative z-10 flex flex-col gap-3 rounded-[16px] border border-slate-200 bg-white p-5 text-center shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
               <h3 className="text-[16px] font-semibold text-slate-800">
@@ -458,6 +453,7 @@ export function CatchUpStack({
             </div>
           ) : (
             <CatchUpStackCard
+              inlineDetail
               moment={displayMoment}
               actions={actions}
               busy={busy}
@@ -467,14 +463,17 @@ export function CatchUpStack({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-4">
+      <div className="brief-footer flex items-center justify-between gap-4">
         <span className="text-[12px] text-slate-500" data-testid="catchup-viewed-summary">
           Viewed {viewedKeys.size} of {order.length}
           {resolvedCount > 0
             ? ` · ${resolvedCount} action${resolvedCount === 1 ? "" : "s"} completed`
             : ""}
         </span>
-        <div className="flex items-center gap-3">
+        <div className="brief-progress" aria-hidden="true">
+          {order.map((key) => <span key={key} data-viewed={viewedKeys.has(key)} />)}
+        </div>
+        <div className="brief-pager flex items-center gap-3">
           <button
             type="button"
             onClick={goPrev}

@@ -313,6 +313,7 @@
   flex: 1;
   min-width: 0;
   border: 0;
+  border-radius: inherit;
   background: transparent;
   outline: 0;
   font: 400 20px var(--kg-ff);
@@ -320,20 +321,26 @@
   color: var(--kg-ink);
   padding: 16px 14px;
 }
+.kg-well select + input {
+  border-radius: 0 16px 16px 0;
+}
 .kg-well input::placeholder {
   color: rgba(79, 61, 92, 0.5);
 }
 /* Chrome/Safari paint autofilled controls with a blue user-agent surface.
    Keep autocomplete enabled, but make that state match the surrounding well. */
-.kg-well input:-webkit-autofill,
-.kg-well input:-webkit-autofill:hover,
-.kg-well input:-webkit-autofill:focus,
-.kg-well input:-webkit-autofill:active {
+.kg-well :is(input, select):-webkit-autofill,
+.kg-well :is(input, select):-webkit-autofill:hover,
+.kg-well :is(input, select):-webkit-autofill:focus,
+.kg-well :is(input, select):-webkit-autofill:active {
   -webkit-text-fill-color: var(--kg-ink);
   caret-color: var(--kg-ink);
   -webkit-box-shadow: 0 0 0 1000px #f0e2d5 inset;
   box-shadow: 0 0 0 1000px #f0e2d5 inset;
   transition: background-color 9999s ease-out 0s;
+}
+.kg-well select:-webkit-autofill {
+  -webkit-text-fill-color: var(--kg-plum);
 }
 .kg-well--compact input {
   font-size: 17px;
