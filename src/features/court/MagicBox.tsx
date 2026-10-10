@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AtSign, CalendarDays, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
 import { format } from "date-fns";
+import { gsap } from "gsap";
+import { useMotionPreference } from "@/hooks/use-motion-preference";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { useAppContext } from "@/features/context/use-app-context";
@@ -23,7 +25,16 @@ import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { Importance } from "@/domain/thing";
-import { MAGIC_BOX_FOCUS_EVENT } from "./magic-box-entry";
+import { MAGIC_BOX_FOCUS_EVENT, MAGIC_BOX_REFERENCES_EVENT, takePendingMagicBoxReferences } from "./magic-box-entry";
+import { useThingNavigation } from "@/features/thing-references/use-open-thing";
+import {
+  mergeThingReferences,
+  recoverLegacyThingDraft,
+  parseClipboardThingReferences,
+  sanitizeThingReferences,
+  supportedThingOrigins,
+  type ThingReference,
+} from "@/features/thing-references/thing-reference";
 import { setCoeyAnchor } from "@/features/hub/coey-anchor";
 
 /** Coey's chat head is 52 px; it docks at the start of the box, vertically centred. */
@@ -42,6 +53,17 @@ function MagicBoxGlow() {
 }
 
 /** Sentence-case the first letter of a parsed title, leaving links and handles alone. */
+/** Draft metadata is untrusted shape: only well-formed, supported references are restored. */
+function readDraftReferences(metadata: unknown): ThingReference[] {
+  if (!metadata || typeof metadata !== "object") return [];
+  return sanitizeThingReferences((metadata as { thingReferences?: unknown }).thingReferences);
+}
+
+// Loaded on first use: it pulls in the Thing read path, which the composer does not otherwise need.
+const CompactThingReferenceCard = lazy(() =>
+  import("@/features/thing-references/CompactThingReferenceCard").then((m) => ({ default: m.CompactThingReferenceCard })),
+);
+
 function capitalizeTitle(title: string): string {
   if (!title || /^(?:https?:\/\/|www\.)/i.test(title)) return title;
   return title.charAt(0).toUpperCase() + title.slice(1);
@@ -93,7 +115,15 @@ export function MagicBox({
   // mid-flight, so the stale result is dropped instead of applied.
   const epochRef = useRef(0);
 
-  const [value, setValue] = useState(() => getDraft<string>(qc, "magic-box", draftEntityId)?.value ?? "");
+  const { openThing } = useThingNavigation();
+  const [value, setValue] = useState(() => {
+    const draft = getDraft<string>(qc, "magic-box", draftEntityId);
+    return recoverLegacyThingDraft(draft?.value ?? "", readDraftReferences(draft?.metadata)).value;
+  });
+  const [references, setReferences] = useState<ThingReference[]>(() => {
+    const draft = getDraft<string>(qc, "magic-box", draftEntityId);
+    return recoverLegacyThingDraft(draft?.value ?? "", readDraftReferences(draft?.metadata)).references;
+  });
   const suppressPasteTextRef = useRef(false);
   const [paceOverride, setPaceOverride] = useState<Importance | null>(null);
   // undefined follows parsed text; null explicitly clears the inferred date.
@@ -174,7 +204,7 @@ export function MagicBox({
   // can silently interrupt a mid-capture the way ThingDetailContent's own
   // comment composer already guards against.
   useBlockWhile(
-    Boolean(value.trim()) || attachedFiles.length > 0 || processingFiles > 0 || failedAttachments.length > 0,
+    Boolean(value.trim()) || attachedFiles.length > 0 || references.length > 0 || processingFiles > 0 || failedAttachments.length > 0,
     "magic-box-draft",
   );
 
@@ -189,10 +219,12 @@ export function MagicBox({
     // draft/attachments state now shown for the new destination.
     epochRef.current += 1;
     const draft = getDraft<string>(qc, "magic-box", draftEntityId);
-    setValue(draft?.value ?? "");
+    const recovered = recoverLegacyThingDraft(draft?.value ?? "", readDraftReferences(draft?.metadata));
+    setValue(recovered.value);
     setPaceOverride(null);
     setDueOverride(undefined);
     setAttachedFiles((draft?.attachments as ThingFile[] | undefined) ?? []);
+    setReferences(recovered.references);
     // Failed/in-flight uploads are transient per-composer-instance state,
     // not part of the persisted draft -- a validation failure against one
     // destination has no meaning once switched to a different one.
@@ -209,12 +241,52 @@ export function MagicBox({
   // navigating away from a List and back) the same way ThingDetailContent's
   // comment composer already does for its own draft.
   useEffect(() => {
-    if (!value && attachedFiles.length === 0) {
+    if (!value && attachedFiles.length === 0 && references.length === 0) {
       clearDraft(qc, "magic-box", draftEntityId);
       return;
     }
-    setDraft(qc, "magic-box", draftEntityId, { value, attachments: attachedFiles });
-  }, [qc, draftEntityId, value, attachedFiles]);
+    setDraft(qc, "magic-box", draftEntityId, {
+      value,
+      attachments: attachedFiles,
+      metadata: references.length ? { thingReferences: references } : undefined,
+    });
+  }, [qc, draftEntityId, value, attachedFiles, references]);
+
+  // One validation/dedupe path for paste and direct insertion. The destination (epochRef) is captured by the caller
+  // before anything asynchronous, so a late insertion cannot land in a different draft.
+  const addReferences = (incoming: ThingReference[], opEpoch: number = epochRef.current) => {
+    if (epochRef.current !== opEpoch || incoming.length === 0) return;
+    const merged = mergeThingReferences(references, incoming);
+    if (merged.added > 0) setReferences(merged.references);
+    if (merged.added > 0) flashMotion("attachment", 630);
+    if (merged.duplicates > 0) {
+      toast.info(merged.added > 0 ? "Some Things were already added." : "That Thing is already added.");
+    }
+    if (merged.overflow > 0) toast.error("A draft can hold up to 10 Things.");
+  };
+  const addReferencesRef = useRef(addReferences);
+  addReferencesRef.current = addReferences;
+
+  useEffect(() => {
+    const consume = () => {
+      const input = inputRef.current;
+      // Only a visible Magic Box takes the request; a hidden one (the other breakpoint's tree) leaves it queued.
+      if (!input || input.getClientRects().length === 0) return;
+      const taken = takePendingMagicBoxReferences();
+      if (taken.length) {
+        addReferencesRef.current(taken);
+        // Never pull focus out from behind an open dialog: the reference is staged, the dialog and its draft stay intact.
+        if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]')) {
+          toast.success("Added to Magic Box. Close this dialog to continue.");
+        } else {
+          input.focus();
+        }
+      }
+    };
+    window.addEventListener(MAGIC_BOX_REFERENCES_EVENT, consume);
+    consume();
+    return () => window.removeEventListener(MAGIC_BOX_REFERENCES_EVENT, consume);
+  }, []);
 
   const applyFirstAsTitleIfEmpty = (firstNewFile: ThingFile) => {
     // If input value is empty, auto-populate with the file name (without extension)
@@ -286,7 +358,15 @@ export function MagicBox({
 
   const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     const files = getClipboardFiles(e.clipboardData);
-    if (!files.length) return;
+    if (!files.length) {
+      // Copied Things arrive as canonical permalinks. Anything else stays an ordinary text paste.
+      const pastedReferences = parseClipboardThingReferences(e.clipboardData.getData("text/plain"), supportedThingOrigins());
+      if (pastedReferences) {
+        e.preventDefault();
+        addReferences(pastedReferences);
+      }
+      return;
+    }
     // When the clipboard contains a file, its plain-text entry is often only
     // an image's alt label or filename (e.g. "image"). Treat this as an attach
     // action; ordinary text-only clipboard paste still uses the browser default.
@@ -340,8 +420,40 @@ export function MagicBox({
 
   // While this box has focus Coey docks at its start; it is released on blur or Escape, and when the box goes away.
   const boxRef = useRef<HTMLDivElement>(null);
+  const animatedHeight = useRef<number | null>(null);
+  const { reduceMotion } = useMotionPreference();
+  useLayoutEffect(() => {
+    const host = boxRef.current;
+    return () => {
+      host?.querySelectorAll<HTMLElement>("[data-reference-exit]").forEach((ghost) => {
+        gsap.killTweensOf(ghost);
+        ghost.remove();
+      });
+    };
+  }, [draftEntityId]);
+  useLayoutEffect(() => {
+    const element = boxRef.current;
+    if (!element) return;
+    // One natural-size read per state change; the tween never measures layout per frame.
+    element.style.height = "";
+    const nextHeight = element.getBoundingClientRect().height;
+    const previousHeight = animatedHeight.current;
+    if (reduceMotion || previousHeight === null || Math.abs(previousHeight - nextHeight) < .5) {
+      animatedHeight.current = nextHeight;
+      return;
+    }
+    const tween = gsap.fromTo(element, { height: previousHeight }, {
+      height: nextHeight, duration: .42, ease: "power3.out", overwrite: "auto",
+      onUpdate: () => { animatedHeight.current = parseFloat(element.style.height); },
+      onComplete: () => { animatedHeight.current = nextHeight; element.style.height = ""; },
+    });
+    return () => { tween.kill(); };
+  }, [references.length, draftEntityId, desktop, reduceMotion]);
   useEffect(() => {
-    if (!motionFocused) return;
+    if (!motionFocused || references.length > 0) {
+      setCoeyAnchor(null);
+      return;
+    }
     let frame = 0;
     const place = () => {
       frame = 0;
@@ -362,7 +474,7 @@ export function MagicBox({
       if (frame) cancelAnimationFrame(frame);
       setCoeyAnchor(null);
     };
-  }, [motionFocused]);
+  }, [motionFocused, references.length]);
 
   const parsed = useMemo(() => parseToss(value, people), [value, people]);
   const effectivePace = paceOverride ?? parsed.importance;
@@ -543,6 +655,7 @@ export function MagicBox({
                 dueAt: effectiveDueAt,
                 dueHasTime: Boolean(effectiveDueAt),
                 files: attachedFiles.length > 0 ? attachedFiles : undefined,
+                references: references.length > 0 ? references : undefined,
               });
               return { assigneeActorId, id: created?.id ?? null, ok: true as const };
             } catch (err) {
@@ -585,6 +698,7 @@ export function MagicBox({
         dueAt: effectiveDueAt,
         dueHasTime: Boolean(effectiveDueAt),
         files: attachedFiles.length > 0 ? attachedFiles : undefined,
+        references: references.length > 0 ? references : undefined,
       });
 
       if (effectiveBucketId && created?.id) {
@@ -640,6 +754,7 @@ export function MagicBox({
           // and no longer need this tab's temporary object URLs alive.
           releaseAllBlobUrlsForOwner(fileOwnerKey);
           setAttachedFiles([]);
+          setReferences([]);
           setFailedAttachments([]);
         }
         setRetryAssigneeIds(hasPartialFailure ? failedAssigneeIds : null);
@@ -956,16 +1071,36 @@ export function MagicBox({
 
       <div
         className={cn(
-          "magic-box-root flex items-center gap-2.5 transition-opacity duration-200",
-          desktop
-            ? "h-[46px] rounded-[16px] px-3 font-composer"
-            : "h-12 rounded-xl border border-border bg-card px-1.5",
+          "magic-box-root flex gap-2.5 transition-opacity duration-200",
+          references.length > 0 ? "magic-box-with-references rounded-[16px] px-3 py-2" : "items-center",
+          references.length > 0
+            ? "font-composer"
+            : desktop
+              ? "h-[46px] rounded-[16px] px-3 font-composer"
+              : "h-12 rounded-xl border border-border bg-card px-1.5",
           tossed && "opacity-60",
         )}
         data-state={motionState}
         data-accent={motionAccent ?? undefined}
         data-visible={documentVisible}
         data-handoff={submitHandoff}
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes("application/katalist-thing")) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+          }
+        }}
+        onDrop={(event) => {
+          if (event.dataTransfer.files.length > 0) return;
+          const incoming = parseClipboardThingReferences(
+            event.dataTransfer.getData("application/katalist-thing") || event.dataTransfer.getData("text/plain"),
+            supportedThingOrigins(),
+          );
+          if (!incoming) return;
+          event.preventDefault();
+          event.stopPropagation();
+          addReferences(incoming);
+        }}
         onMouseEnter={() => setMotionHovered(true)}
         onMouseLeave={() => setMotionHovered(false)}
         ref={boxRef}
@@ -975,13 +1110,14 @@ export function MagicBox({
         }}
       >
         <MagicBoxGlow />
-        <Sparkles className="magic-box-sparkle relative z-[1] h-4 w-4 shrink-0 text-primary" />
+        <div className="contents">
+        <Sparkles className="magic-box-sparkle relative z-[1] h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
 
         {/* ── Highlight mirror + input overlay ─────────────────────────────
             The mirror div renders @person #list /bucket tokens as colored bold
             spans. The real <input> sits on top with color:transparent so only
             the blinking caret is visible. Font metrics must match exactly. */}
-        <div className="relative z-[1] min-w-0 flex-1 h-full">
+        <div className={cn("relative z-[1] min-w-0 flex-1", references.length > 0 ? "h-8" : "h-full")}>
           {/* Mirror — purely visual, no interaction */}
           <div
             aria-hidden="true"
@@ -1154,8 +1290,26 @@ export function MagicBox({
           aria-label="Magic Box"
         />
         </div>
+      {/* Pasted Things stay compact. Removing one drops only the draft reference; opening one keeps the draft. */}
+      {references.length > 0 && (
+        <div className="magic-box-reference-tray relative z-[1] flex min-w-0 gap-2 overflow-x-auto" aria-label="Referenced Things">
+          <Suspense fallback={<div className="h-8 w-56 shrink-0 rounded-lg border border-violet-100 bg-violet-50/40" aria-hidden="true" />}>
+          {references.map((ref) => (
+            <CompactThingReferenceCard
+              key={`${draftEntityId}:${ref.thingId}`}
+              variant="inline"
+              thingId={ref.thingId}
+              onOpen={openThing}
+              onRemove={(thingId) => setReferences((prev) => prev.filter((r) => r.thingId !== thingId))}
+            />
+          ))}
+          </Suspense>
+        </div>
+      )}
+
+        </div>
         {desktop ? (
-          <div className="relative z-[1] flex items-center gap-1.5 shrink-0">
+          <div className={cn("relative z-[1] flex items-center gap-1.5 shrink-0", references.length > 0 && "magic-box-reference-actions w-full")}>
             <button
               type="button"
               onClick={() => {
@@ -1206,7 +1360,7 @@ export function MagicBox({
             </button>
           </div>
         ) : (
-          <div className="relative z-[1] flex items-center gap-1">
+          <div className={cn("relative z-[1] flex items-center gap-1", references.length > 0 && "magic-box-reference-actions w-full")}>
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}

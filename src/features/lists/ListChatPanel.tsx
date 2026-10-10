@@ -35,6 +35,9 @@ import {
   type ListChatMessage,
 } from "@/features/lists/use-list-messages";
 import { useSessionDraft } from "@/features/drafts/use-session-draft";
+import { useReferenceDraft } from "@/features/thing-references/use-reference-draft";
+import { ThingReferenceDraftTray } from "@/features/thing-references/ThingReferenceDraftTray";
+import { ThingReferenceList } from "@/features/thing-references/ThingReferencesSection";
 import { getDraft, getDraftRevision, setDraft } from "@/features/drafts/session-drafts";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { reconcileMentions, type SelectedMention } from "@/features/lists/chat-mentions";
@@ -178,6 +181,7 @@ export const ListChatPanel = forwardRef<
   const selectedMentions = (draft.metadata as SelectedMention[] | undefined) ?? [];
   const stagedAttachment = draft.attachments?.[0] as ChatAttachment | undefined;
   const setMsg = (value: string) => draft.write(value, draft.attachments, selectedMentions);
+  const referenceDraft = useReferenceDraft("list-chat-references", listId);
   const { user } = useSession();
   const mentionable = useChatMentionPeople(listId);
   const [search, setSearch] = useState("");
@@ -186,7 +190,7 @@ export const ListChatPanel = forwardRef<
   const [focusedResult, setFocusedResult] = useState<ListChatMessage | null>(null);
   const [uploading, setUploading] = useState(false);
   useBlockWhile(
-    Boolean(msg.trim()) || Boolean(stagedAttachment) || uploading || chat.send.isPending,
+    Boolean(msg.trim()) || Boolean(stagedAttachment) || referenceDraft.references.length > 0 || uploading || chat.send.isPending,
     "list-chat-draft",
   );
   const [mentionTrigger, setMentionTrigger] = useState<MentionTrigger | null>(null);
@@ -610,6 +614,7 @@ export const ListChatPanel = forwardRef<
                       />
                     ) : null}
                     {m.attachment ? <ChatAttachmentView attachment={m.attachment} /> : null}
+                    {m.thingReferences?.length ? <ThingReferenceList references={m.thingReferences} className="mt-1 grid gap-2" /> : null}
                     {m.delivery === "pending" ? (
                       <p className="text-[12px] text-[#8487a7]">Sending…</p>
                     ) : null}
@@ -699,6 +704,7 @@ export const ListChatPanel = forwardRef<
               </button>
             </div>
           ) : null}
+          <ThingReferenceDraftTray references={referenceDraft.references} onRemove={referenceDraft.remove} />
           {mentionTrigger && mentionMatches.length > 0 ? (
             <MentionMenu
               id="list-chat-mention-menu"
@@ -713,7 +719,8 @@ export const ListChatPanel = forwardRef<
             onSubmit={(e) => {
               e.preventDefault();
               const trimmed = msg.trim();
-              if ((!trimmed && !stagedAttachment) || chat.send.isPending) return;
+              const stagedReferences = referenceDraft.references;
+              if ((!trimmed && !stagedAttachment && stagedReferences.length === 0) || chat.send.isPending) return;
               const mentionedProfileIds = [
                 ...new Set(
                   selectedMentions
@@ -726,12 +733,14 @@ export const ListChatPanel = forwardRef<
                 ),
               ];
               draft.clear();
+              referenceDraft.clear();
               const draftRevision = getDraftRevision(qc, "list-chat", listId);
               void chat.send
                 .mutateAsync({
                   body: trimmed,
                   attachment: stagedAttachment,
                   mentionedProfileIds,
+                  thingReferences: stagedReferences,
                   draftRevision,
                 })
                 .catch((err) => toast.error(domainErrorMessage(err)));
@@ -757,6 +766,7 @@ export const ListChatPanel = forwardRef<
               ref={msgInputRef}
               value={msg}
               onChange={onMsgChange}
+              onPaste={referenceDraft.onPaste}
               role="combobox"
               aria-expanded={Boolean(mentionTrigger && mentionMatches.length > 0)}
               aria-controls="list-chat-mention-menu"
@@ -805,7 +815,7 @@ export const ListChatPanel = forwardRef<
             </button>
             <button
               type="submit"
-              disabled={(!msg.trim() && !stagedAttachment) || chat.send.isPending || uploading}
+              disabled={(!msg.trim() && !stagedAttachment && referenceDraft.references.length === 0) || chat.send.isPending || uploading}
               aria-label="Send message"
               className="inline-flex h-[34px] w-[34px] cursor-pointer items-center justify-center rounded-full bg-[#7046d9] text-white transition hover:bg-[#6036c5] disabled:opacity-40"
             >

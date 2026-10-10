@@ -171,3 +171,79 @@
     box-shadow: 0 0 18px rgba(124, 108, 255, .55);
   }
 }
+
+
+/* A reference adds one small row to the existing composer, with a stronger violet orbit. */
+.magic-box-root.magic-box-with-references {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 3px;
+  --magic-aura-opacity: .95;
+  --magic-frame-opacity: 1;
+  --magic-orbit: 2.8s;
+}
+.magic-box-with-references > .contents > .magic-box-sparkle {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-self: center;
+  color: #975ee2;
+}
+.magic-box-with-references > .contents > div:not(.magic-box-reference-tray) {
+  grid-column: 2;
+  grid-row: 1;
+}
+.magic-box-with-references .magic-box-reference-tray {
+  grid-column: 2 / span 2;
+  grid-row: 2;
+  padding: 2px 2px 3px;
+}
+.magic-box-with-references .magic-box-fill { background: linear-gradient(110deg, #fff 20%, #faf5ff); }
+.magic-box-with-references .magic-box-frame-light,
+.magic-box-with-references .magic-box-aura-light {
+  background: conic-gradient(from 210deg, #975ee2, #d8b4fe 20%, #a855f7 42%, #fff 49%, #a855f7 55%, #7c3aed 75%, #975ee2);
+  animation: magic-box-orbit var(--magic-orbit) linear infinite;
+}
+.magic-box-with-references .magic-box-frame {
+  box-shadow: 0 0 9px rgba(168, 85, 247, .35), 0 0 22px rgba(151, 94, 226, .22);
+}
+.magic-box-reference-actions {
+  grid-column: 3;
+  grid-row: 1;
+  width: auto;
+}
+.magic-box-reference-actions > button:first-child[aria-label^="Focus Magic Box"],
+.magic-box-reference-actions > button[aria-label="Clear Magic Box"] { display: none; }
+.magic-box-reference-actions > button[aria-label="Attach file"] {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e9dff7;
+  border-radius: 10px;
+  color: #7e7a94;
+}
+.magic-box-reference-actions > button[aria-label="Toss Thing"] {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 10px;
+  background: #975ee2;
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .magic-box-with-references .magic-box-frame-light,
+  .magic-box-with-references .magic-box-aura-light { animation: none !important; }
+}
+
+/* Keep the violet orbit running even before attach, so it never restarts at the state boundary. */
+.magic-box-root .magic-box-frame-light { animation: magic-box-orbit 4.4s linear infinite reverse; }
+.magic-box-root .magic-box-aura-light { animation: magic-box-orbit 5.5s linear infinite; }
+.magic-box-root.magic-box-with-references { --magic-orbit: 4.4s; align-content: start; }
+.magic-box-with-references .magic-box-frame-light { animation: magic-box-orbit 4.4s linear infinite reverse; }
+.magic-box-with-references .magic-box-aura-light { animation: magic-box-orbit 5.5s linear infinite; }
+.magic-box-root .magic-box-frame { transition: opacity 420ms ease-out, box-shadow 420ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .magic-box-root .magic-box-frame-light, .magic-box-root .magic-box-aura-light { animation: none !important; }
+}
+.reduce-motion .magic-box-root .magic-box-frame-light,
+.reduce-motion .magic-box-root .magic-box-aura-light { animation: none !important; }

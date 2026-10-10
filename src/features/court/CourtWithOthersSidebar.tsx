@@ -175,6 +175,7 @@ export function CourtWithOthersSidebar({
               return (
                 <div
                   key={thing.id}
+                  data-thing-id={thing.id}
                   role="button"
                   tabIndex={0}
                   onClick={(e) => onOpenThing(thing, e.currentTarget)}

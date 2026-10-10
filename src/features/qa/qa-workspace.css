@@ -1,0 +1,76 @@
+/* Manual QA workspace. Everything is scoped under [data-qa-root]; no global element is restyled. */
+[data-qa-root] {
+  --qa-ink: #000533;
+  --qa-muted: #6a769c;
+  --qa-line: #eaeffa;
+  --qa-line-soft: #eef0f6;
+  --qa-accent: #975ee2;
+  --qa-accent-soft: #f3ecfc;
+  --qa-surface: #ffffff;
+  --qa-tint: #fafaff;
+  color: var(--qa-ink);
+  font-size: 13px;
+}
+[data-qa-root].qa-surface { background: var(--qa-surface); border: 1px solid var(--qa-line); border-radius: 10px; width: 100%; max-width: 100%; min-width: 0; contain: inline-size; position: relative; }
+[data-qa-root] .qa-surface { background: var(--qa-surface); border: 1px solid var(--qa-line); border-radius: 10px; }
+
+/* Local navigation row: Access, Test Sheet, Runs, Defects, History */
+[data-qa-root] .qa-nav { display: flex; align-items: center; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--qa-line-soft); overflow-x: auto; }
+[data-qa-root] .qa-nav button.qa-nav-item { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px; font-size: 13.5px; color: var(--qa-muted); background: none; border: 0; cursor: pointer; white-space: nowrap; border-radius: 6px; }
+[data-qa-root] .qa-nav button.qa-nav-item:hover { color: var(--qa-ink); }
+[data-qa-root] .qa-nav button.qa-nav-item[aria-current="page"] { color: var(--qa-accent); font-weight: 500; }
+[data-qa-root] .qa-nav button.qa-nav-item[aria-current="page"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px; border-radius: 2px; background: var(--qa-accent); }
+[data-qa-root] :is(button, a, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid var(--qa-accent); outline-offset: 2px; }
+
+/* Access: navigator | resources | optional form panel */
+[data-qa-root] .qa-access { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 560px; }
+[data-qa-root] .qa-access[data-panel="open"] { grid-template-columns: 260px minmax(0, 1fr) 380px; }
+[data-qa-root] .qa-access-nav { border-right: 1px solid var(--qa-line-soft); padding: 14px; overflow-y: auto; }
+[data-qa-root] .qa-access-main { min-width: 0; padding: 18px 20px; overflow: hidden; }
+[data-qa-root] .qa-access-panel { border-left: 1px solid var(--qa-line-soft); padding: 18px; overflow-y: auto; min-width: 0; }
+
+/* Execution: grid | detail */
+[data-qa-root] .qa-exec { display: grid; grid-template-columns: minmax(0, 1fr); }
+[data-qa-root] .qa-exec[data-detail="open"] { grid-template-columns: minmax(0, 1fr) 420px; }
+[data-qa-root] .qa-exec-detail { border-left: 1px solid var(--qa-line-soft); min-width: 0; display: flex; flex-direction: column; max-height: 720px; }
+[data-qa-root] .qa-exec-detail-body { overflow-y: auto; padding: 16px 18px; flex: 1; }
+[data-qa-root] .qa-exec-detail-foot { border-top: 1px solid var(--qa-line-soft); padding: 12px 18px; background: #fff; position: sticky; bottom: 0; }
+
+/* Library: grid | case panel */
+[data-qa-root] .qa-lib { display: grid; grid-template-columns: minmax(0, 1fr); }
+[data-qa-root] .qa-lib[data-detail="open"] { grid-template-columns: minmax(0, 1fr) 440px; }
+
+/* Data tables scroll horizontally rather than squeezing text */
+[data-qa-root] .qa-scroll { overflow-x: auto; position: relative; }
+[data-qa-root] table.qa-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: 13px; }
+[data-qa-root] table.qa-table th { text-align: left; font-weight: 500; font-size: 12px; color: var(--qa-muted); background: var(--qa-tint); padding: 0 12px; height: 38px; border-bottom: 1px solid var(--qa-line); white-space: nowrap; }
+[data-qa-root] table.qa-table td { padding: 0 12px; height: 44px; border-bottom: 1px solid var(--qa-line-soft); vertical-align: middle; }
+[data-qa-root] table.qa-table tr[data-selected="true"] td { background: #fdf2f4; }
+[data-qa-root] table.qa-table tr[data-active="true"] td { background: var(--qa-accent-soft); }
+[data-qa-root] table.qa-table tbody tr:hover td { background: var(--qa-tint); }
+[data-qa-root] table.qa-table tr[data-selected="true"]:hover td { background: #fdf2f4; }
+[data-qa-root] table.qa-table td.qa-cell-wrap { white-space: normal; line-height: 1.35; padding-block: 6px; }
+[data-qa-root] [role="gridcell"][tabindex]:focus-visible, [data-qa-root] td[data-cell]:focus-visible { outline: 2px solid var(--qa-accent); outline-offset: -2px; border-radius: 4px; }
+
+[data-qa-root] .qa-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex: none; }
+[data-qa-root] .qa-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 1024px: narrower secondary columns */
+@media (max-width: 1279px) {
+  [data-qa-root] .qa-access { grid-template-columns: 220px minmax(0, 1fr); }
+  [data-qa-root] .qa-access[data-panel="open"] { grid-template-columns: 220px minmax(0, 1fr); }
+  [data-qa-root] .qa-access[data-panel="open"] .qa-access-panel { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--qa-line-soft); }
+  [data-qa-root] .qa-exec[data-detail="open"] { grid-template-columns: minmax(0, 1fr) 360px; }
+  [data-qa-root] .qa-lib[data-detail="open"] { grid-template-columns: minmax(0, 1fr) 380px; }
+}
+/* 768px and below: stack; the detail replaces the grid with a back action */
+@media (max-width: 767px) {
+  [data-qa-root] .qa-access, [data-qa-root] .qa-access[data-panel="open"] { grid-template-columns: minmax(0, 1fr); }
+  [data-qa-root] .qa-access-nav { border-right: 0; border-bottom: 1px solid var(--qa-line-soft); max-height: 260px; }
+  [data-qa-root] .qa-access-main { padding: 14px; }
+  [data-qa-root] .qa-exec[data-detail="open"], [data-qa-root] .qa-lib[data-detail="open"] { grid-template-columns: minmax(0, 1fr); }
+  [data-qa-root] .qa-exec[data-detail="open"] > .qa-exec-main, [data-qa-root] .qa-lib[data-detail="open"] > .qa-lib-main { display: none; }
+  [data-qa-root] .qa-exec-detail { border-left: 0; max-height: none; }
+  [data-qa-root] .qa-nav button.qa-nav-item, [data-qa-root] .qa-touch { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { [data-qa-root] * { animation: none !important; transition: none !important; } }

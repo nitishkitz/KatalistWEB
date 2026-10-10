@@ -62,7 +62,7 @@ export function CatchUpStackCard({ moment, actions, busy, onAction, inlineDetail
   const triggerLabel = `${reasonLabelFor(moment.kind, moment.reason)} · ${relativeTimeLabel(moment.occurredAt)}`;
 
   return (
-    <div className="brief-card relative z-10 flex flex-col gap-4 rounded-[16px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
+    <div data-thing-id={thing.id} className="brief-card relative z-10 flex flex-col gap-4 rounded-[16px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
       {/* Header: who + trigger */}
       <div className="brief-card-sender flex items-center gap-2.5">
         <PersonAvatar

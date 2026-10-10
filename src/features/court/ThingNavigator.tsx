@@ -50,6 +50,7 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
           return (
             <button
               key={thing.id}
+              data-thing-id={thing.id}
               type="button"
               aria-current={selected}
               onClick={() => onSelect(thing.id)}

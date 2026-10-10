@@ -1,3 +1,4 @@
+import { makeThingReference } from "@/features/thing-references/thing-reference";
 import type { ChatOperation } from "./chat-operations";
 import type { ListChatMessage } from "./use-list-messages";
 
@@ -22,6 +23,7 @@ export function mergeChatFeed(
       attachment: operation.input.attachment,
       pinnedAt: null,
       mentionedProfileIds: operation.input.mentionedProfileIds,
+      thingReferences: (operation.input.thingReferenceIds ?? []).flatMap((id) => makeThingReference(id) ?? []),
       delivery: operation.delivery,
       error: operation.error,
     });

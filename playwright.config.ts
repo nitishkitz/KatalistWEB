@@ -27,6 +27,19 @@ const STAGING_CONFIGURED = Boolean(
     process.env.KATALIST_STAGING_SUPABASE_PUBLISHABLE_KEY,
 );
 
+// READY-01: two-account phone/test-code live harness. Registered only when the
+// operator has explicitly approved the target and supplied runtime credentials
+// (never stored in the repo). See tests/e2e/live/README.md.
+const LIVE_CONFIGURED = Boolean(
+  process.env.KATALIST_LIVE_TARGET_APPROVED === "true" &&
+    process.env.KATALIST_LIVE_BASE_URL &&
+    process.env.KATALIST_A_PHONE &&
+    process.env.KATALIST_B_PHONE &&
+    process.env.KATALIST_LIVE_OTP &&
+    process.env.KATALIST_A_NAME &&
+    process.env.KATALIST_B_NAME,
+);
+
 // T00: an isolated, configurable port (not the developer's own `npm run dev`
 // port 8080) so this config's own webServer can safely use
 // `reuseExistingServer: false` -- always starting its OWN fresh server
@@ -61,7 +74,7 @@ export default defineConfig({
   // roughly 2 of 3 runs, while `workers: 1` passed reliably every time.
   // This suite is small/fast enough that serializing it locally costs
   // little; staging runs (a real, already-warm deployment) are unaffected.
-  workers: STAGING_CONFIGURED ? undefined : 1,
+  workers: STAGING_CONFIGURED || LIVE_CONFIGURED ? undefined : 1,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : [["list"]],
@@ -115,8 +128,30 @@ export default defineConfig({
           },
         ]
       : []),
+    // Live: two independent signed-in sessions (A and B) against an approved
+    // deployment. Serial specs; one worker so A/B ordering is deterministic.
+    ...(LIVE_CONFIGURED
+      ? [
+          {
+            name: "live",
+            testDir: "./tests/e2e/live",
+            fullyParallel: false,
+            // Credentials are typed on /auth: no traces, screenshots or video
+            // (they would capture the phone number and code). The harness also
+            // creates its own contexts, which never inherit tracing.
+            use: {
+              ...devices["Desktop Chrome"],
+              viewport: VIEWPORTS.desktop,
+              baseURL: process.env.KATALIST_LIVE_BASE_URL,
+              trace: "off",
+              screenshot: "off",
+              video: "off",
+            },
+          },
+        ]
+      : []),
   ],
-  webServer: STAGING_CONFIGURED
+  webServer: STAGING_CONFIGURED || LIVE_CONFIGURED
     ? undefined
     : {
         // T00: always starts its OWN server on the isolated E2E_PORT rather

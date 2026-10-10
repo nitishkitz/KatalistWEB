@@ -1,0 +1,462 @@
+@@AUTH|Phone sign-in and session|Signed-out A and B; approved test deployment; separate browser profiles|browser + API|scripts/local-fixed-otp-auth.test.mjs
+P0|Correct phone and test code|Open /auth; select +91; enter A's phone; Send code; enter supplied test code; open Me|A's own profile and data appear; the session is authenticated as A, never B
+P1|Wrong verification code|Request a code for A; enter a wrong six-digit code; then enter the correct test code|Wrong code is rejected without a session; correcting it succeeds without losing the phone input
+P1|Phone validation boundaries|Submit blank, letters, 9 digits and 11 local digits; then use a valid +91 number|Invalid inputs show validation and do not send a code or create an account
+P1|Change phone during verification|Request A's code; choose Change number; enter B's phone; verify|The final session is B's; A's previous request cannot authenticate the new phone
+P1|Resend countdown and repeat clicks|Request a code; repeatedly press Send/Resend before and after the displayed countdown|Countdown is enforced; repeated requests do not create competing sessions or misleading success
+P1|Expired code|Advance the test clock beyond the displayed code lifetime; submit the old code|Expired code is rejected or documented test-mode behavior is explicitly recorded; production cannot accept an expired code
+P1|Refresh and deep link after login|Sign in as A; refresh; open a permitted Thing deep link in the same profile|A remains signed in; the exact permitted Thing opens without showing B's data
+P0|Logout revokes visible access|Sign out A; use browser Back; reload a formerly private route|Private content disappears; requests require a valid session; Back does not expose A's cached data
+P0|Test OTP deployment boundary|Inspect approved test and real production configurations; submit the test OTP on a non-test deployment|Fixed OTP is available only in an explicitly approved test environment; accidental public test authentication is a release blocker
+P0|Invalid or expired bearer session|Call protected contact/task endpoints without a bearer token, with garbage, and with an expired token|Each request is rejected before privileged database or provider access; no identity is inferred from submitted phone/profile IDs
+@@ONB|Welcome and onboarding|Disposable new account C; completed account A; profile fixtures|browser + API|scripts/onboarding-state.test.mjs
+P1|New-account onboarding|Sign in to C for the first time; follow each presented onboarding step; reload|Required steps are discoverable; completed profile and onboarding progress persist
+P1|Completed user bypass|Sign in to A with completed onboarding; navigate to Court|A reaches the application without repeating onboarding or losing settings
+P2|Required field validation|Submit each required onboarding field empty; correct one field at a time|Validation identifies the actual missing fields and preserves valid entries
+P2|Back navigation preserves draft|Fill two onboarding steps; go Back then forward|Draft values remain consistent; no step is silently marked complete
+P1|Save failure and retry|Fail the onboarding save request; retry after restoring the network|Failure is visible; draft remains; exactly one successful profile update occurs
+P2|Long and Unicode names|Enter a long name, Telugu text, accented characters and emoji; save|Supported content is preserved and displayed safely without breaking layout
+P1|Returning before completion|Close a partially completed session; sign back in|Resume behavior follows the approved onboarding contract; missing requirements are not silently skipped
+P2|Welcome tour navigation|Open /welcome; use tour controls and sign-in entry points|Links reach the intended route; keyboard focus and history remain usable
+P0|Cross-account onboarding isolation|Partially fill C's profile; sign out; sign in to A|C's draft and progress do not appear in A's profile
+P2|Mobile onboarding|Complete onboarding at 390x844 and with an onscreen keyboard|Every field and primary action remains reachable without clipped controls
+@@NAV|Navigation and global capture|A authenticated; at least one permitted List, Bucket and conversation|browser|tests/e2e/preview/smoke.spec.ts
+P1|Every main route|Visit Court, Lists, Buckets, Team, Nudges and Me; refresh each|Correct page loads and the active navigation item matches the route
+P1|Direct resource links|Open permitted Thing, List, Bucket and conversation links in a new tab|Exact resources load after authentication; unrelated default content is not substituted
+P1|Back and forward|Open a List then a Thing; use Back and Forward|History returns to the expected selection and does not duplicate dialogs
+P1|Global capture shortcut|Press the displayed capture shortcut on Court and other routes|One visible Magic Box is focused; capture is not submitted accidentally
+P1|List-scoped capture destination|Use Create Thing inside a List or Code Activity workspace; submit a test item|Item belongs to the displayed List; global navigation does not silently change its destination
+P1|Unknown and removed resource route|Open an invalid UUID and a resource no longer visible to A|Clear unavailable/not-found state appears; private metadata is not disclosed
+P2|Navigation while dialog is open|Open a nonmodal Contacts or detail panel; click another main navigation item|Panel closes or transitions predictably; clicked destination is reached with correct focus
+P2|Search escaping and empty queries|Enter whitespace, apostrophes, emoji and a URL in each navigation search|Queries do not crash or navigate unexpectedly; clear search restores the unfiltered view
+P1|Capture draft across navigation|Type a test capture draft; navigate away and return|Draft retention follows the existing session-draft contract; another account cannot see it
+P2|Route-local failure containment|Force an optional feature to throw while a List is open; navigate to Things or Chat|Feature error stays local; core navigation and other List tabs remain usable
+@@CTX|Work and Home separation|A/B; distinct Work and Home tasks, chats and buckets|browser + API|scripts/app-context-provider-epoch.test.mjs
+P1|Visible context switch|Open Court; switch Work to Home and back|Selected context has a clear visible state and is understandable without color alone
+P0|Capture in correct context|Create one test Thing in Work and one in Home; reload both views|Each item persists in its intended context and is not misclassified
+P0|Chat context separation|Create Work and Home conversations with distinct text; switch context|Only conversations for the selected context appear; one does not overwrite the other
+P1|Context-specific counts|Seed different lane, nudge and brief counts in both contexts; toggle|Counts and empty states match the active context instead of using stale totals
+P1|Context persists across reload|Select Home; reload and navigate through all main routes|Context follows the approved persistence contract consistently
+P0|In-flight context race|Start a delayed Work capture/read; switch Home before it returns|Result cannot be displayed or created as a Home item accidentally
+P1|Contacts shared across contexts|Accept a contact in Work; switch Home|The contact remains shared while its conversations stay context-specific
+P1|Deep link to other-context item|Open a permitted Home Thing link while Work is active|Context transition or explicit explanation preserves the identity of the linked Thing
+P1|Empty Home state|Leave Home empty while Work contains many Things; switch Home|Home shows its own empty state rather than Work records or a spinner forever
+P0|Account plus context switch|Switch A/Home to B/Work with requests pending|No A data, drafts or selected-context history leaks to B
+@@CAP|Magic Box task capture|A; test prefix; known List and contact B; isolated writes|browser + integration|scripts/magic-box-capture-ux.test.mjs
+P1|Plain task creation|Enter QA-[run]-plain Send budget file; click Toss; open the result; reload|One Thing exists with the intended title, owner, assignee and context
+P1|Blank and whitespace capture|Submit empty input and whitespace-only input|No empty Thing is created; validation or disabled submission is clear
+P1|Double submission|Double-click Toss and press Enter repeatedly during a delayed response|At most one logical submission is stored; duplicate behavior is detected rather than hidden
+P1|Creation failure retains text|Fail the create request; try again|Draft text and attachments remain available; no false success is shown
+P1|Due and pace preview|Enter a task containing an explicit time and urgency; inspect chips before submitting|Preview values equal stored values after creation; due and pace are independent
+P1|Assignment from capture|Select B as assignee in capture; submit; open both accounts|B receives the intended Thing; A's outgoing task shows B visibly
+P1|File with capture|Attach a small supported fixture; submit; reload detail|Exactly the intended file is associated with the new Thing and remains downloadable
+P2|Clear input semantics|Type a draft with a parsed date and pending file; use Clear input|Clearing follows the approved draft/file contract; no stale chip changes the next submission
+P1|Navigation during submission|Submit in List L1; navigate to L2 before the response|Created Thing remains in L1; pending completion cannot inject it into L2
+P2|Long title boundary|Capture at the actual configured maximum title length and one character beyond|Boundary is accepted; excess has explicit validation and is not silently truncated
+@@NLP|Natural-language date and text interpretation|Frozen clock; Asia/Kolkata; parser and persisted create results|unit + browser|scripts/magic-box-natural-language.test.mjs
+P1|Explicit evening time|Capture Send budget tomorrow at 6 PM; inspect chip and persisted dueAt|Due date is tomorrow at 18:00 local; explicit time is not replaced with 22:00
+P1|Explicit morning time|Capture Send budget tomorrow at 6 AM; reload detail|Due date is tomorrow at 06:00 local in preview and storage
+P1|O'clock wording|Enter tomorrow 6 o'clock and tomorrow 6 o clock; inspect parser output|Six is recognized as the supplied hour and never silently becomes ten; AM/PM behavior requires D01
+P1|24-hour and minute precision|Capture tomorrow at 18:30, at 06:05 and at 23:59|Exact local hour and minute survive preview, storage and reload
+P1|Untimed due-date policy|Capture Send budget tomorrow with no clock time|Current 22:00 default is tested separately from explicit-time input; product approval of this default requires D01
+P1|Invalid calendar date|Enter 31 February and a non-leap-year 29 February|Input is flagged; JavaScript date rollover cannot silently change the intended date
+P2|Weekday and end-of-period phrases|Test Friday, next week, next month, this year and next year at calendar boundaries|Each phrase resolves consistently with an approved reference table; ambiguous phrases require D01
+P1|URL immunity to parsing|Capture a URL containing /today, #next, digits, query strings and trailing punctuation|URL is preserved verbatim and not interpreted as due, pace or bucket metadata
+P1|Temporal phrase removal|Capture Send budget tomorrow at 6 PM; compare resulting title and description|Only recognized scheduling words are removed; meaningful task wording is preserved
+P2|Multiple conflicting dates|Enter tomorrow at 6 PM and Friday at 9 AM in the same task|Parser exposes ambiguity or follows an approved documented precedence; D01 is required
+@@TIME|Timezones and scheduled boundaries|A in Asia/Kolkata; B in America/New_York; frozen clocks|unit + integration + browser|scripts/meeting-reminder-timezone.test.mjs
+P1|Same instant across accounts|Create a due time in A; open the same Thing in B's timezone|Both displays represent the same stored instant with appropriate local labels
+P1|Midnight local boundary|Create tomorrow tasks at 23:59 and 00:01 local|Tomorrow follows the creator's local calendar policy; no UTC date shift occurs
+P1|Month and year rollover|Create due dates on 31 December and the final day of a month|Date advances to the intended next month/year without overflow errors
+P1|Leap-day boundary|Use 28 February in leap and non-leap years; create tomorrow and explicit 29 February|Valid leap day works; invalid leap day is rejected
+P1|Daylight-saving skipped hour|Schedule a nonexistent local time in a DST timezone|No silently invented instant; behavior follows an approved timezone policy under D01
+P1|Daylight-saving repeated hour|Schedule a repeated local time at DST fallback|Chosen offset is explicit or follows D01; repeated hour does not trigger duplicate reminders
+P1|Overdue transition|Freeze before due time; advance one minute beyond it; inspect A and B|Needs Attention and due indicators change according to the stored instant
+P1|Terminal task due time|Sort a due Thing; advance beyond its due time|Sorted item does not become an active overdue task or receive active-task reminders
+P2|Locale format variation|View a timed Thing under supported 12-hour and 24-hour locales|Display format may differ but hour, minute, date and underlying timestamp stay identical
+P1|Snooze boundary precision|Snooze a fixture near midnight and month end; reload both accounts|Approved snooze destination/time is preserved; D05 defines the exact snooze rule
+@@ASSIGN|Assignment and reassignment|A owner; B assignee; C unrelated; one private and one List Thing|browser + API + DB|scripts/katalist-permissions.test.mjs
+P1|A assigns to B|Create a test Thing owned by A; assign B; open A and B side by side|A sees an outgoing item labelled B; B sees incoming item in the owner's importance lane
+P1|Task leaves A's personal lanes|Assign an A-self Thing in Now to B; refresh both ends|It leaves A's personal Now/Next/Later lanes; legitimate With Others visibility remains
+P1|Assignee label consistency|Inspect Court card, With Others, detail, List and activity after assigning B|All surfaces resolve B's identity; no stale You or A badge remains
+P1|Reassign after Catch|B catches the Thing; use permitted reassign action to A; refresh|Current assignee changes correctly; permissions and acknowledgment reset according to the approved state contract
+P0|Owner restrictions on assigned task|A attempts Catch, personal pace and Sort on a Thing currently assigned to B|Owner cannot perform assignee-only actions in UI or direct API requests
+P0|Former assignee loses workflow rights|Move task from B to A; B uses a previously open dialog and direct mutation|B's workflow mutation is rejected and UI updates; unrelated visibility changes follow the access contract
+P1|Concurrent reassignment|A and caught B reassign the same fixture concurrently|A single authoritative final assignee is visible on both ends; no split state or duplicated task results
+P1|Actor and profile ID resolution|Assign B through profile-ID and actor-ID entry paths|Both paths resolve the same valid actor; unrelated or malformed IDs fail clearly
+P1|Newly added List member|Add B to a List; immediately open its assign picker|B is selectable without using unrelated global/demo users or stale roster data
+P1|Assignment save failure|Fail the assignment request after selecting B|A's old assignee is restored; error is visible; B is not notified of a failed assignment
+@@WORK|Catch and work-status lifecycle|A owner/B assignee; waiting, caught, in-progress, sorted and cancelled fixtures|unit + browser + DB|scripts/katalist-state.test.mjs
+P1|Incoming Catch|B opens an active waiting Thing and presses Catch; A observes|Acknowledgment becomes caught once; both accounts show consistent acknowledgment and activity
+P0|Catch role enforcement|A owner of B's item and C outsider attempt Catch by API|Both unauthorized attempts fail without changing state
+P1|Begin work|B catches then starts the Thing|Internal under_progress state displays the approved In Progress label and orange presentation
+P1|Mark Sorted|B sorts a caught in-progress item; A observes and refreshes|One terminal sorted state and timestamp appear; active lane counts decrease consistently
+P1|Cancel as owner|A cancels an active item assigned to B|Item becomes cancelled and leaves active lanes; B cannot continue workflow actions
+P0|Assignee cannot cancel owner task|B attempts Cancel on A-owned task through UI and API|Owner-only permission is enforced independently of UI controls
+P1|Reopen cancelled Thing|A reopens a cancelled fixture; B observes|State returns to not_started, cancellation clears and acknowledgment returns to waiting_for_catch
+P0|Reopen permission and status guard|B/C try reopen; A tries reopen on an active or sorted item|Unauthorized or unsupported transitions fail; current implementation permits owner reopen of cancelled only
+P1|Repeated terminal mutation|Double-click Sort/Cancel or repeat the same request|State, timestamps and activity remain coherent; duplicate events are detected
+P1|Mutation error rollback|Fail Catch or Sort after optimistic UI update|Both local surface and authoritative record revert; unsaved state is not reported as success
+@@PACE|Owner importance and personal pace|A owner/B assignee; one waiting and one caught Thing|unit + browser + DB|scripts/set-personal-pace-retry.test.mjs
+P1|Owner's initial lane|A captures with Later importance and assigns B without Catch|B's waiting Thing appears in Later, not forced into Now
+P1|Personal pace after Catch|B catches and chooses Now, Next, then Later|B's lane follows personal pace; each choice persists after refresh
+P0|Pace before Catch|B tries setting personal pace on a waiting Thing by UI and direct RPC|Operation is unavailable or rejected before Catch
+P0|Owner cannot set another's pace|A tries modifying B's personal pace|A's ownership does not grant this assignee-only permission
+P1|Importance and pace independent|A sets owner importance Now; caught B chooses Later|Owner importance and B's pace remain distinct and consistently displayed
+P1|Drag between lanes|B drags a caught Thing Now to Next and then Later|Valid lane move changes pace once and matches detail after reload
+P1|Invalid lane drag|Drag a waiting, sorted, cancelled or non-assigned Thing into a lane|Unsupported drag cannot mutate the task or produce false placement
+P1|Pace update network error|Fail a lane move; restore network; retry|Old lane is restored on failure; retry succeeds without duplicate work
+P1|Sort independent of pace|B sorts items in each pace lane|All sorted items leave active lanes regardless of former pace
+P2|Counts and lane view-all|Change pace with more items than stack preview limit|Lane counts and View all include the complete authoritative set, not just loaded cards
+@@DETAIL|Thing details and descriptions|A/B; task with title, description, due time, files and activity|browser + integration|scripts/detail-capsule-model.test.mjs
+P1|Complete detail rendering|Open a fully populated Thing from Court and List|Title, actual owner/assignee, description, due, pace, files and status agree
+P1|Description visibility|Create or seed a nonempty multiline description; open detail on A and B|Stored description is visibly readable; no valid description is silently omitted
+P1|Description creation/edit contract|Try adding and editing a description through supported UI; reload both accounts|Approved editing fields and role restrictions persist correctly; missing editing contract is D02
+P2|Empty description state|Open a Thing with null, empty and whitespace descriptions|Approved empty state is clear without suggesting description data was lost
+P1|Due-time detail fidelity|Open a task due tomorrow at 18:30 from each entry point|Exact date and time remain visible where required; details cannot misleadingly hide an explicit time
+P1|Detail loading and unavailable counts|Delay detail fetch and fail comments/attachments counts|Loading/error states are distinct from zero comments or zero files
+P1|Dialog focus and close|Open detail by keyboard; inspect focus; Escape or close; reopen|Focus is managed correctly; correct Thing remains selected; no accidental mutation occurs
+P1|Selection changes during slow read|Open Thing T1; immediately open T2 before T1 resolves|Late T1 response cannot overwrite T2's title, files, assignee or actions
+P2|Long content rendering|Use long title, long description, links, Unicode and line breaks|Content remains safe, scrollable and readable without covering actions
+P0|Lost access with open detail|Remove B's resource access while detail is open; B refreshes and tries mutation|Sensitive detail and actions are retired; server rejects unauthorized follow-up requests
+@@COMMENT|Thing comments and drafts|A/B with allowed access; C outsider; fresh task|browser + API + DB|scripts/thing-detail-comment-draft-failure.test.mjs
+P1|A comments and B receives|A posts QA-[run]-comment; B opens the same Thing; refresh both|One comment with correct author and text appears on both ends
+P1|B replies and A receives|B replies on A-owned permitted Thing|Reply persists and is attributed to B; A receives the intended unread update
+P1|Blank comment validation|Submit blank and whitespace-only replies|No empty comment is created; Send remains disabled or validates clearly
+P1|Failed send retains draft|Fail comment submission with text and pending file; retry|Text/file draft stays available; successful retry creates one logical comment
+P1|Repeated send and slow network|Double-click Send and press Enter repeatedly while delayed|Duplicate comment creation is prevented or detected; pending UI reflects actual operation
+P1|Large comment history|Seed several pages of comments; load older pages while new reply arrives|No missing or duplicate comments; chronology and scroll position remain coherent
+P1|Switch Things with draft|Draft in T1; open T2; return to T1|Each Thing has its own draft according to session-draft policy
+P0|Comment authorization|C guesses a Thing ID and posts; removed B retries a stale reply|Server denies unauthorized comments; UI visibility alone is not the authorization mechanism
+P2|Comment content safety|Post links, HTML-looking text, quotes, Unicode and emoji|Text is safely rendered; scripts/markup do not execute; supported links are usable
+P1|Comment write/read agreement|Post a comment then fail the follow-up read|Stored success is not falsely reported as a failed send that encourages duplicate posting
+@@MENTION|People mentions and delivery|A/B authorized participants; C excluded; permitted Thing and chats|browser + API|scripts/mention-trigger.test.mjs
+P1|Typing @ opens people picker|In a permitted comment, type @ then B's name prefix|Picker appears and offers authorized participants including B
+P1|Mention icon opens picker|Use the @ icon rather than typing|Same authorized picker opens with keyboard focus and usable selection
+P1|Keyboard selection|Type @; use arrows, Enter and Escape to select/cancel B|Selection inserts a structured B mention; Escape dismisses without sending
+P1|Mention reaches recipient|A sends a B mention; inspect B's notification and Thing|B is notified once; destination opens the exact permitted Thing/comment
+P0|No unauthorized directory disclosure|C or nonmember opens mention search for a private List/Thing|Picker and server do not expose or authorize unrelated private participants
+P1|Plain text vs structured mention|Compare typed @B plain text with a selected B token|Only approved mention representations drive notifications; contract is D07 if plain text detection is expected
+P1|Duplicate and multiple mentions|Mention B twice and A once; submit|Token display is correct; notification duplication follows the documented recipient dedupe contract
+P1|Removed member mentioned from stale draft|Select B; revoke B's membership; submit stale draft|Server rechecks visibility; removed person gets no private task/chat content
+P1|Mention notification failure|Store comment while push delivery fails|Comment remains stored once; delivery failure does not trigger duplicate comment creation
+P2|Caret and Unicode boundaries|Type email addresses, punctuation, Unicode name and @ in the middle of text|Email/plain-text input is not corrupted; caret placement and replacement are correct
+@@FILE|Attachment upload and previews|Small image/PDF/DOCX/video fixtures; exact 50 MiB and over-limit fixtures|browser + integration|scripts/process-file-for-upload-size-cap.test.mjs
+P1|Small file end-to-end|Attach supported fixture to a Thing; save; B previews/downloads|File bytes, name, association and permissions are correct after reload
+P1|File size boundary|Upload just below, exactly at and one byte above the 50 MiB limit|At/below configured limit works; over-limit rejection is explicit before unnecessary upload
+P1|Multiple attachment batch|Attach several files of different supported types; submit|Every successful file is attached exactly once and failures are individually identifiable
+P1|Partial upload failure|Fail one file in a multi-file submission; retry that file|Successful uploads remain coherent; failed file is retained for retry without duplicate attachments
+P1|Remove pending file|Select a file then remove it before submission|Removed file is not uploaded/attached; local preview resources are released
+P1|Upload then navigate away|Start delayed upload; close detail or switch Things/accounts|Late completion cannot attach to the wrong Thing/account or crash an unmounted UI
+P1|PDF preview paging|Preview a multi-page PDF; change pages rapidly and close/reopen|Correct page renders; stale canvas work does not overwrite the selected page
+P2|Unsupported preview format|Attach allowed file with no supported in-app preview|Clear download/fallback is offered; broken viewer does not block the task
+P1|Expired signed URL refresh|Expire an attachment URL; request preview/download again|Authorized re-sign succeeds or clear unavailable state appears; no invented URL is used
+P1|File metadata consistency|Compare card attachment count, detail list and actual storage associations|Counts reflect the authoritative set; unavailable counts are not claimed as zero
+@@FILESEC|Private file authorization and unsafe content|A private files; B permitted then revoked; C outsider; malicious fixture text|API + DB + browser|scripts/pdf-viewer-private-file-policy.test.mjs
+P0|Outsider signing denial|C asks sign-attachments endpoint for A's private attachment IDs|Signing is denied before storage tokens are issued
+P0|Revoked reader signing denial|Remove B's membership; B requests a fresh attachment signature|Fresh signing fails; previously issued URL expiry policy is documented under D08
+P0|Storage path tampering|Change Thing ID, storage key and completion payload to another user's object|Server validates association/ownership; arbitrary object attachment/signing fails
+P0|Anonymous storage access|Fetch a private object without signature or authenticated access|Private bytes and identifying metadata are not disclosed
+P1|Zero-byte or corrupt files|Upload permitted empty/corrupt PDF and image fixtures|Safe validation/viewer failure appears; application and other attachments remain usable
+P0|MIME and extension disagreement|Upload nonimage bytes named .png and unsafe active content with plausible extension|Validation follows content policy; active content does not execute in the app
+P0|Filename/path injection|Upload filenames with ../, quotes, HTML markup and control characters|Storage path is server controlled; names render safely without path traversal or script execution
+P0|Content access after account switch|Open A's PDF then sign out and sign in as B|A's private preview/Blob URL is removed; B cannot reuse A's cached signing authority
+P1|Orphan cleanup after failure|Abort upload after storage write but before attachment completion|Orphan is cleaned according to lifecycle policy; retry cannot claim unrelated files
+P0|Evidence and secret redaction|Capture failure screenshots/logs containing tokens, passwords or signed URLs|Reports redact secrets and restrict private media; evidence cannot become a new disclosure route
+@@LIST|Lists and resource details|A owns L1; B collaborator; C outsider; empty and large List fixtures|browser + API + DB|tests/e2e/preview/lists-buckets.spec.ts
+P1|Create List|A creates QA-[run]-L1; open it; refresh|One List exists with A as owner and correct name/context
+P1|List title rename|A renames L1; B observes and both refresh|Name agrees in navigation, detail, linked tasks and selector surfaces
+P1|Empty List|Open an empty List and each enabled tab|Clear empty states appear; counts do not imply loading failures are empty data
+P1|Create Thing inside List|Capture QA-[run]-List-task while viewing L1|Task is associated with L1 and appears in the correct scoped Things view
+P1|List task filters|Combine pace/status/assignee/search filters with pagination|Only matching accessible Things appear; counts and selection match filters
+P1|List overview count integrity|Seed more Things than one page; compare card counts and all pages|Overview uses authoritative counts, not loaded-page length
+P1|List detail error and retry|Fail List detail fetch; retry after network returns|Error is visible; retry loads actual List; fabricated empty details are not substituted
+P1|Archive/restore List contract|Attempt supported archive/restore actions on a disposable List|Approved visibility and restoration behavior occurs; absent contract is D04
+P0|Unknown/unauthorized List link|C opens L1 by guessed ID or route|Private List title, members, tasks, files and chat are not revealed
+P1|List tab switching preserves identity|Switch rapidly among Things, Chat, Members, Designs and optional tabs|Every pane remains tied to L1; slow prior responses do not render under another List
+@@MEMBER|List membership and role controls|A List owner; B collaborator; V view-only; C outsider|browser + API + DB|scripts/katalist-permissions.test.mjs
+P1|Add authorized List member|A adds permitted B to L1; B refreshes|B gains approved List visibility; roster, assignment candidates and permissions agree
+P0|Owner-only role administration|B/V/C try add/remove/change-role endpoints on L1|Unauthorized administration fails in backend as well as UI
+P1|Collaborator capabilities|As B, use allowed task/chat collaboration in L1|Collaborator actions succeed only where individual Thing capability also permits them
+P0|View-only workflow restrictions|V attempts task assignment, Catch, Sort, pace change and List chat send|Workflow/chat mutations are blocked according to current List capabilities
+P1|View-only permitted commenting|V comments on a visible Thing in L1|Commenting follows current canComment contract while workflow mutation stays blocked
+P0|Immediate membership removal|A removes B while B has L1 open; B retries reads and writes|New reads/writes fail; private UI retires rather than continuing from stale permissions
+P0|Role downgrade with open composer|Downgrade B to view-only while B is drafting chat or workflow action|Submission rechecks role and fails without leaking private content or losing unrelated drafts
+P1|Duplicate membership addition|A adds B twice or concurrently|Roster has one membership; counts/roles remain consistent
+P0|Owner removal and ownership transfer|Attempt to remove/demote List owner through each endpoint|Ownership invariant is preserved; unsupported transfer requires D09 rather than invented success
+P1|Member naming and actor identity|Add two members with same first name and different IDs|Roster and assignment remain ID based; identical names do not collapse distinct users
+@@BUCKET|Buckets and task organization|A/B; personal Buckets; mixed task states; large fixture|browser + API + DB|scripts/katalist-buckets.test.mjs
+P1|Create and rename Bucket|A creates QA-[run]-Bucket; renames; refreshes|Bucket persists with correct owner/context/name
+P1|Add Thing to Bucket|Add a permitted Thing through detail and drag path|Bucket membership persists once; task ownership/assignee do not change
+P1|Remove Thing from Bucket|Remove association through Bucket UI; inspect Court and List|Only organization association changes; the underlying Thing remains intact
+P1|Bucket progress deduplication|Associate the same task through overlapping direct/List paths|Progress counts the intended unique task set; duplicate associations do not inflate totals
+P1|Sorted and cancelled progress|Sort/cancel fixtures in a Bucket; inspect progress after reload|Progress uses approved denominator and terminal-state rules; ambiguous semantics are D10
+P1|Bucket empty and error states|Open empty Bucket; separately fail populated Bucket fetch|True empty state is distinct from unavailable data and supports retry
+P1|Large Bucket pagination|Seed many permitted items; scroll/filter all pages|All relevant items are reachable without duplicates, skipped entries or false totals
+P0|Private Bucket access|B/C request A's private Bucket by API and direct route|Visibility follows owner/private access rules; task visibility does not grant Bucket visibility
+P1|Delete/archive organization contract|Remove a disposable Bucket using supported action|Underlying Things are retained unless approved policy says otherwise; D04 defines recovery
+P1|Bucket association write failure|Fail Add/Remove after optimistic UI update|Association rolls back consistently; progress and item lists agree
+@@NOTE|Bucket notes and rich-text editing|A private Bucket note; text/image/file fixtures; empty note|browser + integration|scripts/bucket-note-editor-live-mutation.test.mjs
+P1|Create and edit note|Add QA-[run]-note; enter paragraphs; save; refresh|Note content and formatting persist in the correct Bucket
+P1|Autosave delay and indication|Type continuously; pause; observe save indicator; reload after confirmed save|Saved indicator corresponds to committed content, not merely local typing
+P1|Failed note save|Fail save while typing; restore network and retry|Draft remains and failure is clear; newest text is not overwritten by older saved text
+P1|Rapid note selection|Edit N1 then select N2 before N1 save returns|N1 completion cannot replace N2 or write N1 text into N2
+P1|Rich-text and links|Use supported formatting, links, Unicode and pasted multiline content|Allowed formatting survives; links are safe and text remains readable
+P1|Note attachment lifecycle|Attach, remove and download supported note files|File associations, sizes, access and cleanup reflect the actual note state
+P0|Note authorization|B/C access A's private note or attachment via guessed IDs|Backend denies private access and unauthorized writes
+P1|Two-device note edit|Edit the same note concurrently on two A sessions|Approved conflict policy applies and prevents silent loss; D11 is required
+P1|Navigation before save|Leave a dirty note or close the tab during a pending save|Approved save/unsaved warning behavior is explicit; no false committed state is shown
+P2|Large note and editor resize|Open a long note with many blocks on mobile and desktop|Editor remains responsive; scroll and all controls stay reachable
+@@GCONTACT|Google Contacts sync and discovery|A/B own separate disposable Google address books; configured OAuth and applied migration|browser + API + DB|scripts/google-contacts*.test.mjs
+P1|Sync and match saved phone|Save B's registered phone in A's Google test contacts; A explicitly syncs|B appears in A's discovery and unrelated registered users do not
+P1|Email and phone normalization|Use uppercase email, spaces in Indian number and canonical international number|Exact supported identities match once; no name-only or fuzzy match creates a contact
+P0|Private suggestions across accounts|Sync different Google contact sets in A and B; switch sessions and inspect both|Each account sees only its own matched snapshot and sync metadata
+P0|Forged match import|Submit a forged contact array, another owner ID or arbitrary registered profile ID to sync API|Server accepts only its own Google-fetched snapshot for the verified session owner
+P1|OAuth cancel or deny|Close Google popup or deny Contacts permission|No contact snapshot is replaced; clear cancellation/denial state appears
+P1|Multiple contact pages|Sync address book with more than 1000 contacts and repeated identifiers|All pages are read within limits; matches are deduplicated and counts are consistent
+P1|Mid-sync provider failure|Fail a later Google page after earlier pages succeeded|Previous saved matches remain intact; no partial replacement or false success occurs
+P1|Contact removal and re-sync|Remove B from Google contacts; sync again after accepted connection exists|Discovery match is removed while existing accepted Katalist connection is retained
+P0|OAuth callback after account switch|Begin A's popup; switch Katalist to B before callback completes|A's callback cannot import into B; no late state or notification appears in B
+P1|Unavailable configuration and ambiguous matches|Disable configuration; then test one Google contact matching multiple profiles|Configuration failure is explicit; ambiguous contact is excluded instead of choosing a wrong person
+@@CONNECTION|Contact requests and invitations|A/B known permitted contacts; C unrelated; incoming/outgoing request fixtures|browser + API + DB|src/features/hub/use-contacts.ts
+P1|A requests and B accepts|A sends B an explicit connection request; B accepts; refresh both|One accepted connection appears at both ends with correct names and counts
+P1|B declines request|A requests B; B declines; inspect both accounts|Pending state is cleared according to contract; neither shows a false accepted contact
+P1|Cancel pending request|A withdraws outgoing request before B accepts|Request is no longer actionable; B cannot accept a withdrawn stale request
+P0|Unrelated registered user blocked|A sends a direct request to C who is not in synced Google matches|Database rejects discovery-bypassing request even if the UUID is known
+P1|Reciprocal requests|A and B request each other close together|Approved reciprocal auto-accept behavior produces one coherent connection without duplicates
+P1|Accepted contact after re-sync|Remove Google match but keep an accepted connection; open Contacts|Accepted contact remains accessible and is not silently deleted
+P0|Request response authorization|C responds to A-to-B request by guessed request ID|Only the intended addressee can accept/decline; request cannot be hijacked
+P1|Invite link creation and consumption|Create a disposable invitation; copy link; redeem with intended test identity|Invitation lifecycle follows approved recipient rules; role/access are not inferred from arbitrary link text
+P0|Invite expired/revoked/wrong recipient|Redeem revoked, expired and wrong-recipient invitations|Access is denied with clear safe state; sensitive inviter/resource metadata is not unnecessarily exposed
+P1|Invitation failure and clipboard error|Fail create invitation and separately deny clipboard write|Creation failure is reported; clipboard failure cannot falsely say the link was copied
+@@CHAT|Direct and group conversations|A/B accepted contacts; permitted group G; Work/Home fixtures|browser + API + DB|tests/e2e/preview/thing-references.spec.ts
+P1|Create/reuse direct conversation|Open Message to B twice from A's contacts; inspect B|One appropriate DM exists per approved context rules; participants are correct
+P1|Send and receive text|A sends QA-[run]-chat; B replies; reload both|Each message persists once with the correct sender, order and context
+P1|Empty message validation|Send blank and whitespace-only text with no files/references|No empty message is created; meaningful file/reference-only sends follow approved contract
+P1|Message send failure|Fail A's send; restore network; retry|Draft stays available; exactly one intended stored message remains after retry
+P1|Create group with selected users|Create QA-[run]-G with permitted A/B members; inspect roster|Only selected authorized members appear; unrelated global users are not accidentally added
+P1|Group membership change|Change supported group membership while B has conversation open|Roster, visibility and sending rights refresh according to the approved group-role contract
+P0|Outsider reads/sends DM or group|C guesses conversation ID and message endpoint|Server denies unauthorized reads, writes and attachment signing
+P1|Long conversation pagination|Seed several message pages; load older history while new messages arrive|Ordering, dedupe and scroll anchors remain correct
+P1|Attachments and references in chat|Send one file and one permitted Thing reference; B opens both|Message associations persist; viewers recheck resource access independently
+P2|Safe text and failed link preview|Send HTML-looking text, long URL and emoji; fail link preview|Text remains safe; message is usable even when preview service fails
+@@READ|Unread counts and reading behavior|A/B chat and Thing comments; multiple A tabs|browser + integration|scripts/chat-read-state-cross-tab.test.mjs
+P1|Unread incoming message|B sends while A's conversation is closed|A's correct conversation unread count increases; unrelated counts do not
+P1|Reading active visible thread|A opens and views the incoming message|Read marker and badges update consistently for the correct thread
+P1|Hidden/background thread|Keep A's tab hidden or another thread selected while B sends|Unseen content is not automatically marked read merely because a component is mounted
+P1|Unread comment vs chat count|B comments on a Thing and sends a DM separately|Counts target the correct Thing/conversation and do not overwrite one another
+P1|New messages while scrolled up|A reads older history; B sends several new messages|New-message indicator appears; scroll is not forcibly moved away from older content
+P1|Scroll-to-latest affordance|Use the new-message indicator to reach the latest message|Correct messages are reached and read markers advance only as intended
+P0|Cross-tab read synchronization|Read in A tab 1; inspect A tab 2 and B|Same-account read state converges without changing B's personal read state
+P0|Cross-account read isolation|Read a thread as A; switch to B on the same browser|A's cursor/count cannot be reused for B
+P1|Read/count endpoint failure|Fail unread/mention count or mark-read request|Unavailable is shown as unavailable, not zero; failed read acknowledgment is not falsely confirmed
+P1|Message deletion/history gaps|Use supported deleted-message fixture between cursor boundaries|Pagination/read cursors do not skip unrelated unread content or count inaccessible history
+@@CALL|Two-account call basics|A/B; approved mic permission; disposable DM/List; real audio-capable browsers|browser + device|src/features/calls/use-list-call.ts
+P1|A rings and B answers|A starts call to B; B answers on second device|Both join the intended room and hear bidirectional audio; UI alone is insufficient proof
+P1|B rings and A answers|Reverse caller/callee and repeat|Call setup and audio work from both ends, not just the original caller
+P1|Decline incoming call|A rings B; B declines|A sees a clear declined/end state; neither is left in an active room
+P1|Cancel before answer|A starts ringing then cancels before B answers|B's stale ring is cleared; late answer cannot resurrect a cancelled room
+P1|Mute and unmute|During connected call mute A then B; unmute each|Actual audio and displayed mute state agree at both ends
+P1|Leave and end semantics|One participant leaves; remaining participant observes; end call if supported|Tracks/room membership and displayed call status follow approved caller/room policy
+P1|List call participant roster|Join a permitted List call with A/B; inspect names and avatars|Correct participant identities appear without actor/profile confusion
+P0|Outsider call admission|C requests ring/join token for private room or List|Server checks access before issuing room credentials or revealing participants
+P1|Navigation while in call|Switch permitted tabs/routes during an active call|Approved call continuity policy holds; duplicate joins/tracks are not created
+P2|Call keyboard and touch controls|Operate Answer, Decline, Mute and Leave with keyboard and mobile touch|Controls are labelled, focused and sufficiently reachable; destructive confusion is avoided
+@@CALLFAIL|Call permission and recovery failures|A/B; test device network/media controls; active and ringing call fixtures|browser + device|scripts/list-call-panel-recovery-states.test.mjs
+P1|Microphone permission denied|Deny microphone permission when joining|Explicit recoverable permission state appears; no phantom connected call is claimed
+P1|No microphone device|Join on a device with no usable audio input|User receives an accurate explanation and supported recovery options
+P1|Network drop and reconnect|Drop A's network during connected call; restore it|Reconnecting state and real media recovery agree; no duplicate participants appear
+P1|Server room join failure|Fail room credential/join request|UI returns to a retryable state; other app features remain usable
+P1|Leave during join race|Start delayed join then immediately Leave or navigate away|Late join is disposed; no microphone track or room remains silently active
+P1|Account switch during call|Switch from A to B while A's call is active|A-owned room resources and subscriptions are torn down; B cannot inherit A's session
+P1|Membership revoked during call|Remove B's private List access during call|Approved admission/revocation policy is enforced; D12 specifies active-room revocation timing
+P1|Repeated ringing deliveries|Deliver duplicated ring event or receive several simultaneous calls|Ring UI/notification dedupe and busy handling are coherent; no stacked uncontrolled audio
+P2|Background ringtone and vibration|Receive ring in background and foreground on supported devices|Ringtone/vibration follow permission/platform policy; stop reliably when call ends
+P1|Close browser/device sleep|Sleep B's device or close its tab during a call; reopen|Presence and room cleanup converge; stale call status does not persist indefinitely
+@@NOTIFY|In-app and push notifications|A/B; browser permission allowed/denied/default; disposable events|browser + API + device|scripts/notification-model.test.mjs
+P1|Task assignment notification|A assigns B a task; inspect B notification list and open it|Correct recipient and exact Thing link are used; event appears once
+P1|Mention notification|A mentions B in permitted Thing or chat|B gets the intended notification with a correct authorized destination
+P1|Mark notification read|B reads one notification then marks all supported entries read|Unread counts match authoritative per-user state after refresh
+P0|Notification ownership|A attempts to read or mark B's notification IDs through API|Backend enforces recipient ownership
+P1|Deleted or revoked target|Open a notification whose Thing/List is deleted or access revoked|Safe unavailable state appears without leaking private content
+P1|Push permission defaults|Sign in with notification permission unset; navigate normally|Application does not prompt unsolicited permission; supported explicit enable flow remains discoverable
+P1|Push allowed and denied|Explicitly enable on a test browser; deny on another; send test event|Actual push delivery is verified when allowed; denied permission does not break in-app notifications
+P1|Expired device token|Use expired/stale registration fixture and send notification|Provider failure is handled; stored task/comment is not rolled back or resent as a duplicate
+P0|Push registration account switch|Register as A; switch to B on same browser; deliver A event|A's private event is not delivered under B's identity/device association
+P1|Duplicate provider/event delivery|Replay the same notification trigger and refresh B|Logical dedupe follows contract; count and visible feed do not multiply silently
+@@NUDGE|Nudges and escalation|A owner/B assignee; active, waiting, overdue and terminal fixtures|browser + API + DB|scripts/nudge-escalation.test.mjs
+P1|Owner nudges assignee|A nudges active task assigned to B|B receives correct task-linked nudge; A sees appropriate history/confirmation
+P0|Unauthorized nudge|B assignee and C outsider attempt owner-only nudge|Backend denies unauthorized mutation and delivery
+P1|Terminal task nudge guard|Attempt nudge for sorted/cancelled task|Terminal guard prevents inappropriate new active-work nudges
+P1|Nudge filtering|Filter nudges by List, context, sender and active state where supported|Results/counts honor selected scope and actual permissions
+P1|Repeated nudge boundary|Send repeated nudges within configured cooldown|Documented rate/cooldown rule is applied consistently; D13 fixes any undefined threshold
+P1|Escalation job timing|Freeze clock around configured escalation boundary and execute isolated job|Only eligible active tasks escalate; time-window rule is deterministic
+P1|Job idempotency|Run same maintenance/escalation window twice|No duplicate logical escalation or duplicate state transition occurs
+P0|Job authentication|Call job route without valid cron/service credentials|Request is rejected before scanning private work or sending events
+P1|Nudge delivery failure|Store nudge while notification transport fails|Persistent nudge state is coherent; transport failure is not mistaken for successful delivery
+P1|Large nudge history|Seed older and new history beyond default loaded window|History/window indicators are honest; unqueried older records are not claimed absent
+@@BRIEF|Morning Brief and Catch Up|A/B separate due tasks/nudges; Work/Home; controlled local date|browser + API + DB|scripts/morning-brief-receipts-sql.test.mjs
+P1|Correct daily greeting/content|Open brief at approved local morning boundary with known due items|Greeting/date and actionable items match the active account and context
+P1|Manual reopen|Dismiss brief; use supported manual reopen control|Current brief opens again without inventing an automatic daily claim
+P1|Automatic-open feature gate|Test automatic-open flag off and on with configured receipts schema|Off prevents automatic opening; on uses the actual supported scheduling/claim logic
+P1|Same-account two-device daily claim|A opens app concurrently on two devices during daily window|Receipt/claim policy avoids duplicate automatic opening according to approved contract
+P0|Claim account isolation|A claims/open brief; B signs in on same device|B's daily eligibility and content are independent of A's claim
+P1|Context-specific brief|Different Work/Home due items; switch context|Brief and Catch Up show items for the correct context
+P1|Empty brief vs fetch failure|Test genuinely no actionable items and separately failed brief reads|Empty and error states are distinguishable; failure never pretends the day is clear
+P1|Catch Up opens exact Thing|Select each due/nudge/unread card and navigate|Exact permitted task opens; no wrong task from stale card index
+P1|Timers and midnight reset|Advance clock through brief window and next local day; hide/show app|Timers do not duplicate callbacks; receipt/date rolls over correctly
+P2|Reduced-motion and animation lifecycle|Enable reduced motion; open/dismiss brief rapidly and navigate|Content remains available; stale transitions do not trap focus or render duplicate overlays
+@@PROFILE|Me page and preferences|A/B; profile/avatar and preference fixtures; private stats|browser + API|scripts/me-preferences-and-avatar.test.mjs
+P1|Correct signed-in identity|Sign in A then B; open Me and top navigation|Name/avatar correspond to the active account; unknown data does not fabricate another user's identity
+P1|Profile edit persistence|Edit supported display name/occupation/preferences; save and reload|Only permitted fields update; all profile surfaces converge
+P1|Profile save error|Fail profile mutation after editing|Draft remains recoverable; visible success is not shown before a committed save
+P1|Avatar upload and remove|Upload supported avatar; refresh; replace/remove if supported|Correct avatar and storage references appear; old local previews do not persist
+P0|Profile write ownership|A submits update payload targeting B's profile|Server/RLS prevents editing B's profile or protected role fields
+P1|Preference account isolation|Set different supported preferences for A and B; switch accounts|A's preferences do not carry into B's UI
+P1|Stats full dataset accuracy|Seed many completed/active Things across pages; inspect Me totals|Stats are authoritative and correctly scoped, not derived from a partial current page
+P1|Stats unavailable state|Fail personal statistics requests|Unavailable data is explicit rather than displayed as a trustworthy zero
+P2|Name and avatar edge cases|Use long/Unicode name, no avatar and broken avatar URL|Fallback is safe and consistent; real identities with same names stay distinct
+P1|Device/session controls|Use supported session/device management on disposable sessions|Only intended session is affected; self-lockout and device-limit behavior are clear
+@@ARCHIVE|Sorted, cancelled and personal hiding recovery|A owner/B assignee; sorted/cancelled and hidden fixtures|browser + API + DB|scripts/trophy-read-state.test.mjs
+P1|Find sorted Thing|B sorts test Thing; use completed/Trophy/history entry in A and B|Sorted item is discoverable through the actual authorized history path and not silently lost
+P1|Sorted detail integrity|Open sorted task from history; inspect comments/files/activity|Stored detail remains readable where authorized; terminal controls do not imply active work
+P1|Search completed data|Search for exact test prefix in completed/history views|Supported history search locates the intended authorized task beyond current preview cards
+P1|Cancelled task recovery|A cancels then uses owner Reopen|Cancelled task returns according to current server contract and both ends update
+P1|Sorted restoration requirement|Attempt to restore a sorted task using supported UI|D04 must define whether sorted restoration exists; current cancelled-only reopen cannot be silently treated as sorted restoration
+P0|Terminal mutation prohibition|Try ordinary assignment, due, pace and workflow changes on terminal fixture|Terminal state guards hold in UI and backend unless an explicitly permitted restore occurs
+P1|Shred/personal hide semantics|Use Shred/hide on a disposable fixture; inspect other authorized account|D06 defines recovery and whether this is personal hiding; no accidental global deletion is acceptable
+P1|History counters and pagination|Seed many sorted/cancelled tasks; view all pages and counts|Completed statistics, paging and task sets agree
+P0|Private completed-task access|C guesses completed task ID and asks detail/file endpoints|Completion does not make private tasks public
+P1|History mutation failure|Fail a supported reopen/hide action after optimistic UI|Original state is restored; task is not lost between active and history views
+@@REF|Thing references and permalinks|A/B permitted Thing T; private C Thing; MAX_THING_REFERENCES=10|unit + browser + DB|scripts/thing-reference.test.mjs
+P1|Copy and open permalink|Copy T's Thing link; open it as permitted B after reload|Exact durable Thing ID opens; title changes do not invalidate reference
+P1|Paste reference into capture|Paste supported Thing permalink into Magic Box; create a referencing task|Stored reference points to T without cloning it or granting extra access
+P1|Reference in comment and chat|Send supported reference in each composer; B opens card|Correct current authorized metadata is read and link opens exact T
+P1|Duplicate references|Paste same Thing twice with UUID case variations|Supported dedupe keeps one reference per canonical Thing ID
+P1|Reference count boundary|Add 10 unique references then an 11th|Configured maximum is enforced with clear feedback; existing valid references remain
+P1|Malformed/version/foreign-origin reference|Paste malformed UUID, unsupported version and lookalike foreign URL|Invalid representations are rejected and unrelated external URL remains ordinary text
+P0|Reference grants no access|A sends C a reference to a task C cannot view|C sees safe unavailable state; title/files/participants do not leak through card metadata
+P1|Revoked reference target|Remove B's access after a reference card was cached|Cached preview is retired; opening/re-signing checks current access
+P1|Destination routing race|Queue reference while navigation to Court/List capture is pending|Exactly the intended visible composer consumes it once, in the correct context
+P1|Reference-only submission contract|Submit a draft with references but no typed title/text|Approved composer-specific policy applies; unsupported input is explicit under D14
+@@DESIGN|Design library and covers|Configured List/design schema; A owner/B collaborator/V view-only|browser + API + DB|scripts/design-resources-sql.test.mjs
+P1|Create design record|Save a supported Figma/design link in a permitted List folder|One design record persists with correct List, folder, URL and author
+P1|Figma URL validation|Use valid file/design URL, malformed URL and deceptive host|Supported URLs are accepted; unsafe/malformed hosts rejected without breaking ordinary data
+P1|Rename/move folders and designs|Use permitted edit/move actions; refresh another account|Hierarchy, displayed name and linked record remain coherent
+P1|Cover size/content checks|Upload supported cover at 5 MiB limit and invalid/over-limit bytes|Approved content and size are enforced; clear fallback retains design usability
+P1|Cover signing failure|Fail signed cover URL; retry/view design|Unavailable cover is explicit; no fabricated image/URL masks the error
+P0|List role enforcement|V/C attempt design/folder mutations; B reads or edits where allowed|Server enforces actual role contract, not merely button visibility
+P1|Link design to Thing|Link one design to a permitted Thing; inspect both directions|Association persists without duplicating design or granting additional Thing access
+P1|Large design grid and paging|Seed many folders/designs; search and paginate|All relevant records are reachable; filtering and counts do not use only a partial page
+P1|Offline mutation and retry|Edit design while offline or provider unavailable; retry|Draft/error state is clear; successful retry produces one coherent update
+P0|Removed List member views design|Remove B's List access while viewer is open|Private record, cover signing and linked metadata follow current permissions
+@@CODE|Code Activity and Coey optional workflow|Feature-gated deployment; disposable GitHub repository; A owner/B collaborator/V view-only|integration + browser + API|scripts/code-activity-*.test.mjs
+P0|Production and configuration gate|Open optional tab/API with feature off or provider unconfigured|Correct unavailable/disabled state appears; gate does not expose mock activity as real
+P0|Repository connection permissions|A connects one approved repository; B/V/C attempt connection changes|Only owner manages connection; tokens remain server-side and scoped to the repository
+P1|Read commits/PR/checks/diffs|Create known fixture commits/PRs in disposable repo; refresh feed|Real provider data matches repo; unavailable checks are not displayed as passed or zero
+P1|Pagination/filter and provider limit|Load multiple activity pages; filter; simulate 403/429/provider outage|Ordering/dedupe are correct; rate/error state is honest and feature-local
+P0|Webhook signature and replay|Send valid signed fixture, invalid signature and same delivery twice|Invalid intake is rejected; valid replay is deduplicated without duplicate Things
+P0|Private AI consent|Use Coey before consent, after owner consent and after consent removal|Private repository content is sent only when all approved AI gates/consent allow it
+P0|No automatic task creation|Receive webhook or generate AI draft without confirming|No Thing is created until an authorized person explicitly confirms
+P1|Confirm draft once|A/B authorized collaborator confirms a reviewed draft; double-submit|Intended List Thing is created once with correct source/assignee/attributes
+P0|Prompt injection in provider text|Use malicious-looking commit/PR/diff text that requests secrets or actions|Provider text is treated as data; no secret disclosure, code execution or permission override occurs
+P0|Membership revoked and token protection|Revoke B's List access; inspect API calls/client bundle/logs|Unauthorized provider reads/actions fail before token use; secrets never reach client/evidence
+@@QA|Manual QA cases, runs and evidence|QA feature enabled; disposable app/List/test-account fixtures; A owner/B tester/V viewer|browser + API + DB|scripts/qa-domain.test.mjs
+P1|Case create/edit/version|Create test case with title, prerequisites and ordered steps; edit it; create run|Case versioning and run snapshot preserve what was actually executed
+P1|Case spreadsheet import/export|Import provided QA CSV; include multiline steps and escaped formula-like text; export|Rows preserve content and valid enums; formulas are escaped and not executed in spreadsheets
+P1|Run assignment and filters|Create run; assign cases to A/B; filter result/assignee/module|Assignments, totals and filters reflect authoritative run records
+P1|Record Pass/Fail/Blocked|Submit pass, fail with actual result, blocked with reason and N/A|Fail/blocked require notes; statuses persist and counters update exactly
+P1|Multiple attempts and history|Fail a case; retest Pass; inspect attempt history|Original failure is retained; latest result is accurate without erasing evidence
+P0|Credential vault role checks|A configures disposable credential; authorized tester retrieves; V/C attempt read|Server enforces allowed access; encrypted secret is not shown to unauthorized roles
+P0|Evidence ownership lifecycle|Begin/upload/finalize evidence; attempt wrong-run/wrong-owner storage key|Only authorized evidence is associated; guessed keys cannot leak private media
+P1|Aborted evidence and cleanup|Abort upload or fail finalize; run isolated cleanup|Staged orphan is removed safely without deleting valid finalized evidence
+P1|Run completion with unfinished cases|Complete run with Not Run or Blocked remaining|UI requires explicit acceptance under existing QA domain contract; release gate still forbids unresolved P0/P1
+P0|Role/access loss during QA action|Remove B's permissions while run/evidence/secret request is pending|New operations fail and private cached results retire on identity/access change
+@@BRIDGE|External Bridge access tokens|Disposable valid/expired/revoked/wrong-recipient Bridge grants|API + DB + browser|scripts/bridge-authorization-sql.test.mjs
+P1|Valid intended recipient|Redeem a valid fixture link as its intended recipient; view allowed Thing|Grant exposes only its intended task and capabilities, not full app/account access
+P0|Malformed and short token|Open short, empty, malformed and random token paths|Safe failure state; no task metadata or existence oracle beyond approved response
+P0|Expired and revoked grants|Redeem expired/revoked token; retry formerly valid session|Access remains denied; stale token/session cannot restore permission
+P0|Wrong-recipient session|Use session from another grant/actor against target Thing|Recipient/grant binding is enforced server-side
+P0|Bridge scope escalation|Submit different Thing ID, attachment ID or assignee ID with valid grant|Grant cannot authorize another resource or person
+P1|Allowed Bridge status update|Use permitted active status transition; refresh app as A/B|Main app and Bridge converge on authoritative state
+P0|Forward-only workflow|Attempt return to not_started after progress via direct Bridge API|Server rejects unsupported backward status; UI does not offer misleading action
+P1|Bridge comment permissions|Post permitted fixture comment; attempt forged author identity|Server derives actual author and scope; disallowed comment behavior is blocked
+P0|Token leakage prevention|Inspect redirects, URLs, logs, referrers and evidence while navigating Bridge|Token is not exposed to unrelated third parties or public reports
+P1|Bridge provider/network failure|Fail redeem/read/action request; retry when restored|Clear retryable state; failure cannot be interpreted as an accepted action
+@@AUTHZ|Application-wide permission matrix|A owner/B assignee/V view-only/C outsider/X removed member|API + DB + browser|scripts/katalist-permissions.test.mjs
+P0|Anonymous protected endpoints|Enumerate documented private task/List/chat/file/contact/QA routes; call without auth|Each requires verified auth before privileged action or private response
+P0|Outsider object ID tampering|As C, substitute A's task/List/Bucket/chat/evidence IDs in reads and writes|RLS/handler checks deny unrelated resources even if UUIDs are known
+P0|Owner versus assignee capability|Test A owner of B task against every workflow/due/importance/reassignment action|Per-action role matrix holds in UI, API and database independently
+P0|Creator-only actor|Create fixture where creator is neither owner nor current assignee; attempt workflow changes|Creator identity alone grants no ownership/assignee workflow capability
+P0|View-only API bypass|As V, directly request mutations hidden/disabled in UI|Backend rejects prohibited mutation instead of trusting UI state
+P0|Removed membership and cached tokens|Revoke X's membership; reuse existing valid authentication token|Authentication is not sufficient; current resource authorization is rechecked
+P0|Service-role exposure|Inspect built client artifacts, public environment and logs for privileged keys|No service-role/provider/vault secret appears in browser artifacts or public configuration
+P0|Read-only projection restrictions|Query public identities/overview endpoints and compare private fields|Endpoints return only authorized/intended projection; metadata cannot leak full private profile/Thing data
+P0|Overposting and owner impersonation|Submit owner, creator, role, timestamps and recipient fields not permitted for operation|Server derives trusted fields or rejects unauthorized payload, preserving ownership invariants
+P0|Audit and attachment consistency|Perform permitted/denied mutations; inspect authorized activity and object associations|Only successful authorized actions persist; failed mutation cannot leave orphan grants/files/activity
+@@IDENTITY|Account switching and realtime isolation|Separate A/B sessions; same-browser switch fixture; delayed requests and drafts|unit + integration + browser|scripts/identity-boundary.test.mjs
+P0|Cached query separation|Load A Court/List/chat/contacts; sign out and sign in B|No A records or thumbnails appear under B even briefly
+P0|Pending read completion|Delay A read; switch B; release response|Late A result is discarded or remains scoped to retired A cache
+P0|Pending mutation completion|Begin A permitted mutation; switch B before response|Mutation remains attributed to A if committed; B receives no stale UI success/data
+P0|Draft separation|Draft capture, comments, chat and notes as A; switch B|B cannot see or submit A's drafts; returning A follows documented persistence
+P0|Realtime channel teardown|Subscribe A private channels; switch B; emit A updates|A channels are unsubscribed; B receives only authorized events
+P0|Read cursor separation|Advance A read markers; switch B with same task/thread IDs visible|Read state remains per user; A cursor never marks B content read
+P0|Provider callback ownership|Open Google/GitHub callback as A; switch B before completion|Stale operation cannot link or import under B identity
+P0|Cached signed/private media disposal|Load A private PDF/avatar/evidence; switch B|Owned Blob URLs, private viewer state and signing authority are retired appropriately
+P1|Same-account cross-tab convergence|A edits state in tab1; tab2 reconnects or receives invalidation|Both converge without duplicated mutations, discarded valid unread state or infinite refresh loops
+P0|Identity pending versus signed out|Transition auth through loading/pending/null before B resolves|Old identity is retired immediately; pending is not treated as permission to show previous data
+@@RECOVERY|Network errors, retries and data integrity|A/B; request interceptor; delayed, failed and ambiguous mutation responses|integration + browser|scripts/query-updates-rollback.test.mjs
+P1|Offline read behavior|Load permitted data; go offline; navigate or refresh|Cached/offline/unavailable states are truthful; no fabricated empty success
+P1|Offline write behavior|Attempt capture/comment/status while offline|Unsaved draft survives or supported queue is explicit; no false committed success
+P1|Reconnect reconciliation|Mutate fixtures through B while A offline; reconnect A|A refetches and converges to actual server state without stale overwrite
+P1|Server 500 and 503|Fail selected task/contact/chat endpoint then retry|Feature displays useful recoverable error; unrelated features remain functional
+P1|429 and backoff|Rate-limit read/write/provider request; observe retry behavior|No unbounded retry storm; UI remains usable and respects approved retry policy
+P0|Ambiguous write response|Commit write server-side then drop response; user retries|Ambiguity/idempotency contract prevents or detects duplicates and preserves actual committed item
+P1|Optimistic update rollback|Fail an optimistic pace/assignment/bucket change|All affected surfaces restore consistent prior state
+P1|Partial secondary failure|Commit task/comment but fail statistics/notification/signing follow-up|Primary write remains truthful; secondary unavailable state cannot encourage duplicate primary write
+P1|Timeout and request cancellation|Hang read; change route/account; inspect cancellation and retry|Bounded loading; stale response cannot update wrong view; cancellation does not claim data loss
+P0|Preview/live adapter boundary|Run demo mutations with fixture backend unreachable; separately fail real backend|Preview writes stay local; live failures cannot silently replace real data with demo records
+@@A11Y|Keyboard and assistive access|Core routes and dialogs; automated axe checks plus human keyboard/screen reader|browser + manual|tests/e2e/preview/accessibility-cross-cutting.spec.ts
+P1|Keyboard-only golden path|Sign in, capture, assign, Catch, comment and Sort without mouse|All required controls are reachable/operable in sensible order
+P1|Dialog focus management|Open/close Thing, contacts, call and file dialogs with keyboard|Initial focus, focus containment where modal, Escape and return focus work correctly
+P1|Accessible names|Inspect inputs and icon-only controls across core routes|Each has an accurate accessible name; duplicate/ambiguous labels are resolved
+P1|Screen-reader status changes|Trigger loading, error, send success, unread and sync status|Important changes are announced without repeated noisy announcements
+P1|Color-independent state|Compare Work/Home, status, priority, unread and QA results without color|Labels/icons/pressed state convey meaning independent of hue
+P1|Contrast and focus|Measure approved text/control/focus colors against their actual backgrounds|Automated/human contrast criteria in approved design baseline are met
+P1|Zoom and text scaling|Use 200% zoom and supported OS text scaling on core flows|Content reflows; actions and error messages remain reachable without content loss
+P1|Reduced motion|Enable reduced-motion preference; open brief, stacks, contacts and animations|Core functionality remains; decorative motion is reduced and no transition traps input
+P2|Touch target and drag alternative|Measure small action controls; perform lane/bucket organization without drag|Targets meet approved minimum; keyboard/touch alternatives preserve functionality
+P1|Error association|Trigger invalid phone, capture, invite and QA form inputs|Errors are associated with fields and announced; focus aids correction without discarding input
+@@DEVICE|Responsive and cross-browser behavior|Chromium, Firefox, WebKit; Android Chrome/iOS Safari; viewport matrix|browser + device|playwright.config.ts
+P1|Mobile Court golden path|At 390x844 perform capture, assignment, details, comment and Sort|Primary controls remain reachable; no horizontal clipping blocks completion
+P1|Small mobile viewport|At 320x568 inspect core navigation, dialogs and onscreen keyboard|Content reflows; action buttons and focused input remain accessible
+P1|Tablet portrait/landscape|Repeat List/detail/contact flows at 768x1024 and 1024x768|Layouts adapt without losing selection, drafts or task controls
+P1|Desktop and full HD|Repeat core flows at 1440x900 and 1920x1080|No unusably narrow panes or oversized empty space; content/details remain readable
+P1|Real browser engine coverage|Run the critical suite in Chromium, Firefox and WebKit with independently seeded data|Supported engines produce equivalent functional outcomes; project registration is verified
+P1|Orientation during edit|Rotate phone while drafting comment/capture or viewing file|Draft and selected resource survive; no duplicate submission or detached overlay
+P1|Soft keyboard and safe areas|Focus bottom composer on real iOS/Android; open keyboard and dismiss|Input and Send remain visible; safe-area bars do not cover actions
+P1|Touch gestures and scroll|Scroll long chat/history; swipe/drag supported task cards|Gesture does not trigger unintended destructive action or block normal scrolling
+P2|Pointer and hover alternatives|Operate icon actions on touch device with no hover|Required information/actions remain discoverable without hover-only affordances
+P1|PWA/installed versus browser|If supported, repeat sign-in/notifications/deep links in installed app and browser|Storage/navigation/push behavior follows platform policy; PWA absence is labelled gated rather than passed
+@@PERF|Large-data performance and lifecycle|Staging datasets 0,1,25,250,2500 records; declared reference hardware/network|benchmark + browser|scripts/thing-overview-volume.test.mjs
+P1|Cold and warm route timing|Measure login-to-Court and major route navigation on reference device/network|Record p50/p95 and compare approved D15 budgets; spinner duration is not hidden by preload
+P1|Large Court and history|Seed 2500 mixed tasks; filter/search/view all/load history|All items remain accessible with bounded reads and accurate totals; approved D15 time budget is met
+P1|Large List and Bucket totals|Seed many associations including duplicate List/Thing paths|Counts/progress are correct; fetches do not perform unbounded per-item queries
+P1|Directory and avatar request dedupe|Open Court/detail/chat simultaneously with shared identities|Requests are deduplicated appropriately; missing avatar never triggers uncontrolled retries
+P1|Memory after repeated routes|Navigate/open/close major surfaces 100 cycles; measure memory after collection|No monotonic retained growth beyond approved D15 threshold; private media resources are released
+P1|Subscription listener lifecycle|Repeatedly enter/leave chats/Lists/calls and switch identities|One intended active listener/channel per scope; teardown prevents duplicated events
+P1|CPU while hidden|Background app with animations/contacts/brief; inspect active timers/rendering|Decorative work pauses where designed; no runaway loops or repeated network refresh
+P1|Concurrent independent reads|Load multiple summaries/panels under latency; inspect request waterfall|Independent requests use bounded concurrency without serial per-row delays or request explosion
+P1|Expensive file preview|Open large valid PDF; rapidly change pages; monitor responsiveness|UI stays usable; stale render work is cancelled/ignored and approved limits are enforced
+P1|Provider and API budgets|Measure Google sync, Code Activity refresh and background jobs on large fixtures|Limits/timeouts are explicit; maximum-size inputs complete or fail safely within approved budgets
+@@DEPLOY|Build, migrations and release validation|Candidate commit; isolated staging; migration inventory; approved production operator|CI + staging + manual|package.json
+P0|Typecheck and production build|Run npm run typecheck and npm run build on exact candidate commit|Both succeed; known baseline errors are tracked and not counted as a pass
+P1|Complete unit/component/SQL run|Run npm test with bounded workers; retain logs, failures and skips|Results are from actual completed execution; interrupted suites are Not Run/Incomplete
+P0|Preview backend isolation|Run preview E2E with demo enabled and unreachable fixture Supabase URL/key|Preview writes cannot contact real backend; test runner environment is verified before browser actions
+P0|Staging prerequisites and project discovery|List Playwright projects with and without configured staging environment|Missing staging project is recorded Not Run/Blocked, never successful authenticated coverage
+P0|Migration inventory and compatibility|Review pending migrations; apply candidate only to isolated clone; exercise old/new client reads|Intended schema/RLS works; unrelated migrations are not silently deployed; incompatibilities block release
+P0|Environment secret/config validation|Validate required Google/push/provider/service/vault environment presence without printing values|Missing configuration is reported; privileged secrets never appear in VITE/public environment
+P1|Post-deployment smoke|After approved deployment, run safe login/navigation/core read smoke against recorded build|Deployed commit/environment matches tested candidate; production verification uses approved non-destructive fixtures
+P0|Rollback/recovery rehearsal|Rehearse application rollback and database backup restore on disposable clone|Verified recovery procedure preserves required data; destructive production rollback is not performed by testing agent
+P1|Evidence and release report|Collect case IDs, attempt outcomes, exact build, environment and sanitized artifacts|Coverage denominator includes Fail/Blocked/Not Run/N/A; no rerun erases earlier failures
+P0|Release gate enforcement|Try declaring ready with unresolved P0/P1, stale evidence or blocked required integrations|Release stays blocked until critical acceptance is demonstrated or explicitly approved scope changes are recorded

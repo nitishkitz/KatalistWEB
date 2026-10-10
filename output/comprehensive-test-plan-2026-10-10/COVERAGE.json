@@ -1,0 +1,317 @@
+{
+  "authored_date": "2026-10-10",
+  "case_count": 420,
+  "module_count": 42,
+  "priorities": {
+    "P0": 100,
+    "P1": 293,
+    "P2": 27
+  },
+  "status_counts": {
+    "NOT_RUN": 420
+  },
+  "execution_performed": false,
+  "modules": [
+    {
+      "code": "AUTH",
+      "name": "Phone sign-in and session",
+      "pre": "Signed-out A and B; approved test deployment; separate browser profiles",
+      "layers": "browser + API",
+      "source": "scripts/local-fixed-otp-auth.test.mjs"
+    },
+    {
+      "code": "ONB",
+      "name": "Welcome and onboarding",
+      "pre": "Disposable new account C; completed account A; profile fixtures",
+      "layers": "browser + API",
+      "source": "scripts/onboarding-state.test.mjs"
+    },
+    {
+      "code": "NAV",
+      "name": "Navigation and global capture",
+      "pre": "A authenticated; at least one permitted List, Bucket and conversation",
+      "layers": "browser",
+      "source": "tests/e2e/preview/smoke.spec.ts"
+    },
+    {
+      "code": "CTX",
+      "name": "Work and Home separation",
+      "pre": "A/B; distinct Work and Home tasks, chats and buckets",
+      "layers": "browser + API",
+      "source": "scripts/app-context-provider-epoch.test.mjs"
+    },
+    {
+      "code": "CAP",
+      "name": "Magic Box task capture",
+      "pre": "A; test prefix; known List and contact B; isolated writes",
+      "layers": "browser + integration",
+      "source": "scripts/magic-box-capture-ux.test.mjs"
+    },
+    {
+      "code": "NLP",
+      "name": "Natural-language date and text interpretation",
+      "pre": "Frozen clock; Asia/Kolkata; parser and persisted create results",
+      "layers": "unit + browser",
+      "source": "scripts/magic-box-natural-language.test.mjs"
+    },
+    {
+      "code": "TIME",
+      "name": "Timezones and scheduled boundaries",
+      "pre": "A in Asia/Kolkata; B in America/New_York; frozen clocks",
+      "layers": "unit + integration + browser",
+      "source": "scripts/meeting-reminder-timezone.test.mjs"
+    },
+    {
+      "code": "ASSIGN",
+      "name": "Assignment and reassignment",
+      "pre": "A owner; B assignee; C unrelated; one private and one List Thing",
+      "layers": "browser + API + DB",
+      "source": "scripts/katalist-permissions.test.mjs"
+    },
+    {
+      "code": "WORK",
+      "name": "Catch and work-status lifecycle",
+      "pre": "A owner/B assignee; waiting, caught, in-progress, sorted and cancelled fixtures",
+      "layers": "unit + browser + DB",
+      "source": "scripts/katalist-state.test.mjs"
+    },
+    {
+      "code": "PACE",
+      "name": "Owner importance and personal pace",
+      "pre": "A owner/B assignee; one waiting and one caught Thing",
+      "layers": "unit + browser + DB",
+      "source": "scripts/set-personal-pace-retry.test.mjs"
+    },
+    {
+      "code": "DETAIL",
+      "name": "Thing details and descriptions",
+      "pre": "A/B; task with title, description, due time, files and activity",
+      "layers": "browser + integration",
+      "source": "scripts/detail-capsule-model.test.mjs"
+    },
+    {
+      "code": "COMMENT",
+      "name": "Thing comments and drafts",
+      "pre": "A/B with allowed access; C outsider; fresh task",
+      "layers": "browser + API + DB",
+      "source": "scripts/thing-detail-comment-draft-failure.test.mjs"
+    },
+    {
+      "code": "MENTION",
+      "name": "People mentions and delivery",
+      "pre": "A/B authorized participants; C excluded; permitted Thing and chats",
+      "layers": "browser + API",
+      "source": "scripts/mention-trigger.test.mjs"
+    },
+    {
+      "code": "FILE",
+      "name": "Attachment upload and previews",
+      "pre": "Small image/PDF/DOCX/video fixtures; exact 50 MiB and over-limit fixtures",
+      "layers": "browser + integration",
+      "source": "scripts/process-file-for-upload-size-cap.test.mjs"
+    },
+    {
+      "code": "FILESEC",
+      "name": "Private file authorization and unsafe content",
+      "pre": "A private files; B permitted then revoked; C outsider; malicious fixture text",
+      "layers": "API + DB + browser",
+      "source": "scripts/pdf-viewer-private-file-policy.test.mjs"
+    },
+    {
+      "code": "LIST",
+      "name": "Lists and resource details",
+      "pre": "A owns L1; B collaborator; C outsider; empty and large List fixtures",
+      "layers": "browser + API + DB",
+      "source": "tests/e2e/preview/lists-buckets.spec.ts"
+    },
+    {
+      "code": "MEMBER",
+      "name": "List membership and role controls",
+      "pre": "A List owner; B collaborator; V view-only; C outsider",
+      "layers": "browser + API + DB",
+      "source": "scripts/katalist-permissions.test.mjs"
+    },
+    {
+      "code": "BUCKET",
+      "name": "Buckets and task organization",
+      "pre": "A/B; personal Buckets; mixed task states; large fixture",
+      "layers": "browser + API + DB",
+      "source": "scripts/katalist-buckets.test.mjs"
+    },
+    {
+      "code": "NOTE",
+      "name": "Bucket notes and rich-text editing",
+      "pre": "A private Bucket note; text/image/file fixtures; empty note",
+      "layers": "browser + integration",
+      "source": "scripts/bucket-note-editor-live-mutation.test.mjs"
+    },
+    {
+      "code": "GCONTACT",
+      "name": "Google Contacts sync and discovery",
+      "pre": "A/B own separate disposable Google address books; configured OAuth and applied migration",
+      "layers": "browser + API + DB",
+      "source": "scripts/google-contacts*.test.mjs"
+    },
+    {
+      "code": "CONNECTION",
+      "name": "Contact requests and invitations",
+      "pre": "A/B known permitted contacts; C unrelated; incoming/outgoing request fixtures",
+      "layers": "browser + API + DB",
+      "source": "src/features/hub/use-contacts.ts"
+    },
+    {
+      "code": "CHAT",
+      "name": "Direct and group conversations",
+      "pre": "A/B accepted contacts; permitted group G; Work/Home fixtures",
+      "layers": "browser + API + DB",
+      "source": "tests/e2e/preview/thing-references.spec.ts"
+    },
+    {
+      "code": "READ",
+      "name": "Unread counts and reading behavior",
+      "pre": "A/B chat and Thing comments; multiple A tabs",
+      "layers": "browser + integration",
+      "source": "scripts/chat-read-state-cross-tab.test.mjs"
+    },
+    {
+      "code": "CALL",
+      "name": "Two-account call basics",
+      "pre": "A/B; approved mic permission; disposable DM/List; real audio-capable browsers",
+      "layers": "browser + device",
+      "source": "src/features/calls/use-list-call.ts"
+    },
+    {
+      "code": "CALLFAIL",
+      "name": "Call permission and recovery failures",
+      "pre": "A/B; test device network/media controls; active and ringing call fixtures",
+      "layers": "browser + device",
+      "source": "scripts/list-call-panel-recovery-states.test.mjs"
+    },
+    {
+      "code": "NOTIFY",
+      "name": "In-app and push notifications",
+      "pre": "A/B; browser permission allowed/denied/default; disposable events",
+      "layers": "browser + API + device",
+      "source": "scripts/notification-model.test.mjs"
+    },
+    {
+      "code": "NUDGE",
+      "name": "Nudges and escalation",
+      "pre": "A owner/B assignee; active, waiting, overdue and terminal fixtures",
+      "layers": "browser + API + DB",
+      "source": "scripts/nudge-escalation.test.mjs"
+    },
+    {
+      "code": "BRIEF",
+      "name": "Morning Brief and Catch Up",
+      "pre": "A/B separate due tasks/nudges; Work/Home; controlled local date",
+      "layers": "browser + API + DB",
+      "source": "scripts/morning-brief-receipts-sql.test.mjs"
+    },
+    {
+      "code": "PROFILE",
+      "name": "Me page and preferences",
+      "pre": "A/B; profile/avatar and preference fixtures; private stats",
+      "layers": "browser + API",
+      "source": "scripts/me-preferences-and-avatar.test.mjs"
+    },
+    {
+      "code": "ARCHIVE",
+      "name": "Sorted, cancelled and personal hiding recovery",
+      "pre": "A owner/B assignee; sorted/cancelled and hidden fixtures",
+      "layers": "browser + API + DB",
+      "source": "scripts/trophy-read-state.test.mjs"
+    },
+    {
+      "code": "REF",
+      "name": "Thing references and permalinks",
+      "pre": "A/B permitted Thing T; private C Thing; MAX_THING_REFERENCES=10",
+      "layers": "unit + browser + DB",
+      "source": "scripts/thing-reference.test.mjs"
+    },
+    {
+      "code": "DESIGN",
+      "name": "Design library and covers",
+      "pre": "Configured List/design schema; A owner/B collaborator/V view-only",
+      "layers": "browser + API + DB",
+      "source": "scripts/design-resources-sql.test.mjs"
+    },
+    {
+      "code": "CODE",
+      "name": "Code Activity and Coey optional workflow",
+      "pre": "Feature-gated deployment; disposable GitHub repository; A owner/B collaborator/V view-only",
+      "layers": "integration + browser + API",
+      "source": "scripts/code-activity-*.test.mjs"
+    },
+    {
+      "code": "QA",
+      "name": "Manual QA cases, runs and evidence",
+      "pre": "QA feature enabled; disposable app/List/test-account fixtures; A owner/B tester/V viewer",
+      "layers": "browser + API + DB",
+      "source": "scripts/qa-domain.test.mjs"
+    },
+    {
+      "code": "BRIDGE",
+      "name": "External Bridge access tokens",
+      "pre": "Disposable valid/expired/revoked/wrong-recipient Bridge grants",
+      "layers": "API + DB + browser",
+      "source": "scripts/bridge-authorization-sql.test.mjs"
+    },
+    {
+      "code": "AUTHZ",
+      "name": "Application-wide permission matrix",
+      "pre": "A owner/B assignee/V view-only/C outsider/X removed member",
+      "layers": "API + DB + browser",
+      "source": "scripts/katalist-permissions.test.mjs"
+    },
+    {
+      "code": "IDENTITY",
+      "name": "Account switching and realtime isolation",
+      "pre": "Separate A/B sessions; same-browser switch fixture; delayed requests and drafts",
+      "layers": "unit + integration + browser",
+      "source": "scripts/identity-boundary.test.mjs"
+    },
+    {
+      "code": "RECOVERY",
+      "name": "Network errors, retries and data integrity",
+      "pre": "A/B; request interceptor; delayed, failed and ambiguous mutation responses",
+      "layers": "integration + browser",
+      "source": "scripts/query-updates-rollback.test.mjs"
+    },
+    {
+      "code": "A11Y",
+      "name": "Keyboard and assistive access",
+      "pre": "Core routes and dialogs; automated axe checks plus human keyboard/screen reader",
+      "layers": "browser + manual",
+      "source": "tests/e2e/preview/accessibility-cross-cutting.spec.ts"
+    },
+    {
+      "code": "DEVICE",
+      "name": "Responsive and cross-browser behavior",
+      "pre": "Chromium, Firefox, WebKit; Android Chrome/iOS Safari; viewport matrix",
+      "layers": "browser + device",
+      "source": "playwright.config.ts"
+    },
+    {
+      "code": "PERF",
+      "name": "Large-data performance and lifecycle",
+      "pre": "Staging datasets 0,1,25,250,2500 records; declared reference hardware/network",
+      "layers": "benchmark + browser",
+      "source": "scripts/thing-overview-volume.test.mjs"
+    },
+    {
+      "code": "DEPLOY",
+      "name": "Build, migrations and release validation",
+      "pre": "Candidate commit; isolated staging; migration inventory; approved production operator",
+      "layers": "CI + staging + manual",
+      "source": "package.json"
+    }
+  ],
+  "readiness_items": 11,
+  "readiness_status_counts": {
+    "OPEN": 11
+  },
+  "readiness_acceptance_status_counts": {
+    "NOT_RUN": 11
+  }
+}

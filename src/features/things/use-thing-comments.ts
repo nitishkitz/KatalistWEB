@@ -10,6 +10,7 @@ import { currentDemoPerson } from "@/features/demo/identities";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { getDraft, setDraft, getDraftRevision } from "@/features/drafts/session-drafts";
 import type { ThingFile } from "@/domain/thing";
+import { sanitizeThingReferences, type ThingReference } from "@/features/thing-references/thing-reference";
 import { flattenHistory, type HistoryCursor, type HistoryPage } from "@/lib/history-pages";
 import { classifyAsyncError } from "@/lib/query-policy";
 import { fetchThingActivityPage, fetchThingCommentsPage } from "./fetch-thing-history";
@@ -23,6 +24,7 @@ export type ThingComment = {
   authorActorId?: string | null;
   sending?: boolean;
   attachments?: ThingFile[];
+  thingReferences?: ThingReference[];
 };
 export type ThingActivity = { id: string; event: string; at: string };
 
@@ -46,7 +48,7 @@ export type ThingActivity = { id: string; event: string; at: string };
 // the latter is also true when the user typed something new and then
 // deliberately cleared it back to empty, which must NOT be treated as
 // "unchanged" and overwritten by a stale failed-submit restore.
-export type PostCommentInput = { thingId: string; body: string; mentionIds?: string[]; attachments?: ThingFile[]; draftRevision?: number; epoch?: number };
+export type PostCommentInput = { thingId: string; body: string; mentionIds?: string[]; attachments?: ThingFile[]; thingReferences?: ThingReference[]; draftRevision?: number; epoch?: number };
 
 /**
  * `loadActivity` defers the (usually unopened) Activity tab's own fetch
@@ -97,13 +99,13 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
       if (!targetThingId) throw new Error("No Thing selected.");
       if (input.epoch !== undefined && !isEpochCurrent(qc, input.epoch)) throw new Error("This comment session has ended.");
       if (preview) {
-        addCommentLocal(targetThingId, bodyText, currentDemoPerson().name, attachments);
+        addCommentLocal(targetThingId, bodyText, currentDemoPerson().name, attachments, sanitizeThingReferences(input.thingReferences).map((ref) => ref.thingId));
         return;
       }
-      await rpcComment(targetThingId, bodyText, attachments, input.mentionIds);
+      await rpcComment(targetThingId, bodyText, attachments, input.mentionIds, sanitizeThingReferences(input.thingReferences).map((ref) => ref.thingId));
     },
     onMutate: async (input: PostCommentInput) => {
-      const { thingId: targetThingId, body: bodyText, attachments, draftRevision } = input;
+      const { thingId: targetThingId, body: bodyText, attachments, draftRevision, thingReferences } = input;
       // Captured here (effectively at mutate()-dispatch time -- onMutate
       // runs before mutationFn, with nothing awaited yet) and threaded
       // through context so onError/onSettled use this SAME captured
@@ -129,6 +131,7 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         authorActorId: null,
         sending: true,
         attachments,
+        thingReferences,
       };
 
       // Preview sessions write the comment once, in mutationFn.
@@ -155,6 +158,7 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         thingId: targetThingId,
         submittedText: bodyText,
         submittedAttachments: attachments,
+        submittedReferences: thingReferences,
         draftRevision,
       };
     },
@@ -181,7 +185,7 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         context?.thingId &&
         context.epoch !== undefined &&
         isEpochCurrent(qc, context.epoch) &&
-        (context.submittedText || context.submittedAttachments?.length)
+        (context.submittedText || context.submittedAttachments?.length || context.submittedReferences?.length)
       ) {
         // T02: compares the draft's CURRENT revision against the one
         // captured at submit time, not "is the draft empty right now" --
@@ -203,6 +207,9 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
             value: context.submittedText ?? "",
             attachments: context.submittedAttachments,
           });
+          if (context.submittedReferences?.length) {
+            setDraft(qc, "thing-comment-references", context.thingId, { value: context.submittedReferences });
+          }
         }
       }
       if (context?.epoch !== undefined && isEpochCurrent(qc, context.epoch)) toast.error(domainErrorMessage(err));
@@ -231,6 +238,7 @@ export function useThingComments(thingId: string | null, loadActivity = true) {
         avatarUrl: null,
         authorActorId: null,
         attachments: c.attachments,
+        thingReferences: sanitizeThingReferences((c.thingReferenceIds ?? []).map((thingId) => ({ version: 1, thingId }))),
         sending: undefined,
       })),
       activity: getActivity(thingId).map((e) => ({ id: e.id, event: e.event, at: e.at })),

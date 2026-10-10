@@ -13,6 +13,7 @@ let requests = 0;
 mock.module("@/hooks/useSession", { namedExports: { useSession: () => ({ user, session: user ? { user } : null }) } });
 mock.module("@/lib/session-mode", { namedExports: { isPreviewSession: () => preview } });
 mock.module("@/features/things/local-state", { namedExports: { directoryPeople: () => [] } });
+mock.module("@/features/lists/use-lists", { namedExports: { useLists: () => ({ lists: [] }) } });
 mock.module("@/features/demo/identities", { namedExports: { demoDirectory: () => [] } });
 mock.module("@/features/people/directory", { namedExports: { matchAvatarByName: () => null } });
 mock.module("@/integrations/supabase/client", { namedExports: { supabase: {

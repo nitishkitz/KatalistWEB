@@ -5,6 +5,7 @@ import { resolveActorPeople } from "@/features/people/resolve-actors";
 import type { ThingActivity, ThingComment } from "./use-thing-comments";
 import type { ThingFile } from "@/domain/thing";
 import { signThingAttachmentPaths } from "./attachments";
+import { sanitizeThingReferences } from "@/features/thing-references/thing-reference";
 
 function parseCommentBody(rawBody: string): { body: string; attachments?: ThingFile[] } {
   const match = rawBody.match(/\n?<!--attachments:(.*?)-->/s);
@@ -32,7 +33,7 @@ export async function fetchThingCommentsPage(
 ): Promise<HistoryPage<ThingComment>> {
   const { data, error } = await withReadDeadline(signal, async (combined) => {
     let request = supabase.from("thing_comments")
-      .select("id, body, created_at, author_actor_id")
+      .select("id, body, created_at, author_actor_id, thing_reference_ids")
       .eq("thing_id", thingId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
@@ -57,6 +58,7 @@ export async function fetchThingCommentsPage(
       avatarUrl: person?.avatarUrl ?? null,
       at: row.created_at,
       authorActorId: row.author_actor_id,
+      thingReferences: sanitizeThingReferences((row.thing_reference_ids ?? []).map((thingId) => ({ version: 1, thingId }))),
       attachments: parsed.attachments?.map((file) => {
         if (!file.storageKey) return file;
         const result = signed.get(file.storageKey);

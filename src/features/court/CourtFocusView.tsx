@@ -320,6 +320,7 @@ export function CourtFocusView({
                   type="button"
                   ref={isSelected ? selectedCardRef : null}
                   key={thing.id}
+                  data-thing-id={thing.id}
                   onClick={() => handleSelect(thing)}
                   style={
                     isSelected

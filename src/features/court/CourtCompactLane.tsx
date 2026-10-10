@@ -102,6 +102,7 @@ export function CourtCompactLane({ lane, things, onOpen, collapsed = false }: Co
           return (
             <button
               key={thing.id}
+              data-thing-id={thing.id}
               type="button"
               onClick={(event) => onOpen(thing, event.currentTarget)}
               className="w-full rounded-xl border border-border/60 bg-white p-3 text-left outline-none transition-all duration-200 hover:border-border focus-visible:ring-2 focus-visible:ring-ring"

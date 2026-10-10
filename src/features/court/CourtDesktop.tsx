@@ -74,6 +74,9 @@ type CourtDesktopProps = {
    *  `CourtPage` for why two independent instances would be unsafe. */
   catchup: UseCatchup;
   morningBrief: UseMorningBrief;
+  /** A Thing resolved from a `/?thing=<id>` permalink; opened once in the detail modal, then reported handled. */
+  permalinkThing?: Thing | null;
+  onPermalinkHandled?: () => void;
 };
 
 // Supported quick filter presets: "All", "Due", "Waiting", "In Progress"
@@ -197,6 +200,8 @@ export function CourtDesktop({
   onSelect,
   catchup,
   morningBrief,
+  permalinkThing,
+  onPermalinkHandled,
 }: CourtDesktopProps) {
   const [filters, setFilters] = useState<CourtFilterState>(DEFAULT_COURT_FILTERS);
   const [query, setQuery] = useState("");
@@ -442,6 +447,16 @@ export function CourtDesktop({
     const lane: FocusViewTabId = thing.assignee.id === myActorId ? laneOf(thing) : "theirs";
     setModalSelection({ lane, thing });
   };
+
+  // Open a permalinked Thing once. No hero animation: there is no origin card for a link.
+  useEffect(() => {
+    if (!permalinkThing) return;
+    setHeroRect(null);
+    const lane: FocusViewTabId = permalinkThing.assignee.id === myActorId ? laneOf(permalinkThing) : "theirs";
+    setModalSelection({ lane, thing: permalinkThing });
+    onPermalinkHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permalinkThing?.id]);
 
   const [showBucketsPanel, setShowBucketsPanel] = useState(false);
   // E01: at 1024-1279px (Tailwind's lg but not yet xl), the lanes grid

@@ -8,6 +8,7 @@ export function ThingCard({ thing, onSelect }: { thing: Thing; onSelect?: (t: Th
   return (
     <button
       type="button"
+      data-thing-id={thing.id}
       onClick={() => onSelect?.(thing)}
       className="flex w-full flex-col gap-2 rounded-xl border border-border bg-card p-3 text-left md:hidden"
     >

@@ -1055,6 +1055,7 @@ export type Database = {
           kind: string
           list_id: string
           mentioned_profile_ids: string[]
+          thing_reference_ids: string[]
           pinned_at: string | null
           updated_at: string
         }
@@ -1068,6 +1069,7 @@ export type Database = {
           kind?: string
           list_id: string
           mentioned_profile_ids?: string[]
+          thing_reference_ids?: string[]
           pinned_at?: string | null
           updated_at?: string
         }
@@ -1081,6 +1083,7 @@ export type Database = {
           kind?: string
           list_id?: string
           mentioned_profile_ids?: string[]
+          thing_reference_ids?: string[]
           pinned_at?: string | null
           updated_at?: string
         }
@@ -1742,6 +1745,7 @@ export type Database = {
           deleted_at: string | null
           id: string
           mention_ids: string[]
+          thing_reference_ids: string[]
           thing_id: string
           updated_at: string
         }
@@ -1752,6 +1756,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           mention_ids?: string[]
+          thing_reference_ids?: string[]
           thing_id: string
           updated_at?: string
         }
@@ -1762,6 +1767,7 @@ export type Database = {
           deleted_at?: string | null
           id?: string
           mention_ids?: string[]
+          thing_reference_ids?: string[]
           thing_id?: string
           updated_at?: string
         }

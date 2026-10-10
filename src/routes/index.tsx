@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { useThing } from "@/features/things/use-thing";
+import { isThingId, THING_PERMALINK_PARAM } from "@/features/thing-references/thing-reference";
 import {
   AlertCircle,
   ChevronDown,
@@ -39,6 +42,11 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "What needs your attention." },
     ],
   }),
+  // `/?thing=<id>` is the canonical Thing permalink; malformed IDs are dropped rather than trusted.
+  validateSearch: (search: Record<string, unknown>): { thing?: string } => {
+    const id = search[THING_PERMALINK_PARAM];
+    return isThingId(id) ? { thing: id } : {};
+  },
   component: CourtPage,
 });
 
@@ -182,6 +190,21 @@ function CourtPage() {
     completedCount,
   } = useCourt();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const { thing: permalinkId } = Route.useSearch();
+  const { thing: permalinkThing, isLoading: permalinkLoading } = useThing(permalinkId ?? null);
+  const clearPermalink = useCallback(() => void navigate({ to: "/", search: {}, replace: true }), [navigate]);
+  useEffect(() => {
+    if (!permalinkId || permalinkLoading) return;
+    if (!permalinkThing) {
+      toast.error("That Thing was deleted or you no longer have access.");
+      clearPermalink();
+      return;
+    }
+    // Mobile uses ID selection; desktop receives the Thing through `permalinkThing` below.
+    setSelectedId(permalinkThing.id);
+  }, [permalinkId, permalinkLoading, permalinkThing, clearPermalink]);
+  const { thing: fetchedSelected } = useThing(selectedId);
   const [filter, setFilter] = useState<QuickFilter>("all");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"due" | "updated" | "importance" | "pace">("due");
@@ -242,7 +265,7 @@ function CourtPage() {
     all.find((t) => t.id === selectedId) ??
     now.concat(next, later, theirs).find((t) => t.id === selectedId) ??
     catchup.moments.map((m) => m.thing).find((t) => t.id === selectedId) ??
-    null;
+    (fetchedSelected?.id === selectedId ? fetchedSelected : null);
 
   const sortThings = useCallback(
     (list: Thing[]) => {
@@ -324,6 +347,8 @@ function CourtPage() {
         onSelect={(thing) => setSelectedId(thing.id)}
         catchup={catchup}
         morningBrief={desktopMorningBrief}
+        permalinkThing={isDesktopViewport ? permalinkThing : null}
+        onPermalinkHandled={clearPermalink}
       />
 
       <div className="lg:hidden">

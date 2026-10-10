@@ -18,6 +18,7 @@ import {
   type ChatSendInput,
 } from "./chat-operations";
 import { mergeChatFeed } from "./chat-feed-model";
+import { sanitizeThingReferences, type ThingReference } from "@/features/thing-references/thing-reference";
 
 const CHAT_BUCKET = "list-chat";
 const isConfirmedAccessLoss = (error: unknown) => error != null &&
@@ -43,6 +44,7 @@ export type ListChatMessage = {
   attachment: ChatAttachment | null;
   pinnedAt: string | null;
   mentionedProfileIds: string[];
+  thingReferences: ThingReference[];
   delivery?: "pending" | "sent" | "failed";
   error?: string | null;
 };
@@ -51,6 +53,7 @@ export type SendMessageRequest = {
   body: string;
   attachment?: ChatAttachment | null;
   mentionedProfileIds?: string[];
+  thingReferences?: ThingReference[];
   /** The draft revision captured when the composer cleared its submitted text. */
   draftRevision?: number;
 };
@@ -133,13 +136,14 @@ export function useListMessages(listId: string) {
     const body = typeof request === "string" ? request : request.body;
     const attachment = typeof request === "string" ? null : request.attachment ?? null;
     const mentionedProfileIds = typeof request === "string" ? [] : request.mentionedProfileIds ?? [];
+    const thingReferences = typeof request === "string" ? [] : sanitizeThingReferences(request.thingReferences);
     const draftRevision = typeof request === "string" ? undefined : request.draftRevision;
     const targetListId = listId;
     const epoch = getIdentityEpoch(qc).epoch;
     if (hidden || accessLost) return Promise.reject(new Error("That List isn’t available."));
-    if (!body.trim() && !attachment) return Promise.reject(new Error("Write a message or attach a file."));
+    if (!body.trim() && !attachment && thingReferences.length === 0) return Promise.reject(new Error("Write a message, attach a file, or add a Thing."));
     if (preview) {
-      addListMessage(targetListId, body);
+      addListMessage(targetListId, body, "Me", thingReferences.map((ref) => ref.thingId));
       return Promise.resolve({ id: crypto.randomUUID(), inserted: true });
     }
     if (!user?.id) return Promise.reject(new Error("Sign in to chat."));
@@ -147,11 +151,13 @@ export function useListMessages(listId: string) {
       id: crypto.randomUUID(), listId: targetListId, authorId: user.id, epoch,
       body: body.trim(), kind: "message", attachment,
       mentionedProfileIds: [...new Set(mentionedProfileIds)], draftRevision,
+      thingReferenceIds: thingReferences.map((ref) => ref.thingId),
     };
     return execute(input).catch((error: unknown) => {
       if (draftRevision !== undefined && isEpochCurrent(qc, epoch) &&
           getDraftRevision(qc, "list-chat", targetListId) === draftRevision) {
         setDraft(qc, "list-chat", targetListId, { value: body, attachments: attachment ? [attachment] : undefined }, epoch);
+        if (thingReferences.length) setDraft(qc, "list-chat-references", targetListId, { value: thingReferences }, epoch);
         markChatOperationDraftRestored(qc, input.id, getDraftRevision(qc, "list-chat", targetListId));
       }
       throw error;
@@ -164,7 +170,7 @@ export function useListMessages(listId: string) {
     if (hidden || accessLost || preview || !user?.id) return;
     await execute({
       id: crypto.randomUUID(), listId: targetListId, authorId: user.id, epoch,
-      body, kind: "system", attachment: null, mentionedProfileIds: [],
+      body, kind: "system", attachment: null, mentionedProfileIds: [], thingReferenceIds: [],
     });
   };
 
@@ -208,7 +214,7 @@ export function useListMessages(listId: string) {
   });
   const messages: ListChatMessage[] = hidden || accessLost ? [] : preview ? getListMessages(listId).map((m) => ({
     id: m.id, body: m.body, author: m.author, authorId: null, avatarUrl: null, at: m.at,
-    kind: m.kind ?? "message", attachment: m.attachment ?? null, pinnedAt: m.pinnedAt, mentionedProfileIds: [], delivery: "sent" as const,
+    kind: m.kind ?? "message", attachment: m.attachment ?? null, pinnedAt: m.pinnedAt, mentionedProfileIds: [], thingReferences: sanitizeThingReferences((m.thingReferenceIds ?? []).map((thingId) => ({ version: 1, thingId }))), delivery: "sent" as const,
   })) : merged;
 
   return {

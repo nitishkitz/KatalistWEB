@@ -12,6 +12,8 @@ export type ChatSendInput = {
   kind: "message" | "system";
   attachment: ChatAttachment | null;
   mentionedProfileIds: string[];
+  /** Source Thing IDs, in display order. Separate from people mentions; sending them notifies no one. */
+  thingReferenceIds: string[];
   /** Two mounted composers submitting one draft revision are one operation. */
   draftRevision?: number;
 };
@@ -98,7 +100,7 @@ export function acknowledgeChatOperations(qc: QueryClient, listId: string, fetch
 
 function sameMessage(row: {
   id: string; list_id: string; author_profile_id: string; body: string; kind: string;
-  attachment: unknown; mentioned_profile_ids: string[] | null;
+  attachment: unknown; mentioned_profile_ids: string[] | null; thing_reference_ids: string[] | null;
 }, input: ChatSendInput): boolean {
   const storedAttachment = row.attachment as { key?: string; name?: string; mime?: string | null; size?: number | null } | null;
   return row.id === input.id && row.list_id === input.listId && row.author_profile_id === input.authorId &&
@@ -107,7 +109,8 @@ function sameMessage(row: {
     (storedAttachment?.name ?? null) === (input.attachment?.name ?? null) &&
     (storedAttachment?.mime ?? null) === (input.attachment?.mime ?? null) &&
     (storedAttachment?.size ?? null) === (input.attachment?.size ?? null) &&
-    JSON.stringify([...(row.mentioned_profile_ids ?? [])].sort()) === JSON.stringify([...input.mentionedProfileIds].sort());
+    JSON.stringify([...(row.mentioned_profile_ids ?? [])].sort()) === JSON.stringify([...input.mentionedProfileIds].sort()) &&
+    JSON.stringify(row.thing_reference_ids ?? []) === JSON.stringify(input.thingReferenceIds ?? []);
 }
 
 async function insertOrRecover(input: ChatSendInput): Promise<ChatSendResult> {
@@ -122,6 +125,7 @@ async function insertOrRecover(input: ChatSendInput): Promise<ChatSendResult> {
       mime: input.attachment.mime, size: input.attachment.size,
     } : null,
     mentioned_profile_ids: input.mentionedProfileIds,
+    thing_reference_ids: input.thingReferenceIds ?? [],
   };
   const { error } = await supabase.from("list_messages").insert(row);
   if (!error) return { id: input.id, inserted: true };
@@ -130,7 +134,7 @@ async function insertOrRecover(input: ChatSendInput): Promise<ChatSendResult> {
   // the same primary key. RLS gates this read; a collision is accepted only
   // when the authorized row matches the complete logical operation.
   const existing = await supabase.from("list_messages")
-    .select("id,list_id,author_profile_id,body,kind,attachment,mentioned_profile_ids")
+    .select("id,list_id,author_profile_id,body,kind,attachment,mentioned_profile_ids,thing_reference_ids")
     .eq("id", input.id).maybeSingle();
   if (existing.error) throw existing.error;
   if (existing.data) {

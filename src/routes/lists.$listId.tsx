@@ -52,6 +52,9 @@ import { cn } from "@/lib/utils";
 import { CodeActivityBoundary } from "@/features/code-activity/CodeActivityBoundary";
 import { useCodeActivityEnabled } from "@/features/code-activity/use-code-activity-enabled";
 import { DesignsBoundary } from "@/features/designs/DesignsBoundary";
+import { QaBoundary } from "@/features/qa/QaBoundary";
+import { useQaEnabled } from "@/features/qa/use-qa-enabled";
+import type { QaReturnContext } from "@/features/qa/QaRoot";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,13 +66,15 @@ export const Route = createFileRoute("/lists/$listId")({
   component: ListDetailPage,
 });
 
-type TabType = "things" | "chat" | "designs" | "code" | "members";
+type TabType = "things" | "chat" | "designs" | "code" | "qa" | "members";
 type DueFilterType = "all" | "today" | "overdue" | "no_due";
 
 // Code Activity is loaded only when its tab is first shown. Development preview only.
 const CodeActivityRoot = lazy(() => import("@/features/code-activity/CodeActivityRoot"));
 // Designs is loaded only when its tab is first shown.
 const DesignsRoot = lazy(() => import("@/features/designs/DesignsRoot"));
+// Manual QA is loaded only when its tab is first shown. Off by default in production builds (see qa-gate.ts).
+const QaRoot = lazy(() => import("@/features/qa/QaRoot"));
 
 function ListDetailPage() {
   const { listId } = Route.useParams();
@@ -208,6 +213,14 @@ function ListDetailPage() {
 
   const [tab, setTab] = useState<TabType>("things");
   const codeActivityEnabled = useCodeActivityEnabled();
+  const qaEnabled = useQaEnabled();
+  // Where QA was when a member opened a defect Thing, so "Back to QA" restores that run and result.
+  const [qaContext, setQaContext] = useState<QaReturnContext | null>(null);
+  const [qaReturn, setQaReturn] = useState<QaReturnContext | null>(null);
+  useEffect(() => {
+    // The way back only exists while the member is still looking at the Thing they opened from QA.
+    if (tab !== "things") setQaReturn(null);
+  }, [tab]);
   // Deep link from a Thing's "View in Designs": ?tab=designs&design=<id>. Reacts to search changes on
   // this already-mounted route (navigating from a Thing on this same List does not remount it), then
   // clears the params so the same link works again later.
@@ -412,6 +425,17 @@ function ListDetailPage() {
     setSelectedId(null);
   };
   const closeSelectedThing = () => setSelectedId(null);
+  // Opens a Thing from QA with the same selection/filter reset the rest of the page uses, and remembers the way back.
+  const openThingFromQa = (thingId: string, ctx: QaReturnContext) => {
+    const thing = listThings.find((t) => t.id === thingId);
+    setQaReturn(ctx);
+    clearThingFilters();
+    setNavSearch("");
+    if (thing) setNavLane(laneOf(thing));
+    setSelectedFile(null);
+    setSelectedId(thingId);
+    setTab("things");
+  };
   const clearThingFilters = () => {
     setThingsFilter("all");
     setDueFilter("all");
@@ -716,6 +740,7 @@ function ListDetailPage() {
                 ["chat", "Chat"],
                 ["designs", "Designs"],
                 ...(codeActivityEnabled ? ([["code", "Code Activity"]] as const) : []),
+                ...(qaEnabled ? ([["qa", "QA"]] as const) : []),
                 ["members", "Members & Permissions"],
               ] as ReadonlyArray<readonly [TabType, string]>
             ).map(([id, label]) => {
@@ -743,6 +768,18 @@ function ListDetailPage() {
         {/* ========================================================================= */}
         {/* TAB 1: THINGS */}
         {/* ========================================================================= */}
+        {tab === "things" && qaReturn && qaEnabled && (
+          <div className="mb-2 flex items-center gap-2 rounded-[10px] border border-[#eaeffa] bg-white px-3 py-2 text-[13px]">
+            <button
+              type="button"
+              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md px-2 font-medium text-[#975ee2] outline-none hover:bg-[#f3ecfc] focus-visible:ring-2 focus-visible:ring-[#975ee2]"
+              onClick={() => { setQaContext(qaReturn); setTab("qa"); setQaReturn(null); }}
+            >
+              ← Back to QA
+            </button>
+            <span className="text-[#6a769c]">You opened this Thing from a QA result.</span>
+          </div>
+        )}
         {tab === "things" && (
           <ListThingsSection
             list={list}
@@ -972,6 +1009,7 @@ function ListDetailPage() {
                   return (
                     <button
                       key={thing.id}
+                      data-thing-id={thing.id}
                       type="button"
                       onClick={() => {
                         setTab("things");
@@ -1072,6 +1110,41 @@ function ListDetailPage() {
                 />
               </Suspense>
             </CodeActivityBoundary>
+          </div>
+        )}
+
+        {/* Manual QA: access, versioned cases, build-specific runs, defects and history. */}
+        {tab === "qa" && qaEnabled && (
+          <div className="pb-8 pt-1">
+            <QaBoundary resetKey={listId}>
+              <Suspense
+                fallback={
+                  <div role="status" aria-label="Loading QA" className="rounded-[10px] bg-white p-4 text-[13px] text-[#6a769c]">
+                    Loading QA…
+                  </div>
+                }
+              >
+                <QaRoot
+                  listId={listId}
+                  listRole={list.role}
+                  listContext={list.context}
+                  members={list.members.flatMap((m) =>
+                    m.profileId ? [{ profileId: m.profileId, name: m.name, initials: m.initials, avatarUrl: m.avatarUrl }] : [],
+                  )}
+                  things={listThings.map((t) => ({
+                    id: t.id,
+                    title: t.title,
+                    workStatus: t.workStatus,
+                    acknowledgement: t.acknowledgement,
+                    ownerName: t.owner.name,
+                    assigneeName: t.assignee.name,
+                  }))}
+                  initialContext={qaReturn ?? qaContext}
+                  onContextChange={setQaContext}
+                  onOpenThing={openThingFromQa}
+                />
+              </Suspense>
+            </QaBoundary>
           </div>
         )}
 

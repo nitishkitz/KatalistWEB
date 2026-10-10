@@ -10,6 +10,7 @@ import { GhostCard } from "@/features/doorman/GhostCard";
 import { MeetingReminderCard } from "@/features/lists/MeetingReminderCard";
 import { ChatHeadsDock } from "@/features/hub/ChatHeadsDock";
 import { usePresence } from "@/features/people/presence";
+import { GlobalThingContextMenu } from "@/features/thing-references/GlobalThingContextMenu";
 import { requestMagicBoxFocus, tryHandleMagicBoxCapture } from "@/features/court/magic-box-entry";
 
 interface AppShellProps {
@@ -63,6 +64,7 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
 
   return (
     <div className="flex min-h-screen w-full flex-col bg-background">
+      <GlobalThingContextMenu />
       {!hideTopNav && <TopNav />}
       <AppSidebar hideBottomNav={hideBottomNav} />{/* mobile bottom tab bar only */}
       <main className={`flex-1 min-w-0 ${hideBottomNav ? "" : "pb-16 md:pb-0"}`}>

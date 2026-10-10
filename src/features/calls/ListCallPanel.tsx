@@ -42,6 +42,9 @@ import { describeUploadError } from "@/lib/upload-errors";
 import { PdfCanvas } from "@/features/things/PdfCanvas";
 import { useListMessages } from "@/features/lists/use-list-messages";
 import { useSessionDraft } from "@/features/drafts/use-session-draft";
+import { useReferenceDraft } from "@/features/thing-references/use-reference-draft";
+import { ThingReferenceDraftTray } from "@/features/thing-references/ThingReferenceDraftTray";
+import { ThingReferenceList } from "@/features/thing-references/ThingReferencesSection";
 import { getDraftRevision } from "@/features/drafts/session-drafts";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { AnnotateCanvas, type AnnotateCanvasHandle } from "./AnnotateCanvas";
@@ -192,6 +195,7 @@ export function ListCallPanel({
   const chatDraft = useSessionDraft("list-chat", listId, "");
   const draft = chatDraft.value;
   const setDraft = chatDraft.write;
+  const referenceDraft = useReferenceDraft("list-chat-references", listId);
   const chat = useListMessages(listId);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const nearBottomRef = useRef(true);
@@ -889,6 +893,7 @@ export function ListCallPanel({
                       <div className="min-w-0 flex-1 text-[12px]">
                         <span className="font-semibold text-[#000533]">{m.author}</span>
                         {m.body ? <span className="text-[#3d3f74]"> {m.body}</span> : null}
+                        {m.thingReferences?.length ? <ThingReferenceList references={m.thingReferences} className="mt-1 grid gap-2" /> : null}
                         {m.attachment ? (
                           m.attachment.mime?.startsWith("image/") && m.attachment.url ? (
                             <a href={m.attachment.url} target="_blank" rel="noreferrer" className="mt-1 block w-fit">
@@ -917,20 +922,24 @@ export function ListCallPanel({
                 <button type="button" onClick={() => chatDraft.write(draft, [])} className="text-destructive underline">Remove</button>
               </div>
             ) : null}
+            <ThingReferenceDraftTray references={referenceDraft.references} onRemove={referenceDraft.remove} className="mx-2 grid gap-2" />
             <form
               className="flex items-center gap-1.5 border-t border-[#eef0f6] p-2"
               onSubmit={(e) => {
                 e.preventDefault();
                 const text = draft.trim();
-                if ((!text && !stagedChatAttachment) || chat.send.isPending) return;
+                const stagedReferences = referenceDraft.references;
+                if ((!text && !stagedChatAttachment && stagedReferences.length === 0) || chat.send.isPending) return;
                 chatDraft.clear();
+                referenceDraft.clear();
                 const draftRevision = getDraftRevision(qc, "list-chat", listId);
-                void chat.send.mutateAsync({ body: text, attachment: stagedChatAttachment ?? null, draftRevision }).catch(() => {});
+                void chat.send.mutateAsync({ body: text, attachment: stagedChatAttachment ?? null, thingReferences: stagedReferences, draftRevision }).catch(() => {});
               }}
             >
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
+                onPaste={referenceDraft.onPaste}
                 placeholder="Message the list…"
                 className="min-w-0 flex-1 rounded-lg border border-border px-2.5 py-1.5 text-[12px] outline-none focus:border-primary"
               />

@@ -5,7 +5,8 @@ import { Search, MessageCircle, Phone, UserPlus, Check, X, Mail, Copy, Users } f
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
-import { useTeam, type TeamMember } from "@/features/people/use-team";
+import type { TeamMember } from "@/features/people/use-team";
+import { useGoogleContacts } from "@/features/contacts/use-google-contacts";
 import { usePresence } from "@/features/people/presence";
 import { isUuid } from "@/features/things/rpc";
 import {
@@ -30,7 +31,10 @@ type Tab = "people" | "contacts" | "requests" | "invites";
 export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const navigate = useNavigate();
   const online = usePresence();
-  const { members } = useTeam();
+  const googleContacts = useGoogleContacts(open);
+  const members = useMemo<TeamMember[]>(() => googleContacts.people.map(person => ({
+    ...person, email: null, phone: null, connectedSince: null,
+  })), [googleContacts.people]);
   const { context } = useAppContext();
   const { refetch: refetchConversations } = useConversations();
   const { contacts } = useContacts();
@@ -75,7 +79,8 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const realMembers = useMemo(() => members.filter((member) => isUuid(member.id)), [members]);
 
-  // When the query is an email that matches nobody on Katalist, offer to invite it.
+  // Search only the user's imported contacts. An absent match says nothing
+  // about whether that email is registered elsewhere in Katalist.
   const trimmedQuery = query.trim();
   const isEmailQuery = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedQuery);
   const showInviteCta = isEmailQuery && people.length === 0;
@@ -204,7 +209,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   };
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: "people", label: "All people" },
+    { id: "people", label: "Google Contacts" },
     { id: "contacts", label: "Contacts", count: contacts.length },
     { id: "requests", label: "Requests", count: incoming.length },
     { id: "invites", label: "Invites", count: invitations.filter((i) => i.status === "pending").length },
@@ -252,6 +257,22 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           {/* ALL PEOPLE */}
           {tab === "people" && (
             <div className={cn("relative flex min-h-0 flex-col", useScrollableResults ? "min-h-full" : "h-full")}>
+              <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[14px] font-semibold text-[#000533]">Your people on Katalist</p>
+                  <p className="text-[12px] text-[#6a769c]">Only people matched from your Google Contacts appear here.</p>
+                  {googleContacts.syncedAt ? <p className="mt-1 text-[12px] text-[#6a769c]" role="status">{googleContacts.matchedCount} people matched from {googleContacts.contactCount} contacts · Synced {new Date(googleContacts.syncedAt).toLocaleString()}</p> : null}
+                </div>
+                <button type="button" onClick={googleContacts.sync}
+                  disabled={!googleContacts.configured || !googleContacts.ready || googleContacts.syncing}
+                  className="rounded-[9px] bg-[#8454d8] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50">
+                  {googleContacts.syncing ? "Syncing Google Contacts…" : googleContacts.syncedAt ? "Sync Google Contacts" : "Connect Google Contacts"}
+                </button>
+              </div>
+              {!googleContacts.isLoading && !googleContacts.configured && !googleContacts.error ? <p className="mb-3 text-[12px] text-[#6a769c]">Google Contacts sync is not configured yet.</p> : null}
+              {googleContacts.error ? <div className="mb-3 flex items-center gap-3 text-[12px] text-red-700" role="alert"><span>{googleContacts.error}</span><button type="button" onClick={googleContacts.retry} className="underline">Retry</button></div> : null}
+              {googleContacts.isLoading ? <p className="mb-3 text-[12px] text-[#6a769c]" role="status">Loading your contacts…</p> : null}
+              {!googleContacts.isLoading && !googleContacts.error && members.length === 0 ? <p className="mb-3 text-[12px] text-[#6a769c]">{googleContacts.syncedAt ? "None of your Google Contacts matched a Katalist account." : "Connect Google Contacts to find people you already know."}</p> : null}
               <label className="mx-auto mb-3 flex h-11 w-full max-w-[760px] shrink-0 items-center gap-3 rounded-[12px] border border-[#ebecf7] bg-[#fbfaff] px-4 shadow-[0_5px_16px_rgba(60,35,100,0.06)] transition-[border-color,box-shadow] duration-200 focus-within:border-[#b590ee] focus-within:shadow-[0_8px_24px_rgba(109,69,173,0.12)]">
                 <Search className="h-4 w-4 text-[#8487a7]" />
                 <input
@@ -260,7 +281,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     setQuery(e.target.value);
                     setSelectedPersonId(null);
                   }}
-                  placeholder="Search by name, or type an email to invite"
+                  placeholder="Search your contacts, or type an email to invite"
                   className="min-w-0 flex-1 bg-transparent text-[14px] text-[#000533] outline-none placeholder:text-[#8487a7]"
                 />
                 {query ? <button type="button" onClick={() => { setQuery(""); setSelectedPersonId(null); }} aria-label="Clear search" className="rounded-full p-1 text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#6638ec]"><X className="h-4 w-4" /></button> : null}
@@ -274,7 +295,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-[#000533]">{trimmedQuery}</p>
-                    <p className="text-[12px] text-[#6a769c]">Not on Katalist yet — invite by email</p>
+                    <p className="text-[12px] text-[#6a769c]">Not in your synced contacts — invite by email</p>
                   </div>
                   <button
                     type="button"
@@ -339,7 +360,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
           {tab === "contacts" && (
             <div className="grid h-full min-h-0 content-start grid-cols-1 gap-1 overflow-hidden xl:grid-cols-2 xl:gap-x-6">
               {contacts.length === 0 ? (
-                <Empty icon={Users} title="No contacts yet" hint="Connect with people from the All people tab." />
+                <Empty icon={Users} title="No contacts yet" hint="Sync Google Contacts, then connect with people you know." />
               ) : (
                 contacts.map((c) => (
                   <Row

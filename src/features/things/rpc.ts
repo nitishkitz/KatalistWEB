@@ -3,7 +3,10 @@ import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
 import type { Importance, Pace, ThingFile, WorkStatus } from "@/domain/thing";
 import { isPreviewMode } from "@/lib/session-mode";
 import { extractErrorMessage, isNetworkError } from "@/lib/domain-error";
+import { toast } from "sonner";
 import { authedFetch } from "@/lib/authed-fetch";
+import { rpcAddThingReferences } from "@/features/thing-references/rpc";
+import type { ThingReference } from "@/features/thing-references/thing-reference";
 import { DEMO_ACTOR_BY_KEY } from "@/features/demo/identities";
 import {
   addCommentLocal,
@@ -400,6 +403,8 @@ export async function rpcCreateThing(input: {
   dueAt?: string;
   dueHasTime?: boolean;
   files?: ThingFile[];
+  /** Source Things this new Thing refers to. Read-only links: the sources are never changed. */
+  references?: ThingReference[];
 }) {
   return runDomainMutation({
     live: async () => {
@@ -423,6 +428,15 @@ export async function rpcCreateThing(input: {
           addThingFileLocal(created.id, input.files[i]);
         }
       }
+      if (input.references?.length && created?.id) {
+        // The Thing already exists, so a reference failure must not look like a failed create (a retry would duplicate it).
+        try {
+          await rpcAddThingReferences(created.id, input.references);
+        } catch (err) {
+          console.error("Could not save Thing references:", err);
+          toast.error("The Thing was created, but its references could not be saved.");
+        }
+      }
       return created;
     },
     preview: () => {
@@ -436,6 +450,7 @@ export async function rpcCreateThing(input: {
         dueHasTime: input.dueHasTime,
         files: input.files,
       });
+      if (input.references?.length && created?.id) void rpcAddThingReferences(created.id, input.references);
       return created as never;
     },
   });
@@ -717,9 +732,9 @@ export async function rpcAddThingFile(thingId: string, file: ThingFile) {
   }
 }
 
-export async function rpcComment(thingId: string, body: string, attachments?: ThingFile[], mentionIds?: string[]) {
+export async function rpcComment(thingId: string, body: string, attachments?: ThingFile[], mentionIds?: string[], thingReferenceIds?: string[]) {
   if (isPreviewMode()) {
-    addCommentLocal(thingId, body, undefined, attachments);
+    addCommentLocal(thingId, body, undefined, attachments, thingReferenceIds);
     return;
   }
   if (attachments?.some((file) => !file.storageKey)) {
@@ -760,6 +775,7 @@ export async function rpcComment(thingId: string, body: string, attachments?: Th
       body: fullBody,
       author_actor_id: actorId,
       ...(mentionIds?.length ? { mention_ids: [...new Set(mentionIds)] } : {}),
+      ...(thingReferenceIds?.length ? { thing_reference_ids: thingReferenceIds } : {}),
     })
     .select("id")
     .single();

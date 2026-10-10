@@ -412,6 +412,7 @@ function BucketDetailPage() {
                 <li key={t.id}>
                   <button
                     type="button"
+                    data-thing-id={t.id}
                     disabled={Boolean(pendingReference)}
                     className="group relative flex w-full items-center gap-2.5 overflow-hidden rounded-xl px-2.5 py-2 text-left hover:bg-[#f7f3ff] focus-visible:bg-[#f7f3ff] focus-visible:outline-2 focus-visible:outline-[#975ee2] motion-safe:transition-[background-color,box-shadow] motion-safe:duration-200 hover:shadow-[inset_0_0_0_1px_#e7d8ff] cursor-pointer disabled:cursor-wait disabled:opacity-60"
                     onClick={() => void addBucketReference({ thingId: t.id }, "Referenced. The Thing itself did not change.")}
@@ -635,7 +636,7 @@ function BucketDetailPage() {
                 const comments = t.commentCount ?? t.unreadCommentCount ?? 0;
                 const files = t.attachmentCount ?? t.files?.length ?? 0;
                 return (
-                  <tr key={item.thingId} className="border-b border-[#f2f3f9] last:border-0 hover:bg-[#faf9fe]">
+                  <tr key={item.thingId} data-thing-id={item.thingId} className="border-b border-[#f2f3f9] last:border-0 hover:bg-[#faf9fe]">
                     <td className="px-3 py-1.5">
                       <button
                         type="button"

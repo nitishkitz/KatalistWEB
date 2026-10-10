@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getProfileIdentities } from "@/features/people/directory";
 import { HISTORY_PAGE_SIZE, historyCursorFilter, historyPage, type HistoryCursor, type HistoryPage } from "@/lib/history-pages";
 import { withReadDeadline } from "@/lib/read-request";
+import { sanitizeThingReferences } from "@/features/thing-references/thing-reference";
 import type { ListChatMessage, ChatAttachment } from "./use-list-messages";
 
 const CHAT_BUCKET = "list-chat";
@@ -18,6 +19,7 @@ type RawMessage = {
   attachment: RawAttachment | null;
   pinned_at: string | null;
   mentioned_profile_ids: string[] | null;
+  thing_reference_ids: string[] | null;
 };
 
 async function mapMessages(qc: QueryClient, rows: RawMessage[]): Promise<ListChatMessage[]> {
@@ -46,6 +48,7 @@ async function mapMessages(qc: QueryClient, rows: RawMessage[]): Promise<ListCha
       attachment,
       pinnedAt: row.pinned_at,
       mentionedProfileIds: row.mentioned_profile_ids ?? [],
+      thingReferences: sanitizeThingReferences((row.thing_reference_ids ?? []).map((thingId) => ({ version: 1, thingId }))),
       delivery: "sent",
     } satisfies ListChatMessage;
   }));
@@ -59,7 +62,7 @@ export async function fetchListMessagesPage(
 ): Promise<HistoryPage<ListChatMessage>> {
   const { data, error } = await withReadDeadline(signal, async (combined) => {
     let request = supabase.from("list_messages")
-      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
+      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids, thing_reference_ids")
       .eq("list_id", listId)
       .is("deleted_at", null)
       .order("created_at", { ascending: false })
@@ -88,7 +91,7 @@ export async function searchListMessagesPage(
   const pattern = `%${search.replace(/[\\%_]/g, "\\$&")}%`;
   const { data, error } = await withReadDeadline(signal, async (combined) => {
     let request = supabase.from("list_messages")
-      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
+      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids, thing_reference_ids")
       .eq("list_id", listId)
       .is("deleted_at", null)
       .ilike("body", pattern)
@@ -111,7 +114,7 @@ export async function fetchListAttachmentPage(
 ): Promise<HistoryPage<ListChatMessage>> {
   const { data, error } = await withReadDeadline(signal, async (combined) => {
     let request = supabase.from("list_messages")
-      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
+      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids, thing_reference_ids")
       .eq("list_id", listId)
       .is("deleted_at", null)
       .not("attachment", "is", null)
@@ -133,7 +136,7 @@ export async function fetchListSystemPage(
 ): Promise<HistoryPage<ListChatMessage>> {
   const { data, error } = await withReadDeadline(signal, async (combined) => {
     let request = supabase.from("list_messages")
-      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
+      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids, thing_reference_ids")
       .eq("list_id", listId)
       .eq("kind", "system")
       .is("deleted_at", null)
@@ -155,7 +158,7 @@ export async function fetchPinnedListMessagesPage(
 ): Promise<HistoryPage<ListChatMessage>> {
   const { data, error } = await withReadDeadline(signal, async (combined) => {
     let request = supabase.from("list_messages")
-      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids")
+      .select("id, body, created_at, author_profile_id, kind, attachment, pinned_at, mentioned_profile_ids, thing_reference_ids")
       .eq("list_id", listId)
       .is("deleted_at", null)
       .not("pinned_at", "is", null)

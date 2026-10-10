@@ -70,6 +70,7 @@ export function ThingRow({
 
   return (
     <tr
+      data-thing-id={thing.id}
       className="group cursor-pointer border-t border-border/80 hover:bg-muted/40"
       onClick={() => onSelect?.(thing)}
     >

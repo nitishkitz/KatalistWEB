@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ThingReferenceContextMenu } from "@/features/thing-references/ThingReferenceContextMenu";
+import { useReferenceDraft } from "@/features/thing-references/use-reference-draft";
+import { ThingReferencesSection } from "@/features/thing-references/ThingReferencesSection";
 import type * as React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
@@ -265,6 +268,7 @@ export function ThingDetailContent({
   // by thing.id, so this same component instance can be handed a different
   // Thing without unmounting).
   const [comment, setComment] = useState(() => getDraft<string>(qc, "thing-comment", thing?.id ?? "")?.value ?? "");
+  const commentReferences = useReferenceDraft("thing-comment-references", thing?.id ?? "");
   const [commentMentions, setCommentMentions] = useState<SelectedMention[]>([]);
   const [due, setDue] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -328,7 +332,7 @@ export function ThingDetailContent({
   // it isn't in commentAttachments yet, but it's just as much an
   // in-progress composer action.
   useBlockWhile(
-    Boolean(comment.trim()) || commentAttachments.length > 0 || processingCommentFiles > 0,
+    Boolean(comment.trim()) || commentAttachments.length > 0 || commentReferences.references.length > 0 || processingCommentFiles > 0,
     "thing-comment-draft",
   );
 
@@ -570,7 +574,8 @@ export function ThingDetailContent({
       ),
     ];
     const text = comment.trim();
-    if ((!text && commentAttachments.length === 0) || thread.post.isPending || processingCommentFiles > 0) return;
+    const stagedReferences = commentReferences.references;
+    if ((!text && commentAttachments.length === 0 && stagedReferences.length === 0) || thread.post.isPending || processingCommentFiles > 0) return;
     const atts = [...commentAttachments];
     const submittedThingId = thing.id;
     setComment("");
@@ -586,6 +591,7 @@ export function ThingDetailContent({
     // edit). clearDraft() is a no-op revision-wise if the effect already
     // beat it to the same clear -- see session-drafts.ts's own doc.
     clearDraft(qc, "thing-comment", submittedThingId);
+    commentReferences.clear();
     const submittedRevision = getDraftRevision(qc, "thing-comment", submittedThingId);
     thread.post.mutate(
       {
@@ -593,6 +599,7 @@ export function ThingDetailContent({
         body: text,
         mentionIds: mentionIds.length > 0 ? mentionIds : undefined,
         attachments: atts.length > 0 ? atts : undefined,
+        thingReferences: stagedReferences.length > 0 ? stagedReferences : undefined,
         draftRevision: submittedRevision,
         epoch: getIdentityEpoch(qc).epoch,
       },
@@ -788,6 +795,8 @@ export function ThingDetailContent({
             </div>
           ) : null}
 
+          <ThingReferencesSection thingId={thing.id} />
+
           <LinkPreviewCards texts={[thing.title, thing.description]} />
 
           <div className="py-3 empty:hidden">
@@ -850,6 +859,9 @@ export function ThingDetailContent({
             comment={comment}
             onCommentChange={setComment}
             onSubmitComment={submitComment}
+            stagedThingReferences={commentReferences.references}
+            onRemoveThingReference={commentReferences.remove}
+            onComposerPaste={commentReferences.onPaste}
             mentionPeople={mentionPeople}
             mentions={commentMentions}
             onMentionsChange={(value, next) => { setComment(value); setCommentMentions(next); }}
@@ -1055,6 +1067,7 @@ export function ThingDetailContent({
   ) : null;
 
   return (
+    <ThingReferenceContextMenu thingId={thing.id}>
     <div className="min-h-full">
       <ThingIdentityHeader
         variant="default"
@@ -1157,6 +1170,9 @@ export function ThingDetailContent({
         comment={comment}
         onCommentChange={setComment}
         onSubmitComment={submitComment}
+            stagedThingReferences={commentReferences.references}
+            onRemoveThingReference={commentReferences.remove}
+            onComposerPaste={commentReferences.onPaste}
         mentionPeople={mentionPeople}
         mentions={commentMentions}
         onMentionsChange={(value, next) => { setComment(value); setCommentMentions(next); }}
@@ -1172,5 +1188,6 @@ export function ThingDetailContent({
         moreActionsPanel={moreActionsPanel}
       />
     </div>
+    </ThingReferenceContextMenu>
   );
 }

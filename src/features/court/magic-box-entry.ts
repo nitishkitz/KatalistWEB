@@ -32,3 +32,29 @@ export async function tryHandleMagicBoxCapture(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Destination-aware insertion of Thing references. A Magic Box that is visible consumes the request through the same
+ * validation and dedupe path as paste. When none is visible the request stays queued, so the Magic Box that mounts after
+ * navigation to Court picks it up; callers should open Court when this returns false.
+ */
+export const MAGIC_BOX_REFERENCES_EVENT = "katalist:magic-box-references";
+type ReferenceInsertion = { thingId: string; version: 1 };
+let pendingReferences: ReferenceInsertion[] = [];
+let referencesConsumed = false;
+
+export function requestMagicBoxReferences(refs: ReferenceInsertion[]): boolean {
+  if (typeof window === "undefined" || refs.length === 0) return false;
+  pendingReferences = [...pendingReferences, ...refs];
+  referencesConsumed = false;
+  window.dispatchEvent(new Event(MAGIC_BOX_REFERENCES_EVENT));
+  return referencesConsumed;
+}
+
+/** Called by a visible Magic Box. Drains the queue once and marks the request handled. */
+export function takePendingMagicBoxReferences(): ReferenceInsertion[] {
+  const taken = pendingReferences;
+  pendingReferences = [];
+  if (taken.length) referencesConsumed = true;
+  return taken;
+}

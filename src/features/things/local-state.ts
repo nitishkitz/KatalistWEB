@@ -15,6 +15,7 @@ export type LocalComment = {
   author: string;
   at: string;
   attachments?: ThingFile[];
+  thingReferenceIds?: string[];
 };
 export type LocalActivity = { id: string; event: string; at: string; detail?: string };
 export type LocalMessage = {
@@ -25,6 +26,7 @@ export type LocalMessage = {
   pinnedAt: string | null;
   kind?: "message" | "system";
   attachment?: ChatAttachment | null;
+  thingReferenceIds?: string[];
 };
 export type LocalMeeting = {
   id: string;
@@ -456,6 +458,7 @@ export function addCommentLocal(
   body: string,
   author?: string,
   attachments?: ThingFile[],
+  thingReferenceIds?: string[],
 ) {
   if (!getThing(thingId)) throw new Error("That Thing isn’t available.");
   const row: LocalComment = {
@@ -464,6 +467,7 @@ export function addCommentLocal(
     author: author ?? currentDemoPerson().name,
     at: new Date().toISOString(),
     attachments,
+    thingReferenceIds,
   };
   comments.set(thingId, [row, ...(comments.get(thingId) ?? [])]);
   bump({ id: crypto.randomUUID(), event: "commented", at: row.at, thingId });
@@ -538,7 +542,7 @@ export function createListLocal(name: string, context: "work" | "home", descript
   return row;
 }
 
-export function addListMessage(listId: string, body: string, author = "Me") {
+export function addListMessage(listId: string, body: string, author = "Me", thingReferenceIds?: string[]) {
   const me = currentDemoPerson();
   const list = getListById(listId);
   if (!list) throw new Error("That List isn’t available.");
@@ -551,6 +555,7 @@ export function addListMessage(listId: string, body: string, author = "Me") {
     author: author === "Me" ? me.name : author,
     at: new Date().toISOString(),
     pinnedAt: null,
+    thingReferenceIds,
   };
   listMessages.set(listId, [...(listMessages.get(listId) ?? []), row]);
   bump();

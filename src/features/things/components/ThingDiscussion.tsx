@@ -10,6 +10,9 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useAvatarUrl } from "@/features/people/directory";
 import type { ThingFile } from "@/features/things/PDFViewer";
 import type { WorkStatus } from "@/domain/thing";
+import type { ThingReference } from "@/features/thing-references/thing-reference";
+import { ThingReferenceDraftTray } from "@/features/thing-references/ThingReferenceDraftTray";
+import { ThingReferenceList } from "@/features/thing-references/ThingReferencesSection";
 
 function initialsForName(name: string) {
   const initials = name
@@ -47,6 +50,7 @@ export type CommentEntry = {
   avatarUrl?: string | null;
   sending?: boolean;
   attachments?: ThingFile[];
+  thingReferences?: ThingReference[];
 };
 
 export type ActivityEntry = {
@@ -62,6 +66,7 @@ function CommentRow({
   avatarUrl: explicitAvatar,
   sending,
   attachments,
+  thingReferences,
   onFileSelect,
   continuation = false,
 }: {
@@ -71,6 +76,7 @@ function CommentRow({
   avatarUrl?: string | null;
   sending?: boolean;
   attachments?: ThingFile[];
+  thingReferences?: ThingReference[];
   onFileSelect?: (file: ThingFile) => void;
   continuation?: boolean;
 }) {
@@ -101,6 +107,9 @@ function CommentRow({
           </time>
         </div> : null}
         {body ? <p className={cn("text-[12px] leading-[1.3] text-foreground", !continuation && "mt-1")}>{body}</p> : null}
+        {thingReferences && thingReferences.length > 0 ? (
+          <ThingReferenceList references={thingReferences} className="mt-2 grid gap-2" />
+        ) : null}
         {attachments && attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((att) => {
@@ -194,6 +203,10 @@ export type ThingDiscussionProps = {
   comment: string;
   onCommentChange: (value: string) => void;
   onSubmitComment: () => void;
+  /** Thing references staged in the composer, with paste and remove handlers owned by the caller's draft. */
+  stagedThingReferences?: ThingReference[];
+  onRemoveThingReference?: (thingId: string) => void;
+  onComposerPaste?: React.ClipboardEventHandler<HTMLElement>;
   /** People who can be @mentioned (Thing participants + List members). */
   mentionPeople?: MentionPerson[];
   mentions?: SelectedMention[];
@@ -233,6 +246,9 @@ export function ThingDiscussion({
   comment,
   onCommentChange,
   onSubmitComment,
+  stagedThingReferences = [],
+  onRemoveThingReference,
+  onComposerPaste,
   mentionPeople = [],
   mentions = [],
   onMentionsChange,
@@ -333,6 +349,7 @@ export function ThingDiscussion({
                         at={entry.at}
                         sending={entry.sending}
                         attachments={entry.attachments}
+                        thingReferences={entry.thingReferences}
                         onFileSelect={onFileSelect}
                         continuation={continuesPrevious}
                       />
@@ -386,7 +403,11 @@ export function ThingDiscussion({
 
             {/* Reply input box */}
             {commentFileInput}
+            {onRemoveThingReference ? (
+              <ThingReferenceDraftTray references={stagedThingReferences} onRemove={onRemoveThingReference} className="mt-3 grid gap-2" />
+            ) : null}
             <form
+              onPasteCapture={onComposerPaste}
               onSubmit={(e) => {
                 e.preventDefault();
                 onSubmitComment();
@@ -426,7 +447,7 @@ export function ThingDiscussion({
               </button>
               <button
                 type="submit"
-                disabled={(!comment.trim() && commentAttachments.length === 0) || postIsPending || attachmentsUploading}
+                disabled={(!comment.trim() && commentAttachments.length === 0 && stagedThingReferences.length === 0) || postIsPending || attachmentsUploading}
                 className="rounded-[6px] bg-[#975ee2] hover:brightness-95 text-white font-medium text-[12px] px-3.5 py-1.5 transition disabled:opacity-50 cursor-pointer"
               >
                 Send
@@ -501,6 +522,7 @@ export function ThingDiscussion({
                   at={c.at}
                   sending={c.sending}
                   attachments={c.attachments}
+                  thingReferences={c.thingReferences}
                   onFileSelect={onFileSelect}
                   continuation={isSameCommentBatch(comments[idx - 1], c)}
                 />
@@ -508,11 +530,15 @@ export function ThingDiscussion({
             )}
             <form
               className="flex flex-col gap-2"
+              onPasteCapture={onComposerPaste}
               onSubmit={(e) => {
                 e.preventDefault();
                 onSubmitComment();
               }}
             >
+              {onRemoveThingReference ? (
+                <ThingReferenceDraftTray references={stagedThingReferences} onRemove={onRemoveThingReference} className="grid gap-2" />
+              ) : null}
               {commentAttachments.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {commentAttachments.map((att) => (
@@ -553,7 +579,7 @@ export function ThingDiscussion({
                 />
                 <button
                   type="submit"
-                  disabled={!canComment || (!comment.trim() && commentAttachments.length === 0) || postIsPending || attachmentsUploading}
+                  disabled={!canComment || (!comment.trim() && commentAttachments.length === 0 && stagedThingReferences.length === 0) || postIsPending || attachmentsUploading}
                   className="inline-flex items-center gap-1 h-7 rounded-md bg-primary px-2.5 text-[12px] text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
                 >
                 {postIsPending ? (

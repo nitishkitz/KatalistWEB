@@ -25,7 +25,11 @@ export type DraftComposerKind =
   | "thing-comment"
   | "list-chat"
   | "bucket-note"
-  | "magic-box";
+  | "magic-box"
+  // Thing references staged beside a message/comment draft. Kept in their own slot so the main draft's
+  // metadata (people mentions) keeps its shape; both are cleared together on send.
+  | "list-chat-references"
+  | "thing-comment-references";
 
 export type Draft<T> = {
   /** Text/body content, whatever shape the composer needs. */

@@ -101,6 +101,7 @@ export function CourtThingCard({
     return (
       <button
         type="button"
+        data-thing-id={thing.id}
         onClick={open}
         className={cn(
           "group flex min-h-[62px] w-full items-center gap-2 border-b border-border/70 bg-white px-2 py-2.5 text-left outline-none transition-colors hover:bg-white focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
@@ -124,7 +125,7 @@ export function CourtThingCard({
   }
 
   return (
-    <div className="group relative border-b border-border/70">
+    <div data-thing-id={thing.id} className="group relative border-b border-border/70">
       <button
         type="button"
         onClick={open}
