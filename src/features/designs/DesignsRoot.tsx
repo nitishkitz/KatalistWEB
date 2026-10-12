@@ -34,6 +34,9 @@ const primaryButton =
   "inline-flex h-10 cursor-pointer items-center justify-center gap-1.5 rounded-[9px] bg-[#975ee2] px-4 text-[13.5px] font-medium text-white outline-none hover:bg-[#8650d1] focus-visible:ring-2 focus-visible:ring-[#975ee2] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60";
 const selectClass =
   "h-10 w-full rounded-lg border border-[#dfe3f0] bg-white px-2.5 text-[13.5px] text-[#000533] outline-none focus:border-[#975ee2] focus-visible:ring-2 focus-visible:ring-[#975ee2]/40";
+// Deep links auto-page only within a finite budget so a stale/malicious target cannot
+// trigger an unbounded request loop. Users can explicitly extend the search in chunks.
+const DEEP_LINK_PAGE_BUDGET = 100;
 
 function asDesignError(error: unknown): DesignOperationError {
   return error instanceof DesignOperationError ? error : new DesignOperationError("unknown", error instanceof Error ? error.message : "Something went wrong.");
@@ -233,26 +236,45 @@ export default function DesignsRoot({
   useEffect(() => {
     if (viewerId && library.hasFetchedOnce && !viewerResource) setViewerId(null);
   }, [viewerId, viewerResource, library.hasFetchedOnce]);
-  // Deep link from a Thing: open that design once it has loaded, paging forward a bounded number of times.
+  // Deep link from a Thing: open that design once it has loaded, paging forward within
+  // a bounded budget. The explicit continuation keeps large libraries user-controlled.
   const deepLinkRef = useRef({ target: initialDesignId, pages: 0, done: false });
   const [deepLinkMissing, setDeepLinkMissing] = useState(false);
+  const [deepLinkBudgetReached, setDeepLinkBudgetReached] = useState(false);
   useEffect(() => {
     const dl = deepLinkRef.current;
-    if (dl.target !== initialDesignId) Object.assign(dl, { target: initialDesignId, pages: 0, done: false });
+    Object.assign(dl, { target: initialDesignId, pages: 0, done: false });
+    setDeepLinkMissing(false);
+    setDeepLinkBudgetReached(false);
+  }, [initialDesignId]);
+  useEffect(() => {
+    const dl = deepLinkRef.current;
     if (!dl.target || dl.done || !library.hasFetchedOnce) return;
     const found = library.resources.find((r) => r.id === dl.target);
     if (found) {
       dl.done = true;
       setViewerId(found.id);
       setDeepLinkMissing(false);
-    } else if (library.hasNextPage && !library.isFetchingNextPage && dl.pages < 10) {
+      setDeepLinkBudgetReached(false);
+    } else if (library.hasNextPage && !library.isFetchingNextPage && dl.pages < DEEP_LINK_PAGE_BUDGET) {
       dl.pages += 1;
       void library.fetchNextPage();
+    } else if (library.hasNextPage && !library.isFetchingNextPage) {
+      dl.done = true;
+      setDeepLinkBudgetReached(true);
     } else if (!library.hasNextPage && !library.isFetchingNextPage) {
       dl.done = true;
       setDeepLinkMissing(true);
     }
   }, [initialDesignId, library.hasFetchedOnce, library.resources, library.hasNextPage, library.isFetchingNextPage, library]);
+  const continueDeepLinkSearch = () => {
+    const dl = deepLinkRef.current;
+    dl.done = false;
+    dl.pages = 0;
+    setDeepLinkMissing(false);
+    setDeepLinkBudgetReached(false);
+    void library.fetchNextPage();
+  };
   const closeViewer = () => {
     setViewerId(null);
     restoreFocus();
@@ -491,17 +513,30 @@ export default function DesignsRoot({
 
       {/* Never imply complete results when only loaded pages were searched. */}
       {criteriaActive && !notReady && (
-        <p role="status" data-testid="design-scope-note" className={cn("rounded-lg px-3 py-2 text-[12.5px]", library.hasNextPage ? "bg-[#fffaeb] text-[#93370d]" : "bg-[#f4f5fb] text-[#4a5578]")}>
-          {library.hasNextPage
-            ? `Search and filters apply only to the ${loadedCount} design${loadedCount === 1 ? "" : "s"} loaded so far. More designs exist; load more to include them.`
-            : `Searched all ${loadedCount} design${loadedCount === 1 ? "" : "s"} in this view.`}
-        </p>
+        <div role="status" data-testid="design-scope-note" className={cn("flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-[12.5px]", library.hasNextPage ? "bg-[#fffaeb] text-[#93370d]" : "bg-[#f4f5fb] text-[#4a5578]")}>
+          <span>{library.hasNextPage
+            ? `Search and filters apply only to the ${loadedCount} design${loadedCount === 1 ? "" : "s"} loaded so far. More designs exist.`
+            : `Searched all ${loadedCount} design${loadedCount === 1 ? "" : "s"} in this view.`}</span>
+          {library.hasNextPage && (
+            <button type="button" disabled={library.isFetchingNextPage} onClick={() => void library.fetchNextPage()} className="cursor-pointer font-medium underline outline-none focus-visible:ring-2 focus-visible:ring-[#975ee2] disabled:cursor-not-allowed disabled:opacity-60">
+              {library.isFetchingNextPage ? "Loading…" : "Load more results"}
+            </button>
+          )}
+        </div>
       )}
 
       {deepLinkMissing && !viewerResource && (
         <p role="status" className="rounded-lg bg-[#fffaeb] px-3 py-2 text-[12.5px] text-[#93370d]">
           The linked design is not in the active list. It may have been archived; check the Archived view.
         </p>
+      )}
+      {deepLinkBudgetReached && !viewerResource && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#fffaeb] px-3 py-2 text-[12.5px] text-[#93370d]">
+          <span>We searched the first {DEEP_LINK_PAGE_BUDGET} pages but the linked design was not found.</span>
+          <button type="button" disabled={library.isFetchingNextPage} onClick={continueDeepLinkSearch} className="cursor-pointer font-medium underline outline-none focus-visible:ring-2 focus-visible:ring-[#975ee2] disabled:cursor-not-allowed disabled:opacity-60">
+            {library.isFetchingNextPage ? "Loading…" : "Continue searching"}
+          </button>
+        </div>
       )}
       {viewerResource && (
         <DesignViewer key={viewerResource.id} resource={viewerResource} onClose={closeViewer}>

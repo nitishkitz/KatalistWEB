@@ -11,6 +11,7 @@ import { resolvePersonToProfileId } from "./server/lib/resolve-person.ts";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { extractErrorMessage } from "./src/lib/domain-error.ts";
 import { serverFixedOtp } from "./server/lib/fixed-otp.ts";
+import { normalizeTestPhone } from "./server/lib/test-phone.ts";
 
 /**
  * Dev-middleware equivalent of server/lib/require-user.ts. Vite middleware
@@ -195,7 +196,17 @@ function phoneAuthPlugin(): Plugin {
             return;
           }
 
-          const { phone, otp } = JSON.parse(body || "{}");
+          let payload: { phone?: unknown; otp?: unknown } | null;
+          try {
+            payload = JSON.parse(body || "{}");
+          } catch {
+            res.statusCode = 400;
+            res.setHeader("content-type", "application/json");
+            res.end(JSON.stringify({ error: "Invalid login request." }));
+            return;
+          }
+          const phone = normalizeTestPhone(payload?.phone);
+          const otp = payload?.otp;
           if (!phone || otp !== fixedOtp) {
             res.statusCode = 400;
             res.setHeader("content-type", "application/json");
@@ -759,7 +770,19 @@ function completeAttachmentPlugin(): Plugin {
 // Start's preview plugin cannot serve a Nitro build on its own.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
-export default defineConfig(({ command, isPreview, mode }) => ({
+export default defineConfig(({ command, isPreview, mode }) => {
+  // Vite exposes only VITE_* to the browser, but private .env.local values
+  // also need to reach API handlers in the local server process.
+  const privateEnv = loadEnv(mode, process.cwd(), "");
+  for (const key of [
+    "SARVAM_API_KEY", "SARVAM_MODEL",
+    "CODE_ACTIVITY_SARVAM_API_KEY", "CODE_ACTIVITY_SARVAM_MODEL",
+    "COEY_VOICE_ENABLED", "ASSISTANT_ACTION_SECRET",
+  ]) {
+    if (process.env[key] === undefined && privateEnv[key] !== undefined)
+      process.env[key] = privateEnv[key];
+  }
+  return ({
   server: {
     host: "0.0.0.0",
     port: 8080,
@@ -804,9 +827,12 @@ export default defineConfig(({ command, isPreview, mode }) => ({
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            // Coey voice relay (plan Task 6): WebSocket upgrade on the same deployment.
+            features: { websocket: true },
           }),
         ]
       : []),
     viteReact(),
   ],
-}));
+  });
+});

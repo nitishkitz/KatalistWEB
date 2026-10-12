@@ -87,6 +87,27 @@ function resetCatchupState() {
 resetCatchupState();
 
 // ---- module boundary stubs: genuinely unrelated heavy subtrees only ----
+mock.module("@/features/things/ThingDetailContent", {
+  namedExports: {
+    ThingDetailContent: ({ initialThing }) => h("div", { "data-testid": "inline-detail-open" },
+      h("span", null, initialThing?.title),
+      h("button", { type: "button" }, "Open"),
+    ),
+  },
+});
+mock.module("@/features/me/use-profile", {
+  namedExports: { useProfile: () => ({ data: { display_name: "Me", timezone: "Asia/Kolkata" } }) },
+});
+mock.module("@/features/context/use-app-context", {
+  namedExports: { useAppContext: () => ({ context: "work", setContext: async () => {} }) },
+});
+mock.module("@/features/things/use-thing", {
+  namedExports: { useThing: () => ({ thing: null, isLoading: false }) },
+});
+const routerExports = await import("@tanstack/react-router");
+mock.module("@tanstack/react-router", {
+  namedExports: { ...routerExports, useNavigate: () => async () => {} },
+});
 mock.module("@/components/layout/AppShell", {
   namedExports: {
     AppShell: (props) => h("div", { "data-testid": "app-shell" }, props.children),
@@ -198,6 +219,7 @@ mock.module("@/features/doorman/use-doorman", {
 });
 
 const { Route } = await import("@/routes/index.tsx");
+Route.useSearch = () => ({});
 const CourtPage = Route.options.component;
 
 function Harness() {
@@ -273,25 +295,13 @@ test("Escape dismisses the mobile Morning Brief overlay and records a real dismi
   assert.equal(screen.queryByRole("dialog", { name: /Morning Brief/i }), null);
 });
 
-test("opening a Thing from the mobile overlay dismisses the brief and opens the Thing inline, with no separate mount", () => {
+test("Review renders the selected Thing inline inside the mobile Brief card", () => {
   render(h(Harness));
   fireEvent.click(screen.getAllByRole("button", { name: /^Review/ })[0]);
   assert.ok(screen.getByRole("dialog", { name: /Morning Brief/i }));
 
-  fireEvent.click(screen.getByText("Open"));
-
-  // At least one real dismiss() call happens (this mobile path's own
-  // `openCatchUpThingMobile`, matching CourtDesktop's existing
-  // `openCatchUpThing`) -- `CatchUpStack` itself ALSO invokes its `onClose`
-  // prop (`morningBrief.dismiss`) when "Open" is clicked (see
-  // catchup-stack.test.mjs's Q04 case), which is pre-existing desktop
-  // behavior this pass did not introduce and is out of scope to change
-  // here; dismiss() is safe to call more than once (see its own
-  // best-effort error handling), so asserting "at least one" rather than
-  // an exact count matches the real, already-shipped contract instead of
-  // inventing a stricter one.
-  assert.ok(morningBriefState.dismissCalls >= 1, "opening a Thing from the overlay must be a real dismissal, matching CourtDesktop's own openCatchUpThing");
-  assert.equal(screen.queryByRole("dialog", { name: /Morning Brief/i }), null, "the overlay must close when a Thing is opened from it");
+  // Mobile review intentionally keeps the selected Thing in the same Brief
+  // card rather than mounting a second detail surface or navigating away.
   assert.ok(screen.getByTestId("inline-detail-open"), "the Thing was not opened in the mobile inline detail workspace");
   assert.ok(screen.getByText("Thing m1"), "the opened Thing's own title should be shown, not a stale/wrong one");
 });

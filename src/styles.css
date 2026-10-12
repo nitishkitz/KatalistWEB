@@ -6,6 +6,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@font-face {
+  font-family: "Mona Sans";
+  src: url("/fonts/MonaSansVF-opsz-wght.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+}
+
 /*
  * Katalist design system.
  *
@@ -17,11 +25,11 @@
  */
 
 @theme inline {
-  /* Katalist UI type: Poppins across the app, DM Sans for the wordmark, Inter for the composer. */
-  --font-sans: "Poppins", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Poppins", ui-sans-serif, system-ui, sans-serif;
+  /* Poppins remains the default; the Appearance setting overrides app text. */
+  --font-sans: var(--katalist-ui-font, "Poppins", ui-sans-serif, system-ui, sans-serif);
+  --font-display: var(--katalist-ui-font, "Poppins", ui-sans-serif, system-ui, sans-serif);
   --font-logo: "DM Sans", "Poppins", ui-sans-serif, system-ui, sans-serif;
-  --font-composer: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-composer: var(--katalist-composer-font, "Inter", ui-sans-serif, system-ui, sans-serif);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -168,6 +176,31 @@
   --elevation-card: 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --elevation-popover: 0 2px 8px 0 rgb(0 0 0 / 0.08), 0 1px 2px 0 rgb(0 0 0 / 0.04);
   --elevation-dialog: 0 8px 24px 0 rgb(0 0 0 / 0.12), 0 2px 6px 0 rgb(0 0 0 / 0.06);
+}
+
+:root[data-katalist-font="roboto"] {
+  --katalist-ui-font: "Roboto", ui-sans-serif, system-ui, sans-serif;
+  --katalist-composer-font: var(--katalist-ui-font);
+}
+
+:root[data-katalist-font="inter"] {
+  --katalist-ui-font: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --katalist-composer-font: var(--katalist-ui-font);
+}
+
+:root[data-katalist-font="system"] {
+  --katalist-ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --katalist-composer-font: var(--katalist-ui-font);
+}
+
+:root[data-katalist-font="work-sans"] {
+  --katalist-ui-font: "Work Sans", ui-sans-serif, system-ui, sans-serif;
+  --katalist-composer-font: var(--katalist-ui-font);
+}
+
+:root[data-katalist-font="mona-sans"] {
+  --katalist-ui-font: "Mona Sans", ui-sans-serif, system-ui, sans-serif;
+  --katalist-composer-font: var(--katalist-ui-font);
 }
 
 .dark {
@@ -456,4 +489,40 @@
 body:has([data-chat-heads-dock]) [data-sonner-toaster] {
   visibility: hidden;
   pointer-events: none;
+}
+
+/* Personal context stays recognizably Katalist, with a quieter, warmer surface.
+   Only opacity is animated: no page scale, slide, or layout-changing entrance. */
+.katalist-app-shell[data-app-context="home"] {
+  background-color: #fcfafc;
+}
+.katalist-app-shell[data-app-context="home"] > nav {
+  background-color: #faf6fd;
+  border-bottom-color: #ede5f2;
+}
+.home-arrival { animation: home-arrive 180ms ease-out both; }
+@keyframes home-arrive { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .home-arrival { animation: none; }
+}
+/* Avoid a global scrollbar-width shift when long and short views alternate. */
+html { scrollbar-gutter: stable; }
+
+/* Pace selector (Thing detail): sliding pill with a colour cross-fade. */
+.katalist-pace-pill {
+  transition:
+    transform 340ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    background-color 280ms ease,
+    opacity 200ms ease;
+  box-shadow: 0 2px 6px rgba(26, 30, 60, 0.18);
+  will-change: transform;
+}
+.katalist-pace-label {
+  transition: color 240ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .katalist-pace-pill,
+  .katalist-pace-label {
+    transition: none;
+  }
 }

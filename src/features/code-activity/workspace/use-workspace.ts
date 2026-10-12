@@ -4,7 +4,7 @@ import { workspaceApi } from "../live/workspace-api";
 import type { BranchInfo, CommitsPage, CompareInfo, DeploymentsPage, StatsResult } from "../live/workspace-api";
 import { useLiveFeed } from "../live/use-feed";
 import { applyStats, detailFromChange, fromCommit, fromDeployment, fromSaved } from "./adapt";
-import { activeFilterCount, dateBounds, EMPTY_FILTERS, issuesFor, matchItem, normalizePath } from "./filters";
+import { activeFilterCount, dateBounds, EMPTY_FILTERS, issuesFor, matchItem, normalizePath, statusOptions, typesFor } from "./filters";
 import type { WorkspaceFilters } from "./filters";
 import { deriveCheckItems, mergeSources, sourcesFor } from "./merge";
 import type { SourceState } from "./merge";
@@ -21,6 +21,15 @@ const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/;
 const MAX_KNOWN_PATHS = 60;
 const STATS_FIRST = 10;
 
+/** A paginated branch reply may only append to the exact scope/cursor that requested it. */
+export const branchPageMatches = (currentScope: string, requestScope: string, currentCursor: string | null, requestCursor: string): boolean => currentScope === requestScope && currentCursor === requestCursor;
+
+export const filtersForCategory = (next: WorkspaceCategory, previous: WorkspaceFilters): WorkspaceFilters => ({
+  ...previous,
+  statuses: previous.statuses.filter((status) => statusOptions(next).includes(status)),
+  types: previous.types.filter((type) => typesFor(next).includes(type)),
+});
+
 /**
  * The workspace's data: branches and comparison, three sources merged into one feed, filters, search, background stats and
  * the selected change's detail. Every request is cancelled when its inputs change, a late reply is dropped, and nothing
@@ -29,6 +38,8 @@ const STATS_FIRST = 10;
 export function useWorkspace(listId: string, repositoryKey: string, canRefresh: boolean) {
   const feed = useLiveFeed(listId, canRefresh);
   const scope = `${listId}|${repositoryKey}`;
+  const branchScopeRef = useRef(scope);
+  branchScopeRef.current = scope;
 
   // ---- branches ------------------------------------------------------------------------------------
   const [branches, setBranches] = useState<Phase<{ defaultBranch: string | null; items: BranchInfo[]; nextCursor: string | null; complete: boolean }>>({ kind: "idle" });
@@ -36,6 +47,7 @@ export function useWorkspace(listId: string, repositoryKey: string, canRefresh: 
   const [compareBase, setCompareBase] = useState<string | null>(null);
   const [compare, setCompare] = useState<Phase<CompareInfo>>({ kind: "idle" });
   const [branchTick, setBranchTick] = useState(0);
+  const branchPageRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -56,16 +68,30 @@ export function useWorkspace(listId: string, repositoryKey: string, canRefresh: 
     return () => controller.abort();
   }, [scope, listId, branchTick]);
 
+  useEffect(() => () => {
+    branchPageRequest.current?.abort();
+    branchPageRequest.current = null;
+  }, [scope]);
+
   const loadMoreBranches = useCallback(async () => {
     if (branches.kind !== "ready" || !branches.data.nextCursor) return;
-    const r = await workspaceApi.branches(listId, branches.data.nextCursor).catch(() => null);
-    if (!r || !r.ok) return;
+    if (branchPageRequest.current !== null) return;
+    const requestScope = scope;
+    const requestCursor = branches.data.nextCursor;
+    const controller = new AbortController();
+    branchPageRequest.current = controller;
+    const r = await workspaceApi.branches(listId, requestCursor, controller.signal).catch(() => null);
+    if (controller.signal.aborted || !r || !r.ok) {
+      if (branchPageRequest.current === controller) branchPageRequest.current = null;
+      return;
+    }
     setBranches((prev) => {
-      if (prev.kind !== "ready") return prev;
+      if (prev.kind !== "ready" || !branchPageMatches(branchScopeRef.current, requestScope, prev.data.nextCursor, requestCursor)) return prev;
       const seen = new Set(prev.data.items.map((b) => b.name));
       return { kind: "ready", data: { ...prev.data, items: [...prev.data.items, ...r.data.branches.filter((b) => !seen.has(b.name))], nextCursor: r.data.nextCursor, complete: r.data.complete } };
     });
-  }, [branches, listId]);
+    if (branchPageRequest.current === controller) branchPageRequest.current = null;
+  }, [branches, listId, scope]);
 
   const defaultBranch = branches.kind === "ready" ? branches.data.defaultBranch : null;
   const setBranch = useCallback((name: string) => {
@@ -95,8 +121,12 @@ export function useWorkspace(listId: string, repositoryKey: string, canRefresh: 
   }, [listId, branch, effectiveBase]);
 
   // ---- filters ---------------------------------------------------------------------------------------
-  const [category, setCategory] = useState<WorkspaceCategory>("all");
+  const [category, setCategoryState] = useState<WorkspaceCategory>("all");
   const [filters, setFilters] = useState<WorkspaceFilters>(EMPTY_FILTERS);
+  const setCategory = useCallback((next: WorkspaceCategory) => {
+    setCategoryState(next);
+    setFilters((previous) => filtersForCategory(next, previous));
+  }, []);
   // Clear filters clears everything the filter row and the search box set, including the branch (back to the default).
   const clearFilters = useCallback(() => {
     setFilters(EMPTY_FILTERS);
@@ -237,6 +267,7 @@ export function useWorkspace(listId: string, repositoryKey: string, canRefresh: 
   }, [sources, stats, category, branch]);
 
   const visible = useMemo(() => {
+    if (issues.date || issues.path) return { items: [], unchecked: new Set<string>() };
     const pathPushed = push.path !== null;
     const results = merged.items.map((item) => {
       // Commits were already filtered by path on GitHub, so they are not "unchecked".

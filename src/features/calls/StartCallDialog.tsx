@@ -63,15 +63,6 @@ export function StartCallDialog({
     return people.filter((p) => p.name.toLowerCase().includes(q));
   }, [people, query]);
 
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -146,19 +137,30 @@ export function StartCallDialog({
               ) : (
                 filtered.map((p) => {
                   const checked = selected.has(p.id);
+                  const checkboxId = `call-person-${p.id}`;
                   return (
-                    <button
+                    <div
                       key={p.id}
-                      type="button"
-                      onClick={() => toggle(p.id)}
-                      className="flex w-full items-center justify-between gap-2.5 rounded-[8px] px-2 py-1.5 text-left hover:bg-muted/50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex w-full items-center justify-between gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-muted/50"
                     >
-                      <span className="flex items-center gap-2.5">
+                      <label htmlFor={checkboxId} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5">
                         <PersonAvatar name={p.name} initials={p.initials} src={p.avatarUrl} size={30} />
                         <span className="text-[13px] font-medium text-[#000128]">{p.name}</span>
-                      </span>
-                      <Checkbox checked={checked} onCheckedChange={() => toggle(p.id)} />
-                    </button>
+                      </label>
+                      <Checkbox
+                        id={checkboxId}
+                        checked={checked}
+                        aria-label={`Select ${p.name}`}
+                        onCheckedChange={(nextChecked) => {
+                          setSelected((prev) => {
+                            const next = new Set(prev);
+                            if (nextChecked === true) next.add(p.id);
+                            else next.delete(p.id);
+                            return next;
+                          });
+                        }}
+                      />
+                    </div>
                   );
                 })
               )}

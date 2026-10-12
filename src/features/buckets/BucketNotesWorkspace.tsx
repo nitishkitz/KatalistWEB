@@ -16,6 +16,16 @@ import type { Thing } from "@/domain/thing";
 import { rpcCreateThing } from "@/features/things/rpc";
 import { cn } from "@/lib/utils";
 import "./bucket-notes-workspace.css";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type NotesApi = ReturnType<typeof useBucketNotes>;
 type NoteLink = { id: string; target_kind: string; target_id: string; relation: string };
@@ -253,6 +263,8 @@ export function BucketNotesWorkspace({ context, myActorId, notesApi, onOpenThing
   };
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const notes = useMemo(() => [...notesApi.notes].sort((a, b) => {
     if (Boolean(a.pinnedAt) !== Boolean(b.pinnedAt)) return a.pinnedAt ? -1 : 1;
     return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
@@ -270,6 +282,20 @@ export function BucketNotesWorkspace({ context, myActorId, notesApi, onOpenThing
     finally { setCreating(false); }
   };
 
+  const deleteSelected = async () => {
+    if (!selected || deleting) return;
+    setDeleting(true);
+    try {
+      await notesApi.remove.mutateAsync(selected.id);
+      setDeleteOpen(false);
+      setSelectedId(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn’t delete note");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <section className="bucket-notes-workspace" aria-label="Bucket notes">
       <div className="bucket-notes-header"><div><h2 className="text-[18px] font-semibold text-[#16183d]">Notes</h2><p className="text-xs text-[#8188a4]">Ideas, files and decisions for this Bucket</p></div><button type="button" onClick={() => void create()} disabled={creating} className="bucket-note-create"><Plus className="h-4 w-4" /> New note</button></div>
@@ -278,7 +304,21 @@ export function BucketNotesWorkspace({ context, myActorId, notesApi, onOpenThing
         <button type="button" onClick={() => void create()} className="bucket-note-capture"><Plus className="h-4 w-4 text-[#975ee2]" />Write a note about this Bucket…</button>
         <div className="bucket-note-search"><Search className="h-4 w-4" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search notes" aria-label="Search notes" /></div>
         {notesApi.isLoading ? <p className="py-10 text-center text-sm text-[#8a90a8]">Loading notes…</p> : matches.length === 0 ? <p className="py-10 text-center text-sm text-[#8a90a8]">{query ? "No matching notes." : "Capture your first note."}</p> : <div className="bucket-note-card-grid">{matches.map((note) => <BucketNoteCard key={note.id} note={note} summary={summaries.data?.[note.id]} onOpen={() => selectNote(note.id)} onPin={() => void notesApi.pin.mutateAsync({ id: note.id, pinned: !note.pinnedAt }).catch((error) => toast.error(String(error)))} />)}</div>}
-      </div> : <div className="bucket-note-split"><aside className="bucket-note-sidebar"><div className="flex items-center justify-between px-3 py-3"><button type="button" onClick={() => selectNote(null)} className="text-xs font-semibold text-[#7440c9]">← All notes</button><button type="button" onClick={() => void create()} aria-label="New note" className="rounded-lg p-1.5 text-[#7440c9] hover:bg-[#f5efff]"><Plus className="h-4 w-4" /></button></div><div className="bucket-note-search mx-3 mb-2"><Search className="h-3.5 w-3.5" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search notes" aria-label="Search notes" /></div><div className="max-h-[60vh] overflow-y-auto">{matches.map((note) => <button key={note.id} type="button" onClick={() => selectNote(note.id)} className={cn("bucket-note-sidebar-row", selectedId === note.id && "is-selected")}><span className="bucket-note-sidebar-row-top">{summaries.data?.[note.id]?.cover ? <BucketNoteCover cover={summaries.data[note.id].cover!} compact /> : null}<span className="bucket-note-sidebar-row-copy"><strong>{note.title || "Untitled note"}</strong><span>{note.plainText || note.body || "Start writing…"}</span></span></span><BucketNoteMeta summary={summaries.data?.[note.id]} compact /></button>)}</div></aside><div className="bucket-note-editor-shell" style={{ viewTransitionName: `bucket-note-${selected.id}` }}><NoteEditor key={selected.id} note={selected} notesApi={notesApi} addThingToBucket={addThingToBucket} context={context} myActorId={myActorId} onOpenThing={onOpenThing} /><button type="button" onClick={() => { if (window.confirm("Delete this note?")) void notesApi.remove.mutateAsync(selected.id).then(() => setSelectedId(null), (error) => toast.error(String(error))); }} className="absolute bottom-4 right-5 flex items-center gap-1 text-[11px] text-[#a1a5ba] hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /> Delete note</button></div></div>}
+      </div> : <div className="bucket-note-split"><aside className="bucket-note-sidebar"><div className="flex items-center justify-between px-3 py-3"><button type="button" onClick={() => selectNote(null)} className="text-xs font-semibold text-[#7440c9]">← All notes</button><button type="button" onClick={() => void create()} aria-label="New note" className="rounded-lg p-1.5 text-[#7440c9] hover:bg-[#f5efff]"><Plus className="h-4 w-4" /></button></div><div className="bucket-note-search mx-3 mb-2"><Search className="h-3.5 w-3.5" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search notes" aria-label="Search notes" /></div><div className="max-h-[60vh] overflow-y-auto">{matches.map((note) => <button key={note.id} type="button" onClick={() => selectNote(note.id)} className={cn("bucket-note-sidebar-row", selectedId === note.id && "is-selected")}><span className="bucket-note-sidebar-row-top">{summaries.data?.[note.id]?.cover ? <BucketNoteCover cover={summaries.data[note.id].cover!} compact /> : null}<span className="bucket-note-sidebar-row-copy"><strong>{note.title || "Untitled note"}</strong><span>{note.plainText || note.body || "Start writing…"}</span></span></span><BucketNoteMeta summary={summaries.data?.[note.id]} compact /></button>)}</div></aside><div className="bucket-note-editor-shell" style={{ viewTransitionName: `bucket-note-${selected.id}` }}><NoteEditor key={selected.id} note={selected} notesApi={notesApi} addThingToBucket={addThingToBucket} context={context} myActorId={myActorId} onOpenThing={onOpenThing} /><button type="button" onClick={() => setDeleteOpen(true)} disabled={deleting} className="absolute bottom-4 right-5 flex items-center gap-1 text-[11px] text-[#a1a5ba] hover:text-red-600"><Trash2 className="h-3.5 w-3.5" /> Delete note</button></div></div>}
+      <AlertDialog open={deleteOpen} onOpenChange={(open) => { if (!deleting) setDeleteOpen(open); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this note?</AlertDialogTitle>
+            <AlertDialogDescription>This permanently removes the note and its private attachments.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={(event) => { event.preventDefault(); void deleteSelected(); }} disabled={deleting}>
+              {deleting ? "Deleting…" : "Delete note"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

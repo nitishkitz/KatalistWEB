@@ -11,6 +11,7 @@ import { CatchUpNavCapsule } from "@/features/catchup/CatchUpNavCapsule";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useOtherModeUnread } from "@/features/hub/use-conversations";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export function TopNav() {
   const pathname = useRouterState({ select: (r) => r.location.pathname });
@@ -98,7 +99,7 @@ export function TopNav() {
           <button
             type="button"
             aria-pressed={context === "work"}
-            onClick={() => void setContext("work")}
+            onClick={() => void setContext("work").catch(() => toast.error("Could not save the context. Try again."))}
             className={cn(
               "relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1 text-[11px] font-medium outline-none transition-[color,transform] duration-300 focus-visible:ring-2 focus-visible:ring-ring lg:gap-1.5 lg:px-2.5 lg:text-[12px]",
               context === "work" ? "text-[#503188]" : "text-[#667085] hover:text-[#3f276f]",
@@ -119,7 +120,7 @@ export function TopNav() {
           <button
             type="button"
             aria-pressed={context === "home"}
-            onClick={() => void setContext("home")}
+            onClick={() => void setContext("home").catch(() => toast.error("Could not save the context. Try again."))}
             className={cn(
               "relative z-10 inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-full px-1 text-[11px] font-medium outline-none transition-[color,transform] duration-300 focus-visible:ring-2 focus-visible:ring-ring lg:gap-1.5 lg:px-2.5 lg:text-[12px]",
               context === "home" ? "text-[#503188]" : "text-[#667085] hover:text-[#3f276f]",

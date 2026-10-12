@@ -254,12 +254,14 @@ export async function rpcCatchAndStart(thingId: string, pace: Pace = "next") {
   await rpcSetWorkStatus(thingId, "under_progress");
 }
 
-export async function rpcSetDue(thingId: string, dueAt: string, dueHasTime: boolean) {
+/** Pass `dueAt: null` to remove the due date; the time flag is then always false. */
+export async function rpcSetDue(thingId: string, dueAt: string | null, dueHasTime: boolean) {
+  const hasTime = dueAt === null ? false : dueHasTime;
   return runDomainMutation({
     thingId,
-    live: () => liveRpc(() => supabase.rpc("set_due", { p_thing_id: thingId, p_due_at: dueAt, p_due_has_time: dueHasTime })),
+    live: () => liveRpc(() => supabase.rpc("set_due", { p_thing_id: thingId, p_due_at: dueAt, p_due_has_time: hasTime })),
     preview: () => {
-      setDueLocal(thingId, dueAt, dueHasTime);
+      setDueLocal(thingId, dueAt, hasTime);
       return null as never;
     },
   });

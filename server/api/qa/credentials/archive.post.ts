@@ -16,8 +16,16 @@ export default defineEventHandler(async (event) => {
   const account = data as { id: string; list_id: string };
   if (body.archived) {
     const admin = getSupabaseAdmin();
-    await admin.from("qa_account_secrets").delete().eq("account_id", account.id);
-    await admin.from("qa_accounts").update({ has_secret: false, secret_updated_at: null }).eq("id", account.id);
+    const { error: deleteError } = await admin.from("qa_account_secrets").delete().eq("account_id", account.id);
+    if (deleteError) {
+      await audit({ listId: account.list_id, accountId: account.id, actorId: userId, action: "credential_archive", outcome: "error", details: { archived: body.archived } });
+      throw qaError(502, "credential_cleanup_failed", "The account was archived, but its stored credential could not be removed. Try again.");
+    }
+    const { error: flagError } = await admin.from("qa_accounts").update({ has_secret: false, secret_updated_at: null }).eq("id", account.id);
+    if (flagError) {
+      await audit({ listId: account.list_id, accountId: account.id, actorId: userId, action: "credential_archive", outcome: "error", details: { archived: body.archived } });
+      throw qaError(502, "credential_cleanup_failed", "The account was archived, but its credential status could not be updated. Try again.");
+    }
   }
   await audit({ listId: account.list_id, accountId: account.id, actorId: userId, action: "credential_archive", outcome: "success", details: { archived: body.archived } });
   return { ok: true };

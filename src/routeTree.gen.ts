@@ -25,6 +25,10 @@ import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
 import { Route as TeamIndexRouteImport } from './routes/team.index'
 import { Route as TeamConversationIdRouteImport } from './routes/team.$conversationId'
+import { Route as ApiAssistantNudgeRouteImport } from './routes/api/assistant/nudge'
+import { Route as ApiAssistantQueryRouteImport } from './routes/api/assistant/query'
+import { Route as ApiAssistantStreamRouteImport } from './routes/api/assistant/stream'
+import { Route as ApiAssistantVoiceConfigRouteImport } from './routes/api/assistant/voice-config'
 import { Route as ApiCallsRingRouteImport } from './routes/api/calls/ring'
 import { Route as ApiCodeActivityAssigneeCandidatesRouteImport } from './routes/api/code-activity/assignee-candidates'
 import { Route as ApiCodeActivityBranchesRouteImport } from './routes/api/code-activity/branches'
@@ -47,6 +51,8 @@ import { Route as ApiJobsEscalateNudgesRouteImport } from './routes/api/jobs/esc
 import { Route as ApiNudgesNotifyRouteImport } from './routes/api/nudges/notify'
 import { Route as ApiPushTestRouteImport } from './routes/api/push/test'
 import { Route as ApiThingsNotifyMentionRouteImport } from './routes/api/things/notify-mention'
+import { Route as ApiAssistantActionConfirmRouteImport } from './routes/api/assistant/action/confirm'
+import { Route as ApiAssistantActionPreviewRouteImport } from './routes/api/assistant/action/preview'
 import { Route as ApiCodeActivityChangesDetailRouteImport } from './routes/api/code-activity/changes/detail'
 import { Route as ApiCodeActivityChangesDraftRouteImport } from './routes/api/code-activity/changes/draft'
 import { Route as ApiCodeActivityChangesSummaryRouteImport } from './routes/api/code-activity/changes/summary'
@@ -139,6 +145,26 @@ const TeamConversationIdRoute = TeamConversationIdRouteImport.update({
   id: '/$conversationId',
   path: '/$conversationId',
   getParentRoute: () => TeamRoute,
+} as any)
+const ApiAssistantNudgeRoute = ApiAssistantNudgeRouteImport.update({
+  id: '/api/assistant/nudge',
+  path: '/api/assistant/nudge',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAssistantQueryRoute = ApiAssistantQueryRouteImport.update({
+  id: '/api/assistant/query',
+  path: '/api/assistant/query',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAssistantStreamRoute = ApiAssistantStreamRouteImport.update({
+  id: '/api/assistant/stream',
+  path: '/api/assistant/stream',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAssistantVoiceConfigRoute = ApiAssistantVoiceConfigRouteImport.update({
+  id: '/api/assistant/voice-config',
+  path: '/api/assistant/voice-config',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCallsRingRoute = ApiCallsRingRouteImport.update({
   id: '/api/calls/ring',
@@ -259,6 +285,18 @@ const ApiThingsNotifyMentionRoute = ApiThingsNotifyMentionRouteImport.update({
   path: '/api/things/notify-mention',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAssistantActionConfirmRoute =
+  ApiAssistantActionConfirmRouteImport.update({
+    id: '/api/assistant/action/confirm',
+    path: '/api/assistant/action/confirm',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiAssistantActionPreviewRoute =
+  ApiAssistantActionPreviewRouteImport.update({
+    id: '/api/assistant/action/preview',
+    path: '/api/assistant/action/preview',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiCodeActivityChangesDetailRoute =
   ApiCodeActivityChangesDetailRouteImport.update({
     id: '/api/code-activity/changes/detail',
@@ -345,6 +383,10 @@ export interface FileRoutesByFullPath {
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
   '/team/': typeof TeamIndexRoute
+  '/api/assistant/nudge': typeof ApiAssistantNudgeRoute
+  '/api/assistant/query': typeof ApiAssistantQueryRoute
+  '/api/assistant/stream': typeof ApiAssistantStreamRoute
+  '/api/assistant/voice-config': typeof ApiAssistantVoiceConfigRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
   '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
@@ -367,6 +409,8 @@ export interface FileRoutesByFullPath {
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/push/test': typeof ApiPushTestRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
+  '/api/assistant/action/confirm': typeof ApiAssistantActionConfirmRoute
+  '/api/assistant/action/preview': typeof ApiAssistantActionPreviewRoute
   '/api/code-activity/changes/detail': typeof ApiCodeActivityChangesDetailRoute
   '/api/code-activity/changes/draft': typeof ApiCodeActivityChangesDraftRoute
   '/api/code-activity/changes/summary': typeof ApiCodeActivityChangesSummaryRoute
@@ -394,6 +438,10 @@ export interface FileRoutesByTo {
   '/buckets': typeof BucketsIndexRoute
   '/lists': typeof ListsIndexRoute
   '/team': typeof TeamIndexRoute
+  '/api/assistant/nudge': typeof ApiAssistantNudgeRoute
+  '/api/assistant/query': typeof ApiAssistantQueryRoute
+  '/api/assistant/stream': typeof ApiAssistantStreamRoute
+  '/api/assistant/voice-config': typeof ApiAssistantVoiceConfigRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
   '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
@@ -416,6 +464,8 @@ export interface FileRoutesByTo {
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/push/test': typeof ApiPushTestRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
+  '/api/assistant/action/confirm': typeof ApiAssistantActionConfirmRoute
+  '/api/assistant/action/preview': typeof ApiAssistantActionPreviewRoute
   '/api/code-activity/changes/detail': typeof ApiCodeActivityChangesDetailRoute
   '/api/code-activity/changes/draft': typeof ApiCodeActivityChangesDraftRoute
   '/api/code-activity/changes/summary': typeof ApiCodeActivityChangesSummaryRoute
@@ -447,6 +497,10 @@ export interface FileRoutesById {
   '/buckets/': typeof BucketsIndexRoute
   '/lists/': typeof ListsIndexRoute
   '/team/': typeof TeamIndexRoute
+  '/api/assistant/nudge': typeof ApiAssistantNudgeRoute
+  '/api/assistant/query': typeof ApiAssistantQueryRoute
+  '/api/assistant/stream': typeof ApiAssistantStreamRoute
+  '/api/assistant/voice-config': typeof ApiAssistantVoiceConfigRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
   '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
@@ -469,6 +523,8 @@ export interface FileRoutesById {
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/push/test': typeof ApiPushTestRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
+  '/api/assistant/action/confirm': typeof ApiAssistantActionConfirmRoute
+  '/api/assistant/action/preview': typeof ApiAssistantActionPreviewRoute
   '/api/code-activity/changes/detail': typeof ApiCodeActivityChangesDetailRoute
   '/api/code-activity/changes/draft': typeof ApiCodeActivityChangesDraftRoute
   '/api/code-activity/changes/summary': typeof ApiCodeActivityChangesSummaryRoute
@@ -501,6 +557,10 @@ export interface FileRouteTypes {
     | '/buckets/'
     | '/lists/'
     | '/team/'
+    | '/api/assistant/nudge'
+    | '/api/assistant/query'
+    | '/api/assistant/stream'
+    | '/api/assistant/voice-config'
     | '/api/calls/ring'
     | '/api/code-activity/assignee-candidates'
     | '/api/code-activity/branches'
@@ -523,6 +583,8 @@ export interface FileRouteTypes {
     | '/api/nudges/notify'
     | '/api/push/test'
     | '/api/things/notify-mention'
+    | '/api/assistant/action/confirm'
+    | '/api/assistant/action/preview'
     | '/api/code-activity/changes/detail'
     | '/api/code-activity/changes/draft'
     | '/api/code-activity/changes/summary'
@@ -550,6 +612,10 @@ export interface FileRouteTypes {
     | '/buckets'
     | '/lists'
     | '/team'
+    | '/api/assistant/nudge'
+    | '/api/assistant/query'
+    | '/api/assistant/stream'
+    | '/api/assistant/voice-config'
     | '/api/calls/ring'
     | '/api/code-activity/assignee-candidates'
     | '/api/code-activity/branches'
@@ -572,6 +638,8 @@ export interface FileRouteTypes {
     | '/api/nudges/notify'
     | '/api/push/test'
     | '/api/things/notify-mention'
+    | '/api/assistant/action/confirm'
+    | '/api/assistant/action/preview'
     | '/api/code-activity/changes/detail'
     | '/api/code-activity/changes/draft'
     | '/api/code-activity/changes/summary'
@@ -602,6 +670,10 @@ export interface FileRouteTypes {
     | '/buckets/'
     | '/lists/'
     | '/team/'
+    | '/api/assistant/nudge'
+    | '/api/assistant/query'
+    | '/api/assistant/stream'
+    | '/api/assistant/voice-config'
     | '/api/calls/ring'
     | '/api/code-activity/assignee-candidates'
     | '/api/code-activity/branches'
@@ -624,6 +696,8 @@ export interface FileRouteTypes {
     | '/api/nudges/notify'
     | '/api/push/test'
     | '/api/things/notify-mention'
+    | '/api/assistant/action/confirm'
+    | '/api/assistant/action/preview'
     | '/api/code-activity/changes/detail'
     | '/api/code-activity/changes/draft'
     | '/api/code-activity/changes/summary'
@@ -649,6 +723,10 @@ export interface RootRouteChildren {
   TeamRoute: typeof TeamRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
+  ApiAssistantNudgeRoute: typeof ApiAssistantNudgeRoute
+  ApiAssistantQueryRoute: typeof ApiAssistantQueryRoute
+  ApiAssistantStreamRoute: typeof ApiAssistantStreamRoute
+  ApiAssistantVoiceConfigRoute: typeof ApiAssistantVoiceConfigRoute
   ApiCallsRingRoute: typeof ApiCallsRingRoute
   ApiCodeActivityAssigneeCandidatesRoute: typeof ApiCodeActivityAssigneeCandidatesRoute
   ApiCodeActivityBranchesRoute: typeof ApiCodeActivityBranchesRoute
@@ -671,6 +749,8 @@ export interface RootRouteChildren {
   ApiNudgesNotifyRoute: typeof ApiNudgesNotifyRoute
   ApiPushTestRoute: typeof ApiPushTestRoute
   ApiThingsNotifyMentionRoute: typeof ApiThingsNotifyMentionRoute
+  ApiAssistantActionConfirmRoute: typeof ApiAssistantActionConfirmRoute
+  ApiAssistantActionPreviewRoute: typeof ApiAssistantActionPreviewRoute
   ApiCodeActivityChangesDetailRoute: typeof ApiCodeActivityChangesDetailRoute
   ApiCodeActivityChangesDraftRoute: typeof ApiCodeActivityChangesDraftRoute
   ApiCodeActivityChangesSummaryRoute: typeof ApiCodeActivityChangesSummaryRoute
@@ -798,6 +878,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/team/$conversationId'
       preLoaderRoute: typeof TeamConversationIdRouteImport
       parentRoute: typeof TeamRoute
+    }
+    '/api/assistant/nudge': {
+      id: '/api/assistant/nudge'
+      path: '/api/assistant/nudge'
+      fullPath: '/api/assistant/nudge'
+      preLoaderRoute: typeof ApiAssistantNudgeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/assistant/query': {
+      id: '/api/assistant/query'
+      path: '/api/assistant/query'
+      fullPath: '/api/assistant/query'
+      preLoaderRoute: typeof ApiAssistantQueryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/assistant/stream': {
+      id: '/api/assistant/stream'
+      path: '/api/assistant/stream'
+      fullPath: '/api/assistant/stream'
+      preLoaderRoute: typeof ApiAssistantStreamRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/assistant/voice-config': {
+      id: '/api/assistant/voice-config'
+      path: '/api/assistant/voice-config'
+      fullPath: '/api/assistant/voice-config'
+      preLoaderRoute: typeof ApiAssistantVoiceConfigRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/calls/ring': {
       id: '/api/calls/ring'
@@ -953,6 +1061,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiThingsNotifyMentionRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/assistant/action/confirm': {
+      id: '/api/assistant/action/confirm'
+      path: '/api/assistant/action/confirm'
+      fullPath: '/api/assistant/action/confirm'
+      preLoaderRoute: typeof ApiAssistantActionConfirmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/assistant/action/preview': {
+      id: '/api/assistant/action/preview'
+      path: '/api/assistant/action/preview'
+      fullPath: '/api/assistant/action/preview'
+      preLoaderRoute: typeof ApiAssistantActionPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/code-activity/changes/detail': {
       id: '/api/code-activity/changes/detail'
       path: '/api/code-activity/changes/detail'
@@ -1088,6 +1210,10 @@ const rootRouteChildren: RootRouteChildren = {
   TeamRoute: TeamRouteWithChildren,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
+  ApiAssistantNudgeRoute: ApiAssistantNudgeRoute,
+  ApiAssistantQueryRoute: ApiAssistantQueryRoute,
+  ApiAssistantStreamRoute: ApiAssistantStreamRoute,
+  ApiAssistantVoiceConfigRoute: ApiAssistantVoiceConfigRoute,
   ApiCallsRingRoute: ApiCallsRingRoute,
   ApiCodeActivityAssigneeCandidatesRoute:
     ApiCodeActivityAssigneeCandidatesRoute,
@@ -1111,6 +1237,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiNudgesNotifyRoute: ApiNudgesNotifyRoute,
   ApiPushTestRoute: ApiPushTestRoute,
   ApiThingsNotifyMentionRoute: ApiThingsNotifyMentionRoute,
+  ApiAssistantActionConfirmRoute: ApiAssistantActionConfirmRoute,
+  ApiAssistantActionPreviewRoute: ApiAssistantActionPreviewRoute,
   ApiCodeActivityChangesDetailRoute: ApiCodeActivityChangesDetailRoute,
   ApiCodeActivityChangesDraftRoute: ApiCodeActivityChangesDraftRoute,
   ApiCodeActivityChangesSummaryRoute: ApiCodeActivityChangesSummaryRoute,

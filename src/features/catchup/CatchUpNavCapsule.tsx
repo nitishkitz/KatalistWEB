@@ -108,7 +108,7 @@ export function CatchUpNavCapsule() {
     <div
       className="group/catchup relative h-11 w-[224px] shrink-0 md:w-[236px] lg:w-[292px]"
       onMouseEnter={() => { setIsHovered(true); setIsPaused(true); }}
-      onMouseLeave={() => { triggerRef.current?.blur(); setHasFocus(false); setIsHovered(false); setIsPaused(false); setIsPinned(false); setAutoExpanded(false); }}
+      onMouseLeave={() => { setIsHovered(false); setIsPaused(false); setAutoExpanded(false); }}
       onFocusCapture={() => { setHasFocus(true); setIsPaused(true); }}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {

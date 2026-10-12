@@ -1,6 +1,6 @@
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Check, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { getThingCapabilities } from "@/domain/capabilities";
@@ -15,11 +15,11 @@ import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-c
 import { CatchUpStackCard } from "./CatchUpStackCard";
 import {
   catchUpActionsFor,
-  reasonLabelFor,
   relativeTimeLabel,
   type CatchUpActionId,
 } from "./catchup-logic";
 import type { CatchUpMoment } from "./use-catchup";
+import { momentInCategory, queueBadgeFor, type DigestCategory } from "./digest-categories";
 
 type Props = {
   moments: CatchUpMoment[];
@@ -28,6 +28,8 @@ type Props = {
   onOpenThing: (thing: Thing) => void;
   onClose: () => void;
   onRefresh: () => void;
+  /** A Morning Digest summary tile was pressed: select its first matching moment. */
+  jump?: { category: DigestCategory; nonce: number } | null;
 };
 
 /**
@@ -121,6 +123,7 @@ export function CatchUpStack({
   onOpenThing,
   onClose,
   onRefresh,
+  jump,
 }: Props) {
   const qc = useQueryClient();
   const doorman = useDoorman();
@@ -200,6 +203,18 @@ export function CatchUpStack({
     setSelectedKey(key);
     setViewedKeys((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
   }, []);
+
+  const lastJumpRef = useRef<number>(jump?.nonce ?? 0);
+  useEffect(() => {
+    if (!jump || jump.nonce === lastJumpRef.current) return;
+    lastJumpRef.current = jump.nonce;
+    const target = order.find((key) => {
+      const entry = entries.get(key);
+      const m = entry?.live ?? entry?.lastKnown;
+      return m ? momentInCategory(m, jump.category) : false;
+    });
+    if (target) selectKey(target);
+  }, [jump, order, entries, selectKey]);
 
   // T10-05: Previous/Next are plain callbacks driven by the current
   // (key-derived) index, not a `setIndex` updater with a parent `onClose()`
@@ -366,24 +381,31 @@ export function CatchUpStack({
   const busy = busyKey === currentEntry.key;
 
   return (
-    <div className="brief-stack flex flex-col gap-5">
-      <div className="brief-columns flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-5">
-        {/* T10-06: bounded queue (~280px on desktop) -- native buttons with
-          accessible selected state and visible focus, titles wrap rather
-          than truncate unreadably, and the list itself scrolls once it
-          exceeds its own bounded height rather than growing the dialog. */}
+    <div className="brief-stack flex h-full min-h-0 flex-col">
+      <div className="brief-columns flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4 pt-5 lg:flex-row lg:gap-[28px] lg:pb-[17px] lg:pl-[23px] lg:pr-[25px] lg:pt-[22px]">
+        {/* T10-06: bounded queue -- native buttons with accessible selected
+          state and visible focus, titles wrap rather than truncate
+          unreadably, and the list itself scrolls once it exceeds its own
+          bounded height rather than growing the dialog. */}
         {order.length > 1 ? (
-          <nav
-            aria-label="Moments in this review"
-            className="brief-queue order-2 flex gap-2 overflow-x-auto pb-1 lg:order-1 lg:w-[280px] lg:shrink-0 lg:flex-col lg:gap-1.5 lg:overflow-x-visible lg:overflow-y-auto lg:pb-0 lg:max-h-[60vh]"
-          >
-            <span className="brief-queue-label">Your queue</span>
+        <nav
+          aria-label="Moments in this review"
+          className="brief-queue order-2 flex min-h-0 flex-col gap-[12.8px] lg:order-1 lg:w-[358px] lg:shrink-0 lg:border-r-[1.28px] lg:border-[#e6e3ed] lg:pr-[12.8px]"
+        >
+          <div className="flex h-[25.7px] shrink-0 items-center gap-[9px]">
+            <span className="brief-queue-label text-[20.5px] font-semibold text-[#30104d]">Your queue</span>
+            <span className="flex h-[25.7px] w-[25.7px] items-center justify-center rounded-full bg-[#eddeff] text-[12.8px] font-semibold text-[#8d2bf5]">
+              {order.length}
+            </span>
+          </div>
+          <div className="flex min-h-0 flex-col gap-[8.3px] overflow-y-auto">
             {order.map((key) => {
               const entry = entries.get(key);
               if (!entry) return null;
               const m = entry.live ?? entry.lastKnown;
               const selected = key === currentEntry.key;
               const person = m.actor ?? m.thing.assignee;
+              const badge = queueBadgeFor(m);
               return (
                 <button
                   key={key}
@@ -392,32 +414,40 @@ export function CatchUpStack({
                   aria-current={selected ? "true" : undefined}
                   data-resolved={entry.status === "resolved" || undefined}
                   className={cn(
-                    "brief-queue-row flex shrink-0 items-center gap-2 rounded-[10px] border px-3 py-2 text-left text-[12.5px] outline-none transition focus-visible:ring-2 focus-visible:ring-ring cursor-pointer lg:w-full lg:shrink",
+                    "brief-queue-row relative flex w-full shrink-0 cursor-pointer items-center gap-[12.8px] overflow-hidden rounded-[7.7px] px-[11.6px] text-left outline-none transition focus-visible:ring-2 focus-visible:ring-[#8d2bf5]",
                     selected
-                      ? "border-primary/40 bg-primary/[0.06] text-slate-900"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300",
+                      ? "min-h-[80px] border-[0.96px] border-[#b47aff] bg-[#f3e8fc]"
+                      : "min-h-[68.7px] border-[0.64px] border-[#f7f7fa] bg-[#fbfbfc] hover:bg-[#f6f1fb]",
                     entry.status === "unavailable" && "opacity-50",
                   )}
                 >
+                  {selected ? <span className="absolute -left-px -top-px bottom-[-1px] w-[3.2px] bg-[#8d2bf5]" /> : null}
                   <span className="brief-avatar">
                     <PersonAvatar name={person.name} initials={person.initials} src={person.avatarUrl} size={40} />
                     {entry.status === "resolved" ? <Check className="brief-avatar-check" aria-label="Action saved" /> : null}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium lg:whitespace-normal lg:break-words">
+                  <span className="flex min-w-0 flex-1 flex-col gap-[4.5px] text-[12px]">
+                    <span className={cn("block break-words leading-[1.65] text-[#30104d]", selected ? "font-semibold" : "font-semibold")}>
                       {m.thing.title}
                     </span>
-                    <span className="hidden text-[12px] text-slate-400 lg:block">
-                      {person.name} · {reasonLabelFor(m.kind, m.reason)} · {relativeTimeLabel(m.occurredAt)}
+                    <span className="block leading-[1.4] text-[#8286a2]">
+                      {person.name} · {relativeTimeLabel(m.occurredAt)}
                     </span>
+                  </span>
+                  <span
+                    style={{ background: badge.bg, color: badge.text }}
+                    className="shrink-0 rounded-full px-[9.6px] py-[5.8px] text-[12px] font-medium leading-[1.4]"
+                  >
+                    {badge.label}
                   </span>
                 </button>
               );
             })}
-          </nav>
+          </div>
+        </nav>
         ) : null}
 
-        <div key={displayMoment.thing.id} className="brief-detail relative order-1 min-w-0 flex-1 lg:order-2">
+        <div key={displayMoment.thing.id} className="brief-detail relative order-1 min-h-0 min-w-0 flex-1 overflow-y-auto lg:order-2">
           {!isActive ? (
             <div className="relative z-10 flex flex-col gap-3 rounded-[16px] border border-slate-200 bg-white p-5 text-center shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
               <h3 className="text-[16px] font-semibold text-slate-800">
@@ -450,6 +480,10 @@ export function CatchUpStack({
               ) : (
                 <p className="text-[13px] text-slate-500">This moment is no longer available.</p>
               )}
+              <div className="flex justify-center gap-2">
+                <button type="button" onClick={goPrev} disabled={isFirst || busy} aria-label="Previous" className="rounded-full border border-[#e6e3ed] px-3 py-1 text-[12px] disabled:opacity-40">Previous</button>
+                <button type="button" onClick={goNext} disabled={busy} aria-label={isLast ? "Finish" : "Next"} className="rounded-full border border-[#e6e3ed] px-3 py-1 text-[12px] disabled:opacity-40">{isLast ? "Finish" : "Next"}</button>
+              </div>
             </div>
           ) : (
             <CatchUpStackCard
@@ -458,47 +492,28 @@ export function CatchUpStack({
               actions={actions}
               busy={busy}
               onAction={runAction}
+              onPrev={goPrev}
+              onNext={goNext}
+              prevDisabled={isFirst}
+              isLast={isLast}
+              onOpen={() => void runAction("open")}
             />
           )}
         </div>
       </div>
 
-      <div className="brief-footer flex items-center justify-between gap-4">
-        <span className="text-[12px] text-slate-500" data-testid="catchup-viewed-summary">
+      {/* Progress is still announced for assistive tech and tests; the
+          Figma digest has no visible footer. */}
+      <div className="brief-footer sr-only">
+        <span data-testid="catchup-viewed-summary">
           Viewed {viewedKeys.size} of {order.length}
           {resolvedCount > 0
             ? ` · ${resolvedCount} action${resolvedCount === 1 ? "" : "s"} completed`
             : ""}
         </span>
-        <div className="brief-progress" aria-hidden="true">
-          {order.map((key) => <span key={key} data-viewed={viewedKeys.has(key)} />)}
-        </div>
-        <div className="brief-pager flex items-center gap-3">
-          <button
-            type="button"
-            onClick={goPrev}
-            disabled={isFirst || busy}
-            aria-label="Previous"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 outline-none transition hover:border-slate-300 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <span
-            className="min-w-[64px] text-center text-[13px] font-medium text-slate-500"
-            data-testid="catchup-pager-position"
-          >
-            {currentIndex + 1} of {order.length}
-          </span>
-          <button
-            type="button"
-            onClick={goNext}
-            disabled={busy}
-            aria-label={isLast ? "Finish" : "Next"}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 outline-none transition hover:border-slate-300 disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
+        <span data-testid="catchup-pager-position">
+          {currentIndex + 1} of {order.length}
+        </span>
       </div>
     </div>
   );

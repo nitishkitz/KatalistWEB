@@ -120,7 +120,7 @@ export function CallRingProvider() {
       <div className="flex h-7 items-center justify-between">
         <Logo markClassName="h-[18px] w-[18px] rounded-[3px] p-[3px]" textClassName="text-[12px]" className="gap-1.5" />
         <div className="flex items-center gap-1 text-[#51466c]">
-          <button type="button" onClick={dismiss} className="rounded p-1 hover:bg-[#f4f1fa]" aria-label="More call options" title="More options">
+          <button type="button" onClick={dismiss} className="rounded p-1 hover:bg-[#f4f1fa]" aria-label="Dismiss incoming call" title="Dismiss incoming call">
             <MoreHorizontal className="h-4 w-4" />
           </button>
           <button type="button" onClick={dismiss} className="rounded p-1 hover:bg-[#f4f1fa]" aria-label="Close incoming call">

@@ -1,3 +1,4 @@
+import { signInPreview } from "./demo-sign-in";
 import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 
@@ -15,20 +16,7 @@ const shot = async (page: Page, name: string) => {
   await page.screenshot({ path: `${CAPTURE}/${name}-${v?.width}x${v?.height}.png` });
 };
 
-async function signInAsDemo(page: Page) {
-  await page.goto("/auth");
-  const demoTab = page.getByRole("button", { name: /^Demo$/i });
-  if (await demoTab.isVisible().catch(() => false)) await demoTab.click();
-  const persona = page.getByRole("button", { name: /Priya Sharma/i });
-  const available = await persona.waitFor({ state: "visible", timeout: 8_000 }).then(() => true).catch(() => false);
-  if (!available) {
-    if (process.env.CI) throw new Error("Demo personas are missing; QA preview coverage must not skip in CI");
-    return false;
-  }
-  await persona.click();
-  await page.waitForURL("/", { timeout: 20_000 });
-  return true;
-}
+const signInAsDemo = signInPreview;
 
 async function openQa(page: Page) {
   await page.goto("/lists");

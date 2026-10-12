@@ -60,17 +60,13 @@ export function useTeam() {
       // Placeholder/default display names carried by unnamed or seeded accounts.
       const GENERIC_NAMES = new Set(["someone", "member", "katalist user", "unknown", "guest", "user"]);
       const seenIds = new Set<string>();
-      const seenNames = new Set<string>();
       const members: TeamMember[] = [];
       for (const p of identities) {
         if (!p.id || seenIds.has(p.id)) continue;
         const name = (p.display_name || "").trim();
         const key = name.toLowerCase();
         if (!name || GENERIC_NAMES.has(key)) continue;
-        // Collapse duplicate default names (e.g. two unnamed "Priya Sharma").
-        if (seenNames.has(key)) continue;
         seenIds.add(p.id);
-        seenNames.add(key);
         const d = detailById.get(p.id);
         members.push({
           id: p.id,

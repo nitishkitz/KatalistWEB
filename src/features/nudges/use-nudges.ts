@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useCourt } from "@/features/court/use-court";
 import { isActiveThing, theirStateFor, type Thing } from "@/domain/thing";
@@ -54,6 +54,13 @@ export function useNudges() {
   const preview = isPreviewSession(session);
   const liveAuth = Boolean(session) && !preview;
   useLocalVersion();
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const tick = () => { if (!document.hidden) setClock(Date.now()); };
+    const interval = window.setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { window.clearInterval(interval); document.removeEventListener("visibilitychange", tick); };
+  }, []);
   const liveThings = court.theirs.filter(isActiveThing);
 
   const nudgeable = useQuery({
@@ -66,6 +73,8 @@ export function useNudges() {
       if (error) throw error;
       return data ?? [];
     },
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 
   const history = useQuery({
@@ -109,7 +118,7 @@ export function useNudges() {
     const isLiveRecent = (thingId: string) => {
       const hit = latestByThing.get(thingId);
       if (!hit) return false;
-      return Date.now() - new Date(hit.created_at).getTime() < COOLDOWN_MS;
+      return clock - new Date(hit.created_at).getTime() < COOLDOWN_MS;
     };
     for (const t of liveThings) {
       if (t.workStatus === "sorted" || t.workStatus === "cancelled") continue;
@@ -125,7 +134,7 @@ export function useNudges() {
       }
     } else {
       for (const [thingId, hit] of latestByThing) {
-        if (Date.now() - new Date(hit.created_at).getTime() >= COOLDOWN_MS) continue;
+        if (clock - new Date(hit.created_at).getTime() >= COOLDOWN_MS) continue;
         const t = liveThings.find((x) => x.id === thingId);
         if (!t) continue;
         recent.push({
@@ -137,8 +146,16 @@ export function useNudges() {
         });
       }
     }
-    return { rows, recent };
-  }, [liveThings, court.preview, court.myActorId, nudgeable.data, history.data]);
+    // Server-sourced per-Thing state for surfaces that render their own rows
+    // (the Ask panel): eligibility from list_nudgeable_things, last nudge
+    // time from the cooldown-window history. Never remembered client-side.
+    const lastNudgedAt = new Map<string, string>();
+    if (!court.preview)
+      for (const [thingId, hit] of latestByThing)
+        if (clock - new Date(hit.created_at).getTime() < COOLDOWN_MS) lastNudgedAt.set(thingId, hit.created_at);
+    const nudgeableIds = new Set(rows.filter((row) => row.canNudge).map((row) => row.id));
+    return { rows, recent, lastNudgedAt, nudgeableIds };
+  }, [liveThings, court.preview, court.myActorId, nudgeable.data, history.data, clock]);
 
   const counts = useMemo(() => {
     const map: Record<NudgeGroup, number> = {

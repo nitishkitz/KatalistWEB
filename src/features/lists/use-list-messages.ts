@@ -247,6 +247,8 @@ export function useListMessages(listId: string) {
     accessLost,
     isLoading: !preview && !hidden && query.isLoading,
     error: query.error,
+    retryMessages: () => query.refetch(),
+    isRetrying: query.isRefetching,
     hasMore: query.hasNextPage,
     isLoadingOlder: query.isFetchingNextPage,
     olderError: query.isFetchNextPageError,

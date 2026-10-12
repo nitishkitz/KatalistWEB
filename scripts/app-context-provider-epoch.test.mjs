@@ -127,6 +127,7 @@ test("a context update started under A that resolves after a switch to B does no
 });
 
 test("a context update that resolves before any switch still runs its invalidateQueries() normally", async () => {
+  globalThis.localStorage.clear();
   testSession = { user: { id: "profile-A" }, session: { user: { id: "profile-A", app_metadata: {} } } };
   resetRpcGate();
   const qc = newTestClient();

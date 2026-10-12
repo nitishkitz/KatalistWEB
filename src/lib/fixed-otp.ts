@@ -6,6 +6,9 @@
  * hosted Supabase Auth and require the OTP it issued.
  */
 export function localFixedOtp(): string | null {
+  const environment = import.meta.env.VITE_KATALIST_ENV;
+  const testEnvironment = environment === "uat" || environment === "test" || environment === "development";
+  if (environment === "production" || (import.meta.env.PROD && !testEnvironment)) return null;
   const configured = import.meta.env.VITE_KATALIST_FIXED_OTP?.trim();
   return configured && /^\d{6}$/.test(configured) ? configured : null;
 }

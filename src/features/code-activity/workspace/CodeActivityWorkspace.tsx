@@ -112,6 +112,7 @@ export function CodeActivityWorkspace({ listId, listName, repositoryFullName, ro
       <div className="ca-list-chrome ca-status-strip empty:hidden">
         {suspended ? <Notice tone="warn" className="mt-2"><b>GitHub App suspended.</b> Saved activity is shown as of the last sync. Nothing new is read until it is unsuspended.</Notice> : null}
         {ws.feed.notice ? <Notice tone="bad" live="status" className="mt-2">{ws.feed.notice}</Notice> : null}
+        {ws.issues.date || ws.issues.path ? <Notice tone="bad" live="status" className="mt-2">Fix the invalid {ws.issues.date && ws.issues.path ? "date and path filters" : ws.issues.date ? "date filter" : "path filter"} to show matching activity. No unfiltered activity is shown.</Notice> : null}
         {!ws.feed.refreshing && data?.freshness.syncStatus === "partial" ? <Notice tone="info" className="mt-2"><b>Partial sync.</b> What is shown is accurate, but some activity or check results could not be read within the limits.</Notice> : null}
         {ws.deploymentsPermissionNeeded && (ws.category === "deployments" || ws.category === "all") ? (
           <details className="ca-status-disclosure"><summary>Deployments unavailable · permission needed</summary><p>The GitHub App needs Deployments read access. Its owner can grant this in GitHub. Katalist never changes deployments.</p></details>

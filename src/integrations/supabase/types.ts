@@ -3114,7 +3114,7 @@ export type Database = {
         }
       }
       set_due: {
-        Args: { p_due_at: string; p_due_has_time?: boolean; p_thing_id: string }
+        Args: { p_due_at: string | null; p_due_has_time?: boolean; p_thing_id: string }
         Returns: {
           acknowledgement: Database["public"]["Enums"]["acknowledgement_state"]
           assignee_personal_pace: Database["public"]["Enums"]["pace"] | null

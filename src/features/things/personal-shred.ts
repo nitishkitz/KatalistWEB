@@ -108,6 +108,7 @@ export async function invalidatePersonalSurfaces(qc: QueryClient, epoch: number)
     qc.invalidateQueries({ queryKey: ["nudges"] }),
     qc.invalidateQueries({ queryKey: ["nudge-history"] }),
     qc.invalidateQueries({ queryKey: ["trophy"] }),
+    qc.invalidateQueries({ queryKey: ["profile-solved-things"] }),
     qc.invalidateQueries({ queryKey: ["accessible-things"] }),
     qc.invalidateQueries({ queryKey: ["bucket-items"] }),
     qc.invalidateQueries({ queryKey: ["buckets"] }),

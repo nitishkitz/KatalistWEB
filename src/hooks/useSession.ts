@@ -166,7 +166,9 @@ function enforceDeviceLimitOnce(accessToken: string) {
 }
 
 export function useSession() {
-  const [session, setSession] = useState<Session | null>(null);
+  // Preview hooks must know their synthetic identity on the first render;
+  // otherwise enabled read queries can fire before the effect resolves it.
+  const [session, setSession] = useState<Session | null>(() => getStoredDemoSession());
   const [loading, setLoading] = useState(true);
 
   const refreshSession = useCallback(() => {
@@ -179,6 +181,10 @@ export function useSession() {
 
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      setLoading(false);
+    }).catch(() => {
+      // A rejected session read is not an endless loading state. Subsequent
+      // auth events or a new sign-in can still restore the session normally.
       setLoading(false);
     });
   }, []);

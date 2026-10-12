@@ -1,3 +1,4 @@
+import { signInPreview } from "./demo-sign-in";
 import { test, expect } from "@playwright/test";
 
 /**
@@ -30,24 +31,7 @@ import { test, expect } from "@playwright/test";
  * `scripts/magic-box-capture-ux.test.mjs` (capture itself).
  */
 
-async function signInAsFirstDemoPersona(page: import("@playwright/test").Page) {
-  await page.goto("/auth");
-  const demoTab = page.getByRole("button", { name: /^Demo$/i });
-  const appeared = await demoTab
-    .waitFor({ state: "visible", timeout: 8_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!appeared) {
-    if (process.env.CI) throw new Error("Demo tab is missing; Court preview coverage must not skip in CI");
-    return false;
-  }
-  await demoTab.click();
-  const firstPersona = page.getByRole("button", { name: /Priya Sharma/i });
-  await expect(firstPersona).toBeVisible();
-  await firstPersona.click();
-  await page.waitForURL("/");
-  return true;
-}
+const signInAsFirstDemoPersona = signInPreview;
 
 test("top navigation does not overlap the logo or context controls", async ({ page }) => {
   const signedIn = await signInAsFirstDemoPersona(page);

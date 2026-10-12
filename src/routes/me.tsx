@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Bell,
   Briefcase,
@@ -38,11 +38,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTrophy } from "@/features/me/use-trophy";
+import { SolvedThingsDialog } from "@/features/me/SolvedThingsDialog";
 import { useAvatarUrl } from "@/features/people/directory";
 import { isDoormanEnabled } from "@/features/doorman/use-doorman";
 import { cn } from "@/lib/utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useStoredMotionPreference } from "@/hooks/use-motion-preference";
+import { FONT_OPTIONS, setFontPreference, useStoredFontPreference } from "@/hooks/use-font-preference";
 import { getPushPermissionState, registerPushForUser, sendTestPush, type PushPermissionState } from "@/features/push/push-registration";
 import coverImage from "@/assets/profile/cover.png";
 import { LoggedInDevices } from "@/features/me/devices/LoggedInDevices";
@@ -88,7 +90,9 @@ function MePage() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const uploadAvatar = useUploadAvatar();
   const updateProfile = useUpdateProfile();
-  const { stats, restore, readState: trophyReadState, retry: retryTrophy } = useTrophy();
+  const { stats, restore, readState: trophyReadState, retry: retryTrophy, sortedCount } = useTrophy();
+  const [solvedOpen, setSolvedOpen] = useState(false);
+  const sortedCardRef = useRef<HTMLButtonElement | null>(null);
   const { context } = useAppContext();
 
   const [panel, setPanel] = useState<string | null>(null);
@@ -102,6 +106,7 @@ function MePage() {
   // upload from a failed one instead of leaving no visible state at all.
   const [avatarAttempt, setAvatarAttempt] = useState<{ file: File; status: "uploading" | "failed" } | null>(null);
   const { reduceMotion: reduced, setReduceMotion: setReduced } = useStoredMotionPreference();
+  const selectedFont = useStoredFontPreference();
   // G06: real push permission state, shown honestly in the notifications
   // panel below instead of the previous static "in-app notifications
   // only, for now" copy (which was simply false -- real browser push
@@ -282,9 +287,10 @@ function MePage() {
     {
       icon: Crown,
       tint: "bg-[#f0ebfd] text-[#975ee2]",
-      value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.sorted),
+      value: sortedCount === null ? "—" : String(sortedCount),
       label: "Things sorted",
-      hint: "Every sort counts, even on the same Thing twice",
+      hint: "Currently sorted Things assigned to you",
+      action: "solved" as const,
     },
     {
       icon: BarChart3,
@@ -449,18 +455,38 @@ function MePage() {
             </div>
           ) : null}
           <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
-            {statCards.map((s) => (
-              <div key={s.label} className="flex items-center gap-3 rounded-[14px] bg-white p-3.5" style={{ boxShadow: CARD_SHADOW }}>
-                <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", s.tint)}>
-                  <s.icon className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <div className="text-[22px] font-semibold leading-none text-black">{s.value}</div>
-                  <div className="mt-1 text-[12px] font-medium text-[#1b2955]">{s.label}</div>
-                  <div className="mt-0.5 hidden text-[10px] leading-tight text-[#9aa3bd] xl:block">{s.hint}</div>
+            {statCards.map((s) => {
+              const body = (
+                <>
+                  <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", s.tint)}>
+                    <s.icon className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-[22px] font-semibold leading-none text-black">{s.value}</div>
+                    <div className="mt-1 text-[12px] font-medium text-[#1b2955]">{s.label}</div>
+                    <div className="mt-0.5 hidden text-[10px] leading-tight text-[#9aa3bd] xl:block">{s.hint}</div>
+                  </div>
+                </>
+              );
+              return "action" in s ? (
+                <button
+                  key={s.label}
+                  ref={sortedCardRef}
+                  type="button"
+                  aria-label="View sorted Things"
+                  aria-haspopup="dialog"
+                  onClick={() => setSolvedOpen(true)}
+                  className="flex cursor-pointer items-center gap-3 rounded-[14px] bg-white p-3.5 text-left outline-none transition-colors hover:bg-[#faf8ff] focus-visible:ring-2 focus-visible:ring-ring"
+                  style={{ boxShadow: CARD_SHADOW }}
+                >
+                  {body}
+                </button>
+              ) : (
+                <div key={s.label} className="flex items-center gap-3 rounded-[14px] bg-white p-3.5" style={{ boxShadow: CARD_SHADOW }}>
+                  {body}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Two columns fill remaining height */}
@@ -719,14 +745,46 @@ function MePage() {
                 {panel === "devices" ? (
                   <LoggedInDevices />
                 ) : panel === "appearance" ? (
-                  <label className="mt-4 flex items-center justify-between text-[13px]">
-                    Reduced motion
-                    <input
-                      type="checkbox"
-                      checked={reduced}
-                      onChange={(e) => setReduced(e.target.checked)}
-                    />
-                  </label>
+                  <div className="mt-4 space-y-5">
+                    <fieldset>
+                      <legend className="text-[13px] font-semibold text-foreground">App font</legend>
+                      <p className="mt-1 text-[12px] text-muted-foreground">Choose the text style for this device.</p>
+                      <div className="mt-3 grid max-h-[min(50vh,420px)] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                        {FONT_OPTIONS.map((option) => (
+                          <label
+                            key={option.id}
+                            className={cn(
+                              "flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-ring",
+                              selectedFont === option.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+                            )}
+                          >
+                            <input
+                              type="radio"
+                              name="app-font"
+                              value={option.id}
+                              checked={selectedFont === option.id}
+                              onChange={() => setFontPreference(option.id)}
+                              className="mt-1 accent-primary"
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-[16px] font-semibold leading-tight" style={{ fontFamily: option.stack }}>
+                                {option.label}
+                              </span>
+                              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{option.detail}</span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                    <label className="flex items-center justify-between text-[13px]">
+                      Reduced motion
+                      <input
+                        type="checkbox"
+                        checked={reduced}
+                        onChange={(e) => setReduced(e.target.checked)}
+                      />
+                    </label>
+                  </div>
                 ) : panel === "preferences" ? (
                   <label className="mt-4 flex items-center justify-between gap-3 text-[13px]">
                     <span>
@@ -804,6 +862,7 @@ function MePage() {
           </div>
         </DialogContent>
       </Dialog>
+      <SolvedThingsDialog open={solvedOpen} onOpenChange={setSolvedOpen} returnFocusRef={sortedCardRef} />
     </AppShell>
   );
 }

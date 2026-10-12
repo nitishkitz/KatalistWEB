@@ -10,7 +10,6 @@ import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { KatalistIcon } from "./KatalistIcon";
 import {
   ThingReferenceContextMenu,
-  ThingReferenceOverflowMenu,
 } from "@/features/thing-references/ThingReferenceContextMenu";
 
 export type CourtStackAction = "catch" | "later" | "sort";
@@ -451,8 +450,6 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
                 <span>Snooze</span>
               </button>
             )}
-            {/* Touch and keyboard route to the same Copy Thing / Add to Magic Box / Copy link actions as right-click. */}
-            <ThingReferenceOverflowMenu thingId={thing.id} />
           </div>
         )}
       </article>

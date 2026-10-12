@@ -10,8 +10,10 @@ import { test } from "node:test";
 const overlay = readFileSync(new URL("../src/features/catchup/CatchUpOverlay.tsx", import.meta.url), "utf8");
 const banner = readFileSync(new URL("../src/features/catchup/CatchUpBanner.tsx", import.meta.url), "utf8");
 
-test("the overlay's dialog title reads Morning Brief, not Catch Up", () => {
+test("the overlay's dialog is named Morning Brief (heading reads Morning Digest), not Catch Up", () => {
+  // The accessible name stays "Morning Brief"; the visible hero heading follows the Figma "Morning Digest" design.
   assert.match(overlay, />Morning Brief</);
+  assert.match(overlay, />\s*Morning Digest\s*</);
   assert.doesNotMatch(overlay, />Catch Up</);
   // The component/file name itself is unchanged.
   assert.match(overlay, /export function CatchUpOverlay/);

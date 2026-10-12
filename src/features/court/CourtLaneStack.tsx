@@ -485,6 +485,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       if (!node) return;
 
       const holdPage = (event: WheelEvent) => {
+        if (event.target instanceof Element && event.target.closest(".court-peek-deck")) return;
         if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) event.preventDefault();
       };
 
@@ -502,6 +503,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       const observer = Observer.create({
         target: node,
         type: "wheel",
+        ignore: ".court-peek-deck, .court-peek-deck *",
         capture: true,
         preventDefault: true,
         lockAxis: true,
@@ -1074,7 +1076,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             {/* Peek queue — fills the room below the active card and clips extras
                 so the pager below always stays visible. */}
             {things.length > 1 && (
-              <div className="relative z-10 -mt-1.5 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-px pb-1">
+              <div className="court-peek-deck relative z-10 -mt-1.5 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden px-px pb-1">
                 {Array.from({ length: depthCount }, (_, i) => {
                   const depth = i + 1;
                   const targetIndex = (renderIndex + depth) % things.length;

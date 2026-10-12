@@ -29,6 +29,8 @@ export const keys = {
   trophy: (profileId: string | undefined) => ["trophy", profileId] as const,
   notifications: (profileId: string | undefined) =>
     ["notifications", profileId] as const,
+  /** Profile-wide "currently solved Things" list and count; both live under this prefix. */
+  solvedThings: (profileId: string | undefined) => ["profile-solved-things", profileId] as const,
   shredded: (profileId: string | undefined) => ["shredded", profileId] as const,
   snoozed: (profileId: string | undefined) => ["snoozed", profileId] as const,
   // Profile-scoped only, no context: the `actors` table has no context

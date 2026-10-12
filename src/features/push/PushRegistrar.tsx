@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useSession } from "@/hooks/useSession";
-import { getPushPermissionState, registerPushForUser } from "./push-registration";
+import { disposePushForUser, getPushPermissionState, registerPushForUser } from "./push-registration";
 
 /**
  * Re-registers this device's push token when signed in and permission was
@@ -31,6 +31,7 @@ export function PushRegistrar() {
 
     return () => {
       cancelled = true;
+      disposePushForUser(uid);
     };
   }, [user?.id, navigate]);
 

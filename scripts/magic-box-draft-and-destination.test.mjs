@@ -6,17 +6,10 @@ import { act } from "react";
 import { render, cleanup, fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlockerProvider";
+import { isAssistantQuestion } from "@/features/court/magic-box-input-kind";
 
-/**
- * T09/E05: Magic Box previously (a) never showed the destination List or
- * Work/Home context anywhere persistent -- only as a placeholder that
- * vanished once typing started -- and (b) never used the scoped
- * session-draft mechanism at all, so typed text/attachments were plain
- * component state lost on unmount (e.g. navigating away from a List and
- * back). Both are fixed: a persistent destination row, and a real
- * getDraft/setDraft/clearDraft write-through keyed by (List, or Work/Home
- * context when there's no List).
- */
+/** Drafts remain scoped to their List/context. Destination is communicated
+ * by the placeholder; the user requested removal of the persistent row. */
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 mock.module("@/features/context/use-app-context", {
@@ -26,8 +19,12 @@ mock.module("@/features/people/use-assignable", { namedExports: { useAssignableP
 mock.module("@/features/lists/use-lists", { namedExports: { useLists: () => ({ lists: [] }) } });
 mock.module("@/features/buckets/use-buckets", { namedExports: { useBuckets: () => ({ buckets: [] }) } });
 mock.module("@/lib/session-mode", { namedExports: { isPreviewMode: () => true, isPreviewSession: () => true } });
+const createdThings = [];
 mock.module("@/features/things/rpc", {
-  namedExports: { rpcCreateThing: async () => ({ id: "new-thing" }), rpcAddToBucket: async () => {} },
+  namedExports: { rpcCreateThing: async (input) => { createdThings.push(input); return { id: "new-thing" }; }, rpcAddToBucket: async () => {} },
+});
+mock.module("@/features/court/MagicBoxAssistant", {
+  namedExports: { MagicBoxAssistant: ({ question, onClose }) => h('section', { 'aria-label': 'Magic Box assistant' }, question, h('button', { onClick: onClose }, 'Close assistant answer')) },
 });
 
 const { MagicBox } = await import("@/features/court/MagicBox");
@@ -46,24 +43,25 @@ function Harness({ qc, listId, listName }) {
   );
 }
 
-test("the composer shows a persistent destination row naming the List and Work/Home context, not just a placeholder", async () => {
+test("the composer keeps the destination in its placeholder without the removed destination text", async () => {
   const qc = newClient();
-  const { getByText } = render(h(Harness, { qc, listName: "Website Launch" }));
+  const { getByLabelText, queryByText } = render(h(Harness, { qc, listName: "Website Launch" }));
   await act(async () => {});
 
-  assert.ok(getByText("Website Launch"), "destination List name must be shown persistently");
-  assert.ok(getByText("work"), "Work/Home context must be shown persistently");
+  assert.equal(getByLabelText("Magic Box").placeholder, "Toss into Website Launch…");
+  assert.equal(queryByText("Website Launch"), null);
+  assert.equal(queryByText("work"), null);
 
   cleanup();
   qc.clear();
 });
 
-test("with no destination List, the composer names the destination as Court", async () => {
+test("with no destination List, the composer omits the removed Court destination label", async () => {
   const qc = newClient();
-  const { getByText } = render(h(Harness, { qc }));
+  const { queryByText } = render(h(Harness, { qc }));
   await act(async () => {});
 
-  assert.ok(getByText("Court"));
+  assert.equal(queryByText("Court"), null);
 
   cleanup();
   qc.clear();
@@ -104,4 +102,65 @@ test("a different destination List does not see another List's draft", async () 
 
   cleanup();
   qc.clear();
+});
+
+test('clear queries route to Ask; task descriptions retain Toss', () => {
+  for (const value of ['Who is in stale, and i need to see the thing assigned to them', 'Who needs a nudge?', 'What changed this week?', 'how many things are overdue', 'Show me my overdue Things', 'Can you explain my Court?', 'hi', '“Who is stale?”'])
+    assert.equal(isAssistantQuestion(value), true, value);
+  for (const value of ['Rahul submit your docs', '@Rahul submit your docs', 'Investigate why the login fails', 'Review who owns the launch', 'Show the demo to Rahul tomorrow', 'Finish the report by EOD', 'Task: Who needs a nudge?'])
+    assert.equal(isAssistantQuestion(value), false, value);
+});
+
+test('a question submitted from the initial Toss mode opens Ask and never creates a Thing', async () => {
+  const qc = newClient();
+  const ui = render(h(Harness, { qc }));
+  createdThings.length = 0;
+  const question = 'Who is in stale, and i need to see the thing assigned to them';
+  try {
+    await act(async () => fireEvent.change(ui.getByLabelText('Magic Box'), { target: { value: question } }));
+    assert.equal(ui.queryByRole('button', { name: 'Toss Thing' }), null);
+    assert.equal(ui.getByRole('button', { name: 'Ask', exact: true }).getAttribute('aria-pressed'), 'true');
+    await act(async () => fireEvent.keyDown(ui.getByLabelText('Magic Box'), { key: 'Enter' }));
+    assert.ok(ui.getByRole('region', { name: 'Magic Box assistant' }).textContent.includes(question));
+    assert.deepEqual(createdThings, []);
+    assert.ok(ui.getByTestId('magic-box-backdrop'));
+    assert.equal(ui.queryByRole('button', { name: 'Voice unavailable — details' }), null);
+    await act(async () => fireEvent.click(ui.getByRole('button', { name: 'Close assistant answer' })));
+    assert.equal(ui.queryByTestId('magic-box-backdrop'), null);
+  } finally { cleanup(); qc.clear(); }
+});
+
+test('the submit button also routes a question to Ask while ordinary task capture still creates a Thing', async () => {
+  const qc = newClient();
+  const ui = render(h(Harness, { qc }));
+  createdThings.length = 0;
+  try {
+    await act(async () => fireEvent.change(ui.getByLabelText('Magic Box'), { target: { value: 'Who needs a nudge?' } }));
+    await act(async () => fireEvent.click(ui.getByRole('button', { name: 'Ask Coey' })));
+    assert.deepEqual(createdThings, []);
+    await act(async () => fireEvent.click(ui.getByRole('button', { name: 'Close assistant answer' })));
+    await act(async () => fireEvent.click(ui.getByRole('button', { name: 'Toss', exact: true })));
+    await act(async () => fireEvent.change(ui.getByLabelText('Magic Box'), { target: { value: 'Finish the release notes' } }));
+    await act(async () => fireEvent.click(ui.getByRole('button', { name: 'Toss Thing' })));
+    assert.equal(createdThings.length, 1);
+    assert.equal(createdThings[0].title, 'Finish the release notes');
+  } finally { cleanup(); qc.clear(); }
+});
+
+test('Magic Box supports multiline drafts and Shift+Enter never submits', async () => {
+  const qc = newClient();
+  const ui = render(h(Harness, { qc }));
+  createdThings.length = 0;
+  try {
+    const box = ui.getByLabelText('Magic Box');
+    assert.equal(box.tagName, 'TEXTAREA');
+    await act(async () => fireEvent.change(box, { target: { value: 'Finish the release notes' } }));
+    await act(async () => fireEvent.keyDown(box, { key: 'Enter', shiftKey: true }));
+    assert.deepEqual(createdThings, []);
+    await act(async () => fireEvent.change(box, { target: { value: 'Finish the release notes\nInclude the migration checklist' } }));
+    assert.equal(box.value, 'Finish the release notes\nInclude the migration checklist');
+    ui.unmount();
+    const next = render(h(Harness, { qc }));
+    assert.equal(next.getByLabelText('Magic Box').value, 'Finish the release notes\nInclude the migration checklist');
+  } finally { cleanup(); qc.clear(); }
 });

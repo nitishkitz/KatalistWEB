@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {
   Calendar,
   ChevronLeft,
@@ -120,14 +121,20 @@ export function InlineThingDetailWorkspace({
     return (
       <>
         {/* Render base page content inert behind focus workspace */}
-        <div aria-hidden="true" className="contents">
+        <div aria-hidden="true" inert className="contents">
           {children}
         </div>
 
+        <DialogPrimitive.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DialogPrimitive.Portal>
+        <DialogPrimitive.Content asChild aria-describedby={undefined}>
         <section
+          role="dialog"
+          aria-modal="true"
           aria-label="Inline Thing details"
           className="fixed inset-0 z-40 bg-[#fafafa] flex flex-col motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-[0.99] duration-[240ms] ease-out motion-reduce:transition-none motion-reduce:animate-none"
         >
+          <DialogPrimitive.Title className="sr-only">Inline Thing details</DialogPrimitive.Title>
           {/* Top Header Bar */}
           <header className="h-14 shrink-0 border-b border-border/70 bg-white px-6 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -146,6 +153,7 @@ export function InlineThingDetailWorkspace({
               <button
                 type="button"
                 onClick={onClose}
+                autoFocus
                 aria-label="Close Thing details"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border/70 text-muted-foreground hover:text-foreground hover:bg-muted/30 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
               >
@@ -157,7 +165,7 @@ export function InlineThingDetailWorkspace({
           {/* Main Content Split: Left Navigator + Right Thing Detail */}
           <main className="flex-1 flex min-h-0 overflow-hidden">
             {/* Left Column: Navigator + In-List Search + Things List */}
-            <aside className="w-[320px] shrink-0 border-r border-border/70 bg-white/75 backdrop-blur flex flex-col min-h-0">
+            <aside className="hidden w-[280px] shrink-0 border-r border-border/70 bg-white/75 md:flex md:flex-col lg:w-[320px] min-h-0">
               {/* Header with Title and Count */}
               <div className="p-3 border-b border-border/60 flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
@@ -316,6 +324,9 @@ export function InlineThingDetailWorkspace({
             </div>
           </main>
         </section>
+        </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
       </>
     );
   }

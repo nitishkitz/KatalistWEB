@@ -47,6 +47,7 @@ function targetsFor(prefixes: string[]): InvalidationTarget[] {
  */
 const STATIC_TARGETS: Record<Exclude<RealtimeTable, "profile_object_state">, string[]> = {
   things: [
+    "assistant",
     "court",
     "thing",
     "list-things",
@@ -59,6 +60,7 @@ const STATIC_TARGETS: Record<Exclude<RealtimeTable, "profile_object_state">, str
     "nudge-history",
     "catchup",
     "trophy",
+    "profile-solved-things",
     "notifications",
     "notifications-unread",
     "accessible-things",
@@ -70,25 +72,25 @@ const STATIC_TARGETS: Record<Exclude<RealtimeTable, "profile_object_state">, str
   // these collection families intentionally keep their broad fallback.
   thing_attachments: ["thing", "court", "list-things", "bucket-items", "accessible-things", "catchup"],
   thing_comments: ["thing-comments", "thing", "court", "list-things", "bucket-items", "accessible-things", "catchup"],
-  thing_activity: ["thing-activity", "thing", "trophy", "lists"],
-  nudges: ["nudges", "nudge-history", "catchup", "thing", "notifications"],
+  thing_activity: ["assistant", "thing-activity", "thing", "trophy", "profile-solved-things", "lists"],
+  nudges: ["assistant", "nudges", "nudge-history", "catchup", "thing", "notifications"],
   notifications: ["notifications", "notifications-unread", "catchup"],
   list_messages: ["list-messages", "list-message-attachments", "list-system-history", "list-message-search", "list-pinned-messages", "list", "lists", "hub-conversations", "hub-conversation"],
   // Thing mappers resolve List names at fetch time, so a List rename also
   // changes embedded labels outside the List route. Meeting reminders likewise
   // carry a List name and need a fresh projection.
-  lists: ["list", "lists", "hub-conversations", "hub-conversation", "buckets", "bucket", "bucket-items",
-    "court", "thing", "list-things", "catchup", "accessible-things", "upcoming-meetings"],
-  buckets: ["bucket", "buckets"],
-  bucket_items: ["bucket", "buckets", "bucket-items"],
+  lists: ["assistant", "list", "lists", "hub-conversations", "hub-conversation", "buckets", "bucket", "bucket-items",
+    "court", "thing", "list-things", "catchup", "accessible-things", "upcoming-meetings", "profile-solved-things"],
+  buckets: ["assistant", "bucket", "buckets"],
+  bucket_items: ["assistant", "bucket", "buckets", "bucket-items"],
   bucket_notes: ["bucket-notes"],
   // C-06: membership controls List content AND may be the only RLS grant for
   // its Things (can_view_thing checks can_view_list). A revocation must
   // therefore refetch mounted Thing/overview surfaces, too. A membership
   // event does not enumerate affected Thing IDs, so those families remain
   // broad even when the List ID is available.
-  list_members: ["list", "lists", "list-messages", "list-message-attachments", "list-system-history", "list-message-search", "list-pinned-messages", "hub-conversations", "hub-conversation", "hub-files", "list-meetings", "upcoming-meetings",
-    "thing", "thing-comments", "thing-activity", "court", "list-things", "bucket", "buckets", "bucket-items", "accessible-things", "catchup"],
+  list_members: ["assistant", "list", "lists", "list-messages", "list-message-attachments", "list-system-history", "list-message-search", "list-pinned-messages", "hub-conversations", "hub-conversation", "hub-files", "list-meetings", "upcoming-meetings",
+    "thing", "thing-comments", "thing-activity", "court", "list-things", "bucket", "buckets", "bucket-items", "accessible-things", "catchup", "profile-solved-things"],
   list_meetings: ["list-meetings", "upcoming-meetings"],
 };
 

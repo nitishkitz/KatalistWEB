@@ -49,6 +49,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   const [searchMatchIds, setSearchMatchIds] = useState<string[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [clipboardFallback, setClipboardFallback] = useState<string | null>(null);
   const { reduceMotion } = useMotionPreference();
 
   // This drawer is a temporary workspace. Once it closes, discard its
@@ -60,6 +61,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     setSelectedPersonId(null);
     setSearchMatchIds([]);
     setInviteEmail("");
+    setClipboardFallback(null);
   }, [open]);
 
   const contactIds = useMemo(() => new Set(contacts.map((c) => c.id)), [contacts]);
@@ -180,8 +182,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       setInviteEmail("");
       if (emailArg) setQuery("");
       const link = `${window.location.origin}/auth?invite=${inv.token}`;
-      await navigator.clipboard.writeText(link).catch(() => {});
-      toast.success("Invite created — link copied to clipboard");
+      await copyLink(link);
     } catch (err) {
       if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
     } finally {
@@ -191,8 +192,19 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const copyInvite = async (token: string) => {
     const link = `${window.location.origin}/auth?invite=${token}`;
-    await navigator.clipboard.writeText(link).catch(() => {});
-    toast.success("Invite link copied");
+    await copyLink(link);
+  };
+
+  const copyLink = async (link: string) => {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(link);
+      setClipboardFallback(null);
+      toast.success("Invite link copied");
+    } catch {
+      setClipboardFallback(link);
+      toast.error("Couldn’t copy the invite link. Use the link shown below.");
+    }
   };
 
   const revokeInvite = async (id: string) => {
@@ -307,6 +319,12 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   </button>
                 </div>
               )}
+              {clipboardFallback ? (
+                <div className="mb-3 rounded-[10px] border border-[#e7def3] bg-[#faf7ff] p-3" role="alert">
+                  <p className="mb-1 text-[12px] font-medium text-[#563c7e]">Copy the invite link manually:</p>
+                  <input readOnly value={clipboardFallback} aria-label="Invite link fallback" onFocus={(event) => event.currentTarget.select()} className="w-full rounded-[8px] border border-[#ebecf7] bg-white px-2 py-1.5 text-[12px] text-[#3d3f74] outline-none focus:border-[#975ee2]" />
+                </div>
+              ) : null}
 
               {trimmedQuery && people.length === 0 && !showInviteCta ? (
                 <p className="pointer-events-none absolute left-0 right-0 top-16 z-50 text-center text-[12.5px] text-[#6a769c]">No people found.</p>
@@ -449,6 +467,12 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             <div className="space-y-5">
               <div>
                 <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">Invite by email</p>
+                {clipboardFallback ? (
+                  <div className="mb-3 rounded-[10px] border border-[#e7def3] bg-[#faf7ff] p-3" role="alert">
+                    <p className="mb-1 text-[12px] font-medium text-[#563c7e]">Copy the invite link manually:</p>
+                    <input readOnly value={clipboardFallback} aria-label="Invite link fallback" onFocus={(event) => event.currentTarget.select()} className="w-full rounded-[8px] border border-[#ebecf7] bg-white px-2 py-1.5 text-[12px] text-[#3d3f74] outline-none focus:border-[#975ee2]" />
+                  </div>
+                ) : null}
                 <div className="flex gap-2">
                   <label className="flex h-10 flex-1 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 focus-within:border-[#975ee2]">
                     <Mail className="h-4 w-4 text-[#8487a7]" />
@@ -532,7 +556,7 @@ function Row({
   trailing?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-[10px] px-2 py-2 hover:bg-[#f6f7fc]">
+    <div className="flex flex-wrap items-center gap-3 rounded-[10px] px-2 py-2 hover:bg-[#f6f7fc]">
       <span className="relative shrink-0">
         <PersonAvatar name={member.name} initials={member.initials} src={member.avatarUrl} size={38} />
         {online ? <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#12a15f]" /> : null}
@@ -544,24 +568,26 @@ function Row({
           {online ? " · Online" : ""}
         </p>
       </div>
-      {trailing}
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onMessage}
-        className="inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-[#975ee2] px-3 text-[12px] font-semibold text-white hover:brightness-95 disabled:opacity-50"
-      >
-        <MessageCircle className="h-3.5 w-3.5" /> Message
-      </button>
-      <button
-        type="button"
-        disabled={busy}
-        onClick={onCall}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-[#ebecf7] text-[#3d3f74] hover:border-[#975ee2] disabled:opacity-50"
-        aria-label={`Call ${member.name}`}
-      >
-        <Phone className="h-3.5 w-3.5" />
-      </button>
+      <div className="ml-auto flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2 max-[420px]:basis-full">
+        {trailing}
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onMessage}
+          className="inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-[#975ee2] px-3 text-[12px] font-semibold text-white hover:brightness-95 disabled:opacity-50"
+        >
+          <MessageCircle className="h-3.5 w-3.5" /> Message
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onCall}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-[#ebecf7] text-[#3d3f74] hover:border-[#975ee2] disabled:opacity-50"
+          aria-label={`Call ${member.name}`}
+        >
+          <Phone className="h-3.5 w-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

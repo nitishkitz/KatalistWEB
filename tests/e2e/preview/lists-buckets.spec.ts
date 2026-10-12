@@ -1,18 +1,7 @@
+import { signInPreview } from "./demo-sign-in";
 import { expect, test, type Page } from "@playwright/test";
 
-async function signInAsDemo(page: Page) {
-  await page.goto("/auth");
-  const demo = page.getByRole("button", { name: /^Demo$/i });
-  const available = await demo.waitFor({ state: "visible", timeout: 8_000 }).then(() => true).catch(() => false);
-  if (!available) {
-    if (process.env.CI) throw new Error("Demo tab is missing; Lists/Buckets preview coverage must not skip in CI");
-    return false;
-  }
-  await demo.click();
-  await page.getByRole("button", { name: /Priya Sharma/i }).click();
-  await page.waitForURL("/");
-  return true;
-}
+const signInAsDemo = signInPreview;
 
 async function expectNoPageOverflow(page: Page, label: string) {
   const result = await page.evaluate(() => ({

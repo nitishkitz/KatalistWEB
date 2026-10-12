@@ -1,20 +1,7 @@
+import { signInPreview } from "./demo-sign-in";
 import { expect, test, type Page } from "@playwright/test";
 
-async function signInAsDemo(page: Page) {
-  await page.goto("/auth");
-  // The gate lists Demo Personas directly; older builds hide them behind a Demo tab.
-  const demoTab = page.getByRole("button", { name: /^Demo$/i });
-  if (await demoTab.isVisible().catch(() => false)) await demoTab.click();
-  const persona = page.getByRole("button", { name: /Priya Sharma/i });
-  const available = await persona.waitFor({ state: "visible", timeout: 8_000 }).then(() => true).catch(() => false);
-  if (!available) {
-    if (process.env.CI) throw new Error("Demo personas are missing; Designs preview coverage must not skip in CI");
-    return false;
-  }
-  await persona.click();
-  await page.waitForURL("/", { timeout: 20_000 });
-  return true;
-}
+const signInAsDemo = signInPreview;
 
 async function expectNoPageOverflow(page: Page, label: string) {
   const result = await page.evaluate(() => ({

@@ -1,0 +1,11 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="50.0886" height="44.3091" viewBox="0 0 50.0886 44.3091" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Morning symbol" clip-path="url(#clip0_0_26)">
+<path id="Sun rays" d="M27.2598 1.28427V7.41938M8.21204 9.46442L12.4449 13.5545M42.7802 13.5545L47.013 9.46442M2.56825 27.1881H10.3285M44.1912 27.1881H52.6568M14.5613 34.6865H20.2051M24.4379 36.7316H30.0817M35.7255 34.6865H39.2528M27.2598 42.185V45.5934" stroke="#FFB928" stroke-width="2.24756" stroke-linecap="round"/>
+<path id="Sun" d="M13.4847 28.2552C13.4847 23.9974 14.7025 19.914 16.8702 16.9033C19.0379 13.8926 21.978 12.2012 25.0436 12.2012C28.1092 12.2012 31.0492 13.8926 33.217 16.9033C35.3847 19.914 36.6025 23.9974 36.6025 28.2552H13.4847Z" fill="#FFC039"/>
+</g>
+<defs>
+<clipPath id="clip0_0_26">
+<rect width="50.0886" height="44.3091" fill="white"/>
+</clipPath>
+</defs>
+</svg>

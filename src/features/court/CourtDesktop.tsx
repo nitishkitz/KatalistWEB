@@ -550,7 +550,7 @@ export function CourtDesktop({
   }
 
   return (
-    <div className="hidden lg:block w-full min-w-0 px-6 py-3">
+    <div className="relative hidden lg:block min-h-[calc(100vh-7rem)] w-full min-w-0 px-6 py-3">
       {isLoading ? (
         <p className="mb-2 text-[12px] text-muted-foreground" aria-live="polite">
           Loading your Court…
@@ -830,35 +830,6 @@ export function CourtDesktop({
             onRefresh={refreshAfterMutation}
             onViewAll={handleViewAll}
           />
-          {!focusSelection && (
-            <div className="sticky bottom-0 z-30 mt-auto flex shrink-0 w-full justify-center bg-background/95 pt-3 pb-1 backdrop-blur-sm">
-              <div className="w-full max-w-2xl">
-                <MagicBox
-                  desktop
-                  extraPeople={collaborators}
-                  // T09/E05: resolved against viewRef.current at CLICK
-                  // time, not the `view` snapshot from whenever this
-                  // closure happened to be created -- the toast can be
-                  // clicked well after further Court renders/refetches, and
-                  // a captured `view` would silently miss the newly created
-                  // Thing even after the invalidation MagicBox triggers on
-                  // success has finished refetching it in. Reuses the same
-                  // no-hero-animation open path as openCatchUpThing (the
-                  // origin card doesn't exist for a toast-triggered open).
-                  onThingCreated={(thingId) => {
-                    const currentView = viewRef.current;
-                    const created = [
-                      ...currentView.now,
-                      ...currentView.next,
-                      ...currentView.later,
-                      ...currentView.theirs,
-                    ].find((candidate) => candidate.id === thingId);
-                    if (created) openCatchUpThing(created);
-                  }}
-                />
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Buckets side panel shown while dragging */}
@@ -889,6 +860,26 @@ export function CourtDesktop({
         )}
       </div>
 
+      {!focusSelection && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-6">
+          <div className="pointer-events-auto w-full max-w-2xl">
+            <MagicBox
+              desktop
+              extraPeople={collaborators}
+              onThingCreated={(thingId) => {
+                const currentView = viewRef.current;
+                const created = [
+                  ...currentView.now,
+                  ...currentView.next,
+                  ...currentView.later,
+                  ...currentView.theirs,
+                ].find((candidate) => candidate.id === thingId);
+                if (created) openCatchUpThing(created);
+              }}
+            />
+          </div>
+        </div>
+      )}
       {modalSelection && (
         <CourtDetailModal
           thing={modalSelection.thing}

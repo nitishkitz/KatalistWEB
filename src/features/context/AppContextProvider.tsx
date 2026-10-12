@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ContextKind } from "@/domain/thing";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
@@ -35,6 +35,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   const { user, session } = useSession();
   const qc = useQueryClient();
   const preview = isPreviewSession(session);
+  const switchRevision = useRef(0);
 
   const [context, setContextState] = useState<ContextKind>(() => {
     if (typeof window === "undefined") return "work";
@@ -71,17 +72,18 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user || isPreviewSession(session)) return;
     let cancelled = false;
-    supabase
+    const revision = switchRevision.current;
+    Promise.resolve(supabase
       .from("profiles")
       .select("active_context")
       .eq("id", user.id)
-      .maybeSingle()
+      .maybeSingle())
       .then(({ data }) => {
-        if (cancelled || !data?.active_context) return;
+        if (cancelled || revision !== switchRevision.current || !data?.active_context) return;
         setContextState(data.active_context);
         window.localStorage.setItem(liveContextKey(user.id), data.active_context);
         window.localStorage.removeItem(STORAGE_KEY);
-      });
+      }).catch(() => { /* Keep the local context when profile refresh is offline. */ });
     return () => {
       cancelled = true;
     };
@@ -89,6 +91,8 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
   const setContext = useCallback(
     async (next: ContextKind) => {
+      if (next === context) return;
+      const revision = ++switchRevision.current;
       const prev = context;
       // Context changes don't advance the identity epoch (they aren't an
       // identity change), but this function can still straddle one: an
@@ -112,7 +116,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
           // is still the one that's current -- rolling back to A's
           // `prev` value after B is already active would incorrectly
           // overwrite B's own context state.
-          if (isEpochCurrent(qc, epoch)) {
+          if (isEpochCurrent(qc, epoch) && switchRevision.current === revision) {
             setContextState(prev);
             window.localStorage.setItem(liveContextKey(user.id), prev);
           }
@@ -124,8 +128,11 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       // as B's UI has settled -- IdentityBoundary's own resetQueries()
       // on the switch already handles B's cache correctly, so this call
       // has nothing useful left to do once the epoch has moved on.
-      if (!isEpochCurrent(qc, epoch)) return;
-      await qc.invalidateQueries();
+      if (!isEpochCurrent(qc, epoch) || switchRevision.current !== revision) return;
+      // These keys already include context; leave unrelated live chat/files
+      // caches settled instead of causing a full-app refetch storm.
+      const contextRoots = new Set(["court", "lists", "buckets", "accessible-things", "nudges", "nudge-history", "catchup", "hub-conversations"]);
+      await qc.invalidateQueries({ predicate: (query) => contextRoots.has(String(query.queryKey[0])) });
     },
     [user, session, qc, context],
   );

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import gsap from "gsap";
 import {
   ArrowLeft,
-  ChevronDown,
   List,
   Search,
 } from "lucide-react";
@@ -52,6 +51,7 @@ export function CourtFocusView({
 }: CourtFocusViewProps) {
   const [activeLane, setActiveLane] = useState<FocusViewTabId>(selection.lane);
   const [searchQuery, setSearchQuery] = useState("");
+  const [laneSort, setLaneSort] = useState<"due" | "title" | "recent">("due");
 
   const selectedThing = useMemo(() => {
     const activeList = activeLane === "theirs" ? (theirs ?? []) : (lanes[activeLane] ?? []);
@@ -175,10 +175,15 @@ export function CourtFocusView({
 
   const currentLaneThings = useMemo(() => {
     const list = activeLane === "theirs" ? (theirs ?? []) : (lanes[activeLane] ?? []);
-    if (!searchQuery.trim()) return list;
     const q = searchQuery.toLowerCase();
-    return list.filter((t) => t.title.toLowerCase().includes(q));
-  }, [lanes, theirs, activeLane, searchQuery]);
+    const filtered = q.trim() ? list.filter((t) => t.title.toLowerCase().includes(q)) : list;
+    const time = (value: string | null | undefined, fallback: number) => { const parsed = value ? Date.parse(value) : NaN; return Number.isFinite(parsed) ? parsed : fallback; };
+    return [...filtered].sort((a, b) => {
+      if (laneSort === "title") return a.title.localeCompare(b.title);
+      if (laneSort === "recent") return time(b.updatedAt, 0) - time(a.updatedAt, 0);
+      return time(a.dueAt, Infinity) - time(b.dueAt, Infinity);
+    });
+  }, [lanes, theirs, activeLane, searchQuery, laneSort]);
 
   const handleLaneTabChange = useCallback(
     (lane: FocusViewTabId) => {
@@ -289,10 +294,11 @@ export function CourtFocusView({
               <List className="h-3.5 w-3.5 text-[#5f5f90]" />
               <span>{currentLaneThings.length} Things</span>
             </div>
-            <button type="button" className="inline-flex items-center gap-1 rounded font-medium text-[#0f0c2a] hover:opacity-80 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <span>Due soon</span>
-              <ChevronDown className="h-3 w-3" />
-            </button>
+            <select aria-label="Sort Things in lane" value={laneSort} onChange={(event) => setLaneSort(event.target.value as typeof laneSort)} className="min-h-8 rounded bg-transparent font-medium text-[#0f0c2a] cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <option value="due">Due soon</option>
+              <option value="title">Title A–Z</option>
+              <option value="recent">Recently updated</option>
+            </select>
           </div>
 
           {/* Things list */}
@@ -442,7 +448,7 @@ export function CourtFocusView({
       </main>
 
       {/* Bottom floating Toss composer */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-4 z-30 flex justify-center px-4">
+      <div className="pointer-events-none fixed inset-x-0 bottom-5 z-30 flex justify-center px-4">
         <div className="pointer-events-auto w-full max-w-2xl">
           <MagicBox desktop extraPeople={focusCollaborators} />
         </div>

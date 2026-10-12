@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ThingReferenceContextMenu } from "@/features/thing-references/ThingReferenceContextMenu";
 import { useReferenceDraft } from "@/features/thing-references/use-reference-draft";
 import { ThingReferencesSection } from "@/features/thing-references/ThingReferencesSection";
@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { domainErrorMessage } from "@/lib/domain-error";
 import type { Pace, Thing } from "@/domain/thing";
 import {
@@ -270,8 +271,12 @@ export function ThingDetailContent({
   const [comment, setComment] = useState(() => getDraft<string>(qc, "thing-comment", thing?.id ?? "")?.value ?? "");
   const commentReferences = useReferenceDraft("thing-comment-references", thing?.id ?? "");
   const [commentMentions, setCommentMentions] = useState<SelectedMention[]>([]);
-  const [due, setDue] = useState("");
+  const [dueDraft, setDueDraft] = useState("");
+  const [dueOpen, setDueOpen] = useState(false);
+  const [dueError, setDueError] = useState<string | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  const actionsPanelId = useId();
+  const dueInputId = useId();
   const [snoozeClock, setSnoozeClock] = useState(Date.now());
   const [commentAttachments, setCommentAttachments] = useState<ThingFile[]>(
     () => (getDraft<string>(qc, "thing-comment", thing?.id ?? "")?.attachments as ThingFile[] | undefined) ?? [],
@@ -471,7 +476,9 @@ export function ThingDetailContent({
     // persisting across navigation (unlike the comment composer above) --
     // it's simple editable/selection state that must just not leak
     // between Things.
-    setDue("");
+    setDueDraft("");
+    setDueOpen(false);
+    setDueError(null);
     setSelectedFileId(null);
   }, [thing?.id, qc]);
 
@@ -616,15 +623,20 @@ export function ThingDetailContent({
 
   const terminal = caps?.terminal ?? false;
   const canAssignOutside = Boolean(caps?.isOwner && !terminal);
-  const hasMoreActions = Boolean(
-    caps?.canSetDue ||
-    canAssignOutside ||
-    caps?.canCatch ||
-    caps?.canNudge ||
-    caps?.canSort ||
-    caps?.canCancel ||
-    caps?.canShred,
-  );
+  const isCourtVariant = variant === "court";
+  // The Court variant already renders Catch / Mark Sorted in its own action
+  // row; due dates have a dedicated popover, leaving cancellation here.
+  const hasMoreActions = isCourtVariant
+    ? Boolean(caps?.canCancel)
+    : Boolean(
+        caps?.canSetDue ||
+        canAssignOutside ||
+        caps?.canCatch ||
+        caps?.canNudge ||
+        caps?.canSort ||
+        caps?.canCancel ||
+        caps?.canShred,
+      );
   const activePace: Pace = thing.personalPace ?? "next";
   const snoozedUntil = snoozeEnd ?? null;
   const activeSnoozedUntil = snoozedUntil && new Date(snoozedUntil).getTime() > snoozeClock ? snoozedUntil : null;
@@ -739,6 +751,314 @@ export function ThingDetailContent({
       return prev.filter((f) => f.id !== id);
     });
 
+  const toLocalInputValue = (iso: string | null | undefined) => {
+    if (!iso) return "";
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime()) ? "" : format(date, "yyyy-MM-dd'T'HH:mm");
+  };
+
+  const toggleMoreActions = () => {
+    if (moreOpen) {
+      setMoreOpen(false);
+      return;
+    }
+    // Seeded once per opening, not on every render, so an unsaved draft
+    // survives unrelated query refreshes while the panel stays open.
+    setDueDraft(toLocalInputValue(thing.dueAt));
+    setDueError(null);
+    setMoreOpen(true);
+  };
+
+  const hasPersistedDue = Boolean(thing.dueAt);
+  const draftDate = dueDraft ? new Date(dueDraft) : null;
+  const draftValid = Boolean(draftDate && !Number.isNaN(draftDate.getTime()));
+  // The input has minute precision; compare at that precision so a stored
+  // date with seconds does not look edited when the user changed nothing.
+  const draftUnchanged = Boolean(draftValid && thing.dueAt && dueDraft === toLocalInputValue(thing.dueAt));
+  const canSaveDue = !busy && Boolean(dueDraft) && !draftUnchanged;
+
+  const handleSaveDue = () => {
+    if (busy || !dueDraft) return;
+    const parsed = new Date(dueDraft);
+    if (Number.isNaN(parsed.getTime())) {
+      setDueError("Choose a valid date and time.");
+      return;
+    }
+    setDueError(null);
+    const iso = parsed.toISOString();
+    const hadDue = hasPersistedDue;
+    run.mutate(
+      withOptimisticPatch(qc, thing.id, { dueAt: iso, dueHasTime: true }, async () => {
+        await rpcSetDue(thing.id, iso, true);
+        setDueOpen(false);
+        toast.success(hadDue ? "Due date updated." : "Due date added.");
+      }),
+    );
+  };
+
+  const handleRemoveDue = () => {
+    if (busy || !hasPersistedDue) return;
+    const targetThingId = thing.id;
+    run.mutate(
+      withOptimisticPatch(qc, targetThingId, { dueAt: null, dueHasTime: false }, async () => {
+        await rpcSetDue(targetThingId, null, false);
+        if (isMountedRef.current && thingIdRef.current === targetThingId) {
+          setDueDraft("");
+          setDueOpen(false);
+          setDueError(null);
+        }
+        toast.success("Due date removed.");
+      }),
+    );
+  };
+
+  const handleCancelThing = () => {
+    if (busy) return;
+    if (!window.confirm("Are you sure you want to cancel this thing?")) return;
+    run.mutate(
+      withOptimisticPatch(
+        qc,
+        thing.id,
+        { workStatus: "cancelled", cancelledAt: new Date().toISOString() },
+        async () => {
+          await rpcCancelThing(thing.id);
+          toast.success("Cancelled.");
+          onAfterTerminalAction?.();
+        },
+      ),
+    );
+  };
+
+  const dueControl = (
+    <Popover open={dueOpen} onOpenChange={(open) => {
+      if (open) {
+        setDueDraft(toLocalInputValue(thing.dueAt));
+        setDueError(null);
+      }
+      setDueOpen(open);
+    }}>
+      <PopoverTrigger asChild>
+        <button type="button" aria-label={caps?.canSetDue ? (hasPersistedDue ? "Edit due date" : "Add due date") : "View due date"}
+          className="group -mx-2 -my-1 flex min-h-11 flex-col items-start gap-1 rounded-md px-2 py-1 text-left outline-none transition-colors duration-150 hover:bg-[#f5f3fa] focus-visible:ring-2 focus-visible:ring-[#975ee2]/40">
+          <span className="flex items-center gap-1.5 text-[12px] text-[#3a4675]"><Calendar className="h-3.5 w-3.5" /><span>Due</span></span>
+          <span className={`flex min-h-7 items-center text-[12px] font-medium ${dueLabel ? "text-[#f71a24]" : "text-muted-foreground"}`}>
+            {dueLabel ?? (caps?.canSetDue ? "Add date" : "No due date")}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" sideOffset={8} aria-label={caps?.canSetDue ? "Edit due date" : "Due date"}
+        className="z-[80] w-[280px] max-w-[calc(100vw-32px)] rounded-xl border-[#e9e6ee] bg-white p-3 text-[#1b2955] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.12),0_16px_40px_-12px_rgba(0,0,0,0.15)]">
+        {caps?.canSetDue ? (<>
+        <label htmlFor={dueInputId} className="mb-2 block text-[12px] font-medium">Due date and time</label>
+        <input id={dueInputId} type="datetime-local" value={dueDraft} disabled={busy}
+          aria-invalid={dueError ? true : undefined}
+          onChange={(event) => { setDueDraft(event.target.value); setDueError(null); }}
+          className="h-9 w-full min-w-0 rounded-md border border-[#e5e2eb] bg-white px-2 text-[13px] outline-none focus:border-[#975ee2] focus:ring-2 focus:ring-[#975ee2]/10 disabled:opacity-50" />
+        {dueError ? <p role="alert" className="mt-2 text-[12px] text-destructive">{dueError}</p> : null}
+        <div className="mt-3 flex items-center justify-between gap-2">
+          {hasPersistedDue ? <button type="button" disabled={busy} onClick={handleRemoveDue}
+            className="min-h-9 rounded-md px-2 text-[12px] text-[#777183] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#975ee2]/40 disabled:opacity-40">Remove due date</button> : <span />}
+          <button type="button" disabled={!canSaveDue} onClick={handleSaveDue}
+            className="min-h-9 rounded-md bg-[#975ee2] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#854bd0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#975ee2]/40 focus-visible:ring-offset-2 disabled:bg-[#f0edf5] disabled:text-[#a49bac]">
+            {hasPersistedDue ? "Update date" : "Add date"}
+          </button>
+        </div>
+        </>) : (
+          <div className="space-y-2">
+            <p className="text-[13px] font-medium">
+              {thing.dueAt && !Number.isNaN(new Date(thing.dueAt).getTime())
+                ? format(new Date(thing.dueAt), thing.dueHasTime ? "MMM d, yyyy · h:mm a" : "MMM d, yyyy")
+                : "No due date"}
+            </p>
+            <p className="text-[12px] leading-relaxed text-[#777183]">
+              {terminal ? "Due dates cannot be changed on a sorted or cancelled Thing."
+                : viewOnly ? "You have view-only access to this Thing."
+                : `Only ${thing.owner.name}, the owner, can change this date.`}
+            </p>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+
+  const moreActionsButton = hasMoreActions ? (
+    <button
+      type="button"
+      onClick={toggleMoreActions}
+      className={`${isCourtVariant ? "" : "ml-auto "}inline-flex h-7 w-8 items-center justify-center rounded-lg border border-border bg-white text-foreground outline-none hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring`}
+      aria-label="Show more Thing actions"
+      title="More actions"
+      aria-expanded={moreOpen}
+      aria-controls={moreOpen ? actionsPanelId : undefined}
+    >
+      <MoreHorizontal className="h-3.5 w-3.5" />
+    </button>
+  ) : null;
+
+  const moreActionsPanel = moreOpen && hasMoreActions ? (
+    <div id={actionsPanelId} className="mb-3 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-white p-3">
+      <div className="mb-3 flex items-center justify-end">
+        <button
+          type="button"
+          onClick={() => setMoreOpen(false)}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground outline-none hover:border-primary/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Close Thing actions"
+          title="Close actions"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {!isCourtVariant && canAssignOutside ? (
+        <AssignOutsideBlock
+          key={thing.id}
+          thingId={thing.id}
+          disabled={busy}
+          onIssued={(fn) => run.mutate(fn)}
+        />
+      ) : null}
+      {!isCourtVariant && caps?.canSetDue ? (
+        <section className="mt-3 space-y-1.5 border-b border-border/70 pb-3">
+          <h3 className="katalist-section-title">Edit Due Date</h3>
+          <label htmlFor={dueInputId} className="block text-[12px] text-muted-foreground">
+            Due date and time
+          </label>
+          <div className="flex gap-1.5">
+            <input
+              id={dueInputId}
+              type="datetime-local"
+              value={dueDraft}
+              disabled={busy}
+              aria-invalid={dueError ? true : undefined}
+              onChange={(e) => {
+                setDueDraft(e.target.value);
+                setDueError(null);
+              }}
+              className="h-7 min-w-0 flex-1 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
+            />
+            <button
+              type="button"
+              disabled={!canSaveDue}
+              className="h-7 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={handleSaveDue}
+            >
+              {hasPersistedDue ? "Update date" : "Add date"}
+            </button>
+          </div>
+          {dueError ? (
+            <p role="alert" className="text-[12px] text-destructive">
+              {dueError}
+            </p>
+          ) : null}
+          {hasPersistedDue ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleRemoveDue}
+              className="h-7 rounded-md border border-border bg-white px-2 text-[12px] text-destructive disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Remove due date
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+      {(!isCourtVariant && (caps?.canCatch || caps?.canNudge || caps?.canSort || caps?.canShred)) || caps?.canCancel ? (
+        <div className="mt-3 space-y-3">
+          {!isCourtVariant && caps?.canCatch ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                run.mutate(
+                  withOptimisticPatch(
+                    qc,
+                    thing.id,
+                    { acknowledgement: "caught", personalPace: "next", caughtAt: new Date().toISOString() },
+                    async () => {
+                      await rpcCatchThing(thing.id);
+                      toast.success("Caught.");
+                    },
+                  ),
+                )
+              }
+              className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[12px] font-medium text-primary hover:bg-white disabled:opacity-60"
+            >
+              {busy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Hand className="h-3.5 w-3.5" />
+              )}
+              Caught It
+            </button>
+          ) : null}
+
+          {!isCourtVariant && (caps?.canNudge || caps?.canSort) ? (
+            <div className="grid grid-cols-2 gap-2">
+              {caps?.canNudge ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run.mutate(async () => {
+                      await rpcNudgeThing(thing.id);
+                      toast.success(`Nudged ${thing.assignee.name} about “${thing.title}”.`);
+                    })
+                  }
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Bell className="h-3 w-3" />
+                  Nudge
+                </button>
+              ) : null}
+              {caps?.canSort ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleSort}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Check className="h-3 w-3" />
+                  Sort
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {caps?.canCancel || (!isCourtVariant && caps?.canShred) ? (
+            <div className="grid grid-cols-2 gap-2">
+              {caps?.canCancel ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleCancelThing}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[12px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Cancel Thing
+                </button>
+              ) : null}
+              {!isCourtVariant && caps?.canShred ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run.mutate(async () => {
+                      await rpcShred(thing.id);
+                      toast.success("Shredded from your surfaces.");
+                      onAfterTerminalAction?.();
+                    })
+                  }
+                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border bg-white text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Shred for me
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+
   if (variant === "court") {
     const displayFiles: ThingFile[] =
       thing.files && thing.files.length > 0 ? thing.files : [];
@@ -775,6 +1095,7 @@ export function ThingDetailContent({
             assigneeAvatar={assigneeAvatar}
             isAssigneeSameAsOwner={isAssigneeSameAsOwner}
             dueLabel={dueLabel}
+            dueControl={dueControl}
             viewOnly={viewOnly}
             assignableList={assignableList}
             onReassign={handleReassign}
@@ -783,6 +1104,8 @@ export function ThingDetailContent({
             snoozedUntil={activeSnoozedUntil}
             onSnooze={handleSnooze}
             onWake={handleWake}
+            moreActionsButton={moreActionsButton}
+            moreActionsPanel={moreActionsPanel}
           />
 
           {/* Description Section */}
@@ -884,187 +1207,6 @@ export function ThingDetailContent({
       </div>
     );
   }
-
-  const moreActionsButton = hasMoreActions ? (
-    <button
-      type="button"
-      onClick={() => setMoreOpen((current) => !current)}
-      className="ml-auto inline-flex h-7 w-8 items-center justify-center rounded-lg border border-border bg-white text-foreground outline-none hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring"
-      aria-label="Show more Thing actions"
-      title="More actions"
-      aria-expanded={moreOpen}
-    >
-      <MoreHorizontal className="h-3.5 w-3.5" />
-    </button>
-  ) : null;
-
-  const moreActionsPanel = moreOpen ? (
-    <div className="mb-3 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-white p-3">
-      <div className="mb-3 flex items-center justify-end">
-        <button
-          type="button"
-          onClick={() => setMoreOpen(false)}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground outline-none hover:border-primary/50 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Close Thing actions"
-          title="Close actions"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-      {canAssignOutside ? (
-        <AssignOutsideBlock
-          key={thing.id}
-          thingId={thing.id}
-          disabled={busy}
-          onIssued={(fn) => run.mutate(fn)}
-        />
-      ) : null}
-      {caps?.canSetDue ? (
-        <section className="mt-3 space-y-1.5 border-b border-border/70 pb-3">
-          <h3 className="katalist-section-title">Edit Due Date</h3>
-          <div className="flex gap-1.5">
-            <input
-              type="datetime-local"
-              value={due}
-              disabled={busy}
-              onChange={(e) => setDue(e.target.value)}
-              className="h-7 min-w-0 flex-1 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
-            />
-            <button
-              type="button"
-              disabled={busy}
-              className="h-7 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={() => {
-                if (!due) return;
-                const iso = new Date(due).toISOString();
-                run.mutate(
-                  withOptimisticPatch(qc, thing.id, { dueAt: iso, dueHasTime: true }, async () => {
-                    await rpcSetDue(thing.id, iso, true);
-                  }),
-                );
-              }}
-            >
-              Set
-            </button>
-          </div>
-        </section>
-      ) : null}
-      {caps?.canCatch ||
-      caps?.canNudge ||
-      caps?.canSort ||
-      caps?.canCancel ||
-      caps?.canShred ? (
-        <div className="mt-3 space-y-3">
-          {caps?.canCatch ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() =>
-                run.mutate(
-                  withOptimisticPatch(
-                    qc,
-                    thing.id,
-                    { acknowledgement: "caught", personalPace: "next", caughtAt: new Date().toISOString() },
-                    async () => {
-                      await rpcCatchThing(thing.id);
-                      toast.success("Caught.");
-                    },
-                  ),
-                )
-              }
-              className="flex h-8 w-full items-center justify-center gap-2 rounded-lg border border-primary bg-white text-[12px] font-medium text-primary hover:bg-white disabled:opacity-60"
-            >
-              {busy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Hand className="h-3.5 w-3.5" />
-              )}
-              Caught It
-            </button>
-          ) : null}
-
-          {caps?.canNudge || caps?.canSort ? (
-            <div className="grid grid-cols-2 gap-2">
-              {caps?.canNudge ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run.mutate(async () => {
-                      await rpcNudgeThing(thing.id);
-                      toast.success(`Nudged ${thing.assignee.name} about “${thing.title}”.`);
-                    })
-                  }
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Bell className="h-3 w-3" />
-                  Nudge
-                </button>
-              ) : null}
-              {caps?.canSort ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={handleSort}
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-border bg-white text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Check className="h-3 w-3" />
-                  Sort
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-
-          {caps?.canCancel || caps?.canShred ? (
-            <div className="grid grid-cols-2 gap-2">
-              {caps?.canCancel ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (window.confirm("Are you sure you want to cancel this thing?")) {
-                      run.mutate(
-                        withOptimisticPatch(
-                          qc,
-                          thing.id,
-                          { workStatus: "cancelled", cancelledAt: new Date().toISOString() },
-                          async () => {
-                            await rpcCancelThing(thing.id);
-                            toast.success("Cancelled.");
-                            onAfterTerminalAction?.();
-                          },
-                        ),
-                      );
-                    }
-                  }}
-                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-white text-[12px] font-medium text-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Cancel Thing
-                </button>
-              ) : null}
-              {caps?.canShred ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run.mutate(async () => {
-                      await rpcShred(thing.id);
-                      toast.success("Shredded from your surfaces.");
-                      onAfterTerminalAction?.();
-                    })
-                  }
-                  className="inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-border bg-white text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Shred for me
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  ) : null;
 
   return (
     <ThingReferenceContextMenu thingId={thing.id}>

@@ -39,13 +39,17 @@ const seededPeople = [
 
 test("an explicitly configured fixed OTP works in a production test build", async (t) => {
   const previousOtp = process.env.VITE_KATALIST_FIXED_OTP;
+  const previousEnvironment = process.env.VITE_KATALIST_ENV;
   const outputDirectory = await mkdtemp(join(tmpdir(), "katalist-fixed-otp-"));
   process.env.VITE_KATALIST_FIXED_OTP = "111111";
+  process.env.VITE_KATALIST_ENV = "uat";
 
   t.after(async () => {
     await rm(outputDirectory, { recursive: true });
     if (previousOtp === undefined) delete process.env.VITE_KATALIST_FIXED_OTP;
     else process.env.VITE_KATALIST_FIXED_OTP = previousOtp;
+    if (previousEnvironment === undefined) delete process.env.VITE_KATALIST_ENV;
+    else process.env.VITE_KATALIST_ENV = previousEnvironment;
   });
 
   await build({

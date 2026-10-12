@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
-import { Copy, Link2, MoreHorizontal, Sparkles } from "lucide-react";
+import { Copy, MoreHorizontal, Sparkles } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -14,12 +14,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useThingNavigation } from "./use-open-thing";
-import { addThingToMagicBox, copyThingLink, copyThingReference } from "./thing-reference-actions";
+import { addThingToMagicBox, copyThingReference } from "./thing-reference-actions";
 
 /** Ordinary editing and selected-text copying keep the browser's own menu. */
 function shouldKeepNativeMenu(event: MouseEvent<HTMLElement>): boolean {
   const target = event.target as HTMLElement | null;
-  if (target?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']")) return true;
+  if (target?.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']"))
+    return true;
   const selection = typeof window === "undefined" ? null : window.getSelection();
   if (selection && !selection.isCollapsed && selection.toString().trim()) {
     const anchor = selection.anchorNode;
@@ -32,7 +33,6 @@ function useThingReferenceActions(thingId: string) {
   const { openCourt } = useThingNavigation();
   return {
     copy: () => void copyThingReference(thingId),
-    link: () => void copyThingLink(thingId),
     addToMagicBox: () => {
       if (!addThingToMagicBox(thingId)) openCourt();
     },
@@ -74,17 +74,19 @@ export function ThingReferenceContextMenu({
           <Sparkles className="mr-2 h-4 w-4" />
           Add to Magic Box
         </ContextMenuItem>
-        <ContextMenuItem onSelect={actions.link}>
-          <Link2 className="mr-2 h-4 w-4" />
-          Copy link
-        </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   );
 }
 
 /** Touch and keyboard equivalent of the right-click menu. */
-export function ThingReferenceOverflowMenu({ thingId, className }: { thingId: string; className?: string }) {
+export function ThingReferenceOverflowMenu({
+  thingId,
+  className,
+}: {
+  thingId: string;
+  className?: string;
+}) {
   const actions = useThingReferenceActions(thingId);
   return (
     <DropdownMenu>
@@ -103,7 +105,11 @@ export function ThingReferenceOverflowMenu({ thingId, className }: { thingId: st
           <MoreHorizontal className="h-4 w-4" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52" onClick={(event) => event.stopPropagation()}>
+      <DropdownMenuContent
+        align="end"
+        className="w-52"
+        onClick={(event) => event.stopPropagation()}
+      >
         <DropdownMenuItem onSelect={actions.copy}>
           <Copy className="mr-2 h-4 w-4" />
           Copy Thing
@@ -111,10 +117,6 @@ export function ThingReferenceOverflowMenu({ thingId, className }: { thingId: st
         <DropdownMenuItem onSelect={actions.addToMagicBox}>
           <Sparkles className="mr-2 h-4 w-4" />
           Add to Magic Box
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={actions.link}>
-          <Link2 className="mr-2 h-4 w-4" />
-          Copy link
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

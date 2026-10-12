@@ -9,6 +9,7 @@ import { useConnection } from "./live/use-connection";
 import type { SelectableRepository } from "./repository";
 import { Notice, Spinner } from "./ui-parts";
 import type { ListRole } from "./types";
+import { isPreviewMode } from "@/lib/session-mode";
 
 export interface CodeActivityRootProps {
   listId: string;
@@ -191,5 +192,12 @@ function Inner({ listId, listName, listRole, onOpenThings, people = [], workspac
 
 /** Lazy entry point for the List Detail tab. The error boundary wraps it in the List route, outside this lazy chunk. */
 export default function CodeActivityRoot(props: CodeActivityRootProps) {
+  if (isPreviewMode()) {
+    return <div data-code-activity-root data-code-activity-state="not-configured" className="rounded-xl border border-[#eaeffa] bg-white p-6">
+      <h3 className="text-base font-semibold text-[#000533]">GitHub connection is not configured yet</h3>
+      <p className="mt-2 text-sm text-[#6a769c]">Preview accounts cannot connect a repository. Sign in to an approved environment to use Code Activity.</p>
+      <button type="button" disabled className="mt-4 min-h-10 rounded-lg border border-[#eaeffa] px-4 text-sm opacity-50">Connect GitHub</button>
+    </div>;
+  }
   return <Inner {...props} />;
 }

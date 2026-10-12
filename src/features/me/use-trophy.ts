@@ -11,6 +11,7 @@ import { invalidatePersonalSurfaces } from "@/features/things/personal-shred";
 import { keys } from "@/domain/query-keys";
 import { getIdentityEpoch } from "@/features/realtime/identity-cache-policy";
 import { computeStreak } from "@/features/nudges/escalation-logic";
+import { useSolvedThingCount } from "./use-solved-things";
 
 /** Demo streak from the seeded sorted history, formatted like the live stat. */
 function demoStreakLabel(things: { sortedAt: string | null }[]): string {
@@ -120,6 +121,7 @@ export function useTrophy() {
   const preview = isPreviewSession(session);
   const qc = useQueryClient();
   useLocalVersion();
+  const solved = useSolvedThingCount();
 
   const query = useQuery({
     queryKey: keys.trophy(user?.id),
@@ -144,6 +146,9 @@ export function useTrophy() {
         shredded: getShredded().map((s) => ({ id: s.id, title: s.title, kind: s.kind })),
       } satisfies TrophyStats,
       restore: (id: string, kind: "thing" | "list" | "bucket" = "thing") => restoreLocal(id, kind === "list" ? "list" : "thing"),
+      sortedCount: solved.count,
+      sortedCountError: false,
+      retrySortedCount: () => undefined,
       preview: true,
       readState: "ready" as TrophyReadState,
       retry: () => undefined,
@@ -167,6 +172,11 @@ export function useTrophy() {
       await rpcRestore(id, kind);
       await invalidatePersonalSurfaces(qc, epoch);
     },
+    // The Things sorted card counts currently solved Things, each once; the
+    // activity-event count in `stats.sorted` is not used for display.
+    sortedCount: solved.count,
+    sortedCountError: solved.isError,
+    retrySortedCount: solved.retry,
     preview: false,
     readState: resolveTrophyReadState(false, query.data !== undefined, query.isError),
     retry: () => { void query.refetch(); },

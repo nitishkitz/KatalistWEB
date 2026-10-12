@@ -217,7 +217,9 @@ export function grokExtensionsHeadTags(projectId = readGrokProjectId()) {
   if (projectId) {
     tags.push(`<meta name="grok-project-id" content="${id}">`);
   }
-  tags.push(
+  // Ordinary local/third-party deployments have no builder project identity.
+  // Loading this same-origin-restricted script there fails on every page.
+  if (projectId) tags.push(
     `<script src="${GROK_EXTENSIONS_SCRIPT_SRC}"${
       projectId ? ` data-project-id="${id}"` : ""
     } defer></script>`,

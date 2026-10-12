@@ -790,7 +790,8 @@ function BucketDetailPage() {
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search messages"
+                  placeholder="Search Things or Lists"
+                  aria-label="Search Things or Lists"
                   className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#000533] outline-none placeholder:text-[#8487a7]"
                 />
               </label>
@@ -853,7 +854,15 @@ function BucketDetailPage() {
             </div>
           ) : null}
 
-          {itemsSurface === "loading" ? (
+          {detailTab === "notes" ? (
+              <BucketNotesWorkspace
+                context={bucket.context}
+                myActorId={myActorId ?? ""}
+                notesApi={notesApi}
+                addThingToBucket={(thingId) => add.mutateAsync({ thingId })}
+                onOpenThing={(thing) => openThing(thing.id)}
+              />
+            ) : itemsSurface === "loading" ? (
               <BucketItemsShimmer view={detailTab === "lists" ? "lists" : "things"} />
             ) : itemsSurface === "error" ? (
               <div role="alert" className="rounded-xl border border-destructive/30 p-5 text-center">
@@ -862,14 +871,6 @@ function BucketDetailPage() {
                   Retry
                 </button>
               </div>
-            ) : detailTab === "notes" ? (
-              <BucketNotesWorkspace
-                context={bucket.context}
-                myActorId={myActorId ?? ""}
-                notesApi={notesApi}
-                addThingToBucket={(thingId) => add.mutateAsync({ thingId })}
-                onOpenThing={(thing) => openThing(thing.id)}
-              />
             ) : itemsSurface === "empty" ? (
               <div className="rounded-2xl border border-dashed border-[#e3e5ef] px-5 py-12 text-center">
                 <p className="text-[15px] font-bold text-[#000533]">This Bucket is empty.</p>

@@ -83,7 +83,7 @@ test("a file picked for the old destination does not get appended to a new desti
   // Switch destination BEFORE the slow processFileForUpload resolves.
   rerender(h(Harness, { qc, listId: "list-b", listName: "List B" }));
   await act(async () => {});
-  assert.ok(getByText("List B"), "must now show the new destination");
+  assert.equal(getByLabelText("Magic Box").placeholder, "Toss into List B…", "must now show the new destination");
 
   // Now let the stale operation resolve.
   await act(async () => {
@@ -131,6 +131,21 @@ test("a Toss that completes after the destination has switched does not clear th
     "a Toss started for the OLD destination must not wipe the NEW destination's in-progress draft once it resolves",
   );
 
+  cleanup();
+  qc.clear();
+});
+
+test("a Toss completing in the same destination preserves text edited while it was pending", async () => {
+  const qc = newClient();
+  const { getByLabelText } = render(h(Harness, { qc, listId: "quality-same-destination", listName: "Quality" }));
+  await act(async () => { fireEvent.change(getByLabelText("Magic Box"), { target: { value: "first capture" } }); });
+  await act(async () => { fireEvent.keyDown(getByLabelText("Magic Box"), { key: "Enter" }); });
+  await act(async () => { fireEvent.change(getByLabelText("Magic Box"), { target: { value: "next thought, do not erase" } }); });
+  await act(async () => {
+    resolveCreateThing({ id: "quality-created" });
+    await new Promise(resolve => setTimeout(resolve, 30));
+  });
+  assert.equal(getByLabelText("Magic Box").value, "next thought, do not erase");
   cleanup();
   qc.clear();
 });

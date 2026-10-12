@@ -247,9 +247,9 @@ function ListDetailPage() {
     listId,
     thingId: null,
   }));
-  if (selectedState.listId !== listId) {
-    setSelectedState({ listId, thingId: null });
-  }
+  useEffect(() => {
+    setSelectedState((current) => current.listId === listId ? current : { listId, thingId: null });
+  }, [listId]);
   const selectedId = selectedState.listId === listId ? selectedState.thingId : null;
   const setSelectedId = (thingId: string | null) => setSelectedState({ listId, thingId });
   const [navLane, setNavLane] = useState<ListLaneId>("now");

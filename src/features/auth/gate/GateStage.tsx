@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 
-import sceneMp4 from "@/assets/auth/gate/scene-4k.mp4";
+import sceneMp4 from "@/assets/auth/gate/scene.mp4";
 import scenePoster from "@/assets/auth/gate/scene-poster.jpg";
 import type { GateRefs } from "./use-gate-scene";
 import { GATE_RING_SEGMENTS } from "./scene-track";
@@ -15,7 +15,7 @@ export function GateStage({ refs, poster }: { refs: GateRefs; poster?: string | 
         className="kg-video"
         muted
         playsInline
-        preload="auto"
+        preload="metadata"
         disablePictureInPicture
         disableRemotePlayback
         poster={poster || scenePoster}

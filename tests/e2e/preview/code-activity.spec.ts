@@ -1,3 +1,4 @@
+import { signInPreview } from "./demo-sign-in";
 import { expect, test, type Page } from "@playwright/test";
 
 /**
@@ -10,17 +11,9 @@ import { expect, test, type Page } from "@playwright/test";
  */
 const FLAG_ON = process.env.VITE_CODE_ACTIVITY_PREVIEW === "true";
 
-async function signInAsDemo(page: Page): Promise<boolean> {
-  await page.goto("/auth");
-  const demoTab = page.getByRole("button", { name: /^Demo$/i });
-  if (await demoTab.isVisible({ timeout: 1_500 }).catch(() => false)) await demoTab.click();
-  const persona = page.getByRole("button", { name: /Priya Sharma/i });
-  const available = await persona.waitFor({ state: "visible", timeout: 8_000 }).then(() => true).catch(() => false);
-  if (!available) return false;
-  await persona.click();
-  await page.waitForURL("/");
-  return true;
-}
+const signInAsDemo = signInPreview;
+
+
 
 async function openFirstList(page: Page) {
   await page.goto("/lists");

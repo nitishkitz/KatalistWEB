@@ -92,6 +92,10 @@ export async function load(url, context, nextLoad) {
   if (urlPath.endsWith(".css") && url.startsWith("file:")) {
     return { format: "module", source: "export default {};", shortCircuit: true };
   }
+  // Static image assets: Vite resolves these to URLs in the app; a path string is enough under test.
+  if (/\.(png|jpe?g|svg|webp|gif)$/i.test(urlPath) && url.startsWith("file:")) {
+    return { format: "module", source: `export default ${JSON.stringify(urlPath)};`, shortCircuit: true };
+  }
   if (urlPath.endsWith(".json") && url.startsWith("file:")) {
     const filePath = fileURLToPath(urlPath);
     const source = readFileSync(filePath, "utf8");

@@ -26,6 +26,9 @@ import { useCatchup } from "@/features/catchup/use-catchup";
 import { useMorningBrief } from "@/features/catchup/use-morning-brief";
 import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
 import { consumeCatchupOpen, CATCHUP_OPEN_EVENT } from "@/features/catchup/catchup-entry";
+import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
+import { HomeArrival } from "@/features/court/HomeArrival";
+import { useAppContext } from "@/features/context/use-app-context";
 
 const DESKTOP_BREAKPOINT_QUERY = "(min-width: 1024px)";
 
@@ -87,6 +90,7 @@ function Lane({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
         className="flex w-full items-center gap-3 px-4 py-2.5 text-left"
       >
         {open ? (
@@ -98,13 +102,7 @@ function Lane({
         <span className="text-[13px] text-muted-foreground">· {count}</span>
         {open ? meta : null}
         <span className="ml-auto text-[12px] text-muted-foreground">
-          {showAll || hidden === 0
-            ? title === "LATER"
-              ? `View all ${count}`
-              : title === "NEXT"
-                ? `View all ${count}`
-                : "Show 15 more"
-            : `Show ${hidden} more`}
+          {open ? "Collapse" : "Expand"}
         </span>
         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
       </button>
@@ -176,6 +174,10 @@ function TheirCard({
 }
 
 function CourtPage() {
+  const { context } = useAppContext();
+  useEffect(() => {
+    document.title = context === "home" ? "Home — Katalist" : "Court — Katalist";
+  }, [context]);
   const {
     now,
     next,
@@ -334,6 +336,11 @@ function CourtPage() {
 
   return (
     <AppShell noPadding>
+      {context === "home" && (
+        <div className="px-4 pt-4 lg:px-6">
+          <HomeArrival now={now.length} next={next.length} later={later.length} />
+        </div>
+      )}
       <CourtDesktop
         now={now}
         next={next}
@@ -377,22 +384,14 @@ function CourtPage() {
           className="px-4 py-4 pb-12"
         >
           <div>
-            {/* T09/E05: mobile selection is already just an ID lookup
-                (`selected` above resolves it against the current lists),
-                so unlike CourtDesktop's hero-flight-animated open, this
-                needs no Thing-object lookup at all -- setSelectedId
-                tolerates the id not being in cache yet and simply shows
-                nothing until the invalidation MagicBox already triggers
-                finishes refetching. */}
-            <MagicBox onThingCreated={(thingId) => setSelectedId(thingId)} />
-
+            <CatchUpBanner moments={catchup.moments} onReview={morningBrief.reopen} error={catchup.error} hasFetchedOnce={catchup.hasFetchedOnce} />
             <p className="mb-3 flex items-center gap-2 text-[13px] text-muted-foreground">
               <img src="/katalist-mark-app.png" alt="" className="h-4 w-4 opacity-70" />
               {emptyCourt && !isLoading
-                ? "Your Court is clear. Toss something when you’re ready."
+                ? context === "home" ? "A little breathing room. Toss a personal thought when you’re ready." : "Your Court is clear. Toss something when you’re ready."
                 : emptyFilter
                   ? "No Things match this filter."
-                  : "Coey here — your lanes are ready."}
+                  : context === "home" ? "Your personal priorities, at your pace." : "Coey here — your lanes are ready."}
             </p>
 
             <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -559,6 +558,11 @@ function CourtPage() {
         </InlineThingDetailWorkspace>
         )}
 
+        <div className="pointer-events-none fixed inset-x-0 bottom-20 md:bottom-5 z-40 px-4 lg:hidden">
+          <div className="pointer-events-auto mx-auto w-full max-w-2xl">
+            <MagicBox onThingCreated={(thingId) => setSelectedId(thingId)} />
+          </div>
+        </div>
         <CatchUpOverlay
           open={morningBrief.open && !isDesktopViewport}
           onClose={morningBrief.dismiss}

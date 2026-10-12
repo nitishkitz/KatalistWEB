@@ -1,4 +1,4 @@
-import { ArrowUp, Bell, Clock, EyeOff, Gauge, Play, SquareArrowOutUpRight } from "lucide-react";
+import { ArrowUp, Bell, ChevronLeft, ChevronRight, Clock, EyeOff, Gauge, MoreVertical, Play, SquareArrowOutUpRight } from "lucide-react";
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { KatalistIcon } from "@/features/court/KatalistIcon";
@@ -50,9 +50,15 @@ type Props = {
   inlineDetail?: boolean;
   /** arg carries a SnoozeOption for "snooze" and a Pace for "set_pace". */
   onAction: (id: CatchUpActionId, arg?: string) => void;
+  /** Digest header controls (inline detail only). */
+  onPrev?: () => void;
+  onNext?: () => void;
+  prevDisabled?: boolean;
+  isLast?: boolean;
+  onOpen?: () => void;
 };
 
-export function CatchUpStackCard({ moment, actions, busy, onAction, inlineDetail = false }: Props) {
+export function CatchUpStackCard({ moment, actions, busy, onAction, inlineDetail = false, onPrev, onNext, prevDisabled, isLast, onOpen }: Props) {
   const { thing } = moment;
   const chip = KIND_CHIP[moment.kind];
   const facePerson = moment.actor ?? thing.assignee;
@@ -64,24 +70,67 @@ export function CatchUpStackCard({ moment, actions, busy, onAction, inlineDetail
   return (
     <div data-thing-id={thing.id} className="brief-card relative z-10 flex flex-col gap-4 rounded-[16px] border border-slate-200 bg-white p-5 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.18)]">
       {/* Header: who + trigger */}
-      <div className="brief-card-sender flex items-center gap-2.5">
+      <div className="brief-card-sender flex items-center gap-[10px]">
         <PersonAvatar
           name={facePerson.name}
           initials={facePerson.initials}
           src={faceAvatar}
-          size={36}
+          size={inlineDetail ? 33 : 36}
         />
-        <span className="text-[13px] font-semibold text-slate-800">{facePerson.name}<span className="brief-sender-context">{moment.actor ? " sent you an update" : " · your task"}</span></span>
+        <span className="text-[12.2px] text-[#8286a2]">
+          <span className="font-semibold text-[#30104d]">{facePerson.name}</span>
+          <span className="brief-sender-context">{moment.actor ? " sent you an update" : " · your task"}</span>
+        </span>
         <span
           className={cn(
-            "brief-status ml-1 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold",
-            chip.bg,
-            chip.text,
+            "brief-status inline-flex items-center gap-[5px] rounded-full px-[10px] py-[5.8px] text-[12px] leading-[1.4]",
+            inlineDetail ? "bg-[#ffebd0] text-[#30104d]" : cn(chip.bg, chip.text, "font-semibold"),
           )}
         >
-          <Bell className="h-3 w-3" />
+          <Bell className="h-[11.5px] w-[11.5px]" />
           {triggerLabel}
         </span>
+        {inlineDetail ? (
+          <>
+            <span className="flex-1" />
+            <span className="flex items-center gap-[3.2px]">
+              <button
+                type="button"
+                onClick={onPrev}
+                disabled={prevDisabled || busy}
+                aria-label="Previous"
+                className="flex h-[29.5px] w-[29.5px] cursor-pointer items-center justify-center rounded-full border-[1.28px] border-[#e6e3ed] bg-white text-[#30104d] outline-none disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-[#8d2bf5]"
+              >
+                <ChevronLeft className="h-[15px] w-[15px]" />
+              </button>
+              <button
+                type="button"
+                onClick={onNext}
+                disabled={busy}
+                aria-label={isLast ? "Finish" : "Next"}
+                className="flex h-[29.5px] w-[29.5px] cursor-pointer items-center justify-center rounded-full border-[1.28px] border-[#e6e3ed] bg-white text-[#30104d] outline-none disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-[#8d2bf5]"
+              >
+                <ChevronRight className="h-[15px] w-[15px]" />
+              </button>
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="More options"
+                  className="flex h-[29.5px] w-[24.4px] cursor-pointer items-center justify-center text-[#30104d] outline-none focus-visible:ring-2 focus-visible:ring-[#8d2bf5]"
+                >
+                  <MoreVertical className="h-[15px] w-[15px]" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-white">
+                <DropdownMenuItem className="text-[12.5px]" onSelect={() => onOpen?.()}>
+                  Open thing
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        ) : null}
       </div>
 
       {!inlineDetail && <>

@@ -4,6 +4,15 @@ import { requestAutojoin } from "@/features/calls/autojoin-signal";
 import { deliverLocalRing } from "@/features/calls/call-lobby";
 import { firebaseConfig, VAPID_KEY } from "./push-config";
 
+let foregroundListener: { uid: string; dispose: () => void } | null = null;
+let registrationRevision = 0;
+export function disposePushForUser(uid: string) {
+  registrationRevision += 1;
+  if (foregroundListener?.uid !== uid) return;
+  foregroundListener.dispose();
+  foregroundListener = null;
+}
+
 /**
  * G06: the actual notification permission state, for the Me settings
  * panel to display honestly instead of the previous static "in-app
@@ -35,6 +44,7 @@ export async function registerPushForUser(
   uid: string,
   navigate: (opts: unknown) => void,
 ): Promise<RegisterResult> {
+  const revision = ++registrationRevision;
   if (typeof window === "undefined" || !("Notification" in window) || !("serviceWorker" in navigator)) {
     return { ok: false, reason: "unsupported" };
   }
@@ -67,7 +77,9 @@ export async function registerPushForUser(
       return { ok: false, reason: "error" };
     }
 
-    onMessage(messaging, (payload) => {
+    if (revision !== registrationRevision) return { ok: false, reason: "error" };
+    foregroundListener?.dispose();
+    const dispose = onMessage(messaging, (payload) => {
       const title = payload.notification?.title || payload.data?.title || "Katalist";
       const body = payload.notification?.body || payload.data?.body || "";
       const data = payload.data ?? {};
@@ -123,6 +135,7 @@ export async function registerPushForUser(
         toast(title, { description: body });
       }
     });
+    foregroundListener = { uid, dispose };
 
     return { ok: true };
   } catch {

@@ -1,3 +1,4 @@
+import { signInPreview } from "./demo-sign-in";
 import { test, expect, type Page } from "@playwright/test";
 
 /**
@@ -13,27 +14,7 @@ async function pasteClipboard(page: Page) {
   await page.keyboard.press(shortcut);
 }
 
-async function signIn(page: Page) {
-  await page.goto("/auth");
-  // Older builds show a Demo tab first; current builds list the demo personas directly.
-  const demoTab = page.getByRole("button", { name: /^Demo$/i });
-  if (await demoTab.isVisible().catch(() => false)) await demoTab.click();
-  const persona = page.getByRole("button", { name: /Priya Sharma/i });
-  const appeared = await persona.waitFor({ state: "visible", timeout: 20_000 }).then(() => true).catch(() => false);
-  if (!appeared) {
-    if (process.env.CI) throw new Error("Demo personas are missing; Thing reference coverage must not skip in CI");
-    return false;
-  }
-  await persona.click();
-  await page.waitForURL("/");
-  // The Morning Brief can open over Court after sign-in; dismiss it like a user would.
-  const brief = page.getByRole("dialog").first();
-  if (await brief.waitFor({ state: "visible", timeout: 15_000 }).then(() => true).catch(() => false)) {
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-  }
-  return true;
-}
+const signIn = signInPreview;
 
 test("copy a Thing from a Court card and paste it into Magic Box as a compact card", async ({ page, context, browserName }) => {
   test.skip(browserName !== "chromium", "Clipboard permissions are only granted in Chromium");
@@ -46,11 +27,11 @@ test("copy a Thing from a Court card and paste it into Magic Box as a compact ca
   await expect(openButton).toBeVisible({ timeout: 30_000 });
   const title = (await openButton.getAttribute("aria-label"))!.replace(/^Open /, "");
 
-  // Right-click offers the three actions and does not open the card.
+  // Right-click offers the two actions and does not open the card.
   await card.click({ button: "right" });
   await expect(page.getByRole("menuitem", { name: "Copy Thing" })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Add to Magic Box" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Copy link" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Copy link" })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("menuitem", { name: "Copy Thing" }).click();
   await expect(page.getByRole("menu")).toHaveCount(0);
@@ -130,7 +111,8 @@ test("the Add to Magic Box action stages the Thing without a clipboard round tri
   const card = page.locator("article").filter({ has: page.getByRole("button", { name: /^Open / }) }).first();
   await card.waitFor({ state: "visible", timeout: 15_000 }).catch(() => undefined);
   test.skip(!(await card.isVisible().catch(() => false)), "Court stack is not rendered at this breakpoint");
-  await card.getByRole("button", { name: "Thing options" }).click();
+  await expect(card.getByRole("button", { name: "Thing options" })).toHaveCount(0);
+  await card.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Add to Magic Box" }).click();
   await expect(page.getByLabel("Referenced Things").first()).toBeVisible();
 });

@@ -6,8 +6,9 @@ test("incomplete Things payload keeps the broad authority fallback", () => {
   const targets = targetsForEvent({ table: "things" });
   const flat = targets.map((t) => t[0]);
   assert.deepEqual(flat, [
+    "assistant",
     "court", "thing", "list-things", "lists", "list", "buckets", "bucket",
-    "bucket-items", "nudges", "nudge-history", "catchup", "trophy", "notifications",
+    "bucket-items", "nudges", "nudge-history", "catchup", "trophy", "profile-solved-things", "notifications",
     "notifications-unread", "accessible-things", "doorman",
   ]);
 });
@@ -119,5 +120,18 @@ test("known List, Bucket, comment and activity IDs keep unrelated detail quiet",
     const targets = targetsForEvent({ table, new: row });
     assert.ok(targets.some((target) => targetKey(target) === targetKey(expected)), `${table} must target its detail`);
     assert.ok(!targets.some((target) => targetKey(target) === targetKey([expected[0]])), `${table} must not broad-invalidate that detail family`);
+  }
+});
+
+test("Ask refreshes when Things, nudges, scope membership or bucket links change", () => {
+  for (const table of ["things", "nudges", "thing_activity", "lists", "list_members", "buckets", "bucket_items"]) {
+    assert.ok(targetsForEvent({ table }).some((target) => target[0] === "assistant"), `${table} must refresh Ask`);
+  }
+});
+
+test("Sort, reassignment and access changes refresh the profile solved-Things family", () => {
+  for (const table of ["things", "thing_activity", "lists", "list_members"]) {
+    const families = targetsForEvent({ table }).map((target) => target[0]);
+    assert.ok(families.includes("profile-solved-things"), `${table} must refresh profile-solved-things`);
   }
 });

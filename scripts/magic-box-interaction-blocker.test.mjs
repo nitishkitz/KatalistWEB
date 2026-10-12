@@ -74,7 +74,7 @@ test("T03: typing unsent text into Magic Box registers the interaction blocker, 
   const { container } = render(h(Harness, { qc, onBlocked: (v) => (blocked = v) }));
   assert.equal(blocked, false, "not blocked before any input");
 
-  const input = container.querySelector("input[type='text'], input:not([type])");
+  const input = container.querySelector('[aria-label="Magic Box"]');
   await act(async () => {
     fireEvent.change(input, { target: { value: "call the vet" } });
   });

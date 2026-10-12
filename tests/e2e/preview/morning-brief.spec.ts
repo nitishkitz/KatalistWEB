@@ -1,3 +1,4 @@
+import { signInPreview } from "./demo-sign-in";
 import { test, expect } from "@playwright/test";
 
 /**
@@ -32,28 +33,7 @@ import { test, expect } from "@playwright/test";
  * failure, and never silently no-ops as a false pass either.
  */
 
-async function signInAsFirstDemoPersona(page: import("@playwright/test").Page) {
-  await page.goto("/auth");
-  const demoTab = page.getByRole("button", { name: /^Demo$/i });
-  // `.isVisible()` does not auto-wait/retry (unlike `expect().toBeVisible()`)
-  // -- the tab bar renders after React hydration, not in the initial HTML,
-  // so an immediate check can race a cold-started dev server. `waitFor`
-  // actually polls up to its own timeout before giving up.
-  const appeared = await demoTab
-    .waitFor({ state: "visible", timeout: 8_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!appeared) {
-    if (process.env.CI) throw new Error("Demo tab is missing; authenticated preview coverage must not skip in CI");
-    return false; // VITE_KATALIST_DEMO_MODE is not enabled for this run
-  }
-  await demoTab.click();
-  const firstPersona = page.getByRole("button", { name: /Priya Sharma/i });
-  await expect(firstPersona).toBeVisible();
-  await firstPersona.click();
-  await page.waitForURL("/");
-  return true;
-}
+const signInAsFirstDemoPersona = signInPreview;
 
 test.describe("Morning Brief: real backend isolation", () => {
   test("a Demo Persona session makes no request to a real Supabase RPC endpoint", async ({ page }) => {

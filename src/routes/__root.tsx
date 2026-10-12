@@ -19,6 +19,7 @@ import { RealtimeInvalidationProvider } from "@/features/realtime/RealtimeInvali
 import { CallRingProvider } from "@/features/calls/CallRingProvider";
 import { PushRegistrar } from "@/features/push/PushRegistrar";
 import { MotionPreferenceApplier } from "@/components/layout/MotionPreferenceApplier";
+import { applyFontPreference, useStoredFontPreference } from "@/hooks/use-font-preference";
 import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlockerProvider";
 import { ActiveChatOperationBlocker } from "@/features/lists/ActiveChatOperationBlocker";
 import appCss from "../styles.css?url";
@@ -114,7 +115,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=DM+Sans:wght@500;700&family=Inter:wght@400;500;600;700;800&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;700&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@400;500;600;700&family=Roboto:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&display=swap",
       },
       { rel: "icon", type: "image/png", href: "/favicon.png" },
     ],
@@ -170,6 +171,12 @@ function RouteLoadTelemetry() {
   return null;
 }
 
+function FontPreferenceApplier() {
+  const font = useStoredFontPreference();
+  useEffect(() => applyFontPreference(font), [font]);
+  return null;
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
@@ -181,6 +188,7 @@ function RootComponent() {
           guarantee as routed content, rather than resting solely on
           their own independent user?.id-keyed effects. */}
       <MotionPreferenceApplier />
+      <FontPreferenceApplier />
       <RouteLoadTelemetry />
       <IdentityBoundary>
         {/* P7: mounted once here, inside the remounted subtree, instead of

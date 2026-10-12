@@ -208,7 +208,7 @@ export class CallRoom {
   private readonly peers = new Map<string, PeerSlot>();
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
   private stateTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly pendingState = new Map<string, Partial<PeerState>>();
+  private readonly pendingState = new Map<string, { sessionId?: string; state: Partial<PeerState> }>();
   /** Per-peer chain so each peer's SDP/ICE messages are applied strictly in order. */
   private readonly signalQueues = new Map<string, Promise<void>>();
   private localStream: MediaStream | null = null;
@@ -391,9 +391,13 @@ export class CallRoom {
     const slot = this.peers.get(msg.from);
     // State can arrive before the sender shows up in presence; keep the latest.
     if (!slot) {
-      this.pendingState.set(msg.from, msg.state);
+      this.pendingState.set(msg.from, { sessionId: msg.sessionId, state: msg.state });
       return;
     }
+    // A peer id can leave and rejoin while an old state broadcast is still in
+    // flight. Never let that old session overwrite the replacement slot.
+    // Messages without a session id remain accepted for older clients.
+    if (msg.sessionId && slot.sessionId && msg.sessionId !== slot.sessionId) return;
     Object.assign(slot, normalizeState(msg.state));
     this.emit();
   }
@@ -465,6 +469,7 @@ export class CallRoom {
       // new session id. Its old RTCPeerConnection belongs to a dead DTLS
       // session, so rebuild instead of renegotiating onto it.
       if (existing && p.sessionId && existing.sessionId && existing.sessionId !== p.sessionId) {
+        this.pendingState.delete(p.id);
         this.dropPeer(p.id);
         existing = undefined;
       }
@@ -476,7 +481,10 @@ export class CallRoom {
       } else {
         const pending = this.pendingState.get(p.id);
         this.pendingState.delete(p.id);
-        this.createPeer(p.id, p.name, { ...p, ...(pending ? normalizeState(pending) : {}) });
+        const pendingState = pending && (!pending.sessionId || !p.sessionId || pending.sessionId === p.sessionId)
+          ? normalizeState(pending.state)
+          : {};
+        this.createPeer(p.id, p.name, { ...p, ...pendingState });
         joined = true;
       }
     }

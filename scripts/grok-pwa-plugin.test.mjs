@@ -21,13 +21,13 @@ test("injects before </head>", () => {
   const out = injectGrokPwaHead("<html><head><title>x</title></head><body></body></html>");
   assert.match(out, /rel="manifest"/);
   assert.match(out, /apple-touch-icon/);
-  assert.match(out, /grok-app-builder\/extensions\.js/);
+  assert.doesNotMatch(out, /grok-app-builder\/extensions\.js/);
   assert.ok(out.indexOf("manifest") < out.indexOf("</head>"));
 });
 
-test("injects the extensions script without a project id", () => {
+test("ordinary deployments do not request builder extensions without a project id", () => {
   const out = injectGrokPwaHead("<html><head></head></html>", "Demo", "");
-  assert.match(out, /src="https:\/\/grok\.com\/grok-app-builder\/extensions\.js" defer/);
+  assert.doesNotMatch(out, /grok-app-builder\/extensions\.js/);
   assert.doesNotMatch(out, /grok-project-id/);
   assert.doesNotMatch(out, /data-project-id/);
   assert.doesNotMatch(out, /property="grok:app_id"/);

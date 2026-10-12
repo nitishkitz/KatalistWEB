@@ -11,6 +11,9 @@ export default defineEventHandler(async (event) => {
   if (!body || !isUuid(body.evidenceId)) throw qaError(400, "invalid_input", "evidenceId is required.");
   const { data, error } = await client.rpc("qa_abort_evidence", { p_evidence_id: body.evidenceId });
   if (error) throw fromRpcError(error, "The upload could not be cancelled.");
-  if (typeof data === "string") await getSupabaseAdmin().storage.from("qa-evidence").remove([data]);
+  if (typeof data === "string") {
+    const { error: removeError } = await getSupabaseAdmin().storage.from("qa-evidence").remove([data]);
+    if (removeError) throw qaError(502, "storage_unavailable", "The upload record was cancelled, but its stored file could not be removed. Try again or contact an owner.");
+  }
   return { ok: true };
 });

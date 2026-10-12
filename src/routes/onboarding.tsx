@@ -83,7 +83,7 @@ function OnboardingPage() {
 
   if (loading || !session || !hydrated) {
     return (
-      <div className="h-[100dvh] overflow-hidden bg-background px-6 py-6 sm:py-8">
+      <div className="min-h-[100dvh] overflow-x-hidden bg-background px-6 py-6 sm:py-8">
         <Logo />
       </div>
     );
@@ -106,7 +106,7 @@ function OnboardingPage() {
 
   if (onDiscoveryStep) {
     return (
-      <div className="h-[100dvh] overflow-hidden bg-background px-6 py-6 sm:py-8">
+      <div className="min-h-[100dvh] overflow-x-hidden bg-background px-6 py-6 sm:py-8">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
           <Logo />
           <span className="text-[13px] text-muted-foreground">{DISCOVERY_KICKER}</span>
@@ -146,7 +146,7 @@ function OnboardingPage() {
   const isLastTourStep = i === STEPS.length - 1;
 
   return (
-    <div className="h-[100dvh] overflow-hidden bg-background px-6 py-6 sm:py-8">
+    <div className="min-h-[100dvh] overflow-x-hidden bg-background px-6 py-6 sm:py-8">
       <div className="mx-auto flex max-w-5xl items-center justify-between">
         <Logo />
         <span className="text-[13px] text-muted-foreground">{step.kicker}</span>

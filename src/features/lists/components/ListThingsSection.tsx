@@ -181,7 +181,7 @@ export function ListThingsSection({
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto min-h-0 p-2">
+          <div className="flex-1 overflow-auto min-h-0 p-2 pb-32">
             {laneThings.map((thing) => {
               const isSelected = thing.id === activeThing?.id;
               const due = formatCourtDue(thing);
@@ -294,7 +294,7 @@ export function ListThingsSection({
         {/* Right: detail | preview */}
         <div className="flex flex-1 flex-col min-h-0 overflow-hidden rounded-[10px] bg-white">
           <div className="flex flex-1 flex-row min-h-0 overflow-hidden">
-            <div className="list-thing-detail flex-1 min-h-0 overflow-auto bg-[#fefdfd] p-4">
+            <div className="list-thing-detail flex-1 min-h-0 overflow-auto bg-[#fefdfd] p-4 pb-32">
               <div className="w-full">
                 {selectedId && selected && !selectedIsVisible ? (
                   <div role="status" className="flex min-h-[320px] flex-col items-center justify-center text-center">
@@ -355,8 +355,8 @@ export function ListThingsSection({
 
       {/* Toss composer — outside the detail container */}
       {!viewOnly && (
-        <div className="flex shrink-0 justify-center">
-          <div className="w-full max-w-2xl">
+        <div className="pointer-events-none fixed inset-x-0 bottom-20 md:bottom-5 z-40 flex justify-center px-4">
+          <div className="pointer-events-auto w-full max-w-2xl">
             <MagicBox
               listId={list.id}
               listName={list.name}

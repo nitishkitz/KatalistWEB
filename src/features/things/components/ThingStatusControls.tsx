@@ -16,10 +16,10 @@ import type { getThingCapabilities } from "@/domain/capabilities";
 import type { BucketCard } from "@/features/buckets/fixtures";
 import { SNOOZE_OPTIONS, type SnoozeOption } from "../personal-snooze";
 import { cn } from "@/lib/utils";
+import { PaceSegmentedControl } from "./PaceSegmentedControl";
 
 type Caps = ReturnType<typeof getThingCapabilities> | null;
 
-const paces: Pace[] = ["now", "next", "later"];
 const statuses: WorkStatus[] = ["not_started", "under_progress", "sorted"];
 
 function PaceValue({ pace }: { pace: Pace | null }) {
@@ -75,12 +75,15 @@ export type ThingStatusControlsProps = {
   assigneeAvatar?: string | null;
   isAssigneeSameAsOwner?: boolean;
   dueLabel?: string | null;
+  dueControl?: React.ReactNode;
   reviewActionsExternal?: boolean;
   onCatch?: () => void;
   onSort?: () => void;
   snoozedUntil?: string | number | null;
   onSnooze?: (option: SnoozeOption) => void;
   onWake?: () => void;
+  moreActionsButton?: React.ReactNode;
+  moreActionsPanel?: React.ReactNode;
   /** default-only */
   viewOnly?: boolean;
   assignableList?: Person[];
@@ -102,11 +105,14 @@ export function ThingStatusControls({
   ownerAvatar,
   assigneeAvatar,
   dueLabel,
+  dueControl,
   onCatch,
   onSort,
   snoozedUntil,
   onSnooze,
   onWake,
+  moreActionsButton,
+  moreActionsPanel,
   reviewActionsExternal = false,
   viewOnly,
   assignableList,
@@ -122,23 +128,7 @@ export function ThingStatusControls({
   ) : null;
 
   const paceControl = (label: string, value: Pace | null, editable: boolean, onChange: (pace: Pace) => void) => editable ? (
-    <div role="group" aria-label={label} className="inline-flex rounded-[6px] bg-[#f0f1f9] p-0.5">
-      {paces.map((pace) => (
-        <button
-          key={pace}
-          type="button"
-          disabled={busy}
-          aria-pressed={value === pace}
-          onClick={() => onChange(pace)}
-          className={cn(
-            "min-h-7 min-w-[48px] rounded-[5px] px-2.5 text-[12px] font-medium capitalize transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
-            value === pace ? "bg-[#975ee2] text-white" : "text-[#3a4675] hover:bg-white/70",
-          )}
-        >
-          {pace}
-        </button>
-      ))}
-    </div>
+    <PaceSegmentedControl label={label} value={value} disabled={busy} onChange={onChange} />
   ) : <PaceValue pace={value} />;
   const personalPaceControl = paceControl(personalPaceLabel, thing.personalPace, Boolean(caps?.canSetPace), onSetPace);
   const requestedPaceControl = paceControl("Assigned pace", thing.ownerImportance, Boolean(caps?.canSetImportance), onSetRequestedPace);
@@ -247,6 +237,7 @@ export function ThingStatusControls({
         {/* Due and both pace values share one compact metadata row. */}
         <div className="flex flex-wrap items-start gap-x-6 gap-y-3 rounded-[8px] border border-[#f0f1f7] bg-white px-4 py-3">
           <div className="min-w-[100px] flex-1 space-y-1">
+            {dueControl ?? (<>
             <div className="flex items-center gap-1.5 text-[12px] text-[#3a4675]">
               <Calendar className="h-3.5 w-3.5" />
               <span>Due</span>
@@ -254,6 +245,7 @@ export function ThingStatusControls({
             <div className={cn("flex min-h-7 items-center text-[12px] font-medium", dueLabel ? "text-[#f71a24]" : "text-muted-foreground")}>
               {dueLabel ?? "No due date"}
             </div>
+            </>)}
           </div>
           {selfAssigned ? (
             <div className="min-w-[156px] flex-1 space-y-1">
@@ -299,6 +291,7 @@ export function ThingStatusControls({
               </button>
             ) : null}
             {snoozeControl}
+            {moreActionsButton}
           </div>
 
           {caps?.canAddToBucket && !viewOnly ? <DropdownMenu>
@@ -338,6 +331,7 @@ export function ThingStatusControls({
             </DropdownMenuContent>
           </DropdownMenu> : currentBuckets.length ? <span className="inline-flex items-center gap-1.5 text-[12px] text-[#3a4675]"><Folder className="h-3.5 w-3.5" />{currentBuckets.length} {currentBuckets.length === 1 ? "Bucket" : "Buckets"}</span> : null}
         </div>
+        {moreActionsPanel ? <div className="pt-3">{moreActionsPanel}</div> : null}
       </>
     );
   }

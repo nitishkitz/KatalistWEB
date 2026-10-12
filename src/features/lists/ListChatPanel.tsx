@@ -15,7 +15,6 @@ import {
   MessageSquare,
   Paperclip,
   AtSign,
-  Smile,
   Download,
   FileText,
   Phone,
@@ -111,6 +110,23 @@ function ChatAttachmentView({ attachment }: { attachment: ChatAttachment }) {
           className="max-h-56 max-w-[260px] rounded-[10px] border border-[#ebecf7] object-cover"
         />
       </a>
+    );
+  }
+  if (!attachment.url) {
+    return (
+      <span
+        aria-label={`${attachment.name} is not available yet`}
+        className="mt-1.5 inline-flex max-w-[280px] items-center gap-2.5 rounded-[10px] border border-[#ebecf7] bg-[#f9f9fe] px-3 py-2"
+      >
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#eef0f6] text-[#6a769c]">
+          <FileText className="h-4 w-4" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[12px] font-medium text-[#000533]">{attachment.name}</span>
+          {sizeLabel ? <span className="block text-[12px] text-[#8487a7]">{sizeLabel}</span> : null}
+          <span className="block text-[11px] text-[#8487a7]">File unavailable</span>
+        </span>
+      </span>
     );
   }
   return (
@@ -529,9 +545,17 @@ export const ListChatPanel = forwardRef<
             </button>
           ) : null}
           {chat.error && chat.messages.length === 0 ? (
-            <p role="alert" className="py-4 text-center text-xs text-red-600">
-              Couldn't load messages. Reopen this conversation to retry.
-            </p>
+            <div role="alert" className="py-4 text-center text-xs text-red-600">
+              <p>Couldn't load messages.</p>
+              <button
+                type="button"
+                onClick={() => void chat.retryMessages()}
+                disabled={chat.isRetrying}
+                className="mt-2 rounded-md border border-red-200 px-3 py-1.5 font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+              >
+                {chat.isRetrying ? "Retrying…" : "Retry"}
+              </button>
+            </div>
           ) : null}
           {chat.isLoading ? (
             <ChatMessagesSkeleton />
@@ -768,6 +792,9 @@ export const ListChatPanel = forwardRef<
               onChange={onMsgChange}
               onPaste={referenceDraft.onPaste}
               role="combobox"
+              aria-label="Message"
+              aria-autocomplete="list"
+              aria-haspopup="listbox"
               aria-expanded={Boolean(mentionTrigger && mentionMatches.length > 0)}
               aria-controls="list-chat-mention-menu"
               aria-activedescendant={mentionTrigger && mentionMatches.length > 0 ? `list-chat-mention-menu-option-${activeMentionIndex}` : undefined}
@@ -804,14 +831,6 @@ export const ListChatPanel = forwardRef<
               title="Mention someone"
             >
               <AtSign className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              className="cursor-pointer rounded text-[#8487a7] transition-colors hover:text-[#000533] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Emoji"
-              title="Emoji"
-            >
-              <Smile className="h-4 w-4" />
             </button>
             <button
               type="submit"

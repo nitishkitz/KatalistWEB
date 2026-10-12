@@ -48,7 +48,8 @@ export function useGoogleContacts(open: boolean) {
     const current = () => isEpochCurrent(qc, epoch) && attempt.current === myAttempt;
     setSyncing(true); setSyncError(null);
     const fail = (message: string) => { if (current()) { setSyncError(message); setSyncing(false); } };
-    requestGoogleContactsCode(clientId, code => {
+    try {
+      requestGoogleContactsCode(clientId, code => {
       if (!current()) return;
       controller.current = new AbortController();
       void (async () => {
@@ -65,7 +66,10 @@ export function useGoogleContacts(open: boolean) {
         } catch (error) { if (current()) fail(error instanceof Error ? error.message : "Contacts sync failed."); }
         finally { if (current()) setSyncing(false); }
       })();
-    }, fail);
+      }, fail);
+    } catch (error) {
+      fail(error instanceof Error ? error.message : "Google Contacts authorization failed. Try again.");
+    }
   };
   return { people: state.data?.people ?? [], syncedAt: state.data?.syncedAt ?? null,
     contactCount: state.data?.contactCount ?? 0, matchedCount: state.data?.matchedCount ?? 0,

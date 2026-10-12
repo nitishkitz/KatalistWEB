@@ -12,6 +12,8 @@ import { ChatHeadsDock } from "@/features/hub/ChatHeadsDock";
 import { usePresence } from "@/features/people/presence";
 import { GlobalThingContextMenu } from "@/features/thing-references/GlobalThingContextMenu";
 import { requestMagicBoxFocus, tryHandleMagicBoxCapture } from "@/features/court/magic-box-entry";
+import { useAppContext } from "@/features/context/use-app-context";
+import { MobileContextSwitch } from "./MobileContextSwitch";
 
 interface AppShellProps {
   title?: ReactNode;
@@ -27,6 +29,7 @@ interface AppShellProps {
 
 export function AppShell({ title, subtitle, actions, children, noPadding, hideTopNav, hideBottomNav }: AppShellProps) {
   const { session, loading } = useSession();
+  const { context } = useAppContext();
   const navigate = useNavigate();
   // Global database-change invalidation moved to RealtimeInvalidationProvider
   // (P7), mounted once at the root instead of once per AppShell instance --
@@ -63,9 +66,10 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background">
+    <div data-app-context={context} className="katalist-app-shell flex min-h-screen w-full flex-col bg-background">
       <GlobalThingContextMenu />
       {!hideTopNav && <TopNav />}
+      {!hideTopNav && <MobileContextSwitch />}
       <AppSidebar hideBottomNav={hideBottomNav} />{/* mobile bottom tab bar only */}
       <main className={`flex-1 min-w-0 ${hideBottomNav ? "" : "pb-16 md:pb-0"}`}>
         {noPadding ? children : (

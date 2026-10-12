@@ -1,4 +1,5 @@
 import type { Importance, Person } from "@/domain/thing";
+import { parseTossDue, type TossDueChoice } from "./parse-toss-due";
 
 export type TossChip = {
   kind: "assignee" | "due" | "importance" | "list" | "bucket" | "suggestion" | "unresolved";
@@ -10,40 +11,58 @@ const COMMON_STOP_WORDS = new Set([
   "the", "for", "and", "with", "from", "now", "next", "later", "today", "tomorrow",
   "this", "that", "get", "got", "send", "call", "talk", "chat", "meet", "meeting",
   "review", "reviewed", "reviewing", "check", "checked", "discuss", "discussed",
-  "deck", "card", "task", "item", "work", "home", "into", "onto", "about", "have", "need"
+  "deck", "card", "task", "item", "work", "home", "into", "onto", "about", "have", "need",
+  "please", "kindly", "can", "could", "you", "we", "help", "remind", "remember", "update", "fix",
+  "docs", "documents", "files", "ready", "done", "all", "your", "my", "our"
 ]);
+
+function oneEditApart(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length >= b.length) i++;
+    if (b.length >= a.length) j++;
+  }
+  return edits + Number(i < a.length || j < b.length) <= 1;
+}
 
 export function findFuzzyPersonMatch(
   text: string,
   people: Person[],
 ): { person: Person; matchedWord: string } | null {
+  const suggestion = findPersonSuggestions(text, people);
+  return suggestion?.people.length === 1 ? { person: suggestion.people[0]!, matchedWord: suggestion.matchedWord } : null;
+}
+
+function findPersonSuggestions(text: string, people: Person[]): { people: Person[]; matchedWord: string } | null {
   const tokens = text.match(/[A-Za-z0-9_.-]+/g) ?? [];
 
   for (const token of tokens) {
     const clean = token.toLowerCase().replace(/^[@#/]/, "").trim();
     if (clean.length < 3 || COMMON_STOP_WORDS.has(clean)) continue;
 
-    for (const p of people) {
+    const exact = people.filter((p) => clean === p.name.split(" ")[0].toLowerCase() || clean === p.name.toLowerCase());
+    if (exact.length) return { people: dedupePeopleByName(exact), matchedWord: token };
+    const prefix = people.filter((p) => {
       const firstName = p.name.split(" ")[0].toLowerCase();
-      const fullName = p.name.toLowerCase();
-
-      // Exact match on first or full name.
-      if (clean === firstName || clean === fullName) {
-        return { person: p, matchedWord: token };
-      }
-
       // Strong prefix match only: the typed word is a near-complete prefix of the
       // first name (e.g. "priy" -> "priya"). Requires 4+ chars and covers most of
       // the name, so ordinary words no longer trigger a suggestion.
-      if (
+      return (
         clean.length >= 4 &&
         firstName.length >= 4 &&
         firstName.startsWith(clean) &&
         clean.length >= firstName.length - 2
-      ) {
-        return { person: p, matchedWord: token };
-      }
-    }
+      );
+    });
+    if (prefix.length) return { people: dedupePeopleByName(prefix), matchedWord: token };
+    const near = people.filter(p => {
+      const first = p.name.split(" ")[0].toLowerCase();
+      return clean.length >= 4 && first.length >= 4 && oneEditApart(clean, first);
+    });
+    if (near.length) return { people: dedupePeopleByName(near), matchedWord: token };
   }
   return null;
 }
@@ -82,6 +101,7 @@ function dedupePeopleByName(list: Person[]): Person[] {
  * ambiguous "who is this?".
  */
 function resolveMentionCandidates(needle: string, people: Person[]): Person[] {
+  needle = needle.replace(/\./g, " ");
   const firstNameOf = (name: string) => name.toLowerCase().split(" ")[0] ?? "";
   const exact = people.filter(
     (p) => p.name.toLowerCase() === needle || firstNameOf(p.name) === needle,
@@ -92,104 +112,6 @@ function resolveMentionCandidates(needle: string, people: Person[]): Person[] {
   const substring = people.filter((p) => p.name.toLowerCase().includes(needle));
   const pool = exact.length ? exact : prefix.length ? prefix : substring;
   return dedupePeopleByName(pool);
-}
-
-function dueFromToken(token: string, time: string | undefined, now: Date): { dueAt: string; dueHasTime: boolean } | null {
-  const day = now.getDay();
-  const start = new Date(now);
-  // A date without an explicit time means 10 PM local, never 9 AM in the past.
-  start.setHours(22, 0, 0, 0);
-  const map: Record<string, number> = {
-    sunday: 0,
-    monday: 1,
-    tuesday: 2,
-    wednesday: 3,
-    thursday: 4,
-    friday: 5,
-    saturday: 6,
-  };
-  const key = token.toLowerCase().replace(/^(?:this|next|coming)\s+/, "");
-  if (key === "today") return withTime(start, time);
-  if (key === "tomorrow") {
-    start.setDate(start.getDate() + 1);
-    return withTime(start, time);
-  }
-  if (key in map) {
-    const target = map[key]!;
-    let delta = (target - day + 7) % 7;
-    if (delta === 0) delta = 7;
-    start.setDate(start.getDate() + delta);
-    return withTime(start, time);
-  }
-  return null;
-}
-
-const MONTHS: Record<string, number> = {
-  january: 0, jan: 0,
-  february: 1, feb: 1,
-  march: 2, mar: 2,
-  april: 3, apr: 3,
-  may: 4,
-  june: 5, jun: 5,
-  july: 6, jul: 6,
-  august: 7, aug: 7,
-  september: 8, sept: 8, sep: 8,
-  october: 9, oct: 9,
-  november: 10, nov: 10,
-  december: 11, dec: 11,
-};
-const MONTH_PATTERN = "january|february|march|april|may|june|july|august|september|sept|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec";
-
-function endOfMonthDue(year: number, month: number, time: string | undefined, now: Date) {
-  const due = new Date(now);
-  due.setFullYear(year, month + 1, 0);
-  due.setHours(22, 0, 0, 0);
-  return withTime(due, time);
-}
-
-function calendarPeriodDue(kind: "month" | "year", offset: number, now: Date) {
-  if (kind === "year") return endOfMonthDue(now.getFullYear() + offset, 11, undefined, now);
-  const target = new Date(now.getFullYear(), now.getMonth() + offset + 1, 0);
-  return endOfMonthDue(target.getFullYear(), target.getMonth(), undefined, now);
-}
-
-function dueFromCalendarDate(monthToken: string, dayToken: string | undefined, yearToken: string | undefined, time: string | undefined, now: Date) {
-  const month = MONTHS[monthToken.toLowerCase()];
-  if (month === undefined) return null;
-
-  if (!dayToken) {
-    const requestedYear = yearToken ? Number(yearToken) : undefined;
-    if (requestedYear !== undefined) return endOfMonthDue(requestedYear, month, time, now);
-    const year = month < now.getMonth() ? now.getFullYear() + 1 : now.getFullYear();
-    return endOfMonthDue(year, month, time, now);
-  }
-
-  const day = Number(dayToken.replace(/(?:st|nd|rd|th)$/i, ""));
-  let year = yearToken ? Number(yearToken) : now.getFullYear();
-  const due = new Date(now);
-  due.setFullYear(year, month, day);
-  // Reject impossible dates (e.g. February 31) instead of silently rolling forward.
-  if (due.getMonth() !== month || due.getDate() !== day) return null;
-  due.setHours(22, 0, 0, 0);
-  if (!yearToken && due.getTime() < now.getTime()) {
-    year += 1;
-    due.setFullYear(year, month, day);
-  }
-  return withTime(due, time);
-}
-
-function withTime(date: Date, rawTime?: string) {
-  if (rawTime) {
-    const match = rawTime.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
-    if (match) {
-      let hour = Number(match[1]);
-      const minute = Number(match[2] ?? 0);
-      const period = match[3]?.toLowerCase();
-      if (period) hour = (hour % 12) + (period === "pm" ? 12 : 0);
-      if (hour < 24 && minute < 60) date.setHours(hour, minute, 0, 0);
-    }
-  }
-  return { dueAt: date.toISOString(), dueHasTime: true };
 }
 
 const PACE_PHRASES: Array<{ importance: Importance; regex: RegExp }> = [
@@ -227,6 +149,10 @@ export function parseToss(
   dueAt?: string;
   dueHasTime?: boolean;
   suggestedPerson?: { person: Person; matchedWord: string };
+  suggestedPeople?: { people: Person[]; matchedWord: string };
+  unmatchedPerson?: { name: string; matchedWord: string };
+  clarificationMessage?: string;
+  dueChoices?: TossDueChoice[];
   pacePhrase?: string;
   duePhrase?: string;
 } {
@@ -243,6 +169,9 @@ export function parseToss(
   let importance: Importance = "next";
   const assigneeIds: string[] = [];
   let suggestedPerson: { person: Person; matchedWord: string } | undefined;
+  let suggestedPeople: { people: Person[]; matchedWord: string } | undefined;
+  let unmatchedPerson: { name: string; matchedWord: string } | undefined;
+  let clarificationMessage: string | undefined;
   let pacePhrase: string | undefined;
 
   // Find all @mentions (global)
@@ -259,8 +188,26 @@ export function parseToss(
       }
     } else {
       chips.push({ kind: "unresolved", label: `Who is @${mention[1]}?`, value: "person" });
+      clarificationMessage ??= hits.length
+        ? `Several contacts match @${mention[1]}. Which person do you mean? Choose their full name.`
+        : `I couldn't find a contact named @${mention[1]}. Choose a contact or correct the name before tossing.`;
     }
     title = title.replace(mention[0], "").trim();
+  }
+
+  // Resolve dates before pace and destination tokens: "next Friday" is a date,
+  // and a trailing date must not become part of a #List or /Bucket name.
+  const parsedDue = parseTossDue(title, now);
+  const dueAt = parsedDue?.dueAt;
+  const dueHasTime = dueAt ? true : undefined;
+  if (parsedDue) {
+    for (const phrase of parsedDue.phrases ?? [parsedDue.phrase]) title = title.replace(phrase, "").trim();
+    if (parsedDue.phrases) title = title.replace(/\s+(?:or|and)\s*$/i, "").trim();
+    if (dueAt) chips.push({ kind: "due", label: parsedDue.phrase, value: parsedDue.phrase });
+    else {
+      chips.push({ kind: "unresolved", label: "Check date", value: "ambiguous" });
+      clarificationMessage ??= parsedDue.message;
+    }
   }
 
   const hashMatch = title.match(/#([A-Za-z0-9_ -]+)/);
@@ -291,56 +238,24 @@ export function parseToss(
   }
   chips.push({ kind: "importance", label: importance.toUpperCase(), value: importance });
 
-  const dateMatch = title.match(new RegExp(
-    `\\b(?:(?:by|on|before|until)\\s+)?(today|tomorrow|(?:(?:this|next|coming)\\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))(?:\\s+at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?))?\\b|` +
-    `\\b((?:(?:by|in|before|until)\\s+)?(?:(?:this|next)\\s+)?(?:the\\s+)?(${MONTH_PATTERN})\\s+(\\d{1,2}(?:st|nd|rd|th)?)(?:,?\\s+(\\d{4}))?(?:\\s+at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?))?)\\b|` +
-    `\\b((?:(?:by|in|before|until)\\s+)?(?:(?:this|next)\\s+)?(?:the\\s+)?(\\d{1,2}(?:st|nd|rd|th)?)\\s+(?:of\\s+)?(${MONTH_PATTERN})(?:,?\\s+(\\d{4}))?(?:\\s+at\\s+(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?))?)\\b|` +
-    `\\b((?:by\\s+)?(?:this|next)\\s+(month|year|yr))\\b`,
-    "i",
-  ));
-  let dueAt: string | undefined;
-  let dueHasTime: boolean | undefined;
-  if (dateMatch) {
-    const phrase = dateMatch[0];
-    let parsedDue: { dueAt: string; dueHasTime: boolean } | null = null;
-    if (dateMatch[1]) {
-      parsedDue = dueFromToken(dateMatch[1], dateMatch[2], now);
-    } else if (dateMatch[3]) {
-      parsedDue = dueFromCalendarDate(dateMatch[4]!, dateMatch[5], dateMatch[6], dateMatch[7], now);
-    } else if (dateMatch[8]) {
-      parsedDue = dueFromCalendarDate(dateMatch[10]!, dateMatch[9], dateMatch[11], dateMatch[12], now);
-    } else if (dateMatch[13]) {
-      const kind = dateMatch[14]?.toLowerCase() === "month" ? "month" : "year";
-      parsedDue = calendarPeriodDue(kind, dateMatch[13].toLowerCase().includes("next") ? 1 : 0, now);
-    }
-
-    if (parsedDue) {
-      chips.push({ kind: "due", label: phrase, value: phrase });
-      title = title.replace(phrase, "").trim();
-      dueAt = parsedDue.dueAt;
-      dueHasTime = parsedDue.dueHasTime;
-    } else {
-      chips.push({ kind: "unresolved", label: "Check date", value: "ambiguous" });
-    }
-  }
-
-  // A connector left dangling by a removed due phrase ("finish this by") reads as a broken title.
-  title = title.replace(/\s+(?:by|before|until|due)\s*$/i, "").trim();
-
-  if (/\b\d{1,2}\/\d{1,2}\b/.test(raw.replace(URL_PATTERN, "")) && !dateMatch) {
-    chips.push({ kind: "unresolved", label: "Check date", value: "ambiguous" });
-  }
-
   // If no @mention was given, check for natural name / typo match
   if (assigneeIds.length === 0 && allMentions.length === 0) {
-    const fuzzyHit = findFuzzyPersonMatch(title, people);
+    const fuzzyHit = findPersonSuggestions(title, people);
     if (fuzzyHit) {
-      suggestedPerson = fuzzyHit;
+      if (fuzzyHit.people.length === 1) suggestedPerson = { person: fuzzyHit.people[0]!, matchedWord: fuzzyHit.matchedWord };
+      else suggestedPeople = fuzzyHit;
       chips.push({
         kind: "suggestion",
-        label: `Assign to ${fuzzyHit.person.name.split(" ")[0]}?`,
-        value: fuzzyHit.person.id,
+        label: suggestedPerson ? `Assign to ${suggestedPerson.person.name}?` : `Which ${fuzzyHit.matchedWord}?`,
+        value: suggestedPerson?.person.id ?? "person-candidates",
       });
+    } else {
+      const addressed = title.match(/^([A-Za-z]{3,}),?\s+(?:please\s+)?(?:submit|send|finish|complete|upload|share|prepare|review|check)\b/i)
+        || title.match(/^(?:get|collect|send|share|submit)\b.*\b(?:docs?|documents?|files?)\s+(?:(?:for|to|from)\s+)?([A-Za-z]{3,})[.,!?]*$/i);
+      if (addressed && !COMMON_STOP_WORDS.has(addressed[1]!.toLowerCase())) {
+        unmatchedPerson = { name: addressed[1]!, matchedWord: addressed[1]! };
+        chips.push({ kind: "suggestion", label: `Is ${addressed[1]} a contact?`, value: "person-unknown" });
+      }
     }
   }
 
@@ -356,8 +271,21 @@ export function parseToss(
   const restoreUrls = (text: string) => text.replace(URL_PLACEHOLDER, (_m, i: string) => urls[Number(i)] ?? "");
   title = restoreUrls(title);
 
+  // Only flag strong keyboard-mash evidence. Unknown words, identifiers,
+  // acronyms, links and non-Latin writing are valid task descriptions.
+  if (raw.trim() && !title.trim()) {
+    chips.push({ kind: "unresolved", label: "Add a description", value: "content-empty" });
+    clarificationMessage ??= "What would you like this person to do? Add a brief description before tossing.";
+  } else if ((/^[a-z]{12,}$/i.test(title.trim()) && (!/[aeiouy]/i.test(title) || /[bcdfghjklmnpqrstvwxz]{9,}/i.test(title)))
+    || (/^[a-z\s]+$/i.test(title.trim()) && title.trim().split(/\s+/).every(word =>
+      word.length >= 5 && (!/^[A-Z]{1,8}$/.test(word)) && (!/[aeiouy]/i.test(word) || /[bcdfghjklmnpqrstvwxz]{5,}/i.test(word) || /^(asdf|qwerty|zxcv|hjkl)/i.test(word)),
+    ))) {
+    chips.push({ kind: "unresolved", label: "Clarify your message", value: "content" });
+    clarificationMessage ??= "This message is unclear. Could you briefly describe what needs to be done before tossing?";
+  }
+
   return {
-    title: title.replace(/\s+/g, " ").trim() || raw.trim(),
+    title: title.replace(/\s+/g, " ").trim(),
     chips,
     importance,
     assigneeId: assigneeIds[0],
@@ -365,13 +293,16 @@ export function parseToss(
     dueAt,
     dueHasTime,
     suggestedPerson,
+    suggestedPeople,
+    unmatchedPerson,
+    clarificationMessage,
     pacePhrase,
-    duePhrase: dateMatch?.[0],
+    duePhrase: parsedDue?.phrase,
+    dueChoices: parsedDue?.dueChoices,
   };
 }
 
 export function tossBlockedByPerson(chips: TossChip[]): boolean {
-  // Only block on an unresolved @mention. A fuzzy-name suggestion is a soft hint
-  // — the user can toss without dismissing it.
-  return chips.some((c) => c.kind === "unresolved" && c.value === "person");
+  // A plain-text name needs an explicit assignment or "keep in title" choice.
+  return chips.some((c) => c.kind === "suggestion" || (c.kind === "unresolved" && c.value === "person"));
 }

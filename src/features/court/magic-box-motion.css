@@ -247,3 +247,13 @@
 }
 .reduce-motion .magic-box-root .magic-box-frame-light,
 .reduce-motion .magic-box-root .magic-box-aura-light { animation: none !important; }
+
+/* Quality refinement: persistent gradients stay visually identical but do not
+   repaint every frame while idle. Interaction feedback is finite and uses opacity. */
+.magic-box-root .magic-box-frame-light,
+.magic-box-root .magic-box-aura-light,
+.magic-box-with-references .magic-box-frame-light,
+.magic-box-with-references .magic-box-aura-light,
+.magic-box-root .magic-box-aura {
+  animation: none;
+}

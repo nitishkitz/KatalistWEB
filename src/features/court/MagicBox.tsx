@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useId, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AtSign, CalendarDays, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
 import { format } from "date-fns";
 import { gsap } from "gsap";
@@ -16,7 +16,8 @@ import { useBuckets } from "@/features/buckets/use-buckets";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { isPreviewMode } from "@/lib/session-mode";
 import { parseToss, tossBlockedByPerson } from "./parse-toss";
-import { KatalistIcon, type KatalistIconName } from "./KatalistIcon";
+import { correctCommonTypos } from "./correct-common-typos";
+import { KatalistIcon } from "./KatalistIcon";
 import type { ThingFile, Person } from "@/domain/thing";
 import { processFileForUpload, formatFileSize, getClipboardFiles } from "@/lib/file-utils";
 import { acquireBlobUrl, releaseBlobUrl, releaseAllBlobUrlsForOwner } from "@/lib/owned-file-resources";
@@ -35,10 +36,11 @@ import {
   supportedThingOrigins,
   type ThingReference,
 } from "@/features/thing-references/thing-reference";
-import { setCoeyAnchor } from "@/features/hub/coey-anchor";
-
-/** Coey's chat head is 52 px; it docks at the start of the box, vertically centred. */
-const COEY_SIZE = 52;
+import { MagicBoxClarification, type ClarificationChoice } from "./MagicBoxClarification";
+import { MagicBoxAssistant } from "./MagicBoxAssistant";
+import { CoeyVoiceControls } from "./assistant/CoeyVoiceControls";
+import { useCoeyVoice } from "./assistant/use-coey-voice";
+import { isAssistantQuestion } from "./magic-box-input-kind";
 
 type MagicBoxMotionState = "idle" | "hover" | "focused" | "typing" | "submitting" | "processing" | "success" | "error";
 
@@ -128,6 +130,7 @@ export function MagicBox({
   const [paceOverride, setPaceOverride] = useState<Importance | null>(null);
   // undefined follows parsed text; null explicitly clears the inferred date.
   const [dueOverride, setDueOverride] = useState<string | null | undefined>(undefined);
+  const [duePickerOpen, setDuePickerOpen] = useState(false);
   const [tossed, setTossed] = useState(false);
   const [motionHovered, setMotionHovered] = useState(false);
   const [motionFocused, setMotionFocused] = useState(false);
@@ -136,6 +139,11 @@ export function MagicBox({
   const motionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const motionPhaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [submitHandoff, setSubmitHandoff] = useState(false);
+  const [composerMode, setComposerMode] = useState<"toss" | "ask">("toss");
+  const questionInput = isAssistantQuestion(value);
+  const effectiveComposerMode = questionInput ? "ask" : composerMode;
+  const [assistantQuestion, setAssistantQuestion] = useState("");
+  const [assistantRequestKey, setAssistantRequestKey] = useState(0);
 
   const flashMotion = (accent: typeof motionAccent, duration: number) => {
     if (motionTimer.current) clearTimeout(motionTimer.current);
@@ -156,10 +164,14 @@ export function MagicBox({
     type: "person" | "list" | "bucket";
     query: string;
     startIndex: number;
+    replaceLength?: number;
   } | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const suggestionId = useId();
   // tracks which person ID the user has explicitly dismissed from the suggestion prompt
   const [dismissedSuggestionId, setDismissedSuggestionId] = useState<string | null>(null);
+  // A decision applies only to the draft the user reviewed.
+  useEffect(() => setDismissedSuggestionId(null), [value, draftEntityId]);
   const [attachedFiles, setAttachedFiles] = useState<ThingFile[]>(
     () => (getDraft<string>(qc, "magic-box", draftEntityId)?.attachments as ThingFile[] | undefined) ?? [],
   );
@@ -188,8 +200,14 @@ export function MagicBox({
   const [failedAttachments, setFailedAttachments] = useState<
     Array<{ id: string; file: File; name: string; sizeLabel: string; error: string }>
   >([]);
+  // Completion may arrive after the user starts their next capture in this
+  // same destination. A successful old request must never erase newer edits.
+  const draftFingerprint = JSON.stringify([value, attachedFiles, references, paceOverride, dueOverride]);
+  const currentDraftFingerprint = useRef(draftFingerprint);
+  currentDraftFingerprint.current = draftFingerprint;
 
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const textMirrorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const assignablePeople = useAssignablePeople();
   const people = useMemo(
@@ -356,7 +374,7 @@ export function MagicBox({
     await processFiles(Array.from(files));
   };
 
-  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const files = getClipboardFiles(e.clipboardData);
     if (!files.length) {
       // Copied Things arrive as canonical permalinks. Anything else stays an ordinary text paste.
@@ -418,8 +436,28 @@ export function MagicBox({
     return () => window.removeEventListener(MAGIC_BOX_FOCUS_EVENT, focusInput);
   }, []);
 
-  // While this box has focus Coey docks at its start; it is released on blur or Escape, and when the box goes away.
+  // The composer measures only its own attachment layout; focus never repositions Coey.
   const boxRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    const resize = () => {
+      input.style.height = "0px";
+      const height = Math.max(22, Math.min(132, input.scrollHeight));
+      input.style.height = `${height}px`;
+      boxRef.current?.parentElement?.style.setProperty("--magic-text-height", `${height}px`);
+      input.style.overflowY = input.scrollHeight > height ? "auto" : "hidden";
+      if (textMirrorRef.current) textMirrorRef.current.scrollTop = input.scrollTop;
+    };
+    resize();
+    let width = input.getBoundingClientRect().width;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => {
+      const nextWidth = input.getBoundingClientRect().width;
+      if (nextWidth !== width) { width = nextWidth; resize(); }
+    });
+    observer?.observe(input);
+    return () => observer?.disconnect();
+  }, [value, desktop, references.length]);
   const animatedHeight = useRef<number | null>(null);
   const { reduceMotion } = useMotionPreference();
   useLayoutEffect(() => {
@@ -449,33 +487,6 @@ export function MagicBox({
     });
     return () => { tween.kill(); };
   }, [references.length, draftEntityId, desktop, reduceMotion]);
-  useEffect(() => {
-    if (!motionFocused || references.length > 0) {
-      setCoeyAnchor(null);
-      return;
-    }
-    let frame = 0;
-    const place = () => {
-      frame = 0;
-      const el = boxRef.current;
-      if (!el || el.getClientRects().length === 0) return setCoeyAnchor(null);
-      const r = el.getBoundingClientRect();
-      setCoeyAnchor({ x: r.left + 4, y: r.top + (r.height - COEY_SIZE) / 2 });
-    };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(place);
-    };
-    place();
-    window.addEventListener("resize", schedule);
-    window.addEventListener("scroll", schedule, true);
-    return () => {
-      window.removeEventListener("resize", schedule);
-      window.removeEventListener("scroll", schedule, true);
-      if (frame) cancelAnimationFrame(frame);
-      setCoeyAnchor(null);
-    };
-  }, [motionFocused, references.length]);
-
   const parsed = useMemo(() => parseToss(value, people), [value, people]);
   const effectivePace = paceOverride ?? parsed.importance;
   const effectiveDueAt = dueOverride === undefined ? parsed.dueAt : dueOverride ?? undefined;
@@ -486,11 +497,12 @@ export function MagicBox({
   ].filter((item): item is { phrase: string; kind: string } => Boolean(item));
   // Blocked if there's an unresolved person chip, OR an unconfirmed suggestion that
   // the user hasn't explicitly dismissed yet.
-  const blocked = tossBlockedByPerson(
-    parsed.chips.filter(
-      (c) => !(c.kind === "suggestion" && c.value === dismissedSuggestionId),
-    ),
+  const blockingChips = parsed.chips.filter((c) =>
+    !(c.kind === "suggestion" && c.value === dismissedSuggestionId) &&
+    !(c.kind === "unresolved" && c.value === "ambiguous" && dueOverride !== undefined) &&
+    !(c.kind === "unresolved" && c.value === "content-empty" && (attachedFiles.length > 0 || references.length > 0)),
   );
+  const blocked = tossBlockedByPerson(blockingChips) || blockingChips.some((c) => c.kind === "unresolved");
 
   const effectiveListId = useMemo(() => {
     if (listId) return listId;
@@ -564,8 +576,10 @@ export function MagicBox({
   const selectPerson = (person: (typeof people)[0]) => {
     if (!trigger) return;
     const prefix = value.slice(0, trigger.startIndex);
-    const suffix = value.slice(trigger.startIndex + 1 + trigger.query.length);
-    const namePart = person.name.split(" ")[0] || person.name;
+    const suffix = value.slice(trigger.startIndex + 1 + (trigger.replaceLength ?? trigger.query.length));
+    const firstName = person.name.split(" ")[0] || person.name;
+    const namePart = people.filter((p) => p.name.split(" ")[0].toLowerCase() === firstName.toLowerCase()).length > 1
+      ? person.name.replace(/\s+/g, ".") : firstName;
     const nextVal = `${prefix}@${namePart} ${suffix}`;
     setValue(nextVal);
     setTrigger(null);
@@ -605,7 +619,9 @@ export function MagicBox({
   };
 
   const acceptSuggestedPerson = (person: (typeof people)[0], matchedWord: string) => {
-    const namePart = person.name.split(" ")[0];
+    const firstName = person.name.split(" ")[0];
+    const namePart = people.filter((p) => p.name.split(" ")[0].toLowerCase() === firstName.toLowerCase()).length > 1
+      ? person.name.replace(/\s+/g, ".") : firstName;
     const re = new RegExp(`\\b${matchedWord}\\b`, "i");
     let nextVal = value;
     if (re.test(value)) {
@@ -621,7 +637,8 @@ export function MagicBox({
 
   const mutation = useMutation({
     mutationFn: async () => {
-      if (blocked) throw new Error("Pick a person — Coey won't guess.");
+      if (isAssistantQuestion(value)) throw new Error("This is a question for Coey. Use Ask instead of Toss.");
+      if (blocked) throw new Error(parsed.clarificationMessage ?? "Pick a person or keep the name in the title before tossing.");
       const live = !isPreviewMode();
 
       // E04: after a partial multi-toss failure, retry ONLY the assignees
@@ -633,7 +650,7 @@ export function MagicBox({
       const assigneeIds = retryAssigneeIds ?? parsedAssigneeIds;
 
       const titleToUse =
-        capitalizeTitle(parsed.title.trim()) ||
+        capitalizeTitle(correctCommonTypos(parsed.title.trim())) ||
         (attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "New Thing");
 
       // Multi-toss: one Thing per assignee in parallel. E04: uses
@@ -668,8 +685,10 @@ export function MagicBox({
         const failed = settled.filter((r) => !r.ok);
         const createdIds = succeeded.map((r) => r.id).filter((id): id is string => Boolean(id));
 
+        let bucketFailedIds: string[] = [];
         if (effectiveBucketId && createdIds.length > 0) {
-          await Promise.allSettled(createdIds.map((id) => rpcAddToBucket(effectiveBucketId, id)));
+          const links = await Promise.allSettled(createdIds.map((id) => rpcAddToBucket(effectiveBucketId, id)));
+          bucketFailedIds = createdIds.filter((_id, index) => links[index].status === "rejected");
         }
 
         if (failed.length === settled.length) {
@@ -684,6 +703,7 @@ export function MagicBox({
           createdIds,
           failedAssigneeIds: failed.map((r) => r.assigneeActorId),
           title: titleToUse,
+          bucketFailedIds,
         };
       }
 
@@ -701,11 +721,12 @@ export function MagicBox({
         references: references.length > 0 ? references : undefined,
       });
 
+      const bucketFailedIds: string[] = [];
       if (effectiveBucketId && created?.id) {
         try {
           await rpcAddToBucket(effectiveBucketId, created.id);
         } catch {
-          // ignore bucket link error
+          bucketFailedIds.push(created.id);
         }
       }
       return {
@@ -713,9 +734,10 @@ export function MagicBox({
         createdIds: created?.id ? [created.id] : [],
         failedAssigneeIds: [],
         title: titleToUse,
+        bucketFailedIds,
       };
     },
-    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch, opEpoch: epochRef.current }),
+    onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch, opEpoch: epochRef.current, draftFingerprint: currentDraftFingerprint.current }),
     onSuccess: async (result, _vars, mutationContext) => {
       const failedAssigneeIds = result?.failedAssigneeIds ?? [];
       const hasPartialFailure = failedAssigneeIds.length > 0;
@@ -738,8 +760,9 @@ export function MagicBox({
       // Recheck the destination after awaiting: navigation may have changed it.
       if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       const stillSameDestination = epochRef.current === mutationContext.opEpoch;
+      const stillSameDraft = currentDraftFingerprint.current === mutationContext.draftFingerprint;
 
-      if (stillSameDestination) {
+      if (stillSameDestination && stillSameDraft) {
         setTossed(true);
         // A partial multi-toss failure keeps the input (title/files) so the
         // retry attempt below reuses the same content -- only a full
@@ -770,6 +793,18 @@ export function MagicBox({
         toast.error(
           `${count} tossed, ${failedAssigneeIds.length} failed — press Toss again to retry just the failed ${failedAssigneeIds.length > 1 ? "ones" : "one"}.`,
         );
+      } else if (result.bucketFailedIds.length > 0 && effectiveBucketId) {
+        const bucketId = effectiveBucketId;
+        const failedIds = result.bucketFailedIds;
+        const epoch = mutationContext.epoch;
+        toast.warning("Your Thing was saved, but could not be added to the bucket.", {
+          action: { label: "Retry bucket", onClick: () => {
+            if (!isEpochCurrent(qc, epoch)) return;
+            void Promise.all(failedIds.map((id) => rpcAddToBucket(bucketId, id)))
+              .then(() => { void qc.invalidateQueries({ queryKey: ["buckets"] }); toast.success("Added to the bucket."); })
+              .catch(() => toast.error("Bucket link failed. Your saved Things are unchanged."));
+          } },
+        });
       } else if (count === 1 && result?.createdIds.length === 1) {
         // T09/E05: identify the created Thing by title (not just a bare
         // "Tossed."), and offer Open when the caller can act on it -- the
@@ -792,8 +827,101 @@ export function MagicBox({
       toast.error(err instanceof Error ? err.message : "Couldn’t toss that.");
     },
   });
-  const canToss = (Boolean(value.trim()) || attachedFiles.length > 0) && !blocked && !dueIsPast && !mutation.isPending;
+  const canToss = !questionInput && (Boolean(value.trim()) || attachedFiles.length > 0) && !blocked && !dueIsPast && !mutation.isPending;
+  type QuestionChoice = ClarificationChoice & { action(): void };
+  let clarification: { question: string; detail?: string; choices: QuestionChoice[] } | null = null;
+  const openDatePicker = () => setDuePickerOpen(true);
+  const manualDateChoices: QuestionChoice[] = [
+    { id: "pick-date", label: "Choose a date and time", description: "Open the date picker to enter the deadline.", action: openDatePicker },
+    { id: "no-date", label: "No due date", description: "Create this Thing without a deadline.", action: () => setDueOverride(null) },
+  ];
+  if (effectiveComposerMode === "toss" && (blocked || dueIsPast)) {
+    if (blockingChips.some((chip) => chip.kind === "unresolved" && chip.value === "person")) {
+      clarification = {
+        question: "Which contact do you mean?",
+        detail: parsed.clarificationMessage,
+        choices: [{ id: "pick-contact", label: "Choose a contact", description: "Select someone from your contacts. Coey won't guess.", action: () => {
+          const mention = [...value.matchAll(/@([A-Za-z][\w.-]*)/g)].find((match) => blockingChips.some((chip) => chip.value === "person" && chip.label.includes(`@${match[1]}`)));
+          if (!mention || mention.index === undefined) return;
+          setTrigger({ type: "person", query: "", startIndex: mention.index, replaceLength: mention[1].length });
+          setActiveIndex(0);
+          inputRef.current?.focus();
+        } }],
+      };
+    } else if (blockingChips.some((chip) => chip.value === "content" || chip.value === "content-empty")) {
+      clarification = { question: "What needs to be done?", detail: blockingChips.some((chip) => chip.value === "content") ? "This message is unclear. Could you briefly describe the task?" : "Add a brief description of what needs to be done.", choices: [] };
+    } else if (parsed.suggestedPerson && dismissedSuggestionId !== parsed.suggestedPerson.person.id) {
+      const { person, matchedWord } = parsed.suggestedPerson;
+      const exactName = [person.name.toLowerCase(), person.name.split(" ")[0].toLowerCase()].includes(matchedWord.toLowerCase());
+      clarification = {
+        question: exactName ? `Assign this to ${person.name}?` : `Did you mean ${person.name}?`,
+        detail: `You mentioned “${matchedWord}” in your message.`,
+        choices: [
+          { id: "assign", label: `Assign to ${person.name}`, description: "Your contact will receive this Thing after you Toss it.", action: () => acceptSuggestedPerson(person, matchedWord) },
+          { id: "keep-title", label: `Keep “${matchedWord}” in the title`, description: "Leave this Thing with you.", action: () => setDismissedSuggestionId(person.id) },
+        ],
+      };
+    } else if (parsed.suggestedPeople && dismissedSuggestionId !== "person-candidates") {
+      const { people: candidates, matchedWord } = parsed.suggestedPeople;
+      clarification = {
+        question: "Who should receive this?", detail: `Several contacts match “${matchedWord}”. Choose the intended person.`,
+        choices: [...candidates.map((person) => ({ id: person.id, label: person.name, action: () => acceptSuggestedPerson(person, matchedWord) })),
+          { id: "keep-title", label: `Keep “${matchedWord}” in the title`, description: "Leave this Thing with you.", action: () => setDismissedSuggestionId("person-candidates") }],
+      };
+    } else if (parsed.unmatchedPerson && dismissedSuggestionId !== "person-unknown") {
+      const { name, matchedWord } = parsed.unmatchedPerson;
+      clarification = {
+        question: `Is “${name}” a contact?`, detail: "I couldn't find that name in your contacts.",
+        choices: [
+          { id: "pick-contact", label: "Choose a contact", description: "Select the person you meant.", action: () => {
+            const startIndex = value.toLowerCase().indexOf(matchedWord.toLowerCase());
+            if (startIndex < 0) return;
+            setValue(`${value.slice(0, startIndex)}@${value.slice(startIndex)}`);
+            setTrigger({ type: "person", query: "", startIndex, replaceLength: matchedWord.length });
+            setActiveIndex(0);
+            inputRef.current?.focus();
+          } },
+          { id: "keep-title", label: `Keep “${name}” in the title`, description: "Leave this Thing with you.", action: () => setDismissedSuggestionId("person-unknown") },
+        ],
+      };
+    } else if (parsed.dueChoices?.length && dueOverride === undefined) {
+      clarification = {
+        question: parsed.dueChoices.length === 3 ? "What time do you mean by end of day?" : "Which day is the end of your week?",
+        detail: "Choose the deadline you mean. You can enter another date or time.",
+        choices: [...parsed.dueChoices.map((choice) => {
+          const expired = new Date(choice.dueAt).getTime() < Date.now();
+          return { id: choice.dueAt, label: choice.label, disabled: expired, description: expired ? "This time has already passed." : undefined, action: () => setDueOverride(choice.dueAt) };
+        }), ...manualDateChoices],
+      };
+    } else {
+      clarification = { question: "Which deadline should I use?", detail: dueIsPast ? "This due time has passed. Choose a later time or remove the deadline." : parsed.clarificationMessage, choices: manualDateChoices };
+    }
+  }
+  // Voice shares the Ask panel: a spoken question becomes the panel's question once the
+  // server accepts the turn, and the panel then renders that turn's events.
+  const voice = useCoeyVoice({ context, listId: effectiveListId, bucketId: effectiveBucketId });
+  const [voiceTurnId, setVoiceTurnId] = useState<string | null>(null);
+  const [voiceActionReady, setVoiceActionReady] = useState(false);
+  const voiceTranscript = voice.transcript;
+  const voiceBoundTurn = voice.turn.turnId;
+  useEffect(() => {
+    if (!voiceTranscript || voiceBoundTurn !== voiceTranscript.turnId) return;
+    setComposerMode("ask");
+    setValue("");
+    setAssistantQuestion(voiceTranscript.text);
+    setAssistantRequestKey((key) => key + 1);
+    setVoiceTurnId(voiceTranscript.turnId);
+  }, [voiceTranscript, voiceBoundTurn]);
+  const startAsk = () => {
+    const question = value.trim();
+    if (!question) return;
+    setComposerMode("ask");
+    setVoiceTurnId(null);
+    setAssistantQuestion(question);
+    setAssistantRequestKey((key) => key + 1);
+  };
   const startToss = () => {
+    if (isAssistantQuestion(value)) { startAsk(); return; }
     if (!canToss) return;
     if (effectiveDueAt && new Date(effectiveDueAt).getTime() < Date.now()) {
       toast.error("This due time has passed. Choose a later time.");
@@ -816,10 +944,46 @@ export function MagicBox({
   return (
     <div
       className={cn(
-        "relative w-full",
+        "relative isolate w-full",
         !desktop && "mb-3",
       )}
     >
+      {(motionFocused || (effectiveComposerMode === "ask" && assistantQuestion) || clarification) && (
+        <div data-testid="magic-box-backdrop" aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-slate-950/30" />
+      )}
+      {clarification && !trigger ? (
+        <MagicBoxClarification
+          id={`${suggestionId}-clarification`}
+          questionKey={`${draftEntityId}:${value}:${clarification.question}`}
+          question={clarification.question}
+          detail={clarification.detail}
+          choices={clarification.choices}
+          onContinue={(id) => clarification?.choices.find((choice) => choice.id === id)?.action()}
+          onEdit={() => inputRef.current?.focus()}
+        />
+      ) : null}
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1 text-[10px] font-medium text-muted-foreground" aria-label="Magic Box mode and destination">
+        <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5" role="group" aria-label="Magic Box mode">
+          <button type="button" onClick={() => setComposerMode("toss")} aria-pressed={effectiveComposerMode === "toss"} className={cn("rounded px-2 py-1 text-[10px] font-semibold transition", effectiveComposerMode === "toss" ? "bg-violet-100 text-violet-700" : "text-slate-500 hover:text-slate-800")}>Toss</button>
+          <button type="button" onClick={() => setComposerMode("ask")} aria-pressed={effectiveComposerMode === "ask"} className={cn("rounded px-2 py-1 text-[10px] font-semibold transition", effectiveComposerMode === "ask" ? "bg-violet-100 text-violet-700" : "text-slate-500 hover:text-slate-800")}>Ask</button>
+        </div>
+        {voice.enabled && voice.supported && <CoeyVoiceControls voice={voice} actionReady={voiceActionReady} />}
+      </div>
+      {effectiveComposerMode === "ask" && assistantQuestion && (
+        <MagicBoxAssistant
+          question={assistantQuestion}
+          requestKey={assistantRequestKey}
+          listId={effectiveListId}
+          bucketId={effectiveBucketId}
+          context={context}
+          onOpenThing={openThing}
+          onAsk={(next) => { setVoiceTurnId(null); setValue(next); setAssistantQuestion(next); setAssistantRequestKey((key) => key + 1); }}
+          onClose={() => { setAssistantQuestion(""); setValue(""); setVoiceTurnId(null); setVoiceActionReady(false); }}
+          voice={voice}
+          voiceTurnId={voiceTurnId}
+          onProposalChange={setVoiceActionReady}
+        />
+      )}
       {/* Autocomplete Popover for @ People — appears immediately on typing @ */}
       {trigger?.type === "person" && (
         <div className="absolute bottom-full mb-2 left-0 z-50 w-full max-w-sm rounded-2xl border border-border/80 bg-white p-1.5 katalist-elevation-popover animate-in fade-in zoom-in-95 duration-100">
@@ -832,11 +996,15 @@ export function MagicBox({
               </span>
             )}
           </div>
-          <div className="max-h-[220px] overflow-y-auto space-y-0.5">
+          <div id={`${suggestionId}-person`} role="listbox" aria-label="Assign to Person" className="max-h-[220px] overflow-y-auto space-y-0.5">
             {filteredPeople.length > 0 ? (
               filteredPeople.map((person, idx) => (
                 <button
                   key={person.id}
+                  id={`${suggestionId}-person-${idx}`}
+                  role="option"
+                  aria-selected={idx === activeIndex}
+                  tabIndex={-1}
                   type="button"
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -881,11 +1049,15 @@ export function MagicBox({
               </span>
             )}
           </div>
-          <div className="max-h-[220px] overflow-y-auto space-y-0.5">
+          <div id={`${suggestionId}-list`} role="listbox" aria-label="Add to List" className="max-h-[220px] overflow-y-auto space-y-0.5">
             {filteredLists.length > 0 ? (
               filteredLists.map((item, idx) => (
                 <button
                   key={item.id}
+                  id={`${suggestionId}-list-${idx}`}
+                  role="option"
+                  aria-selected={idx === activeIndex}
+                  tabIndex={-1}
                   type="button"
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -927,11 +1099,15 @@ export function MagicBox({
               </span>
             )}
           </div>
-          <div className="max-h-[220px] overflow-y-auto space-y-0.5">
+          <div id={`${suggestionId}-bucket`} role="listbox" aria-label="Add to Bucket" className="max-h-[220px] overflow-y-auto space-y-0.5">
             {filteredBuckets.length > 0 ? (
               filteredBuckets.map((bucket, idx) => (
                 <button
                   key={bucket.id}
+                  id={`${suggestionId}-bucket-${idx}`}
+                  role="option"
+                  aria-selected={idx === activeIndex}
+                  tabIndex={-1}
                   type="button"
                   onMouseDown={(e) => {
                     e.preventDefault();
@@ -1076,8 +1252,8 @@ export function MagicBox({
           references.length > 0
             ? "font-composer"
             : desktop
-              ? "h-[46px] rounded-[16px] px-3 font-composer"
-              : "h-12 rounded-xl border border-border bg-card px-1.5",
+              ? "min-h-[46px] rounded-[16px] px-3 py-2 font-composer"
+              : "min-h-12 rounded-xl border border-border bg-card px-1.5 py-2",
           tossed && "opacity-60",
         )}
         data-state={motionState}
@@ -1115,14 +1291,14 @@ export function MagicBox({
 
         {/* ── Highlight mirror + input overlay ─────────────────────────────
             The mirror div renders @person #list /bucket tokens as colored bold
-            spans. The real <input> sits on top with color:transparent so only
+            spans. The real textarea sits on top with color:transparent so only
             the blinking caret is visible. Font metrics must match exactly. */}
-        <div className={cn("relative z-[1] min-w-0 flex-1", references.length > 0 ? "h-8" : "h-full")}>
+        <div className="relative z-[1] min-w-0 flex-1">
           {/* Mirror — purely visual, no interaction */}
           <div
+            ref={textMirrorRef}
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre text-[13.5px] leading-none"
-            style={{ paddingTop: 0, paddingBottom: 0 }}
+            className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap text-[13.5px] leading-[22px] [overflow-wrap:anywhere]"
           >
             {value === "" ? null : (
               <>
@@ -1165,10 +1341,12 @@ export function MagicBox({
           </div>
 
           {/* Real input — transparent text, caret only */}
-          <input
+          <textarea
             ref={inputRef}
+            rows={1}
             value={value}
             onPaste={handlePaste}
+            onBlur={() => setValue((draft) => correctCommonTypos(draft))}
             onBeforeInput={(e) => {
               if (!suppressPasteTextRef.current) return;
               e.preventDefault();
@@ -1197,6 +1375,7 @@ export function MagicBox({
             }}
 
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing || (e.key === "Enter" && e.shiftKey)) return;
             if (trigger?.type === "person" && filteredPeople.length > 0) {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
@@ -1269,7 +1448,13 @@ export function MagicBox({
               }
             }
 
-            if (e.key === "Enter" && canToss) {
+            if (e.key === "Enter" && effectiveComposerMode === "ask" && value.trim()) {
+              e.preventDefault();
+              startAsk();
+              return;
+            }
+
+            if (e.key === "Enter" && effectiveComposerMode === "toss" && canToss) {
               e.preventDefault();
               startToss();
               return;
@@ -1284,10 +1469,18 @@ export function MagicBox({
               e.currentTarget.blur();
             }
           }}
-          placeholder={listName ? `Toss into ${listName}…` : "Toss a thought..."}
-          className="absolute inset-0 w-full h-full bg-transparent text-[13.5px] outline-none placeholder:text-[#7e7a94]"
+          placeholder={effectiveComposerMode === "ask" ? (listName ? `Ask about ${listName}…` : "Ask about your work…") : (listName ? `Toss into ${listName}…` : "Toss a thought...")}
+          className="relative block min-h-[22px] max-h-[132px] w-full resize-none border-0 bg-transparent p-0 text-[13.5px] leading-[22px] outline-none placeholder:text-[#7e7a94] [overflow-wrap:anywhere]"
           style={{ color: "transparent", caretColor: "var(--foreground)" }}
+          onScroll={(event) => { if (textMirrorRef.current) textMirrorRef.current.scrollTop = event.currentTarget.scrollTop; }}
+          role={trigger ? "combobox" : undefined}
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-expanded={Boolean(trigger)}
+          aria-controls={trigger ? `${suggestionId}-${trigger.type}` : undefined}
+          aria-activedescendant={trigger && (trigger.type === "person" ? filteredPeople : trigger.type === "list" ? filteredLists : filteredBuckets).length > 0 ? `${suggestionId}-${trigger.type}-${activeIndex}` : undefined}
           aria-label="Magic Box"
+          aria-describedby={clarification && !trigger ? `${suggestionId}-clarification` : undefined}
         />
         </div>
       {/* Pasted Things stay compact. Removing one drops only the draft reference; opening one keeps the draft. */}
@@ -1326,6 +1519,7 @@ export function MagicBox({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="magic-box-attachment inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
+              disabled={effectiveComposerMode === "ask"}
               aria-label="Attach file"
               title="Attach files (photos, videos, doc, excel, etc.)"
             >
@@ -1349,14 +1543,14 @@ export function MagicBox({
             ) : null}
             <button
               type="button"
-              disabled={!canToss}
-              onClick={startToss}
+              disabled={effectiveComposerMode === "ask" ? !value.trim() : !canToss}
+              onClick={effectiveComposerMode === "ask" ? startAsk : startToss}
               className="magic-box-toss inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-              aria-label="Toss Thing"
-              title="Toss Thing"
+              aria-label={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
+              title={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
             >
-              <KatalistIcon name="send-toss" className="h-3.5 w-3.5" />
-              Toss
+              {effectiveComposerMode === "ask" ? <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> : <KatalistIcon name="send-toss" className="h-3.5 w-3.5" />}
+              {effectiveComposerMode === "ask" ? "Ask" : "Toss"}
             </button>
           </div>
         ) : (
@@ -1372,20 +1566,20 @@ export function MagicBox({
             </button>
             <button
               type="button"
-              disabled={!canToss}
-              onClick={startToss}
+              disabled={effectiveComposerMode === "ask" ? !value.trim() : !canToss}
+              onClick={effectiveComposerMode === "ask" ? startAsk : startToss}
               className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground outline-none transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Toss Thing"
-              title="Toss Thing"
+              aria-label={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
+              title={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
             >
-              Toss
+              {effectiveComposerMode === "ask" ? "Ask" : "Toss"}
             </button>
           </div>
         )}
       </div>
 
-      {value.trim() ? (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
+      {effectiveComposerMode === "toss" && value.trim() ? (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-white px-2.5 py-2 text-xs shadow-sm">
           <Popover>
             <PopoverTrigger asChild>
               <button type="button" className="rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 font-semibold text-primary hover:bg-primary/10" aria-label={`Pace ${effectivePace}. Change pace`}>
@@ -1400,11 +1594,11 @@ export function MagicBox({
               ))}
             </PopoverContent>
           </Popover>
-          <Popover>
+          <Popover open={duePickerOpen} onOpenChange={setDuePickerOpen}>
             <PopoverTrigger asChild>
-              <button type="button" className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-100" aria-label={effectiveDueAt ? `Due ${format(new Date(effectiveDueAt), "MMM d, h:mm a")}. Change date` : "Add due date"}>
+              <button type="button" className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-100" aria-label={effectiveDueAt ? `Due ${format(new Date(effectiveDueAt), "EEE, MMM d, yyyy, h:mm a")}. Change date` : "Add due date"}>
                 <CalendarDays className="h-3 w-3" />
-                {effectiveDueAt ? `Due ${format(new Date(effectiveDueAt), "MMM d, h:mm a")}` : "Add date"}
+                {effectiveDueAt ? `Due ${format(new Date(effectiveDueAt), "EEE, MMM d, yyyy, h:mm a")}` : "Add date"}
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-64 space-y-2 p-3" align="start" side="top">
@@ -1425,114 +1619,13 @@ export function MagicBox({
                 tomorrow.setHours(22, 0, 0, 0);
                 setDueOverride(tomorrow.toISOString());
               }}>Use tomorrow, 10 PM</button> : null}
-              {effectiveDueAt ? <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setDueOverride(null)}>Remove date</button> : null}
+              {effectiveDueAt || parsed.chips.some((chip) => chip.kind === "unresolved" && chip.value === "ambiguous") ? <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setDueOverride(null)}>No due date</button> : null}
             </PopoverContent>
           </Popover>
           {dueIsPast ? <span role="alert" className="text-amber-700">This time has passed. Change the date before Toss.</span> : null}
         </div>
       ) : null}
 
-      {/* Natural language AI person suggestion prompt — blocks toss until confirmed or dismissed */}
-      {parsed.suggestedPerson &&
-        !parsed.assigneeId &&
-        parsed.suggestedPerson.person.id !== dismissedSuggestionId && (
-          <div className="mt-2 flex items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary/5 px-3 py-2 text-[12px] text-primary animate-in fade-in slide-in-from-bottom-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span className="truncate text-muted-foreground">
-                Did you mean{" "}
-                <strong className="font-semibold text-foreground">
-                  {parsed.suggestedPerson.person.name}
-                </strong>
-                ?
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setDismissedSuggestionId(parsed.suggestedPerson!.person.id)}
-                className="rounded-lg border border-border px-2.5 py-1 text-[12px] font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground transition-all cursor-pointer"
-              >
-                No, skip
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  acceptSuggestedPerson(
-                    parsed.suggestedPerson!.person,
-                    parsed.suggestedPerson!.matchedWord,
-                  );
-                  setDismissedSuggestionId(null);
-                }}
-                className="inline-flex items-center gap-1 rounded-lg bg-primary px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-primary/90 transition-all cursor-pointer"
-              >
-                <Sparkles className="h-3 w-3" />
-                Yes, assign to {parsed.suggestedPerson.person.name.split(" ")[0]}
-              </button>
-            </div>
-          </div>
-        )}
-
-      {parsed.chips.some((chip) => chip.kind === "suggestion" || chip.kind === "unresolved") && value.trim() ? (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {parsed.chips.filter((chip) => chip.kind === "suggestion" || chip.kind === "unresolved").map((c) => {
-            const isSuggestion = c.kind === "suggestion";
-            return (
-              <button
-                key={c.kind + c.value}
-                type="button"
-                disabled={!isSuggestion}
-                onClick={() => {
-                  if (isSuggestion && parsed.suggestedPerson) {
-                    acceptSuggestedPerson(
-                      parsed.suggestedPerson.person,
-                      parsed.suggestedPerson.matchedWord,
-                    );
-                  }
-                }}
-                className={cn(
-                  "rounded-full border px-2 py-0.5 text-[12px] font-medium transition-all text-left",
-                  desktop && "inline-flex items-center gap-1 bg-white",
-                  isSuggestion &&
-                    "border-primary/40 bg-primary/5 text-primary hover:bg-primary hover:text-white cursor-pointer",
-                  c.kind === "unresolved"
-                    ? desktop
-                      ? "border-status-waiting/50 text-status-waiting"
-                      : "border-status-waiting/40 bg-status-waiting-bg text-status-waiting"
-                    : !isSuggestion &&
-                      (desktop
-                        ? "border-border text-foreground"
-                        : "border-border bg-card text-foreground"),
-                )}
-              >
-                {desktop ? (
-                  <KatalistIcon
-                    name={
-                      (
-                        {
-                          assignee: "at-person",
-                          due: "date-detection",
-                          importance: "urgent",
-                          list: "list",
-                          bucket: "hash-bucket",
-                          suggestion: "katalist-spark",
-                          unresolved: "urgent",
-                        } satisfies Record<typeof c.kind, KatalistIconName>
-                      )[c.kind]
-                    }
-                    className="h-3 w-3"
-                  />
-                ) : null}
-                {c.kind === "unresolved"
-                  ? c.label
-                  : c.kind === "suggestion"
-                    ? `${c.label} ↵`
-                    : `${c.kind === "assignee" ? "@" : ""}${c.label}`}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
     </div>
   );
 }

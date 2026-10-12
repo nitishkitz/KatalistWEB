@@ -1,15 +1,33 @@
 import { useQuery } from "@tanstack/react-query";
 import { callUngeneratedRpc } from "@/integrations/supabase/rpcs";
+import { getStoredDemoSession } from "@/hooks/useSession";
 import { isPreviewMode } from "@/lib/session-mode";
-import { isThingId, makeThingReference, type ThingReference } from "./thing-reference";
+import { isThingId, makeThingReference, mergeThingReferences, type ThingReference } from "./thing-reference";
 
 const previewReferences = new Map<string, ThingReference[]>();
+let activePreviewIdentity: string | null = null;
+
+function previewIdentityKey(): string {
+  // Demo sessions have stable actor IDs; never share staged references between actors.
+  return getStoredDemoSession()?.user?.id ?? "preview:none";
+}
+
+function syncPreviewIdentity(): string {
+  const identity = previewIdentityKey();
+  if (activePreviewIdentity !== identity) {
+    previewReferences.clear();
+    activePreviewIdentity = identity;
+  }
+  return identity;
+}
 
 /** Attaches references to a Thing. Server-side checks require the caller to see the Thing and every source. */
 export async function rpcAddThingReferences(thingId: string, references: readonly ThingReference[]) {
   if (!references.length) return;
   if (isPreviewMode()) {
-    previewReferences.set(thingId, [...references]);
+    const identity = syncPreviewIdentity();
+    const current = previewReferences.get(`${identity}:${thingId}`) ?? [];
+    previewReferences.set(`${identity}:${thingId}`, mergeThingReferences(current, references).references);
     return;
   }
   const { error } = await callUngeneratedRpc("add_thing_references", {
@@ -20,7 +38,10 @@ export async function rpcAddThingReferences(thingId: string, references: readonl
 }
 
 async function fetchThingReferences(thingId: string): Promise<ThingReference[]> {
-  if (isPreviewMode()) return previewReferences.get(thingId) ?? [];
+  if (isPreviewMode()) {
+    const identity = syncPreviewIdentity();
+    return previewReferences.get(`${identity}:${thingId}`) ?? [];
+  }
   const { data, error } = await callUngeneratedRpc("get_thing_references", { p_thing_id: thingId });
   if (error) throw new Error(error.message);
   const rows = Array.isArray(data) ? (data as Array<{ source_thing_id?: unknown }>) : [];
@@ -30,8 +51,9 @@ async function fetchThingReferences(thingId: string): Promise<ThingReference[]> 
 }
 
 export function useThingReferences(thingId: string | null) {
+  const previewIdentity = isPreviewMode() ? previewIdentityKey() : "live";
   return useQuery({
-    queryKey: ["thing-references", thingId ?? "none"],
+    queryKey: ["thing-references", previewIdentity, thingId ?? "none"],
     queryFn: () => fetchThingReferences(thingId!),
     enabled: Boolean(thingId),
     staleTime: 30_000,

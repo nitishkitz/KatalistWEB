@@ -8,6 +8,9 @@
  * `process.env.VITE_SUPABASE_URL` fallback pattern in this same directory.
  */
 export function serverFixedOtp(): string | null {
+  const environment = process.env.KATALIST_ENV || process.env.VITE_KATALIST_ENV;
+  const testEnvironment = environment === "uat" || environment === "test" || environment === "development";
+  if (environment === "production" || (!testEnvironment && process.env.NODE_ENV === "production")) return null;
   const configured = process.env.VITE_KATALIST_FIXED_OTP?.trim();
   return configured && /^\d{6}$/.test(configured) ? configured : null;
 }

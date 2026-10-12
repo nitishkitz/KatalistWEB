@@ -2,6 +2,7 @@ import { defineEventHandler, readBody, createError } from "h3";
 import { getSupabaseAdmin, isTransientAuthFailure, withAuthNetworkRetry } from "../../lib/supabase-admin";
 import { serverFixedOtp } from "../../lib/fixed-otp";
 import { findAuthUserByPhone } from "../../lib/find-phone-user";
+import { normalizeTestPhone } from "../../lib/test-phone";
 
 export default defineEventHandler(async (event) => {
   const fixedOtp = serverFixedOtp();
@@ -13,7 +14,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = (await readBody(event)) as { phone?: string; otp?: string } | null;
-  const phone = body?.phone;
+  const phone = normalizeTestPhone(body?.phone);
   const otp = body?.otp;
 
   if (!phone || otp !== fixedOtp) {
