@@ -1,5 +1,5 @@
 import { Suspense, lazy, useId, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AtSign, CalendarDays, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
+import { AtSign, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
 import { format } from "date-fns";
 import { gsap } from "gsap";
 import { useMotionPreference } from "@/hooks/use-motion-preference";
@@ -9,14 +9,10 @@ import { useAppContext } from "@/features/context/use-app-context";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { rpcAddToBucket, rpcCreateThing } from "@/features/things/rpc";
-import { useAssignablePeople } from "@/features/people/use-assignable";
-import { mergeAssignablePeople } from "@/features/people/merge-people";
 import { useLists } from "@/features/lists/use-lists";
 import { useBuckets } from "@/features/buckets/use-buckets";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { isPreviewMode } from "@/lib/session-mode";
-import { parseToss, tossBlockedByPerson } from "./parse-toss";
-import { correctCommonTypos } from "./correct-common-typos";
 import { KatalistIcon } from "./KatalistIcon";
 import type { ThingFile, Person } from "@/domain/thing";
 import { processFileForUpload, formatFileSize, getClipboardFiles } from "@/lib/file-utils";
@@ -24,8 +20,6 @@ import { acquireBlobUrl, releaseBlobUrl, releaseAllBlobUrlsForOwner } from "@/li
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useBlockWhile } from "@/components/katalist/use-interaction-blocker";
 import { getDraft, setDraft, clearDraft } from "@/features/drafts/session-drafts";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import type { Importance } from "@/domain/thing";
 import { MAGIC_BOX_FOCUS_EVENT, MAGIC_BOX_REFERENCES_EVENT, takePendingMagicBoxReferences } from "./magic-box-entry";
 import { useThingNavigation } from "@/features/thing-references/use-open-thing";
 import {
@@ -36,11 +30,20 @@ import {
   supportedThingOrigins,
   type ThingReference,
 } from "@/features/thing-references/thing-reference";
-import { MagicBoxClarification, type ClarificationChoice } from "./MagicBoxClarification";
+import { MagicBoxClarification } from "./MagicBoxClarification";
 import { MagicBoxAssistant } from "./MagicBoxAssistant";
-import { CoeyVoiceControls } from "./assistant/CoeyVoiceControls";
-import { useCoeyVoice } from "./assistant/use-coey-voice";
-import { isAssistantQuestion } from "./magic-box-input-kind";
+import { useCoeyComposer } from "./coey/use-coey-composer";
+import { CoeyChips } from "./coey/CoeyChips";
+import { CoeyCommitError, commitCoeyItems, itemsForPlan, privateCaptureItem } from "./coey/commit";
+import type { ComposerSelections } from "@/domain/coey/contract";
+import { localParts, zonedInstant } from "@/domain/coey/calendar";
+
+/** Explicit #List and /Bucket syntax the user typed or picked. Links are ignored. */
+function explicitTag(text: string, sigil: "#" | "/"): string | null {
+  const withoutUrls = text.replace(/\b(?:https?:\/\/|www\.)[^\s<>"']+/gi, " ");
+  const match = withoutUrls.match(sigil === "#" ? /(?:^|\s)#([A-Za-z0-9_ -]+?)(?=\s[@#/]|$|\s{2})/ : /(?:^|\s)\/([A-Za-z0-9_ -]+?)(?=\s[@#/]|$|\s{2})/);
+  return match?.[1]?.trim() || null;
+}
 
 type MagicBoxMotionState = "idle" | "hover" | "focused" | "typing" | "submitting" | "processing" | "success" | "error";
 
@@ -66,10 +69,6 @@ const CompactThingReferenceCard = lazy(() =>
   import("@/features/thing-references/CompactThingReferenceCard").then((m) => ({ default: m.CompactThingReferenceCard })),
 );
 
-function capitalizeTitle(title: string): string {
-  if (!title || /^(?:https?:\/\/|www\.)/i.test(title)) return title;
-  return title.charAt(0).toUpperCase() + title.slice(1);
-}
 
 export function MagicBox({
   listId,
@@ -127,9 +126,6 @@ export function MagicBox({
     return recoverLegacyThingDraft(draft?.value ?? "", readDraftReferences(draft?.metadata)).references;
   });
   const suppressPasteTextRef = useRef(false);
-  const [paceOverride, setPaceOverride] = useState<Importance | null>(null);
-  // undefined follows parsed text; null explicitly clears the inferred date.
-  const [dueOverride, setDueOverride] = useState<string | null | undefined>(undefined);
   const [duePickerOpen, setDuePickerOpen] = useState(false);
   const [tossed, setTossed] = useState(false);
   const [motionHovered, setMotionHovered] = useState(false);
@@ -140,8 +136,10 @@ export function MagicBox({
   const motionPhaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [submitHandoff, setSubmitHandoff] = useState(false);
   const [composerMode, setComposerMode] = useState<"toss" | "ask">("toss");
-  const questionInput = isAssistantQuestion(value);
-  const effectiveComposerMode = questionInput ? "ask" : composerMode;
+  const effectiveComposerMode = composerMode;
+  // One semantic path (D12): Sarvam reads the draft; code places and validates it.
+  const composer = useCoeyComposer({ text: value, mode: context, enabled: composerMode === "toss" && !isPreviewMode() });
+  const plan = composer.plan;
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantRequestKey, setAssistantRequestKey] = useState(0);
 
@@ -168,23 +166,9 @@ export function MagicBox({
   } | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const suggestionId = useId();
-  // tracks which person ID the user has explicitly dismissed from the suggestion prompt
-  const [dismissedSuggestionId, setDismissedSuggestionId] = useState<string | null>(null);
-  // A decision applies only to the draft the user reviewed.
-  useEffect(() => setDismissedSuggestionId(null), [value, draftEntityId]);
   const [attachedFiles, setAttachedFiles] = useState<ThingFile[]>(
     () => (getDraft<string>(qc, "magic-box", draftEntityId)?.attachments as ThingFile[] | undefined) ?? [],
   );
-  // E04: a multi-assignee toss used to Promise.all() every rpcCreateThing
-  // call -- if even one rejected, the whole mutation rejected too, but the
-  // OTHER assignees' Things were already really created (Promise.all
-  // doesn't undo settled work). Pressing Toss again then replayed the
-  // ENTIRE assignee list, including the ones that already succeeded,
-  // creating duplicates for them. This tracks which assignee ids from the
-  // last attempt still need retrying, so the next submit only retries
-  // those -- set on a partial failure, cleared on a fresh edit or a fully
-  // successful toss.
-  const [retryAssigneeIds, setRetryAssigneeIds] = useState<string[] | null>(null);
   // T03: how many selected files are still being processed -- not yet in
   // attachedFiles, but just as much an in-progress composer action as
   // typed text or an already-attached file (same reasoning as
@@ -202,18 +186,22 @@ export function MagicBox({
   >([]);
   // Completion may arrive after the user starts their next capture in this
   // same destination. A successful old request must never erase newer edits.
-  const draftFingerprint = JSON.stringify([value, attachedFiles, references, paceOverride, dueOverride]);
+  const draftFingerprint = JSON.stringify([value, attachedFiles, references, composer.selections]);
   const currentDraftFingerprint = useRef(draftFingerprint);
   currentDraftFingerprint.current = draftFingerprint;
 
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const textMirrorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const assignablePeople = useAssignablePeople();
-  const people = useMemo(
-    () => (extraPeople?.length ? mergeAssignablePeople(assignablePeople, extraPeople) : assignablePeople),
-    [assignablePeople, extraPeople],
+  // @-picker: accepted connections only; anyone else can be mentioned as text but never receives a Thing.
+  const people = useMemo<Person[]>(
+    () => composer.ctx.candidates.filter((c) => c.connected).map((c) => ({
+      id: c.profileId, profileId: c.profileId, actorId: c.actorId, name: c.name,
+      initials: c.name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase(), avatarUrl: c.avatarUrl,
+    })),
+    [composer.ctx.candidates],
   );
+  void extraPeople;
   const { lists } = useLists();
   const { buckets } = useBuckets();
 
@@ -239,8 +227,7 @@ export function MagicBox({
     const draft = getDraft<string>(qc, "magic-box", draftEntityId);
     const recovered = recoverLegacyThingDraft(draft?.value ?? "", readDraftReferences(draft?.metadata));
     setValue(recovered.value);
-    setPaceOverride(null);
-    setDueOverride(undefined);
+    composer.reset();
     setAttachedFiles((draft?.attachments as ThingFile[] | undefined) ?? []);
     setReferences(recovered.references);
     // Failed/in-flight uploads are transient per-composer-instance state,
@@ -248,9 +235,8 @@ export function MagicBox({
     // destination has no meaning once switched to a different one.
     setFailedAttachments([]);
     setProcessingFiles(0);
-    setRetryAssigneeIds(null);
     setTrigger(null);
-    setDismissedSuggestionId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on destination change only
   }, [draftEntityId, qc]);
 
   // T09/E05: write-through -- every edit persists immediately, so typed
@@ -487,45 +473,27 @@ export function MagicBox({
     });
     return () => { tween.kill(); };
   }, [references.length, draftEntityId, desktop, reduceMotion]);
-  const parsed = useMemo(() => parseToss(value, people), [value, people]);
-  const effectivePace = paceOverride ?? parsed.importance;
-  const effectiveDueAt = dueOverride === undefined ? parsed.dueAt : dueOverride ?? undefined;
-  const dueIsPast = Boolean(effectiveDueAt && new Date(effectiveDueAt).getTime() < Date.now());
+  const firstDraft = plan?.things[0]?.draft;
   const highlightedPhrases = [
-    parsed.pacePhrase ? { phrase: parsed.pacePhrase, kind: "pace" } : null,
-    parsed.duePhrase ? { phrase: parsed.duePhrase, kind: "due" } : null,
-  ].filter((item): item is { phrase: string; kind: string } => Boolean(item));
-  // Blocked if there's an unresolved person chip, OR an unconfirmed suggestion that
-  // the user hasn't explicitly dismissed yet.
-  const blockingChips = parsed.chips.filter((c) =>
-    !(c.kind === "suggestion" && c.value === dismissedSuggestionId) &&
-    !(c.kind === "unresolved" && c.value === "ambiguous" && dueOverride !== undefined) &&
-    !(c.kind === "unresolved" && c.value === "content-empty" && (attachedFiles.length > 0 || references.length > 0)),
-  );
-  const blocked = tossBlockedByPerson(blockingChips) || blockingChips.some((c) => c.kind === "unresolved");
+    firstDraft?.pacePhrase ? { phrase: firstDraft.pacePhrase, kind: "pace" } : null,
+    firstDraft?.actionTime?.source === "typed" && firstDraft.actionTime.phrase ? { phrase: firstDraft.actionTime.phrase, kind: "due" } : null,
+    firstDraft?.eventTime?.phrase ? { phrase: firstDraft.eventTime.phrase, kind: "due" } : null,
+  ].filter((item): item is { phrase: string; kind: string } => Boolean(item) && value.toLowerCase().includes(item!.phrase.toLowerCase()));
 
+  const listTag = useMemo(() => explicitTag(value, "#"), [value]);
+  const bucketTag = useMemo(() => explicitTag(value, "/"), [value]);
   const effectiveListId = useMemo(() => {
     if (listId) return listId;
-    const hashChip = parsed.chips.find((c) => c.kind === "list");
-    if (!hashChip) return undefined;
-    const hit = lists.find(
-      (l) =>
-        l.name.toLowerCase() === hashChip.value.toLowerCase() ||
-        l.name.toLowerCase().includes(hashChip.value.toLowerCase()),
-    );
-    return hit?.id;
-  }, [listId, parsed.chips, lists]);
+    if (!listTag) return undefined;
+    const tag = listTag.toLowerCase();
+    return (lists.find((l) => l.name.toLowerCase() === tag) ?? lists.find((l) => l.name.toLowerCase().includes(tag)))?.id;
+  }, [listId, listTag, lists]);
 
   const effectiveBucketId = useMemo(() => {
-    const bucketChip = parsed.chips.find((c) => c.kind === "bucket");
-    if (!bucketChip) return undefined;
-    const hit = buckets.find(
-      (b) =>
-        b.name.toLowerCase() === bucketChip.value.toLowerCase() ||
-        b.name.toLowerCase().includes(bucketChip.value.toLowerCase()),
-    );
-    return hit?.id;
-  }, [parsed.chips, buckets]);
+    if (!bucketTag) return undefined;
+    const tag = bucketTag.toLowerCase();
+    return (buckets.find((b) => b.name.toLowerCase() === tag) ?? buckets.find((b) => b.name.toLowerCase().includes(tag)))?.id;
+  }, [bucketTag, buckets]);
 
   const checkMentionTrigger = (text: string, cursor: number) => {
     const textBefore = text.slice(0, cursor);
@@ -582,6 +550,9 @@ export function MagicBox({
       ? person.name.replace(/\s+/g, ".") : firstName;
     const nextVal = `${prefix}@${namePart} ${suffix}`;
     setValue(nextVal);
+    // An explicit pick is a constraint for every later reading of this draft.
+    const mentionKey = namePart.toLowerCase().replace(/[._]+/g, " ").trim();
+    composer.setSelections((sel) => ({ ...sel, people: { ...sel.people, [mentionKey]: person.profileId ?? person.id } }));
     setTrigger(null);
     requestAnimationFrame(() => {
       inputRef.current?.focus();
@@ -618,186 +589,105 @@ export function MagicBox({
     });
   };
 
-  const acceptSuggestedPerson = (person: (typeof people)[0], matchedWord: string) => {
-    const firstName = person.name.split(" ")[0];
-    const namePart = people.filter((p) => p.name.split(" ")[0].toLowerCase() === firstName.toLowerCase()).length > 1
-      ? person.name.replace(/\s+/g, ".") : firstName;
-    const re = new RegExp(`\\b${matchedWord}\\b`, "i");
-    let nextVal = value;
-    if (re.test(value)) {
-      nextVal = value.replace(re, `@${namePart}`);
-    } else {
-      nextVal = `${value} @${namePart}`;
-    }
-    setValue(nextVal);
-    requestAnimationFrame(() => {
-      inputRef.current?.focus();
-    });
-  };
+  type SendResult =
+    | { kind: "created"; createdIds: string[]; title: string; bucketFailedIds: string[] }
+    | { kind: "ask"; question: string }
+    | { kind: "paused" }
+    | { kind: "unavailable"; reason: string };
 
   const mutation = useMutation({
-    mutationFn: async () => {
-      if (isAssistantQuestion(value)) throw new Error("This is a question for Coey. Use Ask instead of Toss.");
-      if (blocked) throw new Error(parsed.clarificationMessage ?? "Pick a person or keep the name in the title before tossing.");
-      const live = !isPreviewMode();
+    mutationFn: async (input: { privateCapture?: boolean; selections?: ComposerSelections } = {}): Promise<SendResult> => {
+      const files = attachedFiles.length > 0 ? attachedFiles : undefined;
+      const common = { mode: context, listId: effectiveListId, files, checkIds: [] as string[] };
+      const typed = value.trim();
+      let items: Array<Record<string, unknown>>;
+      let key: string;
 
-      // E04: after a partial multi-toss failure, retry ONLY the assignees
-      // that actually failed -- re-parsing `value` here would include the
-      // ones that already succeeded, creating duplicate Things for them.
-      const parsedAssigneeIds = parsed.assigneeIds.filter(
-        (id) => !(live && id.startsWith("p-")),
-      );
-      const assigneeIds = retryAssigneeIds ?? parsedAssigneeIds;
-
-      const titleToUse =
-        capitalizeTitle(correctCommonTypos(parsed.title.trim())) ||
-        (attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "New Thing");
-
-      // Multi-toss: one Thing per assignee in parallel. E04: uses
-      // allSettled and reports which specific assignees failed, rather
-      // than Promise.all's "one rejects, the mutation rejects" -- the
-      // OTHER assignees' Things are already real, committed rows the
-      // instant their own call resolves, so a naive full-mutation retry
-      // after a partial failure would create duplicates for them.
-      if (assigneeIds.length > 1) {
-        const settled = await Promise.all(
-          assigneeIds.map(async (assigneeActorId) => {
-            try {
-              const created = await rpcCreateThing({
-                title: titleToUse,
-                context,
-                ownerImportance: effectivePace,
-                listId: effectiveListId,
-                assigneeActorId,
-                dueAt: effectiveDueAt,
-                dueHasTime: Boolean(effectiveDueAt),
-                files: attachedFiles.length > 0 ? attachedFiles : undefined,
-                references: references.length > 0 ? references : undefined,
-              });
-              return { assigneeActorId, id: created?.id ?? null, ok: true as const };
-            } catch (err) {
-              return { assigneeActorId, error: err, ok: false as const };
-            }
-          }),
-        );
-
-        const succeeded = settled.filter((r) => r.ok);
-        const failed = settled.filter((r) => !r.ok);
-        const createdIds = succeeded.map((r) => r.id).filter((id): id is string => Boolean(id));
-
-        let bucketFailedIds: string[] = [];
-        if (effectiveBucketId && createdIds.length > 0) {
-          const links = await Promise.allSettled(createdIds.map((id) => rpcAddToBucket(effectiveBucketId, id)));
-          bucketFailedIds = createdIds.filter((_id, index) => links[index].status === "rejected");
-        }
-
-        if (failed.length === settled.length) {
-          // Every assignee failed -- nothing was created, so this is a
-          // plain failure like any other; existing onError handling and
-          // full-mutation retry are both correct here.
-          throw failed[0].error instanceof Error ? failed[0].error : new Error("Couldn’t toss that.");
-        }
-
-        return {
-          count: succeeded.length,
-          createdIds,
-          failedAssigneeIds: failed.map((r) => r.assigneeActorId),
-          title: titleToUse,
-          bucketFailedIds,
-        };
+      if (isPreviewMode()) {
+        // Preview sessions are local-only demos: no interpretation service, no recipients.
+        const title = typed || (attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "");
+        if (!title) return { kind: "paused" };
+        const created = await rpcCreateThing({ title, context, listId: effectiveListId, files, references: references.length ? references : undefined });
+        return { kind: "created", createdIds: created?.id ? [created.id] : [], title, bucketFailedIds: [] };
+      }
+      if (!typed) {
+        if (!attachedFiles.length && !references.length) return { kind: "paused" };
+        const title = attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "Shared Things";
+        items = [{ title, text_raw: title, kind: "task", mode: context, list_id: effectiveListId ?? null, lane: "next", rule_id: "C1+L8",
+          notes: files ? JSON.stringify({ files }) : null }];
+        key = composer.idempotencyKey({ dismissed: ["attachment-only"] });
+      } else if (input.privateCapture) {
+        items = [privateCaptureItem(value, common)];
+        key = composer.idempotencyKey({ ...(input.selections ?? composer.selections), dismissed: ["private-capture"] });
+      } else {
+        const selections = input.selections ?? composer.selections;
+        const decision = await composer.decideSend(selections);
+        if (decision.kind === "ask") return { kind: "ask", question: decision.question };
+        if (decision.kind === "question" || decision.kind === "empty") return { kind: "paused" };
+        if (decision.kind === "unavailable") return { kind: "unavailable", reason: decision.reason };
+        const checkIds = [decision.plan.response.interrupt, ...decision.plan.response.chips, ...decision.plan.response.hints]
+          .filter(Boolean).map((c) => c!.id);
+        items = itemsForPlan(decision.plan, { ...common, checkIds, paceResolution: composer.paceResolution });
+        if (!items.length) return { kind: "paused" };
+        key = composer.idempotencyKey(selections);
       }
 
-      // Single-toss (0 or 1 assignee)
-      const assignee = assigneeIds[0];
-      const created = await rpcCreateThing({
-        title: titleToUse,
-        context,
-        ownerImportance: effectivePace,
-        listId: effectiveListId,
-        assigneeActorId: assignee,
-        dueAt: effectiveDueAt,
-        dueHasTime: Boolean(effectiveDueAt),
-        files: attachedFiles.length > 0 ? attachedFiles : undefined,
-        references: references.length > 0 ? references : undefined,
-      });
-
+      const result = await commitCoeyItems(key, items, references.length ? references : undefined);
+      const createdIds = result.things.map((t) => t.thing_id);
       const bucketFailedIds: string[] = [];
-      if (effectiveBucketId && created?.id) {
-        try {
-          await rpcAddToBucket(effectiveBucketId, created.id);
-        } catch {
-          bucketFailedIds.push(created.id);
-        }
+      if (effectiveBucketId && !result.replayed) {
+        const links = await Promise.allSettled(createdIds.map((id) => rpcAddToBucket(effectiveBucketId, id)));
+        links.forEach((link, index) => { if (link.status === "rejected") bucketFailedIds.push(createdIds[index]!); });
       }
-      return {
-        count: 1,
-        createdIds: created?.id ? [created.id] : [],
-        failedAssigneeIds: [],
-        title: titleToUse,
-        bucketFailedIds,
-      };
+      return { kind: "created", createdIds, title: String(items[0]?.title ?? "New Thing"), bucketFailedIds };
     },
     onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch, opEpoch: epochRef.current, draftFingerprint: currentDraftFingerprint.current }),
     onSuccess: async (result, _vars, mutationContext) => {
-      const failedAssigneeIds = result?.failedAssigneeIds ?? [];
-      const hasPartialFailure = failedAssigneeIds.length > 0;
-      // The user may have switched destination (Work/Home, or List) while
-      // this Toss was in flight -- if so, clearing `value`/`attachedFiles`
-      // now would wipe out whatever the NEW destination's draft already
-      // holds, and the retry-only-failed-assignees state belongs to the
-      // old destination too.
       if (!isEpochCurrent(qc, mutationContext.epoch)) return;
+      if (result.kind === "ask") {
+        setComposerMode("ask");
+        setAssistantQuestion(result.question);
+        setAssistantRequestKey((k) => k + 1);
+        return;
+      }
+      if (result.kind === "paused") {
+        flashMotion("error", 400);
+        return;
+      }
+      if (result.kind === "unavailable") {
+        flashMotion("error", 650);
+        if (result.reason === "people") toast.error("Couldn’t load your connections. Try again in a moment.");
+        return;
+      }
       await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
       await qc.invalidateQueries({ queryKey: ["court"] });
+      void qc.invalidateQueries({ queryKey: ["coey"] });
       if (effectiveListId) {
         await qc.invalidateQueries({ queryKey: ["list-things", effectiveListId] });
         await qc.invalidateQueries({ queryKey: ["lists"] });
       }
-      if (effectiveBucketId) {
-        await qc.invalidateQueries({ queryKey: ["buckets"] });
-      }
-      // Keep the draft visible through the refresh, until the toss finishes.
-      // Recheck the destination after awaiting: navigation may have changed it.
+      if (effectiveBucketId) await qc.invalidateQueries({ queryKey: ["buckets"] });
       if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       const stillSameDestination = epochRef.current === mutationContext.opEpoch;
       const stillSameDraft = currentDraftFingerprint.current === mutationContext.draftFingerprint;
-
       if (stillSameDestination && stillSameDraft) {
         setTossed(true);
-        // A partial multi-toss failure keeps the input (title/files) so the
-        // retry attempt below reuses the same content -- only a full
-        // success or a fresh edit (see the input's onChange) clears it.
-        if (!hasPartialFailure) {
-          setValue("");
-          setPaceOverride(null);
-          setDueOverride(undefined);
-          // A fully successful Toss is done with these local blob previews
-          // -- the created Thing's own files are a separate, durable
-          // concern (a JSON snapshot of `attachedFiles` at capture time)
-          // and no longer need this tab's temporary object URLs alive.
-          releaseAllBlobUrlsForOwner(fileOwnerKey);
-          setAttachedFiles([]);
-          setReferences([]);
-          setFailedAttachments([]);
-        }
-        setRetryAssigneeIds(hasPartialFailure ? failedAssigneeIds : null);
+        setValue("");
+        composer.reset();
+        releaseAllBlobUrlsForOwner(fileOwnerKey);
+        setAttachedFiles([]);
+        setReferences([]);
+        setFailedAttachments([]);
         setTrigger(null);
-        setDismissedSuggestionId(null);
         window.setTimeout(() => setTossed(false), 240);
       }
-      if (stillSameDestination) {
-        flashMotion(hasPartialFailure ? "error" : "success", hasPartialFailure ? 650 : 380);
-      }
-      const count = result?.count ?? 1;
-      if (hasPartialFailure) {
-        toast.error(
-          `${count} tossed, ${failedAssigneeIds.length} failed — press Toss again to retry just the failed ${failedAssigneeIds.length > 1 ? "ones" : "one"}.`,
-        );
-      } else if (result.bucketFailedIds.length > 0 && effectiveBucketId) {
+      if (stillSameDestination) flashMotion("success", 380);
+      const count = result.createdIds.length;
+      if (result.bucketFailedIds.length > 0 && effectiveBucketId) {
         const bucketId = effectiveBucketId;
         const failedIds = result.bucketFailedIds;
         const epoch = mutationContext.epoch;
-        toast.warning("Your Thing was saved, but could not be added to the bucket.", {
+        toast.warning("Saved, but it could not be added to the bucket.", {
           action: { label: "Retry bucket", onClick: () => {
             if (!isEpochCurrent(qc, epoch)) return;
             void Promise.all(failedIds.map((id) => rpcAddToBucket(bucketId, id)))
@@ -805,134 +695,80 @@ export function MagicBox({
               .catch(() => toast.error("Bucket link failed. Your saved Things are unchanged."));
           } },
         });
-      } else if (count === 1 && result?.createdIds.length === 1) {
-        // T09/E05: identify the created Thing by title (not just a bare
-        // "Tossed."), and offer Open when the caller can act on it -- the
-        // callback looks the Thing up in its own current state at click
-        // time, not here at toast-creation time.
-        const thingId = result.createdIds[0];
-        const title = result.title ?? "New Thing";
-        toast.success(`"${title}" tossed ✓`, {
-          action: onThingCreated
-            ? { label: "Open", onClick: () => onThingCreated(thingId, title) }
-            : undefined,
+      } else if (count === 1) {
+        const thingId = result.createdIds[0]!;
+        toast.success(`“${result.title}” tossed`, {
+          action: onThingCreated ? { label: "Open", onClick: () => onThingCreated(thingId, result.title) } : undefined,
         });
-      } else {
-        toast.success(`${count} things tossed ✓`);
+      } else if (count > 1) {
+        toast.success(`${count} Things tossed`);
       }
     },
     onError: (err, _vars, mutationContext) => {
       if (mutationContext && !isEpochCurrent(qc, mutationContext.epoch)) return;
       flashMotion("error", 650);
-      toast.error(err instanceof Error ? err.message : "Couldn’t toss that.");
+      // Nothing was created: the draft and the idempotency key stay for a safe retry.
+      toast.error(err instanceof CoeyCommitError && err.forbidden
+        ? "That person needs to accept your connection request first. Your draft is kept."
+        : "Couldn’t save that. Your draft is kept — try again.");
     },
   });
-  const canToss = !questionInput && (Boolean(value.trim()) || attachedFiles.length > 0) && !blocked && !dueIsPast && !mutation.isPending;
-  type QuestionChoice = ClarificationChoice & { action(): void };
-  let clarification: { question: string; detail?: string; choices: QuestionChoice[] } | null = null;
-  const openDatePicker = () => setDuePickerOpen(true);
-  const manualDateChoices: QuestionChoice[] = [
-    { id: "pick-date", label: "Choose a date and time", description: "Open the date picker to enter the deadline.", action: openDatePicker },
-    { id: "no-date", label: "No due date", description: "Create this Thing without a deadline.", action: () => setDueOverride(null) },
-  ];
-  if (effectiveComposerMode === "toss" && (blocked || dueIsPast)) {
-    if (blockingChips.some((chip) => chip.kind === "unresolved" && chip.value === "person")) {
-      clarification = {
-        question: "Which contact do you mean?",
-        detail: parsed.clarificationMessage,
-        choices: [{ id: "pick-contact", label: "Choose a contact", description: "Select someone from your contacts. Coey won't guess.", action: () => {
-          const mention = [...value.matchAll(/@([A-Za-z][\w.-]*)/g)].find((match) => blockingChips.some((chip) => chip.value === "person" && chip.label.includes(`@${match[1]}`)));
-          if (!mention || mention.index === undefined) return;
-          setTrigger({ type: "person", query: "", startIndex: mention.index, replaceLength: mention[1].length });
-          setActiveIndex(0);
-          inputRef.current?.focus();
-        } }],
-      };
-    } else if (blockingChips.some((chip) => chip.value === "content" || chip.value === "content-empty")) {
-      clarification = { question: "What needs to be done?", detail: blockingChips.some((chip) => chip.value === "content") ? "This message is unclear. Could you briefly describe the task?" : "Add a brief description of what needs to be done.", choices: [] };
-    } else if (parsed.suggestedPerson && dismissedSuggestionId !== parsed.suggestedPerson.person.id) {
-      const { person, matchedWord } = parsed.suggestedPerson;
-      const exactName = [person.name.toLowerCase(), person.name.split(" ")[0].toLowerCase()].includes(matchedWord.toLowerCase());
-      clarification = {
-        question: exactName ? `Assign this to ${person.name}?` : `Did you mean ${person.name}?`,
-        detail: `You mentioned “${matchedWord}” in your message.`,
-        choices: [
-          { id: "assign", label: `Assign to ${person.name}`, description: "Your contact will receive this Thing after you Toss it.", action: () => acceptSuggestedPerson(person, matchedWord) },
-          { id: "keep-title", label: `Keep “${matchedWord}” in the title`, description: "Leave this Thing with you.", action: () => setDismissedSuggestionId(person.id) },
-        ],
-      };
-    } else if (parsed.suggestedPeople && dismissedSuggestionId !== "person-candidates") {
-      const { people: candidates, matchedWord } = parsed.suggestedPeople;
-      clarification = {
-        question: "Who should receive this?", detail: `Several contacts match “${matchedWord}”. Choose the intended person.`,
-        choices: [...candidates.map((person) => ({ id: person.id, label: person.name, action: () => acceptSuggestedPerson(person, matchedWord) })),
-          { id: "keep-title", label: `Keep “${matchedWord}” in the title`, description: "Leave this Thing with you.", action: () => setDismissedSuggestionId("person-candidates") }],
-      };
-    } else if (parsed.unmatchedPerson && dismissedSuggestionId !== "person-unknown") {
-      const { name, matchedWord } = parsed.unmatchedPerson;
-      clarification = {
-        question: `Is “${name}” a contact?`, detail: "I couldn't find that name in your contacts.",
-        choices: [
-          { id: "pick-contact", label: "Choose a contact", description: "Select the person you meant.", action: () => {
-            const startIndex = value.toLowerCase().indexOf(matchedWord.toLowerCase());
-            if (startIndex < 0) return;
-            setValue(`${value.slice(0, startIndex)}@${value.slice(startIndex)}`);
-            setTrigger({ type: "person", query: "", startIndex, replaceLength: matchedWord.length });
-            setActiveIndex(0);
-            inputRef.current?.focus();
-          } },
-          { id: "keep-title", label: `Keep “${name}” in the title`, description: "Leave this Thing with you.", action: () => setDismissedSuggestionId("person-unknown") },
-        ],
-      };
-    } else if (parsed.dueChoices?.length && dueOverride === undefined) {
-      clarification = {
-        question: parsed.dueChoices.length === 3 ? "What time do you mean by end of day?" : "Which day is the end of your week?",
-        detail: "Choose the deadline you mean. You can enter another date or time.",
-        choices: [...parsed.dueChoices.map((choice) => {
-          const expired = new Date(choice.dueAt).getTime() < Date.now();
-          return { id: choice.dueAt, label: choice.label, disabled: expired, description: expired ? "This time has already passed." : undefined, action: () => setDueOverride(choice.dueAt) };
-        }), ...manualDateChoices],
-      };
-    } else {
-      clarification = { question: "Which deadline should I use?", detail: dueIsPast ? "This due time has passed. Choose a later time or remove the deadline." : parsed.clarificationMessage, choices: manualDateChoices };
+  const canToss = (Boolean(value.trim()) || attachedFiles.length > 0 || references.length > 0) && !mutation.isPending;
+
+  const question = composer.question;
+  const runFix = async (optionId: string) => {
+    const check = question?.check ?? null;
+    const option = question?.options.find((o) => o.id === optionId);
+    if (!option) return;
+    try {
+      const { outcome, next } = await composer.applyFix(option.fix, check);
+      if (outcome === "date") setDuePickerOpen(true);
+      else if (outcome === "send") mutation.mutate({ selections: next, privateCapture: option.fix.type === "save_private" });
+      else if (option.fix.type === "connect") toast.success(`Request sent to ${option.fix.name.split(" ")[0]}. Toss again after they accept.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "That didn’t work. Try again.");
     }
-  }
-  // Voice shares the Ask panel: a spoken question becomes the panel's question once the
-  // server accepts the turn, and the panel then renders that turn's events.
-  const voice = useCoeyVoice({ context, listId: effectiveListId, bucketId: effectiveBucketId });
-  const [voiceTurnId, setVoiceTurnId] = useState<string | null>(null);
-  const [voiceActionReady, setVoiceActionReady] = useState(false);
-  const voiceTranscript = voice.transcript;
-  const voiceBoundTurn = voice.turn.turnId;
-  useEffect(() => {
-    if (!voiceTranscript || voiceBoundTurn !== voiceTranscript.turnId) return;
+  };
+  const runHintFix = async (option: import("@/domain/coey/validation").FixOption) => {
+    const { outcome, next } = await composer.applyFix(option.fix, composer.hint);
+    if (outcome === "date") setDuePickerOpen(true);
+    else if (outcome === "send") mutation.mutate({ selections: next, privateCapture: option.fix.type === "save_private" });
+  };
+
+  const startAsk = (asked?: string) => {
+    const q = (asked ?? value).trim();
+    if (!q) return;
     setComposerMode("ask");
-    setValue("");
-    setAssistantQuestion(voiceTranscript.text);
-    setAssistantRequestKey((key) => key + 1);
-    setVoiceTurnId(voiceTranscript.turnId);
-  }, [voiceTranscript, voiceBoundTurn]);
-  const startAsk = () => {
-    const question = value.trim();
-    if (!question) return;
-    setComposerMode("ask");
-    setVoiceTurnId(null);
-    setAssistantQuestion(question);
+    setAssistantQuestion(q);
     setAssistantRequestKey((key) => key + 1);
   };
   const startToss = () => {
-    if (isAssistantQuestion(value)) { startAsk(); return; }
     if (!canToss) return;
-    if (effectiveDueAt && new Date(effectiveDueAt).getTime() < Date.now()) {
-      toast.error("This due time has passed. Choose a later time.");
-      return;
-    }
     flashMotion("submitting", 430);
     setSubmitHandoff(true);
     if (motionPhaseTimer.current) clearTimeout(motionPhaseTimer.current);
     motionPhaseTimer.current = setTimeout(() => setSubmitHandoff(false), 420);
-    mutation.mutate();
+    mutation.mutate({});
   };
+  const pickManualTime = (local: string) => {
+    // datetime-local is wall-clock time in the user's own calendar timezone.
+    const m = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(local);
+    if (!m) return;
+    const at = zonedInstant(m[1]!, Number(m[2]) * 60 + Number(m[3]), composer.ctx.calendar.timezone);
+    composer.setSelections((s) => ({ ...s, manualAction: { at, date: m[1]!, precision: "time", label: format(new Date(at), "EEE d MMM, h:mm a") } }));
+    setDuePickerOpen(false);
+  };
+  const manualDefault = (() => {
+    const anchor = plan?.things[0]?.draft.actionTime;
+    const at = anchor?.at ?? Date.now() + 86_400_000;
+    const p = localParts(at, composer.ctx.calendar.timezone);
+    return `${p.date}T${String(Math.floor(p.minutes / 60)).padStart(2, "0")}:${String(p.minutes % 60).padStart(2, "0")}`;
+  })();
+  const interpretationStatus = composer.interpretation.state.status === "ready" && !plan ? "pending" : composer.interpretation.state.status;
+  const failure = composer.interpretation.state.status === "failed"
+    ? composer.interpretation.state.reason === "too_long" ? "That’s longer than Coey can read at once." : "Coey couldn’t read this right now."
+    : null;
+
   const motionState: MagicBoxMotionState = motionAccent === "success" || motionAccent === "error"
     ? motionAccent
     : motionAccent === "submitting" ? "submitting"
@@ -948,17 +784,17 @@ export function MagicBox({
         !desktop && "mb-3",
       )}
     >
-      {(motionFocused || (effectiveComposerMode === "ask" && assistantQuestion) || clarification) && (
+      {(motionFocused || (effectiveComposerMode === "ask" && assistantQuestion) || question) && (
         <div data-testid="magic-box-backdrop" aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-slate-950/30" />
       )}
-      {clarification && !trigger ? (
+      {question && !trigger && effectiveComposerMode === "toss" ? (
         <MagicBoxClarification
           id={`${suggestionId}-clarification`}
-          questionKey={`${draftEntityId}:${value}:${clarification.question}`}
-          question={clarification.question}
-          detail={clarification.detail}
-          choices={clarification.choices}
-          onContinue={(id) => clarification?.choices.find((choice) => choice.id === id)?.action()}
+          questionKey={`${draftEntityId}:${value}:${question.check.id}`}
+          question={question.check.message}
+          detail={question.check.detail}
+          choices={question.options.map((o) => ({ id: o.id, label: o.label, description: o.description }))}
+          onContinue={(id) => void runFix(id)}
           onEdit={() => inputRef.current?.focus()}
         />
       ) : null}
@@ -967,7 +803,6 @@ export function MagicBox({
           <button type="button" onClick={() => setComposerMode("toss")} aria-pressed={effectiveComposerMode === "toss"} className={cn("rounded px-2 py-1 text-[10px] font-semibold transition", effectiveComposerMode === "toss" ? "bg-violet-100 text-violet-700" : "text-slate-500 hover:text-slate-800")}>Toss</button>
           <button type="button" onClick={() => setComposerMode("ask")} aria-pressed={effectiveComposerMode === "ask"} className={cn("rounded px-2 py-1 text-[10px] font-semibold transition", effectiveComposerMode === "ask" ? "bg-violet-100 text-violet-700" : "text-slate-500 hover:text-slate-800")}>Ask</button>
         </div>
-        {voice.enabled && voice.supported && <CoeyVoiceControls voice={voice} actionReady={voiceActionReady} />}
       </div>
       {effectiveComposerMode === "ask" && assistantQuestion && (
         <MagicBoxAssistant
@@ -977,11 +812,8 @@ export function MagicBox({
           bucketId={effectiveBucketId}
           context={context}
           onOpenThing={openThing}
-          onAsk={(next) => { setVoiceTurnId(null); setValue(next); setAssistantQuestion(next); setAssistantRequestKey((key) => key + 1); }}
-          onClose={() => { setAssistantQuestion(""); setValue(""); setVoiceTurnId(null); setVoiceActionReady(false); }}
-          voice={voice}
-          voiceTurnId={voiceTurnId}
-          onProposalChange={setVoiceActionReady}
+          onAsk={(next) => { setValue(next); setAssistantQuestion(next); setAssistantRequestKey((key) => key + 1); }}
+          onClose={() => { setAssistantQuestion(""); setValue(""); setComposerMode("toss"); }}
         />
       )}
       {/* Autocomplete Popover for @ People — appears immediately on typing @ */}
@@ -1346,7 +1178,6 @@ export function MagicBox({
             rows={1}
             value={value}
             onPaste={handlePaste}
-            onBlur={() => setValue((draft) => correctCommonTypos(draft))}
             onBeforeInput={(e) => {
               if (!suppressPasteTextRef.current) return;
               e.preventDefault();
@@ -1356,14 +1187,6 @@ export function MagicBox({
               const next = e.target.value;
               if (!value && next) flashMotion("first-character", 280);
               setValue(next);
-              const nextParsed = parseToss(next, people);
-              if (nextParsed.pacePhrase !== parsed.pacePhrase) setPaceOverride(null);
-              if (nextParsed.duePhrase !== parsed.duePhrase) setDueOverride(undefined);
-              // A fresh edit means the user is composing something new, not
-              // retrying the last partial failure -- the next submit should
-              // parse `next` normally again, not silently narrow to
-              // whichever assignees failed last time.
-              setRetryAssigneeIds(null);
               const cursor = e.target.selectionStart ?? next.length;
               checkMentionTrigger(next, cursor);
             }}
@@ -1480,7 +1303,7 @@ export function MagicBox({
           aria-controls={trigger ? `${suggestionId}-${trigger.type}` : undefined}
           aria-activedescendant={trigger && (trigger.type === "person" ? filteredPeople : trigger.type === "list" ? filteredLists : filteredBuckets).length > 0 ? `${suggestionId}-${trigger.type}-${activeIndex}` : undefined}
           aria-label="Magic Box"
-          aria-describedby={clarification && !trigger ? `${suggestionId}-clarification` : undefined}
+          aria-describedby={question && !trigger ? `${suggestionId}-clarification` : undefined}
         />
         </div>
       {/* Pasted Things stay compact. Removing one drops only the draft reference; opening one keeps the draft. */}
@@ -1530,8 +1353,7 @@ export function MagicBox({
                 type="button"
                 onClick={() => {
                   setValue("");
-                  setPaceOverride(null);
-                  setDueOverride(undefined);
+                  composer.reset();
                   setTrigger(null);
                 }}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 outline-none hover:text-slate-700 focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
@@ -1544,7 +1366,7 @@ export function MagicBox({
             <button
               type="button"
               disabled={effectiveComposerMode === "ask" ? !value.trim() : !canToss}
-              onClick={effectiveComposerMode === "ask" ? startAsk : startToss}
+              onClick={effectiveComposerMode === "ask" ? () => startAsk() : startToss}
               className="magic-box-toss inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               aria-label={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
               title={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
@@ -1567,7 +1389,7 @@ export function MagicBox({
             <button
               type="button"
               disabled={effectiveComposerMode === "ask" ? !value.trim() : !canToss}
-              onClick={effectiveComposerMode === "ask" ? startAsk : startToss}
+              onClick={effectiveComposerMode === "ask" ? () => startAsk() : startToss}
               className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground outline-none transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
               title={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
@@ -1578,52 +1400,38 @@ export function MagicBox({
         )}
       </div>
 
-      {effectiveComposerMode === "toss" && value.trim() ? (
-        <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-white px-2.5 py-2 text-xs shadow-sm">
-          <Popover>
-            <PopoverTrigger asChild>
-              <button type="button" className="rounded-full border border-primary/25 bg-primary/5 px-2.5 py-1 font-semibold text-primary hover:bg-primary/10" aria-label={`Pace ${effectivePace}. Change pace`}>
-                {effectivePace.toUpperCase()}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-40 p-1" align="start" side="top">
-              {(["now", "next", "later"] as Importance[]).map((pace) => (
-                <button key={pace} type="button" onClick={() => setPaceOverride(pace)} className="block w-full rounded-md px-3 py-2 text-left text-xs font-medium hover:bg-primary/10" aria-pressed={effectivePace === pace}>
-                  {pace.toUpperCase()}
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
-          <Popover open={duePickerOpen} onOpenChange={setDuePickerOpen}>
-            <PopoverTrigger asChild>
-              <button type="button" className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-medium text-blue-700 hover:bg-blue-100" aria-label={effectiveDueAt ? `Due ${format(new Date(effectiveDueAt), "EEE, MMM d, yyyy, h:mm a")}. Change date` : "Add due date"}>
-                <CalendarDays className="h-3 w-3" />
-                {effectiveDueAt ? `Due ${format(new Date(effectiveDueAt), "EEE, MMM d, yyyy, h:mm a")}` : "Add date"}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-64 space-y-2 p-3" align="start" side="top">
-              <label className="block text-xs font-semibold text-foreground" htmlFor="magic-box-due">Due date and time</label>
+      {effectiveComposerMode === "toss" && value.trim() && !isPreviewMode() ? (
+        <CoeyChips
+          plan={plan}
+          status={interpretationStatus}
+          failure={failure}
+          calendar={composer.ctx.calendar}
+          lane={composer.selections.lane}
+          hint={question ? null : composer.hint}
+          onLane={(lane) => composer.setSelections((sel) => ({ ...sel, lane }))}
+          onAcceptInferred={() => composer.setSelections((sel) => ({ ...sel, acceptInferred: true }))}
+          onPickDate={() => setDuePickerOpen(true)}
+          onHintFix={(option) => void runHintFix(option)}
+          onRetry={composer.interpretation.retry}
+          onKeepPrivate={() => mutation.mutate({ privateCapture: true })}
+          dateOpen={duePickerOpen}
+          onDateOpenChange={setDuePickerOpen}
+          dateEditor={(
+            <>
+              <label className="block text-xs font-semibold text-foreground" htmlFor="magic-box-due">When should this happen?</label>
               <input
                 id="magic-box-due"
                 type="datetime-local"
-                value={format(effectiveDueAt ? new Date(effectiveDueAt) : new Date(Date.now() + 86400000), "yyyy-MM-dd'T'HH:mm")}
-                onChange={(event) => {
-                  const date = new Date(event.target.value);
-                  if (!Number.isNaN(date.getTime())) setDueOverride(date.toISOString());
-                }}
+                defaultValue={manualDefault}
+                onChange={(event) => pickManualTime(event.target.value)}
                 className="w-full rounded-md border border-border px-2 py-1.5 text-xs text-foreground"
               />
-              {!effectiveDueAt ? <button type="button" className="text-xs font-semibold text-blue-700" onClick={() => {
-                const tomorrow = new Date();
-                tomorrow.setDate(tomorrow.getDate() + 1);
-                tomorrow.setHours(22, 0, 0, 0);
-                setDueOverride(tomorrow.toISOString());
-              }}>Use tomorrow, 10 PM</button> : null}
-              {effectiveDueAt || parsed.chips.some((chip) => chip.kind === "unresolved" && chip.value === "ambiguous") ? <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => setDueOverride(null)}>No due date</button> : null}
-            </PopoverContent>
-          </Popover>
-          {dueIsPast ? <span role="alert" className="text-amber-700">This time has passed. Change the date before Toss.</span> : null}
-        </div>
+              {composer.selections.manualAction ? (
+                <button type="button" className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { composer.setSelections((sel) => ({ ...sel, manualAction: null })); setDuePickerOpen(false); }}>Use what I typed</button>
+              ) : null}
+            </>
+          )}
+        />
       ) : null}
 
     </div>

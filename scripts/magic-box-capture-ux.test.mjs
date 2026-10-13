@@ -30,13 +30,12 @@ test("Escape returns focus away from the composer without clearing the typed dra
 
 test("a successful single-Thing capture identifies the Thing by title and offers an Open action when the caller supports it", () => {
   assert.match(magicBox, /onThingCreated\?:\s*\(thingId: string, title: string\) => void/);
-  assert.match(magicBox, /toast\.success\(`"\$\{title\}" tossed/);
-  assert.match(magicBox, /action: onThingCreated\s*\n\s*\? \{ label: "Open", onClick: \(\) => onThingCreated\(thingId, title\) \}/);
+  assert.match(magicBox, /toast\.success\(`“\$\{result\.title\}” tossed`/);
+  assert.match(magicBox, /action: onThingCreated \? \{ label: "Open", onClick: \(\) => onThingCreated\(thingId, result\.title\) \}/);
 });
 
-test("the mutation threads the used title back through both the single- and multi-toss result shapes, for the success toast to read", () => {
-  assert.match(magicBox, /failedAssigneeIds: failed\.map\(\(r\) => r\.assigneeActorId\),\s*\n\s*title: titleToUse,/);
-  assert.match(magicBox, /failedAssigneeIds: \[\],\s*\n\s*title: titleToUse,/);
+test("the mutation threads the saved title back through the create result, for the success toast to read", () => {
+  assert.match(magicBox, /return \{ kind: "created", createdIds, title: String\(items\[0\]\?\.title \?\? "New Thing"\), bucketFailedIds \};/);
 });
 
 test("CourtDesktop wires onThingCreated by looking the Thing up in a ref that tracks the current view (not a stale capture-time snapshot), reusing the existing no-hero-animation open path", () => {

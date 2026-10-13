@@ -45,6 +45,7 @@ import { Route as ApiCodeActivityFeedRouteImport } from './routes/api/code-activ
 import { Route as ApiCodeActivityRefreshRouteImport } from './routes/api/code-activity/refresh'
 import { Route as ApiCodeActivityWorkspaceConfirmRouteImport } from './routes/api/code-activity/workspace-confirm'
 import { Route as ApiCodeActivityWorkspaceSourceRouteImport } from './routes/api/code-activity/workspace-source'
+import { Route as ApiCoeyInterpretRouteImport } from './routes/api/coey/interpret'
 import { Route as ApiHubNotifyMessageRouteImport } from './routes/api/hub/notify-message'
 import { Route as ApiJobsCodeActivityDrainRouteImport } from './routes/api/jobs/code-activity-drain'
 import { Route as ApiJobsDailyMaintenanceRouteImport } from './routes/api/jobs/daily-maintenance'
@@ -255,6 +256,11 @@ const ApiCodeActivityWorkspaceSourceRoute =
     path: '/api/code-activity/workspace-source',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiCoeyInterpretRoute = ApiCoeyInterpretRouteImport.update({
+  id: '/api/coey/interpret',
+  path: '/api/coey/interpret',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiHubNotifyMessageRoute = ApiHubNotifyMessageRouteImport.update({
   id: '/api/hub/notify-message',
   path: '/api/hub/notify-message',
@@ -409,6 +415,7 @@ export interface FileRoutesByFullPath {
   '/api/code-activity/refresh': typeof ApiCodeActivityRefreshRoute
   '/api/code-activity/workspace-confirm': typeof ApiCodeActivityWorkspaceConfirmRoute
   '/api/code-activity/workspace-source': typeof ApiCodeActivityWorkspaceSourceRoute
+  '/api/coey/interpret': typeof ApiCoeyInterpretRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
@@ -465,6 +472,7 @@ export interface FileRoutesByTo {
   '/api/code-activity/refresh': typeof ApiCodeActivityRefreshRoute
   '/api/code-activity/workspace-confirm': typeof ApiCodeActivityWorkspaceConfirmRoute
   '/api/code-activity/workspace-source': typeof ApiCodeActivityWorkspaceSourceRoute
+  '/api/coey/interpret': typeof ApiCoeyInterpretRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
@@ -525,6 +533,7 @@ export interface FileRoutesById {
   '/api/code-activity/refresh': typeof ApiCodeActivityRefreshRoute
   '/api/code-activity/workspace-confirm': typeof ApiCodeActivityWorkspaceConfirmRoute
   '/api/code-activity/workspace-source': typeof ApiCodeActivityWorkspaceSourceRoute
+  '/api/coey/interpret': typeof ApiCoeyInterpretRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
@@ -586,6 +595,7 @@ export interface FileRouteTypes {
     | '/api/code-activity/refresh'
     | '/api/code-activity/workspace-confirm'
     | '/api/code-activity/workspace-source'
+    | '/api/coey/interpret'
     | '/api/hub/notify-message'
     | '/api/jobs/code-activity-drain'
     | '/api/jobs/daily-maintenance'
@@ -642,6 +652,7 @@ export interface FileRouteTypes {
     | '/api/code-activity/refresh'
     | '/api/code-activity/workspace-confirm'
     | '/api/code-activity/workspace-source'
+    | '/api/coey/interpret'
     | '/api/hub/notify-message'
     | '/api/jobs/code-activity-drain'
     | '/api/jobs/daily-maintenance'
@@ -701,6 +712,7 @@ export interface FileRouteTypes {
     | '/api/code-activity/refresh'
     | '/api/code-activity/workspace-confirm'
     | '/api/code-activity/workspace-source'
+    | '/api/coey/interpret'
     | '/api/hub/notify-message'
     | '/api/jobs/code-activity-drain'
     | '/api/jobs/daily-maintenance'
@@ -755,6 +767,7 @@ export interface RootRouteChildren {
   ApiCodeActivityRefreshRoute: typeof ApiCodeActivityRefreshRoute
   ApiCodeActivityWorkspaceConfirmRoute: typeof ApiCodeActivityWorkspaceConfirmRoute
   ApiCodeActivityWorkspaceSourceRoute: typeof ApiCodeActivityWorkspaceSourceRoute
+  ApiCoeyInterpretRoute: typeof ApiCoeyInterpretRoute
   ApiHubNotifyMessageRoute: typeof ApiHubNotifyMessageRoute
   ApiJobsCodeActivityDrainRoute: typeof ApiJobsCodeActivityDrainRoute
   ApiJobsDailyMaintenanceRoute: typeof ApiJobsDailyMaintenanceRoute
@@ -1032,6 +1045,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiCodeActivityWorkspaceSourceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/coey/interpret': {
+      id: '/api/coey/interpret'
+      path: '/api/coey/interpret'
+      fullPath: '/api/coey/interpret'
+      preLoaderRoute: typeof ApiCoeyInterpretRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/hub/notify-message': {
       id: '/api/hub/notify-message'
       path: '/api/hub/notify-message'
@@ -1251,6 +1271,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCodeActivityRefreshRoute: ApiCodeActivityRefreshRoute,
   ApiCodeActivityWorkspaceConfirmRoute: ApiCodeActivityWorkspaceConfirmRoute,
   ApiCodeActivityWorkspaceSourceRoute: ApiCodeActivityWorkspaceSourceRoute,
+  ApiCoeyInterpretRoute: ApiCoeyInterpretRoute,
   ApiHubNotifyMessageRoute: ApiHubNotifyMessageRoute,
   ApiJobsCodeActivityDrainRoute: ApiJobsCodeActivityDrainRoute,
   ApiJobsDailyMaintenanceRoute: ApiJobsDailyMaintenanceRoute,

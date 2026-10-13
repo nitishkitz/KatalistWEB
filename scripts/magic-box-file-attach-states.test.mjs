@@ -18,6 +18,13 @@ import { InteractionBlockerProvider } from "@/components/katalist/InteractionBlo
  */
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+mock.module("@/features/court/coey/use-coey-context", {
+  namedExports: {
+    useCoeyContext: () => ({ ready: false, error: null, viewer: null, candidates: [], calendar: { timezone: "Asia/Kolkata", workDays: [1, 2, 3, 4, 5, 6], workStart: 540, workEnd: 1110, offSaturdays: [], holidays: [], festivals: [], leave: [], homeStart: 420, homeEnd: 1320 }, holderCals: {}, dismissedCounts: {} }),
+    recordDismissal: async () => {},
+  },
+});
+mock.module("@/lib/authed-fetch", { namedExports: { authedFetch: async () => new Response("{}", { status: 503 }) } });
 mock.module("@/features/context/use-app-context", {
   namedExports: { useAppContext: () => ({ context: "work", setContext: async () => {} }) },
 });

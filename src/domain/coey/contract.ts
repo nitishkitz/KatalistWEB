@@ -221,6 +221,8 @@ export type ComposerSelections = {
   dayChoices?: Record<string, string>;
   /** User accepted the ghost (inferred) time. */
   acceptInferred?: boolean;
+  /** A date/time the user picked in the composer: a typed action anchor. */
+  manualAction?: { at: number; date: string; precision: "date" | "time"; label: string } | null;
   /** Lane chosen on the chip; stored as an explicit scheduling decision. */
   lane?: "now" | "next" | "later";
   /** Resolution for L10 conflict: which signal the user meant. */

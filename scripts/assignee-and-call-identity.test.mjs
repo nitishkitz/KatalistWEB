@@ -3,7 +3,6 @@ import { test } from "node:test";
 import { mergeAssignablePeople, memberToPerson } from "@/features/people/merge-people";
 import { findCallProfile, isGenericName } from "@/features/calls/call-identity";
 import { describeUploadError } from "@/lib/upload-errors";
-import { parseToss } from "@/features/court/parse-toss";
 
 const ajjju = { id: "actor-ajjju", actorId: "actor-ajjju", name: "Ajjju Reddy", initials: "AR" };
 const member = (name, profileId) => memberToPerson({ name, profileId, initials: name.slice(0, 2).toUpperCase() });
@@ -16,13 +15,6 @@ test("every List member is selectable and a resolved actor id wins over a profil
   assert.equal(a.profileId, "profile-ajjju");
   assert.equal(a.listMember, true);
   assert.equal(merged.find((p) => p.name === "Nithesh Kumar").id, "profile-nithesh");
-});
-
-test("an @mention resolves to the actor id, not the duplicate profile-id entry", () => {
-  const people = mergeAssignablePeople([ajjju], [member("Ajjju Reddy", "profile-ajjju")]);
-  const result = parseToss("review deck @Ajjju", people);
-  assert.deepEqual(result.assigneeIds, ["actor-ajjju"]);
-  assert.equal(result.chips.some((c) => c.kind === "unresolved"), false);
 });
 
 test("placeholder names are not treated as real call identities", () => {

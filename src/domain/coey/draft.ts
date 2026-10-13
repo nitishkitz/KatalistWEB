@@ -24,6 +24,8 @@ export type Candidate = {
 
 export type Viewer = { profileId: string; actorId: string; name: string };
 
+const LANE_TO_PACE = { now: "urgent", next: "normal", later: "chill" } as const;
+
 const SELF_WORDS = new Set(["me", "myself", "i", "mujhe", "main", "khud", "self"]);
 
 function fold(s: string): string {
@@ -174,7 +176,11 @@ function buildOne(thing: InterpretedThing, input: BuildInput, timeIssues: TimeIs
     if (!resolved.ok) timeIssues.push({ key, phrase: resolved.phrase, reason: resolved.reason });
     return { anchor: anchorFrom(resolved), resolved };
   };
-  const action = resolveSlot(thing.action_time, "action");
+  const action = selections.manualAction
+    ? { anchor: { at: selections.manualAction.at, date: selections.manualAction.date, precision: selections.manualAction.precision, source: "typed" as const, accepted: true, phrase: selections.manualAction.label }, resolved: null }
+    : resolveSlot(thing.action_time, "action");
+  // A manual pick answers any question about the typed action time.
+  if (selections.manualAction) for (let i = timeIssues.length - 1; i >= 0; i--) if (timeIssues[i]!.key === `${index}:action`) timeIssues.splice(i, 1);
   const event = resolveSlot(thing.event_time, "event");
   const hasTypedTime = Boolean(action.anchor || event.anchor);
   const inferredTime = hasTypedTime ? null : inferredAnchor(thing.activity_type, now, holderCal, Boolean(selections.acceptInferred));
@@ -202,6 +208,11 @@ function buildOne(thing: InterpretedThing, input: BuildInput, timeIssues: TimeIs
   };
   // A model-reported pace with no grounded words is not the sender's word (L1/L2 need their word).
   if (draft.pace && !draft.pacePhrase) draft.pace = null;
+  // D4: the lane chip edits the sender's pace, an explicit stored decision.
+  if (selections.lane) {
+    draft.pace = LANE_TO_PACE[selections.lane];
+    draft.pacePhrase = null;
+  }
   const mismatch = thing.action_time && action.resolved && weekdayMismatch(thing.action_time, action.resolved)
     ? { key: `${index}:action`, said: thing.action_time.said_weekday!, date: action.resolved.ok ? action.resolved.date : "" }
     : null;
@@ -225,11 +236,11 @@ export function buildDraftPlan(input: BuildInput): DraftPlan {
   if (unclear) wholeCourt = { kind: "inbox", reason: "unresolved_capture", rule: "C10" };
   const things: PlannedThing[] = (drafts.length > 1 && split === "split" ? built : built.slice(0, 1)).map((b) => {
     const court = unclear ? wholeCourt : placeCourt([b.draft]);
-    return { draft: b.draft, court, lane: placeLane(b.draft, court, b.holderCal, input.now, input.selections.paceConflict ?? null) };
+    return { draft: b.draft, court, lane: placeLane(b.draft, court, b.holderCal, input.now, paceResolutionOf(input.selections)) };
   });
 
   const first = things[0];
-  const paceConflict = Boolean(first && first.lane.ask === "pace_conflict" && !input.selections.paceConflict);
+  const paceConflict = Boolean(first && first.lane.ask === "pace_conflict" && !paceResolutionOf(input.selections));
   const ctx: ValidationContext = { now: input.now, senderCal: input.cal, ...input.validation, dismissedForDraft: input.selections.dismissed };
   const checks = wholeCourt.kind === "answer"
     ? []
@@ -269,6 +280,11 @@ function mergeThings(things: InterpretedThing[]): InterpretedThing {
     participants: things.flatMap((t) => t.participants),
     assign_shape: "single",
   };
+}
+
+/** A lane chosen on the chip is the sender's decision; it settles any L10 question. */
+export function paceResolutionOf(selections: ComposerSelections): "pace" | "anchor" | null {
+  return selections.paceConflict ?? (selections.lane ? "pace" : null);
 }
 
 /** Whether the plan can be committed now (the send button is never disabled; this picks the path). */

@@ -10,7 +10,6 @@ import {
   isPersonallyShreddedList,
 } from "@/features/things/personal-shred";
 import { canDemoActorViewThing } from "@/features/demo/visibility";
-import { parseToss, tossBlockedByPerson } from "@/features/court/parse-toss";
 import { setDemoActorForTests, demoDirectory } from "@/features/demo/identities";
 import {
   accessibleDemoThings,
@@ -114,24 +113,6 @@ test("Creator-only does not grant visibility; Owner, Assignee, and List member s
   const visSrc = readFileSync(new URL("../src/features/demo/visibility.ts", import.meta.url), "utf8");
   assert.equal(visSrc.includes("thing.creator.id === actorId"), false);
   assert.match(visSrc, /Creator is provenance only/);
-});
-
-test("Magic Box: unresolved person blocks Toss; ambiguous date allows Toss with no Due", () => {
-  const people = demoDirectory();
-  const blocked = parseToss("Deck for @unknownperson", people);
-  assert.equal(tossBlockedByPerson(blocked.chips), true);
-  assert.ok(blocked.chips.some((c) => c.kind === "unresolved" && c.value === "person"));
-
-  const ambiguous = parseToss("Finish the deck 3/5", people);
-  assert.equal(tossBlockedByPerson(ambiguous.chips), false);
-  assert.ok(ambiguous.chips.some((c) => c.label === "Check date" && c.value === "ambiguous"));
-  assert.equal(ambiguous.dueAt, undefined);
-  assert.equal(ambiguous.dueHasTime, undefined);
-
-  const box = readFileSync(new URL("../src/features/court/MagicBox.tsx", import.meta.url), "utf8");
-  assert.match(box, /tossBlockedByPerson/);
-  assert.equal(box.includes('throw new Error("Check date")'), false);
-  assert.match(box, /Pick a person/);
 });
 
 test("Duplicate List names cannot cross-contaminate Things; identity is UUID only", () => {
