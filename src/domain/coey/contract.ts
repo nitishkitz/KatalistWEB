@@ -93,6 +93,8 @@ export const thingSchema = z.object({
       exclude_self: z.boolean(),
       state: z.enum(["any", "pending", "waiting_on_others", "waiting_on_me", "stale", "sorted"]),
       window: z.enum(["any", "today", "this_week", "overdue"]),
+      /** True when the line only adjusts the previous Ask question ("and Priya?"). */
+      continues_previous: z.boolean().default(false),
     })
     .nullable(),
   confidence: z.number().min(0).max(1),
@@ -194,12 +196,13 @@ export function interpretationJsonSchema(): Record<string, unknown> {
                 {
                   type: "object",
                   additionalProperties: false,
-                  required: ["about_person", "exclude_self", "state", "window"],
+                  required: ["about_person", "exclude_self", "state", "window", "continues_previous"],
                   properties: {
                     about_person: nullableString(undefined, 60),
                     exclude_self: { type: "boolean" },
                     state: { type: "string", enum: ["any", "pending", "waiting_on_others", "waiting_on_me", "stale", "sorted"] },
                     window: { type: "string", enum: ["any", "today", "this_week", "overdue"] },
+                    continues_previous: { type: "boolean" },
                   },
                 },
                 { type: "null" },

@@ -150,6 +150,8 @@ export type AssistantAnswer = {
   }>;
   scope_candidates?: ScopeCandidate[];
   person_candidates?: Array<{ actor_id: string; display_name: string }>;
+  /** The structured query this answer resolved; sent back so follow-ups keep its filters. */
+  structured_query?: { about_person: string | null; exclude_self: boolean; state: string; window: string };
 };
 
 export type AssistantConversationTurn = {

@@ -39,14 +39,17 @@ async function run(request: Request): Promise<Response> {
   const holderIds = [...new Set(schedules.map((s) => s.holderProfileId!))];
 
   const cals = new Map<string, HolderCalendar>();
+  // Delivery rejects a plan made against an older calendar (hours, days, holidays, leave, timezone).
+  const calRevisions = new Map<string, number>();
   if (holderIds.length) {
     const [{ data: profiles }, { data: calRows }] = await Promise.all([
       admin.from("profiles").select("id, timezone").in("id", holderIds),
       admin.from("profile_calendars").select("*").in("profile_id", holderIds),
     ]);
     type CalRow = { profile_id: string; work_days: number[]; work_start: number; work_end: number; off_saturdays: number[];
-      holidays: string[]; festivals: string[]; leave: Array<{ start: string; end: string }>; home_start: number; home_end: number };
+      holidays: string[]; festivals: string[]; leave: Array<{ start: string; end: string }>; home_start: number; home_end: number ; revision?: number };
     const byId = new Map(((calRows ?? []) as CalRow[]).map((c) => [c.profile_id, c]));
+    for (const c of byId.values()) calRevisions.set(c.profile_id, c.revision ?? 0);
     for (const p of (profiles ?? []) as Array<{ id: string; timezone: string | null }>) {
       const c = byId.get(p.id);
       const base = defaultCalendar(safeTimezone(p.timezone));
@@ -67,7 +70,7 @@ async function run(request: Request): Promise<Response> {
     const { data, error: applyError } = await admin.rpc("coey_apply_followups", {
       p_holder: holder,
       p_local_date: localParts(now, cal.timezone).date,
-      p_items: items.map((i) => ({ thing_id: i.thingId, step: i.step, kind: i.kind, revision: i.revision })),
+      p_items: items.map((i) => ({ thing_id: i.thingId, step: i.step, kind: i.kind, revision: i.revision, calendar_revision: calRevisions.get(holder) ?? 0 })),
       p_budget: COEY_CONFIG.F5_DAILY_NUDGE_BUDGET,
     });
     if (applyError) continue;

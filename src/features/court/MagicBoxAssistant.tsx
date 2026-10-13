@@ -186,6 +186,7 @@ export function MagicBoxAssistant({
     : ownTurn;
   const historyRef = useRef(history);
   historyRef.current = history;
+  const previousQueryRef = useRef<CoeyTurnRequest["previous_query"]>(null);
   const [courtChanged, setCourtChanged] = useState(false);
   const buildRequest = useCallback(
     (reuse: boolean) => {
@@ -201,6 +202,7 @@ export function MagicBoxAssistant({
         reuse,
         // Follow-ups in the same panel are open questions again.
         query: historyRef.current.length === 0 ? query : null,
+        previous_query: historyRef.current.length > 0 ? previousQueryRef.current : null,
       };
     },
     [question, listId, bucketId, choice, personChoice, context, query],
@@ -264,6 +266,7 @@ export function MagicBoxAssistant({
     // A selection card is not an answer; the turn is recorded once the user picks a scope.
     if (result.answer.intent === "scope_selection_required" || result.answer.intent === "person_selection_required") return;
     recordedRequestKey.current = requestKey;
+    previousQueryRef.current = result.answer.structured_query ?? null;
     const resolved = result.facts.scope;
     if (resolved && (resolved.type === "list" || resolved.type === "bucket") && resolved.id)
       pinnedRef.current = { type: resolved.type, id: resolved.id, label: resolved.label };

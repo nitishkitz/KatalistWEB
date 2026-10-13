@@ -14,6 +14,8 @@ export type RingPayload = {
   listName: string;
   fromDeviceId: string;
   fromName: string;
+  /** Caller's profile. Realtime rings without it are ignored (they cannot be checked). */
+  fromUserId?: string;
   fromAvatarUrl?: string | null;
   memberIds: string[];
   callType?: "audio" | "video";
@@ -96,7 +98,12 @@ export function subscribeToRings(
       const p = payload as RingPayload | undefined;
       if (!p || p.fromDeviceId === selfDeviceId) return;
       if (!Array.isArray(p.memberIds) || !p.memberIds.includes(selfUserId)) return;
-      onRing(p);
+      // The lobby is a broadcast channel: ask the server whether this caller may ring me
+      // (conversation membership, no block either way, connected for DMs).
+      if (!p.fromUserId || !p.listId) return;
+      void (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
+        "can_receive_call", { p_list_id: p.listId, p_from_profile: p.fromUserId },
+      ).then(({ data, error }) => { if (!error && data === true) onRing(p); }, () => undefined);
     })
     .subscribe();
   // Already addressed to us by the server; only skip our own device.

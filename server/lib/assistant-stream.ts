@@ -27,7 +27,7 @@ import {
   type TurnTimings,
 } from "./assistant-turn";
 import type { AssistantConversationTurn } from "./assistant";
-import { loadSchedulesForFacts, parseStructuredQuery, structuredAnswer, type StructuredQuery } from "./coey/ask";
+import { loadSchedulesForFacts, mergeFollowUp, parseStructuredQuery, structuredAnswer, type StructuredQuery } from "./coey/ask";
 import { interpretLine } from "./coey/interpret";
 
 export type TurnInput = {
@@ -41,6 +41,8 @@ export type TurnInput = {
   reuse?: boolean;
   /** Set when the Magic Box interpreted the line as a question (C0a): answered in code, no keyword routing. */
   query?: StructuredQuery | null;
+  /** The structured query of the previous answer in this conversation. */
+  previousQuery?: StructuredQuery | null;
 };
 
 /**
@@ -59,7 +61,7 @@ export type TurnDeps = {
    * query, so every entry point uses the same code-executed answer. Null means
    * "not a structured question" (e.g. an action request) or unavailable.
    */
-  interpretQuestion?: (question: string, history: AssistantConversationTurn[], context: "work" | "home", signal: AbortSignal) => Promise<StructuredQuery | null>;
+  interpretQuestion?: (question: string, history: AssistantConversationTurn[], context: "work" | "home", signal: AbortSignal, previousQuery: StructuredQuery | null) => Promise<StructuredQuery | null>;
   log?: (entry: Record<string, unknown>) => void;
 };
 
@@ -70,16 +72,18 @@ export const defaultTurnDeps = (client: SupabaseClient, userId: string): TurnDep
   verifyChoice: verifyScopeChoice,
   buildFacts: buildAssistantFacts,
   answer: answerAssistantQuestion,
-  interpretQuestion: async (question, history, context, signal) => {
+  interpretQuestion: async (question, history, context, signal, previousQuery) => {
     const { data: profile } = await client.from("profiles").select("timezone").eq("id", userId).maybeSingle();
-    const earlier = [...history].reverse().find((t) => t.role === "user")?.content;
+    const earlierQuestions = history.filter((t) => t.role === "user").map((t) => t.content);
     const result = await interpretLine(question, {
       timezone: (profile as { timezone?: string } | null)?.timezone ?? "Asia/Kolkata",
-      mode: context, requestId: "ask", draftRevision: 0, signal, earlier,
+      mode: context, requestId: "ask", draftRevision: 0, signal, askContext: { earlierQuestions, previousQuery },
     });
     if (!result.ok || result.interpretation.things.length !== 1) return null;
     const [thing] = result.interpretation.things;
-    return thing!.kind === "question" ? parseStructuredQuery(thing!.question) : null;
+    if (thing!.kind !== "question") return null;
+    const parsed = parseStructuredQuery(thing!.question);
+    return parsed ? mergeFollowUp(previousQuery, parsed, thing!.question?.continues_previous === true) : null;
   },
   log: (entry) => console.info(JSON.stringify({ evt: "coey_turn", ...entry })),
 });
@@ -130,7 +134,7 @@ export async function runCoeyTurn(
     // One interpretation path for Toss-redirected questions, direct Ask and follow-ups.
     let query = input.query ?? null;
     if (!query && deps.interpretQuestion) {
-      query = await deps.interpretQuestion(input.question, input.history, input.context, signal).catch(() => null);
+      query = await deps.interpretQuestion(input.question, input.history, input.context, signal, input.previousQuery ?? null).catch(() => null);
       if (signal.aborted) return;
     }
     input = { ...input, query };

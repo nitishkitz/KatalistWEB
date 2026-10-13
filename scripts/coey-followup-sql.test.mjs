@@ -23,6 +23,7 @@ const apply = async (holder, items, date = "2026-10-13", budget = 3) => {
   await db.exec("RESET ROLE");
   for (const item of items) {
     if (item.revision === undefined) item.revision = (await db.query("SELECT revision FROM thing_schedules WHERE thing_id = $1", [item.thing_id])).rows[0]?.revision ?? 0;
+    if (item.calendar_revision === undefined) item.calendar_revision = (await db.query("SELECT revision FROM profile_calendars WHERE profile_id = $1", [holder])).rows[0]?.revision ?? 0;
   }
   await actAs(db, null, "service_role");
   return (await db.query("SELECT coey_apply_followups($1, $2::date, $3::jsonb, $4) r", [holder, date, JSON.stringify(items), budget])).rows[0].r;
@@ -37,6 +38,9 @@ before(async () => {
   for (const [id, name] of [[SENDER, "Deva Rao"], [RAVI, "Ravi Kumar"], [PRIYA, "Priya Shah"]]) await createUser(db, { id, name });
   await connect(SENDER, RAVI);
   await connect(PRIYA, RAVI);
+  // Ravi works every hour of every day, so these tests do not depend on the wall clock.
+  await actAs(db, RAVI);
+  await db.query("SELECT set_my_calendar($1::jsonb)", [JSON.stringify({ work_days: [0, 1, 2, 3, 4, 5, 6], work_start: 0, work_end: 1440, home_start: 0, home_end: 1440 })]);
 });
 after(async () => db?.close());
 

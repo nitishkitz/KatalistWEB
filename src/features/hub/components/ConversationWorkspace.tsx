@@ -196,6 +196,7 @@ export function ConversationWorkspace({
       listName: title,
       fromDeviceId: getDeviceId(),
       fromName: selfName,
+      fromUserId: user?.id,
       fromAvatarUrl: (user?.user_metadata?.avatar_url as string | undefined) ?? null,
       memberIds: selectedIds,
       callType: withVideo ? "video" : "audio",

@@ -16,6 +16,8 @@ export type CoeyTurnRequest = {
   reuse: boolean;
   /** Structured read query from Magic Box interpretation; answered in code on the server. */
   query?: { about_person: string | null; exclude_self: boolean; state: string; window: string } | null;
+  /** The previous answer's resolved query, so a follow-up keeps its filters. */
+  previous_query?: { about_person: string | null; exclude_self: boolean; state: string; window: string } | null;
 };
 
 const TURN_TIMEOUT_MS = 30_000;

@@ -87,3 +87,15 @@ An independent review (`output/coey-code-review/review.md`) found seven defects.
 After the fixes: typecheck and production build pass; 1,675 tests, the same 38 baseline failures and no new ones; 111/111 migrations replay; the reviewer's own reproduction script reports every case fixed; live Sarvam matched 29/29 on two runs and 28/29 on one (an ambiguous "send … to Ravi" read as Ravi doing it, which correctly asked which Ravi).
 
 Calls ride on conversation membership and were not separately audited for block enforcement.
+
+## Re-review fixes (13 October 2026, after 6437276e)
+
+| Gap | Fix | Test |
+| --- | --- | --- |
+| Blocked people could still be rung | `/api/calls/ring` pushes only to recipients `call_ring_recipients` allows (no block either way; DMs need a connection). The in-app receiver asks `can_receive_call` before showing a ring and ignores rings without a caller id | `coey-rereview-fixes-sql` |
+| Calendar edits did not invalidate follow-up plans | Holder calendars have a revision (hours, days, holidays, leave, and timezone changes); plans name it; delivery also re-checks the holder's working time at the moment of delivery, under a lock | `coey-rereview-fixes-sql`; reviewer's `calendar-race.mjs` now delivers 0 |
+| Follow-up chains lost filters | Each answer returns the query it resolved; the client sends it back; the interpreter sees earlier questions and the previous query, marks whether the line continues it, and code inherits every field the follow-up does not change. Unknown-name answers keep the query too | `coey-review-fixes`; live `scripts/coey-live-followups.mjs` |
+
+Results: typecheck and build pass; 1,681 tests, the same 38 baseline failures, none new; 112/112 migrations replay; live Sarvam: 29/29 labelled lines, follow-up chains 8/8 on the final run (7/8 on one run where Sarvam returned unparseable output once — that path is safe: Ask falls back to the old answer path and the composer offers Try again).
+
+**Remaining limitation:** the call lobby is a public Realtime broadcast channel, so a ring's caller id cannot be authenticated on the client. The receiver check stops honest clients and blocked DM partners, but a malicious group member could put another member's id on a ring. Closing that needs private Realtime channels with authorization policies.

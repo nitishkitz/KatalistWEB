@@ -31,6 +31,21 @@ export type StructuredQuery = {
   window: "any" | "today" | "this_week" | "overdue";
 };
 
+/**
+ * A follow-up ("and Priya?") changes only what it says. Fields it leaves at
+ * their neutral value inherit the previous query, so filters survive any
+ * number of follow-ups. Whether a line is a follow-up is the model's reading.
+ */
+export function mergeFollowUp(previous: StructuredQuery | null, next: StructuredQuery, continuesPrevious: boolean): StructuredQuery {
+  if (!previous || !continuesPrevious) return next;
+  return {
+    about_person: next.about_person ?? previous.about_person,
+    exclude_self: next.about_person ? false : next.exclude_self || previous.exclude_self,
+    state: next.state === "any" || (next.state === "pending" && previous.state !== "any" && previous.state !== "pending") ? previous.state : next.state,
+    window: next.window === "any" ? previous.window : next.window,
+  };
+}
+
 export function parseStructuredQuery(raw: unknown): StructuredQuery | null {
   if (!raw || typeof raw !== "object") return null;
   const q = raw as Record<string, unknown>;
@@ -90,7 +105,7 @@ export function structuredAnswer(
   // A named person resolves exactly; near names ask, never guess (V1.2).
   let personId: string | null = null;
   if (confirmedActorId) {
-    if (!people.has(confirmedActorId)) return { ...base, intent: "person_not_found", answer_markdown: "That person is no longer available here.", groups: [] };
+    if (!people.has(confirmedActorId)) return { ...base, intent: "person_not_found", structured_query: query, answer_markdown: "That person is no longer available here.", groups: [] };
     personId = confirmedActorId;
   } else if (query.about_person) {
     const wanted = fold(query.about_person);
@@ -100,10 +115,10 @@ export function structuredAnswer(
     else {
       const candidates = exact.length ? exact : named.filter(([, name]) => fold(name).split(" ")[0]!.startsWith(wanted.slice(0, 3)) && wanted.length >= 3);
       if (!candidates.length) {
-        return { ...base, intent: "person_not_found", groups: [], answer_markdown: `I can’t find “${query.about_person}” among the people in this view.` };
+        return { ...base, intent: "person_not_found", structured_query: query, groups: [], answer_markdown: `I can’t find “${query.about_person}” among the people in this view.` };
       }
       return {
-        ...base, intent: "person_selection_required", groups: [],
+        ...base, intent: "person_selection_required", groups: [], structured_query: query,
         answer_markdown: candidates.length === 1 ? `Do you mean **${candidates[0]![1]}**?` : "Which person do you mean?",
         person_candidates: candidates.slice(0, 8).map(([actor_id, display_name]) => ({ actor_id, display_name })),
       };
@@ -162,6 +177,7 @@ export function structuredAnswer(
             : n ? `${n} open ${noun}${who}.` : `No open Things${who}.`;
   return {
     ...base,
+    structured_query: { ...query, about_person: personId ? people.get(personId) ?? query.about_person : query.about_person },
     intent: personId ? "person_items" : query.state === "stale" ? "stale_items" : "scope_summary",
     answer_markdown,
     groups,

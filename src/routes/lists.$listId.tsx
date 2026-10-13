@@ -128,6 +128,7 @@ function ListDetailPage() {
       listName: list?.name ?? "a list",
       fromDeviceId: getDeviceId(),
       fromName: selfName,
+      fromUserId: user?.id,
       memberIds: selectedProfileIds,
     });
     // Record a call-history entry that renders inline in the chat timeline.

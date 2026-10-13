@@ -61,6 +61,7 @@ export const Route = createFileRoute("/api/assistant/stream")({
             reuse: body.reuse === true,
             personChoice: typeof body.personChoice === "string" ? body.personChoice : undefined,
             query: parseStructuredQuery(body.query),
+            previousQuery: parseStructuredQuery(body.previous_query),
           };
           const deps = defaultTurnDeps(client, userId);
           const turnId = makeTurnId();

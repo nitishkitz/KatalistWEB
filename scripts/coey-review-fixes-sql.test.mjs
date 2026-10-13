@@ -16,7 +16,9 @@ before(async () => {
   const req = (await db.query("SELECT (send_contact_request($1)).id", [B])).rows[0].id;
   await actAs(db, B);
   await db.query("SELECT respond_contact_request($1, true)", [req]);
+  await db.query("SELECT set_my_calendar($1::jsonb)", [JSON.stringify({ work_days: [0, 1, 2, 3, 4, 5, 6], work_start: 0, work_end: 1440, home_start: 0, home_end: 1440 })]);
 });
+const calRev = async (p) => { await db.exec("RESET ROLE"); return (await db.query("SELECT revision FROM profile_calendars WHERE profile_id = $1", [p])).rows[0]?.revision ?? 0; };
 after(async () => db?.close());
 
 test("1: a private capture created inside a shared List is not readable by other List members, and cannot be moved back in", async () => {
@@ -59,17 +61,18 @@ test("5: a plan made before a new promise is rejected; a replayed plan is reject
   const planned = (await db.query("SELECT revision FROM thing_schedules WHERE thing_id = $1", [id])).rows[0].revision;
   await actAs(db, B);
   await db.query("SELECT coey_promise($1, now() + interval '10 days')", [id]);
+  const cal = await calRev(B);
   await actAs(db, null, "service_role");
-  const stale = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 1, kind: "cadence", revision: planned }])])).rows[0].r;
+  const stale = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 1, kind: "cadence", revision: planned, calendar_revision: cal }])])).rows[0].r;
   assert.equal(stale.delivered, 0);
   await db.exec("RESET ROLE");
   const current = (await db.query("SELECT revision FROM thing_schedules WHERE thing_id = $1", [id])).rows[0].revision;
   await actAs(db, null, "service_role");
-  const wrongKind = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 1, kind: "cadence", revision: current }])])).rows[0].r;
+  const wrongKind = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 1, kind: "cadence", revision: current, calendar_revision: cal }])])).rows[0].r;
   assert.equal(wrongKind.delivered, 0, "a cadence nudge never goes out once a promise exists");
-  const ok = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 1, kind: "promise_soon", revision: current }])])).rows[0].r;
+  const ok = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 1, kind: "promise_soon", revision: current, calendar_revision: cal }])])).rows[0].r;
   assert.equal(ok.delivered, 1);
-  const replay = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 1, kind: "promise_soon", revision: current }])])).rows[0].r;
+  const replay = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 1, kind: "promise_soon", revision: current, calendar_revision: cal }])])).rows[0].r;
   assert.equal(replay.delivered, 0);
   const missing = (await db.query("SELECT coey_apply_followups($1, current_date, $2::jsonb, 3) r", [B, JSON.stringify([{ thing_id: id, step: 2, kind: "promise_due" }])])).rows[0].r;
   assert.equal(missing.delivered, 0, "a plan without a revision is never trusted");

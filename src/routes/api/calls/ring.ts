@@ -59,9 +59,17 @@ export const Route = createFileRoute("/api/calls/ring")({
         // but always intersect with actual list membership so a client can
         // never make this endpoint push to someone outside the list.
         const requested = Array.isArray(body.memberIds) ? new Set(body.memberIds) : null;
-        const recipientIds = [...memberIds].filter(
+        const candidateIds = [...memberIds].filter(
           (id) => id !== uid && (!requested || requested.has(id)),
         );
+        if (candidateIds.length === 0) return json({ sent: 0 });
+        // Blocked people (either direction), and unconnected people in a DM, are never rung.
+        const { data: allowed, error: allowError } = await (supabaseAdmin.rpc as unknown as (
+          fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
+          "call_ring_recipients", { p_list_id: listId, p_caller: uid, p_recipients: candidateIds },
+        );
+        if (allowError) return json({ error: "could not check who can be called" }, 500);
+        const recipientIds = (Array.isArray(allowed) ? allowed : []) as string[];
         if (recipientIds.length === 0) return json({ sent: 0 });
 
         const { data: toks } = await supabaseAdmin
@@ -83,6 +91,7 @@ export const Route = createFileRoute("/api/calls/ring")({
             // push alone when its Realtime ring never arrived.
             listName: list.name ?? "",
             fromName,
+            fromUserId: uid,
             fromAvatarUrl: caller?.avatar_url ?? "",
             callType,
             listKind: list.kind ?? "list",

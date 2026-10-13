@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { runCoeyTurn } from "../server/lib/assistant-stream.ts";
 import { localWindows, structuredAnswer } from "../server/lib/coey/ask.ts";
 import { zonedInstant } from "../src/domain/coey/calendar.ts";
+import { buildMessages } from "../server/lib/coey/interpret.ts";
 
 const IST = "Asia/Kolkata";
 const iso = (date, minutes) => new Date(zonedInstant(date, minutes, IST)).toISOString();
@@ -81,4 +82,34 @@ test("6: a line that is not a structured question (or interpretation unavailable
   const a = await answerOf("draft a nudge for the deck", d);
   assert.equal(a.answer_markdown, "model");
   assert.equal(calls.model, 1);
+});
+
+test("re-review: a chain of follow-ups carries the previous resolved query to the interpreter", async () => {
+  const seen = [];
+  const { deps: d } = deps(() => null);
+  d.interpretQuestion = async (q, history, _ctx, _signal, previous) => {
+    seen.push({ q, questions: history.filter((h) => h.role === "user").map((h) => h.content), previous });
+    if (/^show Ravi/.test(q)) return { about_person: "Ravi", exclude_self: false, state: "any", window: "overdue" };
+    return { ...previous, about_person: q.replace(/^and |\?$/g, "") };
+  };
+  const turn = async (question, history, previousQuery) => {
+    const events = [];
+    await runCoeyTurn({ question, context: "work", history, previousQuery }, d, "t", (e) => events.push(e), new AbortController().signal);
+    return events.find((e) => e.type === "answer").answer;
+  };
+  const first = await turn("show Ravi's overdue Things", [], null);
+  const h1 = [{ role: "user", content: "show Ravi's overdue Things" }, { role: "assistant", content: first.answer_markdown }];
+  const second = await turn("and Priya?", h1, first.structured_query);
+  const h2 = [...h1, { role: "user", content: "and Priya?" }, { role: "assistant", content: second.answer_markdown }];
+  await turn("and Ajjju?", h2, second.structured_query);
+  assert.equal(seen[2].previous.window, "overdue", "the third turn still knows the original filter");
+  assert.equal(second.structured_query.about_person, "Priya Shah");
+  assert.deepEqual(seen[2].questions, ["show Ravi's overdue Things", "and Priya?"]);
+});
+
+test("re-review: the interpreter prompt for a follow-up includes earlier questions and the previous query", () => {
+  const m = buildMessages("and Ajjju?", Date.now(), IST, "work", { earlierQuestions: ["show Ravi's overdue Things", "and Priya?"], previousQuery: { about_person: "Priya", exclude_self: false, state: "any", window: "overdue" } });
+  assert.match(m[1].content, /"window":"overdue"/);
+  assert.match(m[1].content, /show Ravi's overdue Things/);
+  assert.match(m[1].content, /keep every other field exactly/);
 });
