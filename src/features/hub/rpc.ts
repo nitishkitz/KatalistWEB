@@ -54,7 +54,7 @@ export async function rpcCreateGroup(
   return firstRow<ConversationRow>(data as ConversationRow | ConversationRow[] | null);
 }
 
-/** Send (or auto-accept a reciprocal) connection request to another person. */
+/** Send a connection request. Idempotent; only the recipient's Accept connects. */
 export async function rpcSendContactRequest(addresseeProfileId: string): Promise<void> {
   const { error } = await (supabase.rpc as unknown as LooseRpc)("send_contact_request", {
     p_addressee_profile_id: addresseeProfileId,
@@ -77,6 +77,43 @@ export async function rpcCancelContactRequest(requestId: string): Promise<void> 
     p_request_id: requestId,
   });
   if (error) throw error;
+}
+
+export type ConnectCandidate = {
+  profile_id: string;
+  display_name: string;
+  avatar_url: string | null;
+  state: "self" | "connected" | "pending_out" | "pending_in" | "none";
+  request_id: string | null;
+};
+
+/** Exact lookup by connect link, email or phone. At most one minimal identity. */
+export async function rpcFindPersonForConnect(query: string): Promise<ConnectCandidate | null> {
+  const { data, error } = await (supabase.rpc as unknown as LooseRpc)("find_person_for_connect", { p_query: query });
+  if (error) throw error;
+  const rows = (Array.isArray(data) ? data : data ? [data] : []) as ConnectCandidate[];
+  return rows[0] ?? null;
+}
+
+export async function rpcMyConnectHandle(): Promise<string | null> {
+  const { data, error } = await (supabase.rpc as unknown as LooseRpc)("my_connect_handle", {});
+  if (error) throw error;
+  return typeof data === "string" ? data : null;
+}
+
+/** Stops new direct interactions with this person. Shared Lists and history keep their own rules. */
+export async function rpcDisconnectContact(profileId: string): Promise<void> {
+  const { error } = await (supabase.rpc as unknown as LooseRpc)("disconnect_contact", { p_other_profile_id: profileId });
+  if (error) throw error;
+}
+
+export async function rpcBlockContact(profileId: string): Promise<void> {
+  const { error } = await (supabase.rpc as unknown as LooseRpc)("block_contact", { p_other_profile_id: profileId });
+  if (error) throw error;
+}
+
+export function connectLink(handle: string): string {
+  return `${window.location.origin}/connect/${handle}`;
 }
 
 /** Create an email invitation for a person not yet on Katalist. Returns the token. */

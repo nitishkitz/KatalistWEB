@@ -21,6 +21,7 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as BridgeTokenRouteImport } from './routes/bridge.$token'
 import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
+import { Route as ConnectHandleRouteImport } from './routes/connect.$handle'
 import { Route as ListsIndexRouteImport } from './routes/lists.index'
 import { Route as ListsListIdRouteImport } from './routes/lists.$listId'
 import { Route as TeamIndexRouteImport } from './routes/team.index'
@@ -125,6 +126,11 @@ const BucketsBucketIdRoute = BucketsBucketIdRouteImport.update({
   id: '/$bucketId',
   path: '/$bucketId',
   getParentRoute: () => BucketsRoute,
+} as any)
+const ConnectHandleRoute = ConnectHandleRouteImport.update({
+  id: '/connect/$handle',
+  path: '/connect/$handle',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ListsIndexRoute = ListsIndexRouteImport.update({
   id: '/',
@@ -378,6 +384,7 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/connect/$handle': typeof ConnectHandleRoute
   '/lists/$listId': typeof ListsListIdRoute
   '/team/$conversationId': typeof TeamConversationIdRoute
   '/buckets/': typeof BucketsIndexRoute
@@ -433,6 +440,7 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/connect/$handle': typeof ConnectHandleRoute
   '/lists/$listId': typeof ListsListIdRoute
   '/team/$conversationId': typeof TeamConversationIdRoute
   '/buckets': typeof BucketsIndexRoute
@@ -492,6 +500,7 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
+  '/connect/$handle': typeof ConnectHandleRoute
   '/lists/$listId': typeof ListsListIdRoute
   '/team/$conversationId': typeof TeamConversationIdRoute
   '/buckets/': typeof BucketsIndexRoute
@@ -552,6 +561,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
+    | '/connect/$handle'
     | '/lists/$listId'
     | '/team/$conversationId'
     | '/buckets/'
@@ -607,6 +617,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
+    | '/connect/$handle'
     | '/lists/$listId'
     | '/team/$conversationId'
     | '/buckets'
@@ -665,6 +676,7 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/bridge/$token'
     | '/buckets/$bucketId'
+    | '/connect/$handle'
     | '/lists/$listId'
     | '/team/$conversationId'
     | '/buckets/'
@@ -723,6 +735,7 @@ export interface RootRouteChildren {
   TeamRoute: typeof TeamRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
+  ConnectHandleRoute: typeof ConnectHandleRoute
   ApiAssistantNudgeRoute: typeof ApiAssistantNudgeRoute
   ApiAssistantQueryRoute: typeof ApiAssistantQueryRoute
   ApiAssistantStreamRoute: typeof ApiAssistantStreamRoute
@@ -850,6 +863,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/buckets/$bucketId'
       preLoaderRoute: typeof BucketsBucketIdRouteImport
       parentRoute: typeof BucketsRoute
+    }
+    '/connect/$handle': {
+      id: '/connect/$handle'
+      path: '/connect/$handle'
+      fullPath: '/connect/$handle'
+      preLoaderRoute: typeof ConnectHandleRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/lists/': {
       id: '/lists/'
@@ -1210,6 +1230,7 @@ const rootRouteChildren: RootRouteChildren = {
   TeamRoute: TeamRouteWithChildren,
   WelcomeRoute: WelcomeRoute,
   BridgeTokenRoute: BridgeTokenRoute,
+  ConnectHandleRoute: ConnectHandleRoute,
   ApiAssistantNudgeRoute: ApiAssistantNudgeRoute,
   ApiAssistantQueryRoute: ApiAssistantQueryRoute,
   ApiAssistantStreamRoute: ApiAssistantStreamRoute,

@@ -1,12 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Search, MessageCircle, Phone, UserPlus, Check, X, Mail, Copy, Users } from "lucide-react";
+import { Search, MessageCircle, Phone, UserPlus, Check, X, Mail, Copy, Users, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
-import type { TeamMember } from "@/features/people/use-team";
-import { useGoogleContacts } from "@/features/contacts/use-google-contacts";
 import { usePresence } from "@/features/people/presence";
 import { isUuid } from "@/features/things/rpc";
 import {
@@ -16,6 +14,12 @@ import {
   rpcCancelContactRequest,
   rpcCreateInvitation,
   rpcRevokeInvitation,
+  rpcFindPersonForConnect,
+  rpcMyConnectHandle,
+  rpcDisconnectContact,
+  rpcBlockContact,
+  connectLink,
+  type ConnectCandidate,
 } from "@/features/hub/rpc";
 import { useConversations } from "@/features/hub/use-conversations";
 import { useAppContext } from "@/features/context/use-app-context";
@@ -23,18 +27,12 @@ import { useContacts, useContactRequests, useInvitations, useRefreshContacts } f
 import { domainErrorMessage } from "@/lib/domain-error";
 import { cn } from "@/lib/utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
-import { useMotionPreference } from "@/hooks/use-motion-preference";
-import { ContactPhysicsPile } from "./ContactPhysicsPile";
 
 type Tab = "people" | "contacts" | "requests" | "invites";
 
 export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const navigate = useNavigate();
   const online = usePresence();
-  const googleContacts = useGoogleContacts(open);
-  const members = useMemo<TeamMember[]>(() => googleContacts.people.map(person => ({
-    ...person, email: null, phone: null, connectedSince: null,
-  })), [googleContacts.people]);
   const { context } = useAppContext();
   const { refetch: refetchConversations } = useConversations();
   const { contacts } = useContacts();
@@ -45,12 +43,11 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
 
   const [tab, setTab] = useState<Tab>("people");
   const [query, setQuery] = useState("");
-  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
-  const [searchMatchIds, setSearchMatchIds] = useState<string[]>([]);
+  const [lookup, setLookup] = useState<{ query: string; status: "idle" | "searching" | "done" | "error"; person: ConnectCandidate | null }>({ query: "", status: "idle", person: null });
+  const [myHandle, setMyHandle] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [clipboardFallback, setClipboardFallback] = useState<string | null>(null);
-  const { reduceMotion } = useMotionPreference();
 
   // This drawer is a temporary workspace. Once it closes, discard its
   // navigation and search state so the next visit always starts predictably.
@@ -58,56 +55,34 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     if (open) return;
     setTab("people");
     setQuery("");
-    setSelectedPersonId(null);
-    setSearchMatchIds([]);
+    setLookup({ query: "", status: "idle", person: null });
     setInviteEmail("");
     setClipboardFallback(null);
   }, [open]);
 
-  const contactIds = useMemo(() => new Set(contacts.map((c) => c.id)), [contacts]);
-  const outgoingIds = useMemo(() => new Set(outgoing.map((r) => r.person.id)), [outgoing]);
+  useEffect(() => {
+    if (!open || myHandle) return;
+    let cancelled = false;
+    rpcMyConnectHandle().then((handle) => { if (!cancelled) setMyHandle(handle); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [open, myHandle]);
 
-  const people = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const base = members.filter((m) => isUuid(m.id));
-    if (!q) return base;
-    return base.filter(
-      (m) =>
-        m.name.toLowerCase().includes(q) ||
-        (m.role ?? "").toLowerCase().includes(q) ||
-        (m.email ?? "").toLowerCase().includes(q),
-    );
-  }, [members, query]);
-
-  const realMembers = useMemo(() => members.filter((member) => isUuid(member.id)), [members]);
-
-  // Search only the user's imported contacts. An absent match says nothing
-  // about whether that email is registered elsewhere in Katalist.
+  // Exact lookup only: a connect link, an email or a phone number finds at most one person.
   const trimmedQuery = query.trim();
   const isEmailQuery = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedQuery);
-  const showInviteCta = isEmailQuery && people.length === 0;
-  const resultPersonIds = useMemo(() => (trimmedQuery ? searchMatchIds : selectedPersonId ? [selectedPersonId] : []), [searchMatchIds, selectedPersonId, trimmedQuery]);
-  const activePersonId = trimmedQuery ? searchMatchIds[0] ?? null : selectedPersonId;
-  const featuredPerson = realMembers.find((member) => member.id === activePersonId) ?? null;
-  // Matter.js is ideal for the small, tactile pile. Once a query matches a
-  // larger roster, use a regular scrollable list so every result stays
-  // reachable without simulating dozens of moving bodies.
-  const useScrollableResults = Boolean(trimmedQuery) && people.length > 12;
-  const physicsMembers = useMemo(() => {
-    const visibleIds = new Set([...realMembers.slice(0, 24).map((member) => member.id), ...people.map((member) => member.id)]);
-    return realMembers.filter((member) => visibleIds.has(member.id));
-  }, [people, realMembers]);
-
-  useEffect(() => {
-    if (!trimmedQuery) {
-      setSearchMatchIds([]);
-      return;
+  const findPerson = async () => {
+    if (trimmedQuery.length < 3) return;
+    const asked = trimmedQuery;
+    setLookup({ query: asked, status: "searching", person: null });
+    try {
+      const person = await rpcFindPersonForConnect(asked);
+      setLookup((current) => current.query === asked ? { query: asked, status: "done", person } : current);
+    } catch {
+      setLookup((current) => current.query === asked ? { query: asked, status: "error", person: null } : current);
     }
-    // Keep the current card in place while typing. Only commit a new match
-    // after the debounce, rather than releasing and lifting it per keystroke.
-    const timeout = window.setTimeout(() => setSearchMatchIds(people.map((person) => person.id)), reduceMotion ? 0 : 180);
-    return () => window.clearTimeout(timeout);
-  }, [people, reduceMotion, trimmedQuery]);
+  };
+  const lookupDone = lookup.status === "done" && lookup.query === trimmedQuery;
+  const showInviteCta = isEmailQuery && lookupDone && !lookup.person;
 
   const openDm = async (member: { id: string; name: string }, startCall: boolean) => {
     if (!isUuid(member.id)) {
@@ -127,12 +102,15 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     }
   };
 
-  const connect = async (member: TeamMember) => {
+  const connect = async (member: { id: string; name: string }) => {
     setBusyId(member.id);
     const epoch = getIdentityEpoch(qc).epoch;
     try {
       await rpcSendContactRequest(member.id);
       refreshContacts(epoch);
+      if (lookup.person?.profile_id === member.id) {
+        setLookup((current) => current.person ? { ...current, person: { ...current.person, state: "pending_out" } } : current);
+      }
       if (isEpochCurrent(qc, epoch)) toast.success(`Request sent to ${member.name.split(" ")[0]}`);
     } catch (err) {
       if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
@@ -160,6 +138,22 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
     try {
       await rpcCancelContactRequest(requestId);
       refreshContacts(epoch);
+    } catch (err) {
+      if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeContact = async (member: { id: string; name: string }, block: boolean) => {
+    const first = member.name.split(" ")[0];
+    if (!window.confirm(block ? `Block ${first}? They can't send you requests, Things or messages.` : `Disconnect from ${first}? Shared Lists and history stay as they are.`)) return;
+    setBusyId(member.id);
+    const epoch = getIdentityEpoch(qc).epoch;
+    try {
+      await (block ? rpcBlockContact(member.id) : rpcDisconnectContact(member.id));
+      refreshContacts(epoch);
+      if (isEpochCurrent(qc, epoch)) toast.success(block ? `${first} is blocked` : `Disconnected from ${first}`);
     } catch (err) {
       if (isEpochCurrent(qc, epoch)) toast.error(domainErrorMessage(err));
     } finally {
@@ -200,7 +194,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(link);
       setClipboardFallback(null);
-      toast.success("Invite link copied");
+      toast.success("Link copied");
     } catch {
       setClipboardFallback(link);
       toast.error("Couldn’t copy the invite link. Use the link shown below.");
@@ -221,7 +215,7 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
   };
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
-    { id: "people", label: "Google Contacts" },
+    { id: "people", label: "Add people" },
     { id: "contacts", label: "Contacts", count: contacts.length },
     { id: "requests", label: "Requests", count: incoming.length },
     { id: "invites", label: "Invites", count: invitations.filter((i) => i.status === "pending").length },
@@ -263,51 +257,64 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
         <div
           className={cn(
             "min-h-0 flex-1 px-5 md:px-10",
-            tab === "people" && useScrollableResults ? "overflow-y-auto py-3 md:py-4" : tab === "people" || tab === "contacts" ? "overflow-hidden py-3 md:py-4" : "overflow-y-auto py-4 md:py-6",
+            "overflow-y-auto py-4 md:py-6",
           )}
         >
-          {/* ALL PEOPLE */}
+          {/* ADD PEOPLE: exact lookup, never a directory */}
           {tab === "people" && (
-            <div className={cn("relative flex min-h-0 flex-col", useScrollableResults ? "min-h-full" : "h-full")}>
-              <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-[14px] font-semibold text-[#000533]">Your people on Katalist</p>
-                  <p className="text-[12px] text-[#6a769c]">Only people matched from your Google Contacts appear here.</p>
-                  {googleContacts.syncedAt ? <p className="mt-1 text-[12px] text-[#6a769c]" role="status">{googleContacts.matchedCount} people matched from {googleContacts.contactCount} contacts · Synced {new Date(googleContacts.syncedAt).toLocaleString()}</p> : null}
-                </div>
-                <button type="button" onClick={googleContacts.sync}
-                  disabled={!googleContacts.configured || !googleContacts.ready || googleContacts.syncing}
-                  className="rounded-[9px] bg-[#8454d8] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50">
-                  {googleContacts.syncing ? "Syncing Google Contacts…" : googleContacts.syncedAt ? "Sync Google Contacts" : "Connect Google Contacts"}
-                </button>
+            <div className="mx-auto flex w-full max-w-[640px] flex-col gap-4">
+              <div>
+                <p className="text-[14px] font-semibold text-[#000533]">Add someone you know</p>
+                <p className="text-[12px] text-[#6a769c]">Enter their phone number, email or Katalist link. They choose whether to accept.</p>
               </div>
-              {!googleContacts.isLoading && !googleContacts.configured && !googleContacts.error ? <p className="mb-3 text-[12px] text-[#6a769c]">Google Contacts sync is not configured yet.</p> : null}
-              {googleContacts.error ? <div className="mb-3 flex items-center gap-3 text-[12px] text-red-700" role="alert"><span>{googleContacts.error}</span><button type="button" onClick={googleContacts.retry} className="underline">Retry</button></div> : null}
-              {googleContacts.isLoading ? <p className="mb-3 text-[12px] text-[#6a769c]" role="status">Loading your contacts…</p> : null}
-              {!googleContacts.isLoading && !googleContacts.error && members.length === 0 ? <p className="mb-3 text-[12px] text-[#6a769c]">{googleContacts.syncedAt ? "None of your Google Contacts matched a Katalist account." : "Connect Google Contacts to find people you already know."}</p> : null}
-              <label className="mx-auto mb-3 flex h-11 w-full max-w-[760px] shrink-0 items-center gap-3 rounded-[12px] border border-[#ebecf7] bg-[#fbfaff] px-4 shadow-[0_5px_16px_rgba(60,35,100,0.06)] transition-[border-color,box-shadow] duration-200 focus-within:border-[#b590ee] focus-within:shadow-[0_8px_24px_rgba(109,69,173,0.12)]">
+              <form
+                onSubmit={(event) => { event.preventDefault(); void findPerson(); }}
+                className="flex h-11 w-full items-center gap-3 rounded-[12px] border border-[#ebecf7] bg-[#fbfaff] px-4 focus-within:border-[#b590ee]"
+              >
                 <Search className="h-4 w-4 text-[#8487a7]" />
                 <input
                   value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setSelectedPersonId(null);
-                  }}
-                  placeholder="Search your contacts, or type an email to invite"
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Phone, email or Katalist link"
+                  aria-label="Phone, email or Katalist link"
                   className="min-w-0 flex-1 bg-transparent text-[14px] text-[#000533] outline-none placeholder:text-[#8487a7]"
                 />
-                {query ? <button type="button" onClick={() => { setQuery(""); setSelectedPersonId(null); }} aria-label="Clear search" className="rounded-full p-1 text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#6638ec]"><X className="h-4 w-4" /></button> : null}
-              </label>
+                {query ? <button type="button" onClick={() => { setQuery(""); setLookup({ query: "", status: "idle", person: null }); }} aria-label="Clear" className="rounded-full p-1 text-[#8487a7] hover:bg-[#f0e9fb] hover:text-[#6638ec]"><X className="h-4 w-4" /></button> : null}
+                <button type="submit" disabled={trimmedQuery.length < 3 || lookup.status === "searching"} className="inline-flex h-8 items-center rounded-[9px] bg-[#975ee2] px-3 text-[12px] font-semibold text-white disabled:opacity-50">
+                  {lookup.status === "searching" ? "Finding…" : "Find"}
+                </button>
+              </form>
+
+              {lookup.status === "error" && lookup.query === trimmedQuery ? (
+                <p role="alert" className="text-[12.5px] text-red-700">Couldn’t look that up. Check your connection and try again.</p>
+              ) : null}
+              {lookupDone && lookup.person ? (
+                <div className="flex flex-wrap items-center gap-3 rounded-[12px] border border-[#ebecf7] px-3 py-3">
+                  <PersonAvatar name={lookup.person.display_name} initials={lookup.person.display_name.slice(0, 2).toUpperCase()} src={lookup.person.avatar_url} size={40} />
+                  <p className="min-w-0 flex-1 truncate text-[14px] font-semibold text-[#000533]">{lookup.person.display_name}</p>
+                  {lookup.person.state === "self" ? <span className="text-[12px] text-[#6a769c]">That’s you</span>
+                    : lookup.person.state === "connected" ? <span className="rounded-full bg-[#f2ecfa] px-2.5 py-1 text-[12px] font-medium text-[#7045a4]">Connected</span>
+                    : lookup.person.state === "pending_out" ? <span className="rounded-full bg-[#f2ecfa] px-2.5 py-1 text-[12px] font-medium text-[#7045a4]">Requested</span>
+                    : lookup.person.state === "pending_in" && lookup.person.request_id ? (
+                      <button type="button" disabled={busyId === lookup.person.request_id} onClick={() => void respond(lookup.person!.request_id!, true)} className="inline-flex h-8 items-center gap-1 rounded-[9px] bg-[#975ee2] px-3 text-[12px] font-semibold text-white disabled:opacity-50"><Check className="h-3.5 w-3.5" /> Accept their request</button>
+                    ) : (
+                      <button type="button" disabled={busyId === lookup.person.profile_id} onClick={() => void connect({ id: lookup.person!.profile_id, name: lookup.person!.display_name })} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-[#975ee2] px-3 text-[12px] font-semibold text-white disabled:opacity-50"><UserPlus className="h-3.5 w-3.5" /> Connect</button>
+                    )}
+                </div>
+              ) : null}
+              {lookupDone && !lookup.person && !showInviteCta ? (
+                <p className="text-[12.5px] text-[#6a769c]">No Katalist account matches that exactly.</p>
+              ) : null}
 
               {/* Not on Katalist → offer an email invite inline. */}
               {showInviteCta && (
-                <div className="mb-2 flex items-center gap-3 rounded-[10px] border border-dashed border-[#d9c9f6] bg-[#faf7ff] px-3 py-2.5">
+                <div className="flex items-center gap-3 rounded-[10px] border border-dashed border-[#d9c9f6] bg-[#faf7ff] px-3 py-2.5">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f0e9fb] text-[#6638ec]">
                     <Mail className="h-4 w-4" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] font-semibold text-[#000533]">{trimmedQuery}</p>
-                    <p className="text-[12px] text-[#6a769c]">Not in your synced contacts — invite by email</p>
+                    <p className="text-[12px] text-[#6a769c]">Not on Katalist yet — invite by email</p>
                   </div>
                   <button
                     type="button"
@@ -319,66 +326,32 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                   </button>
                 </div>
               )}
+
+              <div className="rounded-[12px] border border-[#ebecf7] px-3 py-3">
+                <p className="text-[12px] font-semibold uppercase tracking-wide text-[#8487a7]">Your Katalist link</p>
+                <p className="mt-0.5 text-[12px] text-[#6a769c]">Share it so people can send you a request. Opening it never connects anyone.</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Link2 className="h-4 w-4 shrink-0 text-[#8487a7]" />
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-[#3d3f74]">{myHandle ? connectLink(myHandle) : "Loading…"}</span>
+                  <button type="button" disabled={!myHandle} onClick={() => myHandle && void copyLink(connectLink(myHandle))} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#ebecf7] px-2.5 text-[12px] font-medium text-[#3d3f74] hover:border-[#975ee2] disabled:opacity-50">
+                    <Copy className="h-3.5 w-3.5" /> Copy
+                  </button>
+                </div>
+              </div>
               {clipboardFallback ? (
-                <div className="mb-3 rounded-[10px] border border-[#e7def3] bg-[#faf7ff] p-3" role="alert">
+                <div className="rounded-[10px] border border-[#e7def3] bg-[#faf7ff] p-3" role="alert">
                   <p className="mb-1 text-[12px] font-medium text-[#563c7e]">Copy the invite link manually:</p>
                   <input readOnly value={clipboardFallback} aria-label="Invite link fallback" onFocus={(event) => event.currentTarget.select()} className="w-full rounded-[8px] border border-[#ebecf7] bg-white px-2 py-1.5 text-[12px] text-[#3d3f74] outline-none focus:border-[#975ee2]" />
                 </div>
               ) : null}
-
-              {trimmedQuery && people.length === 0 && !showInviteCta ? (
-                <p className="pointer-events-none absolute left-0 right-0 top-16 z-50 text-center text-[12.5px] text-[#6a769c]">No people found.</p>
-              ) : null}
-
-              {useScrollableResults ? (
-                <div className="min-h-0 flex-1" aria-label={`${people.length} matching people`}>
-                  <p className="mb-2 px-2 text-[12px] font-medium text-[#8487a7]" aria-live="polite">{people.length} people found</p>
-                  <div className="grid grid-cols-1 gap-1 xl:grid-cols-2">
-                    {people.map((person) => (
-                      <Row
-                        key={person.id}
-                        member={person}
-                        online={online.has(person.id)}
-                        busy={busyId === person.id}
-                        onMessage={() => void openDm(person, false)}
-                        onCall={() => void openDm(person, true)}
-                        trailing={contactIds.has(person.id) ? <span className="rounded-full bg-[#f2ecfa] px-2.5 py-1 text-[12px] font-medium text-[#7045a4]">Contact</span> : outgoingIds.has(person.id) ? <span className="rounded-full bg-[#f2ecfa] px-2.5 py-1 text-[12px] font-medium text-[#7045a4]">Requested</span> : (
-                          <button type="button" disabled={busyId === person.id} onClick={() => void connect(person)} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#e7def3] bg-white px-3 text-[12px] font-medium text-[#563c7e] transition-colors hover:border-[#975ee2] disabled:opacity-50"><UserPlus className="h-3.5 w-3.5" /> Connect</button>
-                        )}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <ContactPhysicsPile
-                  members={physicsMembers}
-                  activePersonId={activePersonId}
-                  resultPersonIds={resultPersonIds}
-                  onlineIds={online}
-                  reduceMotion={reduceMotion}
-                  onSelect={(personId) => {
-                    setQuery("");
-                    setSelectedPersonId(personId);
-                  }}
-                  activeControls={featuredPerson ? (
-                    <>
-                      {!contactIds.has(featuredPerson.id) && !outgoingIds.has(featuredPerson.id) ? (
-                        <button type="button" disabled={busyId === featuredPerson.id} onClick={() => void connect(featuredPerson)} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#e7def3] bg-white px-3 text-[12px] font-medium text-[#563c7e] transition-colors hover:border-[#975ee2] disabled:opacity-50"><UserPlus className="h-3.5 w-3.5" /> Connect</button>
-                      ) : <span className="rounded-full bg-[#f2ecfa] px-2.5 py-1 text-[12px] font-medium text-[#7045a4]">{contactIds.has(featuredPerson.id) ? "Contact" : "Requested"}</span>}
-                      <button type="button" disabled={busyId === featuredPerson.id} onClick={() => void openDm(featuredPerson, false)} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] bg-[#8454d8] px-3 text-[12px] font-semibold text-white transition-transform duration-150 hover:-translate-y-0.5 hover:bg-[#7444c7] disabled:opacity-50"><MessageCircle className="h-3.5 w-3.5" /> Message</button>
-                      <button type="button" disabled={busyId === featuredPerson.id} onClick={() => void openDm(featuredPerson, true)} aria-label={`Call ${featuredPerson.name}`} className="inline-flex h-8 w-8 items-center justify-center rounded-[9px] border border-[#e7def3] bg-white text-[#563c7e] transition-colors hover:border-[#975ee2] disabled:opacity-50"><Phone className="h-3.5 w-3.5" /></button>
-                    </>
-                  ) : null}
-                />
-              )}
             </div>
           )}
 
           {/* CONTACTS */}
           {tab === "contacts" && (
-            <div className="grid h-full min-h-0 content-start grid-cols-1 gap-1 overflow-hidden xl:grid-cols-2 xl:gap-x-6">
+            <div className="grid content-start grid-cols-1 gap-1 xl:grid-cols-2 xl:gap-x-6">
               {contacts.length === 0 ? (
-                <Empty icon={Users} title="No contacts yet" hint="Sync Google Contacts, then connect with people you know." />
+                <Empty icon={Users} title="No contacts yet" hint="Add people by phone, email or their Katalist link." />
               ) : (
                 contacts.map((c) => (
                   <Row
@@ -388,6 +361,12 @@ export function ContactsDialog({ open, onOpenChange }: { open: boolean; onOpenCh
                     busy={busyId === c.id}
                     onMessage={() => void openDm(c, false)}
                     onCall={() => void openDm(c, true)}
+                    trailing={(
+                      <>
+                        <button type="button" disabled={busyId === c.id} onClick={() => void removeContact(c, false)} className="inline-flex h-8 items-center rounded-[9px] border border-[#ebecf7] px-2.5 text-[12px] font-medium text-[#8487a7] hover:text-[#000533] disabled:opacity-50">Disconnect</button>
+                        <button type="button" disabled={busyId === c.id} onClick={() => void removeContact(c, true)} className="inline-flex h-8 items-center rounded-[9px] border border-[#ebecf7] px-2.5 text-[12px] font-medium text-[#8487a7] hover:border-[#e5484d] hover:text-[#e5484d] disabled:opacity-50">Block</button>
+                      </>
+                    )}
                   />
                 ))
               )}

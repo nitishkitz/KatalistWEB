@@ -4,12 +4,6 @@ import { test } from "node:test";
 
 const source = async (file) => readFile(new URL(`../src/${file}`, import.meta.url), "utf8");
 
-test("Google Contacts handles synchronous OAuth failures", async () => {
-  const text = await source("features/contacts/use-google-contacts.ts");
-  assert.match(text, /try\s*\{\s*requestGoogleContactsCode/);
-  assert.match(text, /Google Contacts authorization failed/);
-});
-
 test("team roster does not collapse distinct IDs by display name", async () => {
   const text = await source("features/people/use-team.ts");
   assert.doesNotMatch(text, /seenNames/);

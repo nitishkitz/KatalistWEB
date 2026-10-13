@@ -325,32 +325,22 @@ function listMemberPlugin(): Plugin {
           const { client } = auth;
 
           if (pathOnly === "/api/people/directory") {
-            // Cross-user directory: profiles/actors RLS is "own row only",
-            // so this deliberately uses the admin client - gated on the
-            // auth check above rather than reachable anonymously.
-            const admin = getSupabaseAdmin();
-            const [{ data: profiles }, { data: actors }] = await Promise.all([
-              admin.from("profiles").select("id, email, display_name, avatar_url"),
-              admin.from("actors").select("id, profile_id, kind"),
-            ]);
-
-            const actorByProfile = new Map<string, string>();
-            for (const a of actors ?? []) {
-              if (a.profile_id) actorByProfile.set(a.profile_id, a.id);
-            }
-
-            const list = (profiles ?? []).map((p) => ({
-              id: p.id,
-              profile_id: p.id,
-              actor_id: actorByProfile.get(p.id) || p.id,
+            // Same contract as server/api/people/directory.get.ts: only people
+            // this user may already see, email for self only.
+            const { data, error } = await client.rpc("list_visible_identities" as never);
+            const rows = (error ? [] : (data ?? [])) as Array<{ profile_id: string; actor_id: string | null; display_name: string; avatar_url: string | null; email: string | null; connected: boolean }>;
+            const list = rows.map((p) => ({
+              id: p.profile_id,
+              profile_id: p.profile_id,
+              actor_id: p.actor_id || p.profile_id,
               email: p.email,
-              display_name: p.display_name && p.display_name !== "Someone" ? p.display_name : "Katalist User",
+              display_name: p.display_name,
               avatar_url: p.avatar_url,
+              connected: p.connected,
             }));
-
             res.statusCode = 200;
             res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ ok: true, people: list }));
+            res.end(JSON.stringify({ ok: !error, people: list }));
             return;
           }
 
