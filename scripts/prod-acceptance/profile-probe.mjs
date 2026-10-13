@@ -1,0 +1,14 @@
+import { chromium } from "playwright";
+const SESS = process.argv[2];
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ storageState: `${SESS}/A.state.json`, viewport: { width: 1440, height: 900 } });
+const page = await ctx.newPage();
+const failures = [];
+page.on("response", async (r) => { if (r.status() >= 400 && /supabase|\/api\//.test(r.url())) failures.push(`${r.status()} ${new URL(r.url()).pathname} ${(await r.text().catch(() => "")).slice(0, 160)}`); });
+await page.goto("https://katalist-web.vercel.app/auth", { waitUntil: "networkidle" });
+await page.waitForSelector("#kg-profile-name", { timeout: 20000 });
+await page.fill("#kg-profile-name", "Katalist Verify A");
+await page.getByRole("button", { name: /continue/i }).click();
+await page.waitForTimeout(5000);
+console.log(JSON.stringify({ url: page.url(), note: await page.locator("#kg-profile-note").innerText().catch(() => ""), failures }, null, 2));
+await browser.close();

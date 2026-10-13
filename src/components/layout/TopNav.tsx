@@ -20,14 +20,17 @@ export function TopNav() {
   const { user } = useSession();
   const { data: profile } = useProfile();
 
+  // The saved profile name wins; the Auth metadata keeps the sign-in placeholder.
+  const profileName = profile?.display_name && profile.display_name.toLowerCase() !== "katalist user" ? profile.display_name : null;
   const name =
+    profileName ||
     user?.user_metadata?.display_name ||
     user?.user_metadata?.full_name ||
     user?.email?.split("@")[0] ||
     "You";
 
   const initials =
-    user?.user_metadata?.initials ||
+    (profileName ? null : user?.user_metadata?.initials) ||
     name
       .split(" ")
       .map((n: string) => n[0])
