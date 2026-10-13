@@ -160,3 +160,18 @@ test("the confirm engine runs the agent's new actions only after preview + confi
   assert.equal(notMine.token, null, "a Thing in someone else's court cannot be sorted");
   assert.throws(() => parseActionRequest({ type: "snooze_thing", targetIds: [T], params: { until: "2001-01-01T00:00:00Z" } }), /passed/);
 });
+
+test("production regression: invented Things or people are caught before the answer is shown", async () => {
+  const { unknownTitles, unknownPeople } = await import("../server/lib/coey/agent/agent.ts");
+  assert.deepEqual(unknownTitles('The oldest are "Review Q3 marketing data" and "Verify B send the price list".', ["Verify B send the price list"], ""), ["Review Q3 marketing data"]);
+  assert.deepEqual(unknownPeople("sent to Priya, and one with Bharat KTest from Monday", ["Bharat KTest", "Avani KTest"]), ["Priya"]);
+  const { fetchImpl } = sarvam([call("find_things", { relation: "i_sent" }), { content: 'Nudge "Confirm venue for team offsite" with Priya.' }, { content: 'Nudge "Confirm venue for team offsite" with Priya.' }]);
+  const a = await runAgent({ question: "who needs a nudge", history: [], mode: "work" }, { client: null, userId: "me", apiKey: "k", model: "m", fetchImpl, workspace: workspace() }, () => {}, new AbortController().signal);
+  assert.equal(a, null, "never shown; the older path answers");
+});
+
+test("an answer that offers a nudge always comes with the button to confirm it", async () => {
+  const { fetchImpl } = sarvam([call("find_things", { relation: "i_sent", state: "past_follow_up" }), { content: '"to-avani" is past its follow-up time. I can nudge it — tap to confirm.' }]);
+  const a = await runAgent({ question: "who needs a nudge", history: [], mode: "work" }, { client: null, userId: "me", apiKey: "k", model: "m", fetchImpl, workspace: workspace() }, () => {}, new AbortController().signal);
+  assert.deepEqual(a.actions.map((x) => [x.type, x.target_ids]), [["prepare_nudge", ["to-avani"]]]);
+});

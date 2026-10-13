@@ -47,10 +47,7 @@ function BucketsPage() {
     <AppShell>
       <div className="font-['Inter',sans-serif]">
         <div className="mb-[14px] flex min-h-[58px] items-center justify-between gap-4">
-          <div className="flex flex-col gap-[1.4px] leading-normal">
-            <h1 className="text-[34.56px] font-bold text-[#100d36]">Buckets</h1>
-            <p className="text-[15.12px] text-[#7a81ab]">Organize your things, lists and notes in one place.</p>
-          </div>
+          <h1 className="text-[34.56px] font-bold leading-normal text-[#100d36]">Buckets</h1>
           <button
             type="button"
             onClick={() => setCreating(true)}

@@ -80,6 +80,29 @@ export function ungroundedNumbers(answer: string, question: string, toolText: st
   return [...new Set((stripped.match(NUMBER) ?? []).filter((n) => !allowed.has(norm(n))))];
 }
 
+/** Quoted Thing names that no tool returned (the model must not invent Things). */
+export function unknownTitles(answer: string, known: string[], extra: string): string[] {
+  const k = known.map(fold);
+  const overlap = (f: string, t: string) => { const w = f.split(" ").filter((x) => x.length > 2); const have = new Set(t.split(" ")); return w.length > 0 && w.filter((x) => have.has(x)).length / w.length >= 0.7; };
+  const ok = (q: string) => { const f = fold(q); return !f || k.some((t) => t.includes(f) || (f.includes(t) && t.length >= 6) || overlap(f, t)) || fold(extra).includes(f); };
+  return [...answer.matchAll(/["“]([^"”\n]{3,140})["”]/g)].map((m) => m[1]!.trim()).filter((q) => !ok(q));
+}
+
+/** People named after "with / to / from / sent to" who are not in the user's data. */
+export function unknownPeople(answer: string, known: string[], toolText = ""): string[] {
+  // A capitalised word is fine when it is a known person or appears in what the tools returned (a place in a title).
+  const names = new Set([...known.flatMap((n) => fold(n).split(" ")), ...fold(toolText).split(" ")].filter((w) => w.length >= 2));
+  const out: string[] = [];
+  for (const m of answer.matchAll(/\b(?:with|to|from|by|for)\s+\**([A-Z][\p{L}]+)/gu)) {
+    const w = fold(m[1]!);
+    if (!names.has(w) && !COMMON.has(w)) out.push(m[1]!);
+  }
+  return [...new Set(out)];
+}
+const COMMON = new Set(["you", "your", "now", "next", "later", "today", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+  "mon", "tue", "wed", "thu", "fri", "sat", "sun", "work", "home", "katalist", "coey", "list", "lists", "bucket", "buckets", "jan", "feb", "mar", "apr", "may", "jun",
+  "jul", "aug", "sep", "oct", "nov", "dec", "the", "this", "that", "catch", "sorted", "normal", "urgent"]);
+
 /** Claims an action already happened (Coey only proposes; the person confirms). */
 export function claimsDone(answer: string): boolean {
   return /^\W*(done|all set)\b|\bI(?:'ve| have| just)? (moved|nudged|sorted|snoozed|caught|reassigned|sent|promised|commented|marked)\b/im.test(answer);
@@ -174,6 +197,12 @@ export async function runAgent(
     const out: string[] = [];
     if (extra.length) out.push(`These numbers were not in any tool result: ${extra.join(", ")}. Use only numbers from the tool results.`);
     if (blames(answer!, names)) out.push("Do not make a person the subject of a failure; speak about the Thing and whose court it is in.");
+    const knownTitles = [...tools.seen].map((id) => ws.thing(id)?.title ?? "").filter(Boolean);
+    const inventedThings = unknownTitles(answer!, knownTitles, `${input.question} ${tools.actions.map((a) => a.label).join(" ")}`);
+    if (inventedThings.length) out.push(`These Thing names were not returned by any tool: ${inventedThings.map((t) => `"${t}"`).join(", ")}. Mention only Things the tools returned.`);
+    const knownPeople = [ws.viewerName, ...ws.people.map((p) => p.name), ...ws.things.flatMap((t) => [t.owner, t.holder])];
+    const inventedPeople = unknownPeople(answer!, knownPeople, toolTexts.join(" "));
+    if (inventedPeople.length) out.push(`These people are not in the user's data: ${inventedPeople.join(", ")}. Mention only people the tools returned.`);
     if (tools.actions.length && claimsDone(answer!)) out.push("Write it as an offer, e.g. \"Tap Nudge … to send it.\" — the button does it when the user taps.");
     return out;
   };
@@ -192,6 +221,11 @@ export async function runAgent(
   const folded = fold(answer);
   const named = [...tools.seen].filter((id) => { const t = ws.thing(id); return t && t.title.length > 3 && folded.includes(fold(t.title)); });
   const rows = (named.length ? named : lastList).filter(visible).slice(0, 20);
+  // The answer offers an action ("I can nudge both… tap to confirm") but proposed none: propose it for the
+  // Things it names. Still only a proposal; the tool applies the same rights checks.
+  if (!tools.actions.length && named.length && /\b(nudge|chase|follow up)\b/i.test(input.question) && /\b(?:I can|I could|want me to|shall I|tap)\b[^.?!]*\bnudge\b/i.test(answer)) {
+    await tools.run("propose_action", { type: "nudge", thing_ids: named.slice(0, 20) });
+  }
   return {
     schema_version: "katalist.assistant.answer.v1",
     intent: "agent_answer",
