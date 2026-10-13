@@ -187,12 +187,12 @@ test("T8 / L10 V2.2: urgent but 3 weeks out → asks, shown as Next", () => {
   assert.equal(answered.response.interrupt, null);
 });
 
-test("T4 / L6 F3: breakfast with Ravi at 20:00 → ghost 09:00 tomorrow, Home, Next until accepted, then Now", () => {
+test("T4 / L6 F3: breakfast with Ravi at 20:00 → ghost 09:00 tomorrow, stays in the mode it was tossed from, Next until accepted, then Now", () => {
   const text = "Breakfast with Ravi";
   const t = thing({ action: "Breakfast with Ravi", participants: [{ mention: "Ravi", role: "mentioned" }], activity_type: "meal.breakfast" });
   const now = at("2026-10-13", "20:00");
   const p = plan(text, [t], { now });
-  assert.equal(p.things[0].draft.mode, "home");
+  assert.equal(p.things[0].draft.mode, "work", "production bug: Things tossed in Work vanished into Home");
   assert.equal(local(p.things[0].draft.inferredTime.at), "2026-10-14 09:00");
   assert.equal(p.things[0].lane.lane, "next");
   assert.equal(p.things[0].lane.rule, "L6");

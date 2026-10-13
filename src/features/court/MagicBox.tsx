@@ -106,6 +106,8 @@ export function MagicBox({
   // never revoke a retained draft's attachment preview, only an explicit
   // remove or a genuinely completed/cleared Toss should.
   const fileOwnerKey = `magic-box:${draftEntityId}`;
+  // The original File for each attached chip, so a live Toss can upload it to storage.
+  const fileObjects = useRef(new Map<string, File>());
   // T09 fix: file processing and Toss are async and can outlive a
   // destination switch (Work<->Home, or a different List) that happens
   // while they're in flight -- without this guard, a slow upload or Toss
@@ -314,6 +316,7 @@ export function MagicBox({
       // List/context the user has since switched to.
       if (epochRef.current !== opEpoch) return;
       acquireBlobUrl(processed.url, fileOwnerKey);
+      fileObjects.current.set(processed.id, file);
       setAttachedFiles((prev) => [...prev, processed]);
       applyFirstAsTitleIfEmpty(processed);
       flashMotion("attachment", 630);
@@ -355,10 +358,12 @@ export function MagicBox({
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+    // Copy first: input.files is live, and clearing the value empties it. Clearing
+    // before copying silently dropped every picked file.
+    const files = Array.from(e.target.files ?? []);
     if (fileInputRef.current) fileInputRef.current.value = "";
-    await processFiles(Array.from(files));
+    if (files.length === 0) return;
+    await processFiles(files);
   };
 
   const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -591,7 +596,7 @@ export function MagicBox({
   };
 
   type SendResult =
-    | { kind: "created"; createdIds: string[]; title: string; bucketFailedIds: string[] }
+    | { kind: "created"; createdIds: string[]; title: string; bucketFailedIds: string[]; uploadFailed?: string[] }
     | { kind: "ask"; question: string; query: import("@/domain/coey/draft").DraftPlan["question"] }
     | { kind: "paused" }
     | { kind: "unavailable"; reason: string };
@@ -599,7 +604,11 @@ export function MagicBox({
   const mutation = useMutation({
     mutationFn: async (input: { privateCapture?: boolean; selections?: ComposerSelections } = {}): Promise<SendResult> => {
       const files = attachedFiles.length > 0 ? attachedFiles : undefined;
-      const common = { mode: context, listId: effectiveListId, files, checkIds: [] as string[] };
+      // Live saves upload real attachments after the Thing exists; only files whose
+      // original is gone (a restored draft) fall back to the inline file list.
+      const uploadable = (files ?? []).filter((f) => fileObjects.current.has(f.id));
+      const inlineOnly = (files ?? []).filter((f) => !fileObjects.current.has(f.id));
+      const common = { mode: context, listId: effectiveListId, files: inlineOnly.length ? inlineOnly : undefined, checkIds: [] as string[] };
       const typed = value.trim();
       let items: Array<Record<string, unknown>>;
       let key: string;
@@ -615,7 +624,7 @@ export function MagicBox({
         if (!attachedFiles.length && !references.length) return { kind: "paused" };
         const title = attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "Shared Things";
         items = [{ title, text_raw: title, kind: "task", mode: context, list_id: effectiveListId ?? null, lane: "next", rule_id: "C1+L8",
-          notes: files ? JSON.stringify({ files }) : null }];
+          notes: inlineOnly.length ? JSON.stringify({ files: inlineOnly }) : null }];
         key = composer.idempotencyKey({ dismissed: ["attachment-only"] });
       } else if (input.privateCapture) {
         items = [privateCaptureItem(value, common)];
@@ -635,12 +644,22 @@ export function MagicBox({
 
       const result = await commitCoeyItems(key, items, references.length ? references : undefined);
       const createdIds = result.things.map((t) => t.thing_id);
+      const uploadFailed: string[] = [];
+      if (!result.replayed && uploadable.length) {
+        const { uploadThingAttachment } = await import("@/features/things/attachments");
+        for (const thingId of createdIds) {
+          for (const f of uploadable) {
+            try { await uploadThingAttachment(thingId, fileObjects.current.get(f.id)!); }
+            catch { uploadFailed.push(f.name); }
+          }
+        }
+      }
       const bucketFailedIds: string[] = [];
       if (effectiveBucketId && !result.replayed && !input.privateCapture) {
         const links = await Promise.allSettled(createdIds.map((id) => rpcAddToBucket(effectiveBucketId, id)));
         links.forEach((link, index) => { if (link.status === "rejected") bucketFailedIds.push(createdIds[index]!); });
       }
-      return { kind: "created", createdIds, title: String(items[0]?.title ?? "New Thing"), bucketFailedIds };
+      return { kind: "created", createdIds, title: String(items[0]?.title ?? "New Thing"), bucketFailedIds, uploadFailed };
     },
     onMutate: () => ({ epoch: getIdentityEpoch(qc).epoch, opEpoch: epochRef.current, draftFingerprint: currentDraftFingerprint.current }),
     onSuccess: async (result, _vars, mutationContext) => {
@@ -677,6 +696,7 @@ export function MagicBox({
         setValue("");
         composer.reset();
         releaseAllBlobUrlsForOwner(fileOwnerKey);
+        fileObjects.current.clear();
         setAttachedFiles([]);
         setReferences([]);
         setFailedAttachments([]);
@@ -684,6 +704,9 @@ export function MagicBox({
         window.setTimeout(() => setTossed(false), 240);
       }
       if (stillSameDestination) flashMotion("success", 380);
+      if (result.uploadFailed?.length) {
+        toast.warning(`Saved, but ${result.uploadFailed.length === 1 ? `“${result.uploadFailed[0]}”` : `${result.uploadFailed.length} files`} could not be uploaded. Open the Thing to attach again.`);
+      }
       const count = result.createdIds.length;
       if (result.bucketFailedIds.length > 0 && effectiveBucketId) {
         const bucketId = effectiveBucketId;

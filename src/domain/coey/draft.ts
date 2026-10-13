@@ -164,7 +164,9 @@ export type BuildInput = {
 function buildOne(thing: InterpretedThing, input: BuildInput, timeIssues: TimeIssue[], index: number) {
   const { text, selections, now, cal } = input;
   const kind = selections.kindOverride ?? thing.kind;
-  const mode: Mode = thing.mode ?? (thing.activity_type && PRIORS[thing.activity_type]?.mode) ?? input.mode;
+  // A Thing lands in the mode the user tossed it from (Work or Home). The model's or a
+  // prior's guess never moves it to the other Court, where it would seem to vanish.
+  const mode: Mode = input.mode;
   const participants = thing.participants
     .filter((p) => grounded(text, p.mention))
     .map((p) => resolveMention(p.mention, p.role, input.candidates, input.viewer, selections));
