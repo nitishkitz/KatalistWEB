@@ -17,7 +17,7 @@ const thing = (id, owner, holder, over = {}) => ({
   owner_actor_id: owner, owner: { [ME]: "You", [AVANI]: "Avani Rao", [RAVI1]: "Ravi Kumar", [RAVI2]: "Ravi Teja" }[owner],
   holder_actor_id: holder, holder: { [ME]: "You", [AVANI]: "Avani Rao", [RAVI1]: "Ravi Kumar", [RAVI2]: "Ravi Teja" }[holder],
   sent_by_me: owner === ME && holder !== ME, in_my_court: holder === ME, open: true, lane: holder === ME ? "next" : null,
-  concern: owner === ME && holder !== ME ? "not_caught" : null, promise_at: null, snoozed_until: null, bucket_ids: [], can_nudge_now: owner === ME && holder !== ME, ...over,
+  concern: owner === ME && holder !== ME ? "not_caught" : null, promise_at: null, snoozed_until: null, bucket_ids: [], can_nudge_now: owner === ME && holder !== ME, files: [], ...over,
 });
 function workspace() {
   const ws = new Workspace(null, "me", NOW);
@@ -34,7 +34,7 @@ function workspace() {
     things: [
       thing("from-avani-1", AVANI, ME), thing("from-avani-2", AVANI, ME, { acknowledgement: "caught", status: "under_progress" }),
       thing("to-avani", ME, AVANI, { concern: "stale" }), thing("to-ravi", ME, RAVI1), thing("to-ravi-fresh", ME, RAVI1, { can_nudge_now: false }),
-      thing("mine", ME, ME), thing("done", ME, ME, { status: "sorted", open: false, sorted_at: iso("2026-10-13") }),
+      thing("mine", ME, ME, { files: [{ name: "site photo.jpg", kind: "image" }, { name: "quote.pdf", kind: "pdf" }] }), thing("done", ME, ME, { status: "sorted", open: false, sorted_at: iso("2026-10-13") }),
     ],
   });
   return ws;
@@ -175,4 +175,14 @@ test("an answer that offers a nudge always comes with the button to confirm it",
   const { fetchImpl } = sarvam([call("find_things", { relation: "i_sent", state: "past_follow_up" }), { content: '"to-avani" is past its follow-up time. I can nudge it — tap to confirm.' }]);
   const a = await runAgent({ question: "who needs a nudge", history: [], mode: "work" }, { client: null, userId: "me", apiKey: "k", model: "m", fetchImpl, workspace: workspace() }, () => {}, new AbortController().signal);
   assert.deepEqual(a.actions.map((x) => [x.type, x.target_ids]), [["prepare_nudge", ["to-avani"]]]);
+});
+
+test("production regression: “how many things have images” counts attached images, not the word “images”", async () => {
+  const { fileKind } = await import("../server/lib/coey/agent/workspace.ts");
+  assert.deepEqual(["a.PNG", "scan.pdf", "sheet.xlsx", "clip.mov", "notes.docx", "x.bin"].map((n) => fileKind(n)), ["image", "pdf", "spreadsheet", "video", "document", "other"]);
+  assert.equal(fileKind("upload", "image/jpeg"), "image");
+  const tools = new AgentTools(workspace(), "work");
+  const r = (await run(tools, "find_things", { has_files: "image", state: "any" })).result;
+  assert.equal(r.total, 1);
+  assert.deepEqual(r.things[0].files, ["site photo.jpg (image)", "quote.pdf (pdf)"]);
 });

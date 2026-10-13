@@ -58,6 +58,7 @@ export function systemPrompt(ws: Workspace, mode: "work" | "home") {
     "- About one Thing (summary, comments, files, history): find it, then get_thing.",
     "- \"pending with X\" / \"what's with X\": both what is with X and what X sent the user; find_things with person and relation any returns that breakdown.",
     "- \"sent me today\" / \"new today\": date_field created. \"due today\": date_field due.",
+    "- Files, images, photos, PDFs, attachments: find_things has_files (image, pdf, document, spreadsheet, video or any), state any unless they say open.",
     "- For a request on several Things (\"catch everything Avani sent\"), pass all their ids in one propose_action thing_ids.",
     "- Field values like waiting_for_catch or in_progress are internal: write them as plain words (waiting for you to catch, in progress). Never mention tools, limits or \"rows shown\".",
     "- can_nudge_now false means it is too soon to nudge that Thing (it was sent or changed only a few hours ago, or nudged recently); say so instead of offering a nudge, and offer one that can be nudged if any.",

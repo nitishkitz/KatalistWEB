@@ -38,6 +38,7 @@ export const TOOL_DEFINITIONS = [
           list: nullable({ type: "string", description: "List name" }),
           bucket: nullable({ type: "string", description: "Bucket name" }),
           text: nullable({ type: "string", description: "Words in the Thing title or notes" }),
+          has_files: nullable({ type: "string", enum: ["any", "image", "pdf", "document", "spreadsheet", "video"], description: "Only Things with attached files of this kind (\"any\" = any file)" }),
           date_field: nullable({ type: "string", enum: ["due", "created", "sorted", "updated"] }),
           from: nullable({ type: "string", description: "First local date, YYYY-MM-DD, inclusive" }),
           to: nullable({ type: "string", description: "Last local date, YYYY-MM-DD, inclusive" }),
@@ -183,6 +184,7 @@ export class AgentTools {
       lane: t.lane, due: this.local(t.due_at), promised_for: this.local(t.promise_at), follow_up: t.concern ? FOLLOW_UP[t.concern] ?? t.concern : null,
       snoozed_until: this.local(t.snoozed_until),
       ...(t.sent_by_me && t.open ? { can_nudge_now: t.can_nudge_now } : {}),
+      ...(t.files.length ? { files: t.files.slice(0, 5).map((f) => `${f.name} (${f.kind})`), file_count: t.files.length } : {}),
       created: this.local(t.created_at)?.slice(4, 14) ?? null, sorted_on: this.local(t.sorted_at)?.slice(4, 14) ?? null,
     };
   }
@@ -255,6 +257,8 @@ export class AgentTools {
       const words = fold(text).split(" ").filter((w) => w.length > 2);
       things = things.filter((t) => { const hay = fold(`${t.title} ${t.notes ?? ""}`); return words.every((w) => hay.includes(w)); });
     }
+    const hasFiles = str(a.has_files);
+    if (hasFiles) things = things.filter((t) => t.files.some((f) => hasFiles === "any" || f.kind === hasFiles));
     const field = str(a.date_field);
     const from = this.day(str(a.from)), to = this.day(str(a.to), true);
     if (from !== null || to !== null) {
@@ -311,17 +315,16 @@ export class AgentTools {
     const t = this.findOne(a);
     if (!t) return { result: { error: "No single Thing matches. Use find_things with text to see candidates." }, thingIds: [], status: "Looking for that Thing" };
     const c = this.ws.client;
-    const [comments, events, files, nudges] = await Promise.all([
+    const [comments, events, nudges] = await Promise.all([
       c.from("thing_comments").select("author_actor_id,body,created_at").eq("thing_id", t.id).is("deleted_at", null).order("created_at", { ascending: false }).limit(10),
       c.from("thing_activity").select("actor_id,event,detail,created_at").eq("thing_id", t.id).order("created_at", { ascending: false }).limit(15),
-      c.from("thing_attachments").select("file_name,mime_type,status").eq("thing_id", t.id).eq("status", "ready").limit(20),
       c.from("nudges").select("created_at").eq("thing_id", t.id).order("created_at", { ascending: false }).limit(10),
     ]);
     const name = (id: unknown) => this.nameOf(id);
     return {
       result: {
         thing: { ...this.compact(t), notes: t.notes, caught_on: this.local(t.caught_at), updated: this.local(t.updated_at), sent_by_user: t.sent_by_me, in_users_court: t.in_my_court },
-        files: (files.data ?? []).map((f) => (f as { file_name: string }).file_name),
+        files: t.files.map((f) => `${f.name} (${f.kind})`),
         comments: ((comments.data ?? []) as Array<{ author_actor_id: string; body: string; created_at: string }>).map((r) => ({ by: name(r.author_actor_id), at: this.local(r.created_at), untrusted_text: String(r.body ?? "").replace(/\s+/g, " ").slice(0, 300) })),
         history: ((events.data ?? []) as Array<{ actor_id: string; event: string; detail: Record<string, unknown> | null; created_at: string }>).map((e) => ({ at: this.local(e.created_at), by: name(e.actor_id), what: summarizeEvent(e.event, e.detail, name) })),
         // §13.2: nudge history shows times only, never who asked.

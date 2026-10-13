@@ -40,7 +40,20 @@ export type WsThing = {
   bucket_ids: string[];
   /** The server would accept a nudge right now (list_nudgeable_things: timing, cooldown, rights). */
   can_nudge_now: boolean;
+  /** Files on the Thing (stored attachments, plus older inline files kept in notes). */
+  files: Array<{ name: string; kind: FileKind }>;
 };
+
+export type FileKind = "image" | "pdf" | "document" | "spreadsheet" | "video" | "other";
+export function fileKind(name: string, mime?: string | null, type?: string | null): FileKind {
+  const m = `${mime ?? ""} ${type ?? ""} ${name}`.toLowerCase();
+  if (/image|\b(png|jpe?g|gif|webp|heic|svg)\b|\.(png|jpe?g|gif|webp|heic|svg)$/.test(m)) return "image";
+  if (/pdf/.test(m)) return "pdf";
+  if (/video|\.(mp4|mov|webm)$/.test(m)) return "video";
+  if (/sheet|excel|csv|\.(xlsx?|csv)$/.test(m)) return "spreadsheet";
+  if (/word|docx?|text|\.(docx?|txt|pptx?)$/.test(m)) return "document";
+  return "other";
+}
 
 export type WsPerson = { actor_id: string; profile_id: string; name: string; connected: boolean; me: boolean };
 
@@ -111,7 +124,7 @@ export class Workspace {
     };
     const rows = (things.data ?? []) as Row[];
     const thingIds = rows.map((r) => r.id);
-    const [schedules, bucketItems] = await Promise.all([this.schedules(thingIds), this.bucketItems(thingIds)]);
+    const [schedules, bucketItems, attachments] = await Promise.all([this.schedules(thingIds), this.bucketItems(thingIds), this.attachments(thingIds)]);
     const me = this.myActorId;
     this.things = rows.map((r) => {
       const s = schedules.get(r.id);
@@ -124,8 +137,19 @@ export class Workspace {
         lane = decided ?? ((r.assignee_personal_pace ?? r.owner_importance ?? "next") as WsThing["lane"]);
         if (snoozed.has(r.id)) lane = "hidden";
       }
+      // Older Things keep inline files in notes as JSON; that is not note text.
+      let notes: string | null = r.notes;
+      const inline: Array<{ name: string; kind: FileKind }> = [];
+      if (r.notes?.trim().startsWith("{")) {
+        try {
+          const parsed = JSON.parse(r.notes) as { files?: Array<{ name?: string; type?: string; mimeType?: string }>; text?: string };
+          notes = typeof parsed.text === "string" ? parsed.text : null;
+          for (const f of parsed.files ?? []) if (f.name) inline.push({ name: f.name, kind: fileKind(f.name, f.mimeType, f.type) });
+        } catch { /* plain text */ }
+      }
+      const stored = attachments.get(r.id) ?? [];
       return {
-        id: r.id, title: r.title, notes: r.notes ? r.notes.slice(0, 500) : null, mode: r.context, list_id: r.list_id,
+        id: r.id, title: r.title, notes: notes ? notes.slice(0, 500) : null, mode: r.context, list_id: r.list_id,
         list: r.list_id ? listName.get(r.list_id) ?? null : null, status: r.work_status, acknowledgement: r.acknowledgement,
         due_at: r.due_at, created_at: r.created_at, updated_at: r.updated_at, sorted_at: r.sorted_at, caught_at: r.caught_at,
         owner_actor_id: r.owner_actor_id, owner: nameOf.get(r.owner_actor_id) ?? "Katalist member",
@@ -136,6 +160,7 @@ export class Workspace {
         snoozed_until: snoozed.get(r.id) ?? null,
         bucket_ids: bucketItems.get(r.id) ?? [],
         can_nudge_now: canNudge.has(r.id),
+        files: stored.length ? stored : inline,
       };
     });
   }
@@ -161,6 +186,17 @@ export class Workspace {
       for (const s of rows) out.set(s.thingId, { schedule: s, cal: (s.holderProfileId && cals.get(s.holderProfileId)) || fallback });
     } catch {
       // Without schedules, lanes fall back to the stored pace and concerns are unknown.
+    }
+    return out;
+  }
+
+  private async attachments(ids: string[]) {
+    const out = new Map<string, Array<{ name: string; kind: FileKind }>>();
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data } = await this.client.from("thing_attachments").select("thing_id,file_name,mime_type").in("thing_id", ids.slice(i, i + 200)).eq("status", "ready").limit(2000);
+      for (const row of (data ?? []) as Array<{ thing_id: string; file_name: string; mime_type: string }>) {
+        out.set(row.thing_id, [...(out.get(row.thing_id) ?? []), { name: row.file_name, kind: fileKind(row.file_name, row.mime_type) }]);
+      }
     }
     return out;
   }

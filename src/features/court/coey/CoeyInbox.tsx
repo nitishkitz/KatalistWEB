@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Thing } from "@/domain/thing";
 import { useCourt } from "../use-court";
 import { useCoeyContext } from "./use-coey-context";
+import { rpcCancelThing, rpcReopenThing } from "@/features/things/rpc";
 
 type LooseRpc = (fn: string, args: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
 const rpc = (fn: string, args: Record<string, unknown>) => (supabase.rpc as unknown as LooseRpc)(fn, args);
@@ -45,6 +46,23 @@ export function CoeyInbox({ className }: { className?: string }) {
     void refetch();
   };
 
+  // Inbox captures are the sender's own; deleting cancels the Thing, with Undo.
+  const remove = async (thing: Thing) => {
+    setBusy(thing.id);
+    try {
+      await rpcCancelThing(thing.id, "deleted from Inbox");
+      toast.success("Deleted", {
+        action: { label: "Undo", onClick: () => void rpcReopenThing(thing.id).then(() => { void qc.invalidateQueries({ queryKey: ["court"] }); void refetch(); }).catch(() => toast.error("Couldn’t bring it back.")) },
+      });
+      void qc.invalidateQueries({ queryKey: ["court"] });
+      void refetch();
+    } catch {
+      toast.error("That didn’t work. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <section aria-label="Inbox" className={className}>
       <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2">
@@ -66,6 +84,7 @@ export function CoeyInbox({ className }: { className?: string }) {
                     <>
                       <button type="button" aria-expanded={open === thing.id} onClick={() => setOpen(open === thing.id ? null : thing.id)} className="rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[12px] font-medium text-violet-700 hover:bg-violet-100">Choose a person</button>
                       <button type="button" disabled={busy === thing.id} onClick={() => void act(thing.id, "coey_resolve_holder", { p_thing_id: thing.id, p_holder_profile_id: thing.coey!.viewerProfileId }, "Kept in your Court")} className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[12px] font-medium hover:bg-slate-50 disabled:opacity-50">Keep it for me</button>
+                      <button type="button" aria-label={`Delete ${thing.title}`} disabled={busy === thing.id} onClick={() => void remove(thing)} className="rounded-full border border-slate-200 px-2.5 py-0.5 text-[12px] font-medium text-red-700 hover:border-red-200 hover:bg-red-50 disabled:opacity-50">Delete</button>
                     </>
                   )}
                 </div>
