@@ -132,3 +132,14 @@ test("topics parse strictly; old clients without a topic mean Things; follow-ups
   assert.equal(parseStructuredQuery({ topic: "weather", state: "any", window: "any" }), null);
   assert.equal(mergeFollowUp(q({ topic: "nudge" }), q({ topic: "things", about_person: "Priya" }), true).topic, "nudge");
 });
+
+test("production regression: “who need the nudge the most” ranks Things past follow-up by person, and says what is still waiting otherwise", async () => {
+  const { nudgeAnswer } = await import("../server/lib/coey/ask.ts");
+  const a = nudgeAnswer(facts, q({ topic: "nudge" }), schedules, now);
+  assert.equal(a.intent, "nudge_recommendation");
+  assert.equal(a.answer_markdown, "Most worth a nudge: 1 Thing with **Ravi Kumar** is past its usual follow-up time.");
+  assert.deepEqual(a.groups.map((g) => g.thing_ids), [["sent-to-ravi"]]);
+  assert.equal(a.actions.length, 0, "no nudge button without server eligibility");
+  const calm = nudgeAnswer(facts, q({ topic: "nudge" }), new Map(), now);
+  assert.equal(calm.answer_markdown, "Nothing you sent is past its follow-up time, so no nudge is needed yet. Not caught yet: 1 Thing with Ravi Kumar, 1 Thing with Priya Shah.");
+});

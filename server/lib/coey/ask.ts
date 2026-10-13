@@ -299,3 +299,62 @@ export function progressAnswer(
     citations: [...sorted, ...toCatch, ...late].slice(0, 20).map((t) => ({ type: "thing" as const, id: t.id, label: t.citation_label })),
   };
 }
+
+/**
+ * "Who needs a nudge (the most)?" — from the sender's side of the Things you
+ * sent (§8.2): missed promises first, then Things past their follow-up time,
+ * by person, most first. When none are due, say so and what is still waiting.
+ * Nudge buttons come only from the server's eligibility (cooldowns, rights).
+ */
+export function nudgeAnswer(
+  facts: AssistantFacts,
+  query: StructuredQuery,
+  schedules: Schedules,
+  now = Date.parse(facts.generated_at) || Date.now(),
+): AssistantAnswer {
+  const base = { schema_version: "katalist.assistant.answer.v1" as const, confidence: "high" as const, freshness: facts.freshness };
+  const me = facts.viewer.actor_id ?? "";
+  const sent = facts.things.filter((t) => t.owner_actor_id === me && t.assignee_actor_id && t.assignee_actor_id !== me && !CLOSED.has(t.status));
+  const byHolder = new Map<string, { name: string; missed: string[]; stale: string[]; waiting: string[] }>();
+  for (const t of sent) {
+    const row = byHolder.get(t.assignee_actor_id!) ?? { name: t.assignee_name ?? "someone", missed: [], stale: [], waiting: [] };
+    const s = schedules.get(t.id);
+    const concern = s ? computeSenderConcern(s.schedule, s.cal, now) : null;
+    if (concern === "promise_missed") row.missed.push(t.id);
+    else if (concern === "stale") row.stale.push(t.id);
+    else if (t.acknowledgement === "waiting_for_catch") row.waiting.push(t.id);
+    byHolder.set(t.assignee_actor_id!, row);
+  }
+  const rank = [...byHolder].sort(([, a], [, b]) => b.missed.length * 2 + b.stale.length - (a.missed.length * 2 + a.stale.length));
+  const due = rank.filter(([, r]) => r.missed.length + r.stale.length > 0);
+  const plural = (n: number, one = "Thing") => `${n} ${n === 1 ? one : `${one}s`}`;
+  const eligible = new Map(facts.nudge_recommendations.filter((r) => r.can_nudge).map((r) => [r.actor_id, r]));
+  let answer_markdown: string;
+  if (due.length) {
+    answer_markdown = due.map(([, r], i) => {
+      const n = r.missed.length + r.stale.length;
+      const missed = r.missed.length ? ` (${r.missed.length} missed ${r.missed.length === 1 ? "its" : "their"} promised date)` : "";
+      return `${i === 0 ? "Most worth a nudge: " : ""}${plural(n)} with **${r.name}** ${n === 1 ? "is" : "are"} past ${n === 1 ? "its" : "their"} usual follow-up time${missed}.`;
+    }).join("\n\n");
+  } else {
+    const waiting = rank.filter(([, r]) => r.waiting.length);
+    answer_markdown = "Nothing you sent is past its follow-up time, so no nudge is needed yet." +
+      (waiting.length ? ` Not caught yet: ${waiting.map(([, r]) => `${plural(r.waiting.length)} with ${r.name}`).join(", ")}.` : "");
+  }
+  const shown = due.length ? due : rank.filter(([, r]) => r.waiting.length);
+  return {
+    ...base,
+    intent: "nudge_recommendation",
+    structured_query: query,
+    answer_markdown,
+    groups: shown.map(([actor, r]) => {
+      const ids = due.length ? [...r.missed, ...r.stale] : r.waiting;
+      return { key: `person:${actor}` as const, title: due.length ? `Past follow-up with ${r.name}` : `Not caught yet by ${r.name}`, thing_ids: ids, total: ids.length };
+    }),
+    citations: shown.map(([actor, r]) => ({ type: "person" as const, id: actor, label: r.name })),
+    actions: due.filter(([actor]) => eligible.has(actor)).map(([actor, r]) => ({
+      id: `nudge-${actor}`, type: "prepare_nudge" as const, label: `Prepare nudge for ${r.name}`, requires_confirmation: true,
+      target_ids: eligible.get(actor)!.eligible_thing_ids,
+    })),
+  };
+}

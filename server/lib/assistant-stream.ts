@@ -8,7 +8,7 @@ import {
   type AssistantFacts,
 } from "./assistant";
 import { wantsActivity } from "./assistant-activity";
-import { buildFastAnswer, buildGreetingAnswer, buildOutOfScopeAnswer } from "./assistant-fast-answer";
+import { buildGreetingAnswer, buildOutOfScopeAnswer } from "./assistant-fast-answer";
 import {
   DeadlineError,
   factsCacheKey,
@@ -27,7 +27,7 @@ import {
   type TurnTimings,
 } from "./assistant-turn";
 import type { AssistantConversationTurn } from "./assistant";
-import { groundWindow, loadSchedulesForFacts, mergeFollowUp, parseStructuredQuery, progressAnswer, structuredAnswer, type StructuredQuery } from "./coey/ask";
+import { groundWindow, loadSchedulesForFacts, mergeFollowUp, nudgeAnswer, parseStructuredQuery, progressAnswer, structuredAnswer, type StructuredQuery } from "./coey/ask";
 import { interpretLine } from "./coey/interpret";
 
 export type TurnInput = {
@@ -206,7 +206,7 @@ export async function runCoeyTurn(
     const answer = !input.query
       ? await deps.answer(facts, input.question, input.history, signal, input.personChoice)
       : topic === "nudge"
-        ? { ...buildFastAnswer("nudge_recommendation", facts, input.question), structured_query: input.query }
+        ? nudgeAnswer(facts, input.query, await loadSchedulesForFacts(deps.client, facts))
         : topic === "progress"
           ? progressAnswer(facts, input.query)
           : structuredAnswer(facts, input.query, await loadSchedulesForFacts(deps.client, facts), input.personChoice);
