@@ -41,7 +41,15 @@ const mount = () => {
   const ui = render(h(QueryClientProvider, { client: qc }, h(CoeyResults, { presentation, onOpenThing: (id) => opened.push(id) })));
   return { ui, qc, opened };
 };
-const click = (el) => act(async () => { fireEvent.click(el); await new Promise((r) => setTimeout(r, 30)); });
+// The row loads its RPCs on first use; wait until the action has settled (no pending label).
+const click = (el) => act(async () => {
+  const li = el.closest("li");
+  fireEvent.click(el);
+  for (let i = 0; i < 200; i++) {
+    await new Promise((r) => setTimeout(r, 10));
+    if (!/…/.test(li.textContent) && (li.querySelector('[role="status"],[role="alert"]') || i > 150)) break;
+  }
+});
 const row = (ui, title) => ui.getByRole("button", { name: title }).closest("li");
 
 test("the results show the outcome, counts and grouped rows with their real states", () => {

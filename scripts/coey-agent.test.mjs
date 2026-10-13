@@ -121,7 +121,7 @@ test("an answer that keeps inventing numbers is not shown; the older path answer
 test("a blaming draft is rewritten once before it is shown", async () => {
   const { fetchImpl, sent } = sarvam([call("find_things", { relation: "i_sent" }), { content: "Avani hasn't caught \"to-avani\"." }, { content: "\"to-avani\" is still in Avani's court." }]);
   const a = await runAgent({ question: "what's stuck", history: [], mode: "work" }, { client: null, userId: "me", apiKey: "k", model: "m", fetchImpl, workspace: workspace() }, () => {}, new AbortController().signal);
-  assert.equal(a.answer_markdown, "\"to-avani\" is still in Avani's court.");
+  assert.match(a.answer_markdown, /^"to-avani" is still in Avani's court\.\n\nShowing: Sent by you\.$/, "the shown filters ride along for follow-ups");
   assert.match(sent.at(-1).messages.at(-1).content, /subject of a failure/);
 });
 

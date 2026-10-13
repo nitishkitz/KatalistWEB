@@ -29,7 +29,9 @@ import {
 import type { AssistantConversationTurn } from "./assistant";
 import { groundWindow, loadSchedulesForFacts, mergeFollowUp, nudgeAnswer, parseStructuredQuery, progressAnswer, structuredAnswer, type StructuredQuery } from "./coey/ask";
 import { interpretLine } from "./coey/interpret";
-import { runAgent } from "./coey/agent/agent";
+import { runAgent, splitAnswer } from "./coey/agent/agent";
+import { presentFromGroups } from "./coey/agent/present";
+import { Workspace } from "./coey/agent/workspace";
 
 export type TurnInput = {
   question: string;
@@ -65,6 +67,8 @@ export type TurnDeps = {
   interpretQuestion?: (question: string, history: AssistantConversationTurn[], context: "work" | "home", signal: AbortSignal, previousQuery: StructuredQuery | null) => Promise<StructuredQuery | null>;
   /** Ask as an agent (tools + checked answer). Null means "not available": the older paths answer. */
   agent?: (input: TurnInput, onStatus: (text: string) => void, signal: AbortSignal) => Promise<AssistantAnswer | null>;
+  /** Shows an older Ask answer's lists in the reusable results view. */
+  present?: (answer: AssistantAnswer, mode: "work" | "home") => Promise<AssistantAnswer>;
   log?: (entry: Record<string, unknown>) => void;
 };
 
@@ -95,6 +99,16 @@ export const defaultTurnDeps = (client: SupabaseClient, userId: string): TurnDep
       onStatus,
       signal,
     ),
+  present: async (answer, mode) => {
+    if (process.env.KATALIST_ASK_PRESENTATION?.trim() === "off") return answer;
+    // Keep the older views that have their own controls (nudge picker, person/place choices).
+    if (!answer.groups?.length || ["nudge_recommendation", "person_selection_required", "scope_selection_required"].includes(answer.intent)) return answer;
+    const ws = new Workspace(client, userId);
+    await ws.load();
+    const { heading, description } = splitAnswer(answer.answer_markdown, null);
+    const presentation = presentFromGroups(ws, { heading, description, mode, groups: answer.groups });
+    return presentation.blocks.length ? { ...answer, presentation } : answer;
+  },
   log: (entry) => console.info(JSON.stringify({ evt: "coey_turn", ...entry })),
 });
 
@@ -238,7 +252,9 @@ export async function runCoeyTurn(
           : structuredAnswer(facts, input.query, await loadSchedulesForFacts(deps.client, facts), input.personChoice);
     timer.mark("modelMs");
     if (signal.aborted) return;
-    emitAnswer(answer, resultFacts(facts), decision.kind !== "model");
+    const shown = deps.present ? await deps.present(answer, input.context).catch(() => answer) : answer;
+    if (signal.aborted) return;
+    emitAnswer(shown, resultFacts(facts), decision.kind !== "model");
     finish();
   } catch (error) {
     if (signal.aborted) return;

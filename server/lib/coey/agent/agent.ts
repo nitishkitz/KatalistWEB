@@ -2,7 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, localParts, weekdayOf } from "../../../../src/domain/coey/calendar";
 import type { AssistantAnswer, AssistantConversationTurn } from "../../assistant";
 import { AgentTools, TOOL_DEFINITIONS, todayIn } from "./tools";
-import { buildPresentation } from "./present";
+import { buildPresentation, detailBlock } from "./present";
+import type { ResultBlock } from "../../../../src/domain/coey/presentation";
 import { Workspace } from "./workspace";
 
 /**
@@ -57,6 +58,9 @@ export function systemPrompt(ws: Workspace, mode: "work" | "home") {
     "- \"progress\", \"how did my week go\": find_things state sorted with date_field sorted for the period, find_things date_field created for what came in, and find_things relation in_my_court for what is open. To compare periods, run the same search for each period.",
     "- \"what should I do first\": find_things relation in_my_court lane now sort due_soonest, then lane next.",
     "- About one Thing (summary, comments, files, history): find it, then get_thing.",
+    "- Never write a \"Showing:\" line yourself; the app adds it.",
+    "- Follow-ups (\"only overdue\", \"and Sudheer?\", \"what about Home?\", \"this week instead\") change the previous search: run it again with the same filters plus the change (\"Showing:\" in your previous answer lists them). A new, complete question starts fresh.",
+    "- What changed / history / comments: activity or search_comments. About one Thing: get_thing. Then call the show_answer tool with those refs in results; never write refs in the text.",
     "- \"pending with X\" / \"what's with X\": both what is with X and what X sent the user; find_things with person and relation any returns that breakdown.",
     "- \"sent me today\" / \"new today\": date_field created. \"due today\": date_field due.",
     "- Files, images, photos, PDFs, attachments: find_things has_files (image, pdf, document, spreadsheet, video or any), state any unless they say open.",
@@ -171,6 +175,11 @@ export async function runAgent(
     const msg = await chat(deps, messages, signal, true);
     const calls = (msg.tool_calls ?? []).slice(0, 4);
     if (!calls.length) {
+      // A follow-up answered from memory invents things: make it look again once.
+      if (step === 0 && input.history.length && !toolTexts.length && !/outside|only help/i.test(msg.content ?? "")) {
+        messages.push({ role: "assistant", content: msg.content ?? "" }, { role: "user", content: "Use the tools for this follow-up: run the previous search again with the change, then call show_answer." });
+        continue;
+      }
       answer = strip(msg.content ?? "");
       break;
     }
@@ -197,20 +206,28 @@ export async function runAgent(
     answer = strip(msg.content ?? "");
   }
   if (!answer) return null;
+  // Refs written into the text ("Ref: a1") instead of passed to show_answer: use them, and remove them.
+  const writtenRefs = [...answer.matchAll(/\b(?:refs?|results?)\s*[:=]\s*((?:[rdac]\d+[\s,]*(?:and\s+)?)+)/gi)].flatMap((m) => m[1]!.match(/[rdac]\d+/g) ?? []).filter((r) => tools.hasRef(r));
+  answer = answer.replace(/\(?\b(?:refs?|results?)\s*[:=]\s*(?:[rdac]\d+[\s,]*(?:and\s+)?)+\)?\.?/gi, "").replace(/[ \t]+\n/g, "\n").trim();
+  if (!answer) answer = "Here is what I found.";
 
   // Gates: numbers must come from tools; no blame. One rewrite, then a plain fallback.
   const names = ws.people.filter((p) => !p.me).map((p) => p.name);
   const problems = () => {
     // The dates Coey was told (today, this week) are grounded too.
-    const extra = ungroundedNumbers(answer!, input.question, `${messages[0]!.content as string} ${toolTexts.join(" ")}`);
+    // Earlier answers in this conversation were checked when they were shown, so their facts count too.
+    const earlier = input.history.map((t) => t.content).join(" ");
+    const extra = ungroundedNumbers(answer!, input.question, `${messages[0]!.content as string} ${toolTexts.join(" ")} ${earlier}`);
     const out: string[] = [];
     if (extra.length) out.push(`These numbers were not in any tool result: ${extra.join(", ")}. Use only numbers from the tool results.`);
     if (blames(answer!, names)) out.push("Do not make a person the subject of a failure; speak about the Thing and whose court it is in.");
-    const knownTitles = [...tools.seen].map((id) => ws.thing(id)?.title ?? "").filter(Boolean);
+    // Any Thing a tool returned (rows, history, comments) or an earlier answer named.
+    const readText = fold(`${toolTexts.join(" ")} ${earlier}`);
+    const knownTitles = ws.things.map((t) => t.title).filter((title) => title.length > 2 && readText.includes(fold(title)));
     const inventedThings = unknownTitles(answer!, knownTitles, `${input.question} ${tools.actions.map((a) => a.label).join(" ")}`);
     if (inventedThings.length) out.push(`These Thing names were not returned by any tool: ${inventedThings.map((t) => `"${t}"`).join(", ")}. Mention only Things the tools returned.`);
     const knownPeople = [ws.viewerName, ...ws.people.map((p) => p.name), ...ws.things.flatMap((t) => [t.owner, t.holder])];
-    const inventedPeople = unknownPeople(answer!, knownPeople, toolTexts.join(" "));
+    const inventedPeople = unknownPeople(answer!, knownPeople, `${toolTexts.join(" ")} ${earlier}`);
     if (inventedPeople.length) out.push(`These people are not in the user's data: ${inventedPeople.join(", ")}. Mention only people the tools returned.`);
     if (tools.actions.length && claimsDone(answer!)) out.push("Write it as an offer, e.g. \"Tap Nudge … to send it.\" — the button does it when the user taps.");
     return out;
@@ -229,9 +246,31 @@ export async function runAgent(
   // else the Things the answer names. Records, counts and actions come from the Workspace, not the model.
   const folded = fold(answer);
   const named = [...tools.seen].filter((id) => { const t = ws.thing(id); return t && t.title.length > 3 && folded.includes(fold(t.title)); });
-  const refs = tools.final?.results.length ? tools.final.results : [];
+  let refs = tools.final?.results.length ? tools.final.results : writtenRefs;
+  // Nothing chosen: a history or comment question shows what it read.
+  if (!refs.length) {
+    const last = [...tools.timelines.keys(), ...tools.commentSets.keys()].pop();
+    if (last && !tools.results.size) refs = [last];
+  }
   const fromRefs = refs.flatMap((r) => tools.results.get(r)?.ids ?? []);
-  let ids = fromRefs.length ? fromRefs : named.length ? named : lastList;
+  // Detail, history and comment blocks come from what the tools read, by ref.
+  const extras: ResultBlock[] = [];
+  const detailRefs = refs.filter((r) => tools.details.has(r));
+  // Asked about one Thing and read it, but chose no rows: show that Thing in full.
+  if (!refs.length && tools.details.size === 1 && named.length <= 1) detailRefs.push([...tools.details.keys()][0]!);
+  for (const r of detailRefs) { const b = detailBlock(ws, tools.details.get(r)!); if (b) extras.push(b); }
+  for (const r of refs) {
+    const tl = tools.timelines.get(r);
+    if (tl?.length) extras.push({ type: "timeline", title: "What changed", entries: tl.slice(0, 30) });
+    const cs = tools.commentSets.get(r);
+    if (cs?.length) extras.push({ type: "comments", title: "Comments", entries: cs.slice(0, 20) });
+  }
+  // Rows from the last search when nothing was chosen: show that search's filters too.
+  const lastRef = [...tools.results.keys()].pop();
+  const filterRefs = refs.some((r) => tools.results.has(r)) ? refs : !refs.length && lastRef ? [lastRef] : [];
+  const filters = [...new Set(filterRefs.flatMap((r) => tools.results.get(r)?.filters ?? []))];
+  const detailOnly = extras.length > 0 && !fromRefs.length;
+  let ids = fromRefs.length ? fromRefs : detailOnly ? [] : named.length ? named : lastList;
   const { heading, description } = splitAnswer(answer, tools.final);
   // Rows must match the count the heading states: prefer the search that matched exactly that many.
   const stated = /\b(\d+)\b/.exec(heading);
@@ -241,11 +280,12 @@ export async function runAgent(
   }
   const mixed = ids.some((id) => ws.thing(id)?.in_my_court) && ids.some((id) => ws.thing(id)?.sent_by_me);
   const groupBy = tools.final?.groupBy && tools.final.groupBy !== "none" ? tools.final.groupBy : mixed || ids.length > 4 ? "lane" : "none";
-  const presentation = buildPresentation(ws, { ids, groupBy, heading, description, mode: input.mode, partial: ws.things.length >= 600 });
+  const presentation = buildPresentation(ws, { ids, groupBy, heading, description, mode: input.mode, partial: ws.things.length >= 600, extras, filters });
   return {
     schema_version: "katalist.assistant.answer.v1",
     intent: "agent_answer",
-    answer_markdown: (description ? `**${heading}**\n\n${description}` : answer).slice(0, 4000),
+    // The filters ride along in the text so a follow-up ("only overdue", "and Sudheer?") keeps the context.
+    answer_markdown: `${description ? `**${heading}**\n\n${description}` : answer}${filters.length ? `\n\nShowing: ${filters.join(", ")}.` : ""}`.slice(0, 4000),
     confidence: "high",
     citations: ids.slice(0, 20).flatMap((id) => { const t = ws.thing(id); return t ? [{ type: "thing" as const, id, label: t.title.slice(0, 100) }] : []; }),
     actions: tools.actions.map((a) => ({ id: a.id, type: a.type, label: a.label, requires_confirmation: a.requires_confirmation, target_ids: a.target_ids, params: a.params })),
@@ -263,8 +303,13 @@ export function splitAnswer(answer: string, final: { heading: string; descriptio
     const lines = answer.split(/\n\n/);
     return { heading: clean(lines[0] ?? final.heading), ...(lines.slice(1).join(" ").trim() ? { description: clean(lines.slice(1).join(" ")) } : {}) };
   }
-  const prose = answer.split("\n").filter((l) => !/^\s*([-*•]|\d+\.)\s/.test(l)).join(" ").replace(/\s+/g, " ").trim();
-  const text = clean(prose);
+  // Prose only: list items, list headers ("Open with you (10):") and "Showing:" lines belong to the rows.
+  const lines = answer.split("\n").map((l) => clean(l)).filter((l) => l && !/^\s*([-*•]|\d+\.)\s/.test(l) && !/:\s*$/.test(l) && !/^showing:/i.test(l));
+  const firstLine = lines[0] ?? "";
+  if (firstLine && firstLine.length <= 100 && lines.length > 1) {
+    return { heading: firstLine.replace(/[.]$/, ""), description: lines.slice(1).join(" ").slice(0, 320) };
+  }
+  const text = lines.join(" ").replace(/\s+/g, " ").trim();
   const first = /^(.{3,100}?[.!?])(\s|$)/.exec(text);
   if (first) {
     const rest = text.slice(first[0].length).trim();

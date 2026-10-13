@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CalendarDays, CheckCircle2, ChevronDown, Clock, Loader2, Moon, Paperclip, Play, Send, Users } from "lucide-react";
 import { format, isToday, isTomorrow } from "date-fns";
-import type { CoeyPresentation, CoeyRecord, RecordAction, RecordGroup } from "@/domain/coey/presentation";
+import type { CoeyPresentation, CoeyRecord, RecordAction, RecordGroup, ResultBlock, ResultEntry } from "@/domain/coey/presentation";
 import { cn } from "@/lib/utils";
 import { useRecordActions, type RowState } from "./use-record-actions";
 
@@ -41,6 +41,14 @@ export function CoeyResults({ presentation, onOpenThing }: { presentation: CoeyP
         <h3 className="text-[19px] font-bold leading-snug tracking-[-0.01em] text-slate-900">{presentation.summary.heading}</h3>
         {presentation.summary.description ? <p className="mt-1 text-sm leading-relaxed text-slate-600">{presentation.summary.description}</p> : null}
       </div>
+      {presentation.scope.filters?.length ? (
+        <div className="flex flex-wrap items-center gap-1.5" aria-label="Showing">
+          <span className="text-xs text-slate-500">Showing</span>
+          {presentation.scope.filters.map((f) => (
+            <span key={f} className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-medium text-violet-700">{f}</span>
+          ))}
+        </div>
+      ) : null}
       {presentation.blocks.map((block, i) =>
         block.type === "counts" ? (
           <div key={i} className="flex flex-wrap gap-1.5" aria-label="Counts">
@@ -50,6 +58,10 @@ export function CoeyResults({ presentation, onOpenThing }: { presentation: CoeyP
               </span>
             ))}
           </div>
+        ) : block.type === "thing_detail" ? (
+          <ThingDetail key={i} block={block} actions={actions} onOpenThing={onOpenThing} />
+        ) : block.type === "timeline" || block.type === "comments" ? (
+          <Entries key={i} title={block.title} entries={block.entries} quote={block.type === "comments"} onOpenThing={onOpenThing} />
         ) : block.type === "notice" ? (
           <p key={i} role="status" className={cn("rounded-lg px-3 py-2 text-xs", block.tone === "warning" ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600")}>{block.text}</p>
         ) : null,
@@ -66,6 +78,55 @@ export function CoeyResults({ presentation, onOpenThing }: { presentation: CoeyP
 }
 
 type Actions = ReturnType<typeof useRecordActions>;
+
+const stamp = (iso: string) => format(new Date(iso), isToday(new Date(iso)) ? "'Today,' h:mm a" : "EEE d MMM, h:mm a");
+
+function ThingDetail({ block, actions, onOpenThing }: { block: Extract<ResultBlock, { type: "thing_detail" }>; actions: Actions; onOpenThing: (id: string) => void }) {
+  const record = actions.current(block.record);
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label={`About ${record.title}`}>
+      <ul><RecordRow record={record} row={actions.rows[record.id] ?? {}} onRun={(kind) => void actions.run(record, kind)} onOpenThing={onOpenThing} /></ul>
+      <div className="space-y-3 border-t border-slate-100 bg-slate-50/60 px-3 py-2.5 text-xs text-slate-700">
+        {block.notes ? <p className="whitespace-pre-line leading-relaxed"><span className="font-semibold text-slate-800">Notes. </span>{block.notes}</p> : null}
+        {block.files.length ? (
+          <p className="flex flex-wrap items-center gap-1.5"><span className="font-semibold text-slate-800">Files</span>
+            {block.files.map((f) => <span key={f} className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-0.5"><Paperclip className="h-3 w-3" aria-hidden="true" />{f}</span>)}
+          </p>
+        ) : null}
+        {block.comments.length ? (
+          <div><p className="mb-1 font-semibold text-slate-800">Latest comments</p>
+            <ul className="space-y-1">{block.comments.slice(0, 5).map((c, i) => <li key={i} className="rounded-lg bg-white px-2 py-1.5"><span className="font-medium">{c.by}</span> <span className="text-slate-400">· {stamp(c.at)}</span><p className="mt-0.5 text-slate-700">{c.text}</p></li>)}</ul>
+          </div>
+        ) : null}
+        {block.history.length ? (
+          <div><p className="mb-1 font-semibold text-slate-800">History</p>
+            <ol className="space-y-0.5">{block.history.slice(0, 8).map((h, i) => <li key={i} className="flex gap-2"><span className="w-32 shrink-0 text-slate-400">{stamp(h.at)}</span><span>{h.text}{h.by && h.by !== "Katalist member" ? <span className="text-slate-400"> · {h.by}</span> : null}</span></li>)}</ol>
+          </div>
+        ) : null}
+        {block.nudged_at.length ? <p className="text-slate-500">Nudged {block.nudged_at.length === 1 ? "once" : `${block.nudged_at.length} times`}, last {stamp(block.nudged_at[0]!)}.</p> : null}
+      </div>
+    </section>
+  );
+}
+
+function Entries({ title, entries, quote, onOpenThing }: { title: string; entries: ResultEntry[]; quote: boolean; onOpenThing: (id: string) => void }) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label={title}>
+      <p className="border-b border-slate-100 px-3 py-2 text-[13px] font-semibold text-slate-800">{title} <span className="font-normal text-slate-500">· {entries.length}</span></p>
+      <ol className="divide-y divide-slate-100">
+        {entries.map((e, i) => (
+          <li key={i} className="px-3 py-2 text-xs">
+            <div className="flex flex-wrap items-center gap-x-1.5 text-slate-500">
+              <span>{stamp(e.at)}</span><span aria-hidden="true">·</span><span className="font-medium text-slate-700">{e.by}</span><span aria-hidden="true">·</span>
+              <button type="button" onClick={() => onOpenThing(e.thing_id)} className="max-w-[16rem] truncate font-medium text-violet-700 hover:underline focus-visible:ring-2 focus-visible:ring-violet-500">{e.thing_title}</button>
+            </div>
+            <p className={cn("mt-0.5 text-slate-800", quote ? "border-l-2 border-violet-200 pl-2" : "")}>{e.text}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 function Group({ group, defaultOpen, actions, onOpenThing }: { group: RecordGroup; defaultOpen: boolean; actions: Actions; onOpenThing: (id: string) => void }) {
   const [open, setOpen] = useState(defaultOpen);

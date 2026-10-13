@@ -37,14 +37,21 @@ export type CoeyRecord = {
 
 export type RecordGroup = { key: string; title: string; total: number; records: CoeyRecord[] };
 
+/** A history line or a comment. `text` from people is plain text, never markup. */
+export type ResultEntry = { at: string; by: string; text: string; thing_id: string; thing_title: string };
+
 export type ResultBlock =
   | { type: "counts"; items: Array<{ label: string; count: number }> }
   | { type: "thing_list"; groups: RecordGroup[] }
+  | { type: "thing_detail"; record: CoeyRecord; notes: string | null; files: string[]; history: ResultEntry[]; comments: ResultEntry[]; nudged_at: string[] }
+  | { type: "timeline"; title: string; entries: ResultEntry[] }
+  | { type: "comments"; title: string; entries: ResultEntry[] }
   | { type: "notice"; tone: "info" | "warning"; text: string };
 
 export type CoeyPresentation = {
   version: 1;
-  scope: { mode: "work" | "home"; label: string };
+  /** What the shown results cover, as plain chips ("Waiting for Catch", "With Bharat"). */
+  scope: { mode: "work" | "home"; label: string; filters?: string[] };
   summary: { heading: string; description?: string };
   blocks: ResultBlock[];
   completeness: { status: "complete" | "partial"; matched_total: number; displayed: number };
@@ -74,6 +81,10 @@ export function validPresentation(p: unknown): p is CoeyPresentation {
       }
     } else if (b.type === "counts") {
       if (!Array.isArray(b.items)) return false;
+    } else if (b.type === "thing_detail") {
+      if (!isRecord(b.record) || !Array.isArray(b.history) || !Array.isArray(b.comments) || !Array.isArray(b.files)) return false;
+    } else if (b.type === "timeline" || b.type === "comments") {
+      if (!Array.isArray(b.entries) || !b.entries.every((e) => isStr(e.at) && isStr(e.text) && isStr(e.thing_id))) return false;
     } else if (b.type !== "notice") return false;
   }
   return true;

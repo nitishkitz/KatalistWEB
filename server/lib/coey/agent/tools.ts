@@ -54,7 +54,7 @@ export const TOOL_DEFINITIONS = [
     function: {
       name: "show_answer",
       description:
-        "Finish: show the answer. The heading is the outcome in a few words (\"5 Things in your court\", \"No follow-up needed yet\"). The description is one or two short sentences of context, without listing Thing titles (the rows show them). results = the refs of find_things searches whose Things should be shown as rows (empty if none). group_by: lane (Now/Next/Later/With others/Snoozed), person, state, or none.",
+        "Finish: show the answer. The heading is the outcome in a few words (\"5 Things in your court\", \"No follow-up needed yet\"). The description is one or two short sentences of context, without listing Thing titles (the rows show them). results = the refs to show: find_things (r1…) as rows, get_thing (d1…) as one Thing in full, activity (a1…) as a timeline, search_comments (c1…) as comment excerpts. Empty if nothing should be shown. group_by: lane (Now/Next/Later/With others/Snoozed), person, state, or none.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -140,13 +140,22 @@ const FOLLOW_UP: Record<string, string> = {
   blocked: "waiting on someone else",
 };
 
+/** One line of history or a comment, with its Thing. Times are ISO; text from people is plain text. */
+export type Entry = { at: string; by: string; text: string; thing_id: string; thing_title: string };
+const commentText = (body: unknown) => String(body ?? "").replace(/<!--[\s\S]*?-->/g, " ").replace(/\s+/g, " ").trim().slice(0, 300);
+
 export type ToolOutcome = { result: Json; thingIds: string[]; action?: ProposedAction; status: string };
 
 export class AgentTools {
   readonly actions: ProposedAction[] = [];
   readonly seen = new Set<string>();
   /** Every find_things result, by ref, with ALL matching ids (not only the rows sent to the model). */
-  readonly results = new Map<string, { ids: string[] }>();
+  readonly results = new Map<string, { ids: string[]; filters: string[] }>();
+  /** get_thing (d…), activity (a…) and search_comments (c…) results the answer can show. */
+  readonly details = new Map<string, { thingId: string; comments: Entry[]; history: Entry[]; nudgedAt: string[] }>();
+  readonly timelines = new Map<string, Entry[]>();
+  readonly commentSets = new Map<string, Entry[]>();
+  hasRef(ref: string) { return this.results.has(ref) || this.details.has(ref) || this.timelines.has(ref) || this.commentSets.has(ref); }
   /** Set when the model calls show_answer. */
   final: { heading: string; description: string | null; results: string[]; groupBy: "lane" | "person" | "state" | "none" } | null = null;
   private readonly ws: Workspace;
@@ -171,7 +180,7 @@ export class AgentTools {
         this.final = {
           heading: (str(args.heading) ?? "").slice(0, 90),
           description: str(args.description)?.slice(0, 320) ?? null,
-          results: Array.isArray(args.results) ? (args.results as unknown[]).filter((x): x is string => typeof x === "string" && this.results.has(x)) : [],
+          results: Array.isArray(args.results) ? (args.results as unknown[]).filter((x): x is string => typeof x === "string" && this.hasRef(x)) : [],
           groupBy: g === "lane" || g === "person" || g === "state" ? g : "none",
         };
         return { result: { shown: true }, thingIds: [], status: "Writing the answer" };
@@ -325,7 +334,7 @@ export class AgentTools {
     const limit = Math.min(50, Math.max(1, Number(a.limit) || 15));
     const shown = things.slice(0, limit).map((t) => this.compact(t));
     const ref = `r${this.results.size + 1}`;
-    this.results.set(ref, { ids: things.map((t) => t.id) });
+    this.results.set(ref, { ids: things.map((t) => t.id), filters: filterLabels(a, personNote?.person as string | undefined, this.mode) });
     return {
       result: { ref, total: things.length, ...(personNote ?? {}), ...(breakdown ? { person_breakdown: breakdown } : {}), ...(groups ? { groups } : {}), things: shown, ...(things.length > shown.length ? { more: things.length - shown.length } : {}) },
       thingIds: shown.map((t) => t.id),
@@ -356,11 +365,20 @@ export class AgentTools {
       c.from("nudges").select("created_at").eq("thing_id", t.id).order("created_at", { ascending: false }).limit(10),
     ]);
     const name = (id: unknown) => this.nameOf(id);
+    const ref = `d${this.details.size + 1}`;
+    const entry = (at: string, by: string, text: string): Entry => ({ at, by, text, thing_id: t.id, thing_title: t.title });
+    this.details.set(ref, {
+      thingId: t.id,
+      comments: ((comments.data ?? []) as Array<{ author_actor_id: string; body: string; created_at: string }>).map((r) => entry(r.created_at, name(r.author_actor_id), commentText(r.body))).filter((e) => e.text),
+      history: ((events.data ?? []) as Array<{ actor_id: string; event: string; detail: Record<string, unknown> | null; created_at: string }>).map((e) => entry(e.created_at, name(e.actor_id), summarizeEvent(e.event, e.detail, name))),
+      nudgedAt: ((nudges.data ?? []) as Array<{ created_at: string }>).map((n) => n.created_at),
+    });
     return {
       result: {
+        ref,
         thing: { ...this.compact(t), notes: t.notes, caught_on: this.local(t.caught_at), updated: this.local(t.updated_at), sent_by_user: t.sent_by_me, in_users_court: t.in_my_court },
         files: t.files.map((f) => `${f.name} (${f.kind})`),
-        comments: ((comments.data ?? []) as Array<{ author_actor_id: string; body: string; created_at: string }>).map((r) => ({ by: name(r.author_actor_id), at: this.local(r.created_at), untrusted_text: String(r.body ?? "").replace(/\s+/g, " ").slice(0, 300) })),
+        comments: ((comments.data ?? []) as Array<{ author_actor_id: string; body: string; created_at: string }>).map((r) => ({ by: name(r.author_actor_id), at: this.local(r.created_at), untrusted_text: commentText(r.body) })),
         history: ((events.data ?? []) as Array<{ actor_id: string; event: string; detail: Record<string, unknown> | null; created_at: string }>).map((e) => ({ at: this.local(e.created_at), by: name(e.actor_id), what: summarizeEvent(e.event, e.detail, name) })),
         // §13.2: nudge history shows times only, never who asked.
         nudged_at: ((nudges.data ?? []) as Array<{ created_at: string }>).map((n) => this.local(n.created_at)),
@@ -395,8 +413,10 @@ export class AgentTools {
     }
     const { data } = await q.order("created_at", { ascending: false }).limit(Math.min(30, Math.max(1, Number(a.limit) || 15)));
     const rows = (data ?? []) as Array<{ thing_id: string; author_actor_id: string; body: string; created_at: string }>;
+    const cref = `c${this.commentSets.size + 1}`;
+    this.commentSets.set(cref, rows.map((r) => ({ at: r.created_at, by: this.nameOf(r.author_actor_id), text: commentText(r.body), thing_id: r.thing_id, thing_title: this.ws.thing(r.thing_id)?.title ?? "a Thing" })).filter((e) => e.text));
     return {
-      result: { comments: rows.map((r) => ({ thing_id: r.thing_id, thing: this.ws.thing(r.thing_id)?.title ?? "a Thing", by: this.nameOf(r.author_actor_id), at: this.local(r.created_at), untrusted_text: String(r.body ?? "").replace(/\s+/g, " ").slice(0, 300) })) },
+      result: { ref: cref, comments: rows.map((r) => ({ thing_id: r.thing_id, thing: this.ws.thing(r.thing_id)?.title ?? "a Thing", by: this.nameOf(r.author_actor_id), at: this.local(r.created_at), untrusted_text: commentText(r.body) })) },
       thingIds: [...new Set(rows.map((r) => r.thing_id))],
       status: "Reading comments",
     };
@@ -420,8 +440,10 @@ export class AgentTools {
     const name = (id: unknown) => this.nameOf(id);
     const counts: Record<string, number> = {};
     for (const r of rows) counts[r.event] = (counts[r.event] ?? 0) + 1;
+    const aref = `a${this.timelines.size + 1}`;
+    this.timelines.set(aref, rows.map((r) => ({ at: r.created_at, by: name(r.actor_id), text: summarizeEvent(r.event, r.detail, name), thing_id: r.thing_id, thing_title: this.ws.thing(r.thing_id)?.title ?? "a Thing" })));
     return {
-      result: { counts_by_event: counts, events: rows.map((r) => ({ thing_id: r.thing_id, thing: this.ws.thing(r.thing_id)?.title ?? "a Thing", by: name(r.actor_id), at: this.local(r.created_at), what: summarizeEvent(r.event, r.detail, name) })) },
+      result: { ref: aref, counts_by_event: counts, events: rows.map((r) => ({ thing_id: r.thing_id, thing: this.ws.thing(r.thing_id)?.title ?? "a Thing", by: name(r.actor_id), at: this.local(r.created_at), what: summarizeEvent(r.event, r.detail, name) })) },
       thingIds: [...new Set(rows.map((r) => r.thing_id))].slice(0, 20),
       status: "Checking what changed",
     };
@@ -540,6 +562,34 @@ export class AgentTools {
     this.seen.add(t.id);
     return { result: { proposed: true, shown_to_user_as_button: full.label, note: "Not done yet; the user must confirm." }, thingIds: [t.id], action: full, status: "Preparing an action" };
   }
+}
+
+const STATE_LABEL: Record<string, string> = {
+  waiting_for_catch: "Waiting for Catch", in_progress: "In progress", sorted: "Sorted", overdue: "Overdue",
+  past_follow_up: "Past follow-up", promised: "Promised", snoozed: "Snoozed", any: "Any state",
+};
+/** Plain labels for what a search covered, shown as chips above the rows. */
+export function filterLabels(a: Json, person: string | undefined, mode: "work" | "home"): string[] {
+  const out: string[] = [];
+  const m = str(a.mode);
+  if (m === "both") out.push("Work and Home");
+  else if (m && m !== mode) out.push(m === "work" ? "Work" : "Home");
+  const rel = str(a.relation);
+  if (rel === "in_my_court") out.push("In your court");
+  if (rel === "i_sent") out.push("Sent by you");
+  if (person) out.push(rel === "they_sent_me" ? `From ${person}` : rel === "with_them" ? `With ${person}` : person);
+  const st = str(a.state);
+  if (st && st !== "open" && STATE_LABEL[st]) out.push(STATE_LABEL[st]);
+  const lane = str(a.lane);
+  if (lane) out.push(lane[0]!.toUpperCase() + lane.slice(1));
+  for (const k of ["list", "bucket"] as const) { const v = str(a[k]); if (v) out.push(`${k === "list" ? "List" : "Bucket"}: ${v}`); }
+  const text = str(a.text);
+  if (text) out.push(`“${text}”`);
+  const files = str(a.has_files);
+  if (files) out.push(files === "any" ? "Has files" : `Has ${files === "image" ? "images" : `${files} files`}`);
+  const field = str(a.date_field), from = str(a.from), to = str(a.to);
+  if (from || to) out.push(`${field === "created" ? "Created" : field === "sorted" ? "Sorted" : field === "updated" ? "Changed" : "Due"} ${from && to ? (from === to ? from : `${from} – ${to}`) : from ? `from ${from}` : `until ${to}`}`);
+  return out;
 }
 
 function batchLabel(x: ProposedAction) {
