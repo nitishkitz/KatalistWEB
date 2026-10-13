@@ -42,6 +42,8 @@ export type WsThing = {
   can_nudge_now: boolean;
   /** Files on the Thing (stored attachments, plus older inline files kept in notes). */
   files: Array<{ name: string; kind: FileKind }>;
+  /** When the viewer last nudged this Thing (their own nudges only). */
+  my_last_nudge_at: string | null;
 };
 
 export type FileKind = "image" | "pdf" | "document" | "spreadsheet" | "video" | "other";
@@ -124,7 +126,7 @@ export class Workspace {
     };
     const rows = (things.data ?? []) as Row[];
     const thingIds = rows.map((r) => r.id);
-    const [schedules, bucketItems, attachments] = await Promise.all([this.schedules(thingIds), this.bucketItems(thingIds), this.attachments(thingIds)]);
+    const [schedules, bucketItems, attachments, myNudges] = await Promise.all([this.schedules(thingIds), this.bucketItems(thingIds), this.attachments(thingIds), this.myNudges(thingIds)]);
     const me = this.myActorId;
     this.things = rows.map((r) => {
       const s = schedules.get(r.id);
@@ -161,6 +163,7 @@ export class Workspace {
         bucket_ids: bucketItems.get(r.id) ?? [],
         can_nudge_now: canNudge.has(r.id),
         files: stored.length ? stored : inline,
+        my_last_nudge_at: myNudges.get(r.id) ?? null,
       };
     });
   }
@@ -187,6 +190,14 @@ export class Workspace {
     } catch {
       // Without schedules, lanes fall back to the stored pace and concerns are unknown.
     }
+    return out;
+  }
+
+  private async myNudges(ids: string[]) {
+    const out = new Map<string, string>();
+    if (!ids.length || !this.myActorId) return out;
+    const { data } = await this.client.from("nudges").select("thing_id,created_at").eq("from_actor_id", this.myActorId).in("thing_id", ids.slice(0, 300)).order("created_at", { ascending: false }).limit(500);
+    for (const row of (data ?? []) as Array<{ thing_id: string; created_at: string }>) if (!out.has(row.thing_id)) out.set(row.thing_id, row.created_at);
     return out;
   }
 

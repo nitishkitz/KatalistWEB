@@ -30,6 +30,8 @@ import { isLocalReply } from "../../../server/lib/assistant-voice-protocol";
 import { useLists } from "@/features/lists/use-lists";
 import { toProxiedUrl } from "@/integrations/supabase/proxy";
 import type { Thing } from "@/domain/thing";
+import { validPresentation } from "@/domain/coey/presentation";
+import { CoeyResults } from "./assistant/results/CoeyResults";
 
 // Row UI pulls in the Court data layer, so it loads only when an answer has rows.
 const AssistantAnswerGroups = lazy(() => import("./assistant/AssistantAnswerGroups"));
@@ -278,6 +280,8 @@ export function MagicBoxAssistant({
     setHistory(nextHistory);
   }, [history, result, question, requestKey]);
   const answer = result?.answer;
+  // Reusable results when the server sent a valid presentation; otherwise the older answer view.
+  const presentation = answer?.presentation && validPresentation(answer.presentation) ? answer.presentation : null;
   // ---- Spoken actions: the card, the speech and the server stay in step. ----
   const navigate = useNavigate();
   const cardRefs = useRef(new Map<string, ActionCardHandle>());
@@ -480,7 +484,7 @@ export function MagicBoxAssistant({
           <p className="truncate text-sm font-semibold text-slate-900" title={question}>
             {question}
           </p>
-          <p className="text-xs text-slate-500">Coey</p>
+          <p className="text-xs text-slate-500">Coey{presentation ? ` · ${presentation.scope.label}` : ""}</p>
         </div>
         <button
           type="button"
@@ -563,14 +567,16 @@ export function MagicBoxAssistant({
                 {shownScope.label} · {shownScope.type === "list" ? "List" : "Bucket"}
               </p>
             )}
-            {answer.intent === "nudge_recommendation" && recommendations.length ? (
+            {presentation ? (
+              <CoeyResults presentation={presentation} onOpenThing={onOpenThing} />
+            ) : answer.intent === "nudge_recommendation" && recommendations.length ? (
               <p className="mb-3 text-sm text-slate-600">
                 Choose a person, then select the Things you want to follow up on.
               </p>
             ) : (
               <AnswerText text={answer.answer_markdown} />
             )}
-            {(answer.groups?.length ?? 0) > 0 && (
+            {!presentation && (answer.groups?.length ?? 0) > 0 && (
               <Suspense
                 fallback={
                   <p className="mt-3 flex items-center gap-2 text-xs text-slate-500" role="status">

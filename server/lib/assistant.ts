@@ -154,6 +154,8 @@ export type AssistantAnswer = {
   }>;
   scope_candidates?: ScopeCandidate[];
   person_candidates?: Array<{ actor_id: string; display_name: string }>;
+  /** Reusable result blocks (records, counts, action availability) decided by the server. */
+  presentation?: import("../../src/domain/coey/presentation").CoeyPresentation;
   /** The structured query this answer resolved; sent back so follow-ups keep its filters. */
   structured_query?: { about_person: string | null; exclude_self: boolean; state: string; window: string };
 };

@@ -52,6 +52,25 @@ export const TOOL_DEFINITIONS = [
   {
     type: "function",
     function: {
+      name: "show_answer",
+      description:
+        "Finish: show the answer. The heading is the outcome in a few words (\"5 Things in your court\", \"No follow-up needed yet\"). The description is one or two short sentences of context, without listing Thing titles (the rows show them). results = the refs of find_things searches whose Things should be shown as rows (empty if none). group_by: lane (Now/Next/Later/With others/Snoozed), person, state, or none.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          heading: { type: "string", maxLength: 90 },
+          description: nullable({ type: "string", maxLength: 320 }),
+          results: { type: "array", items: { type: "string" }, maxItems: 4 },
+          group_by: { type: "string", enum: ["lane", "person", "state", "none"] },
+        },
+        required: ["heading", "results", "group_by"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "get_thing",
       description: "Full detail of one Thing: notes, who sent it and who holds it, dates, lane, promise, files, latest comments, its activity history and nudge times. Pass the id from find_things, or a title.",
       parameters: { type: "object", additionalProperties: false, properties: { id: nullable({ type: "string" }), title: nullable({ type: "string" }) } },
@@ -126,6 +145,10 @@ export type ToolOutcome = { result: Json; thingIds: string[]; action?: ProposedA
 export class AgentTools {
   readonly actions: ProposedAction[] = [];
   readonly seen = new Set<string>();
+  /** Every find_things result, by ref, with ALL matching ids (not only the rows sent to the model). */
+  readonly results = new Map<string, { ids: string[] }>();
+  /** Set when the model calls show_answer. */
+  final: { heading: string; description: string | null; results: string[]; groupBy: "lane" | "person" | "state" | "none" } | null = null;
   private readonly ws: Workspace;
   private readonly mode: "work" | "home";
   constructor(ws: Workspace, mode: "work" | "home") {
@@ -143,6 +166,16 @@ export class AgentTools {
       case "activity": return this.activity(args);
       case "people_lists_buckets": return this.peopleListsBuckets();
       case "propose_action": return this.proposeMany(args);
+      case "show_answer": {
+        const g = String(args.group_by);
+        this.final = {
+          heading: (str(args.heading) ?? "").slice(0, 90),
+          description: str(args.description)?.slice(0, 320) ?? null,
+          results: Array.isArray(args.results) ? (args.results as unknown[]).filter((x): x is string => typeof x === "string" && this.results.has(x)) : [],
+          groupBy: g === "lane" || g === "person" || g === "state" ? g : "none",
+        };
+        return { result: { shown: true }, thingIds: [], status: "Writing the answer" };
+      }
       default: return { result: { error: `unknown tool ${name}` }, thingIds: [], status: "Thinking" };
     }
   }
@@ -291,8 +324,10 @@ export class AgentTools {
     }
     const limit = Math.min(50, Math.max(1, Number(a.limit) || 15));
     const shown = things.slice(0, limit).map((t) => this.compact(t));
+    const ref = `r${this.results.size + 1}`;
+    this.results.set(ref, { ids: things.map((t) => t.id) });
     return {
-      result: { total: things.length, ...(personNote ?? {}), ...(breakdown ? { person_breakdown: breakdown } : {}), ...(groups ? { groups } : {}), things: shown, ...(things.length > shown.length ? { more: things.length - shown.length } : {}) },
+      result: { ref, total: things.length, ...(personNote ?? {}), ...(breakdown ? { person_breakdown: breakdown } : {}), ...(groups ? { groups } : {}), things: shown, ...(things.length > shown.length ? { more: things.length - shown.length } : {}) },
       thingIds: shown.map((t) => t.id),
       status: "Looking through your Things",
     };

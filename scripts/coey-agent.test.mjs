@@ -34,7 +34,7 @@ function workspace() {
     things: [
       thing("from-avani-1", AVANI, ME), thing("from-avani-2", AVANI, ME, { acknowledgement: "caught", status: "under_progress" }),
       thing("to-avani", ME, AVANI, { concern: "stale" }), thing("to-ravi", ME, RAVI1), thing("to-ravi-fresh", ME, RAVI1, { can_nudge_now: false }),
-      thing("mine", ME, ME, { files: [{ name: "site photo.jpg", kind: "image" }, { name: "quote.pdf", kind: "pdf" }] }), thing("done", ME, ME, { status: "sorted", open: false, sorted_at: iso("2026-10-13") }),
+      thing("mine", ME, ME, { files: [{ name: "site photo.jpg", kind: "image" }, { name: "quote.pdf", kind: "pdf" }] }), thing("done", ME, ME, { status: "sorted", open: false, in_my_court: false, lane: null, sorted_at: iso("2026-10-13") }),
     ],
   });
   return ws;
@@ -104,7 +104,9 @@ test("the agent loop: tool → answer from the result, with the rows it named", 
   const a = await runAgent({ question: "whats pending with avani", history: [], mode: "work" }, { client: null, userId: "me", apiKey: "k", model: "m", fetchImpl, workspace: workspace() }, (s) => statuses.push(s), new AbortController().signal);
   assert.equal(a.intent, "agent_answer");
   assert.match(a.answer_markdown, /3 Things/);
-  assert.deepEqual(a.groups[0].thing_ids, ["from-avani-1"]);
+  const rows = a.presentation.blocks.find((b) => b.type === "thing_list").groups.flatMap((g) => g.records.map((r) => r.id));
+  assert.deepEqual(rows.sort(), ["from-avani-1", "from-avani-2", "to-avani"], "rows are the whole search the answer is about, from the server");
+  assert.equal(a.presentation.summary.heading, "3 Things with Avani: \"from-avani-1\" is waiting for you to catch");
   assert.deepEqual(statuses, ["Looking through your Things"]);
   assert.equal(sent[1].messages.at(-1).role, "tool", "the tool result goes back to the model");
   assert.ok(sent.every((b) => Array.isArray(b.tools)), "tools are always declared");
@@ -171,10 +173,12 @@ test("production regression: invented Things or people are caught before the ans
   assert.equal(a, null, "never shown; the older path answers");
 });
 
-test("an answer that offers a nudge always comes with the button to confirm it", async () => {
-  const { fetchImpl } = sarvam([call("find_things", { relation: "i_sent", state: "past_follow_up" }), { content: '"to-avani" is past its follow-up time. I can nudge it — tap to confirm.' }]);
+test("an answer about nudges comes with each row's real Nudge availability", async () => {
+  const { fetchImpl } = sarvam([call("find_things", { relation: "i_sent", state: "past_follow_up" }), call("show_answer", { heading: "1 Thing is past follow-up", description: "It is with Avani.", results: ["r1"], group_by: "none" })]);
   const a = await runAgent({ question: "who needs a nudge", history: [], mode: "work" }, { client: null, userId: "me", apiKey: "k", model: "m", fetchImpl, workspace: workspace() }, () => {}, new AbortController().signal);
-  assert.deepEqual(a.actions.map((x) => [x.type, x.target_ids]), [["prepare_nudge", ["to-avani"]]]);
+  const [group] = a.presentation.blocks.find((b) => b.type === "thing_list").groups;
+  assert.equal(a.presentation.summary.heading, "1 Thing is past follow-up");
+  assert.deepEqual(group.records.map((r) => [r.id, r.actions[0].kind, r.actions[0].status]), [["to-avani", "nudge", "available"]]);
 });
 
 test("production regression: “how many things have images” counts attached images, not the word “images”", async () => {
@@ -185,4 +189,42 @@ test("production regression: “how many things have images” counts attached i
   const r = (await run(tools, "find_things", { has_files: "image", state: "any" })).result;
   assert.equal(r.total, 1);
   assert.deepEqual(r.things[0].files, ["site photo.jpg (image)", "quote.pdf (pdf)"]);
+});
+
+test("presentation: server-decided states and actions; snoozed and sorted Things stay visible; ids are unique", async () => {
+  const { buildPresentation, recordActions } = await import("../server/lib/coey/agent/present.ts");
+  const { validPresentation } = await import("../src/domain/coey/presentation.ts");
+  const ws = workspace();
+  ws.things.push(
+    thing("snoozed", AVANI, ME, { lane: "hidden", snoozed_until: iso("2026-10-13", 17 * 60) }),
+    thing("fresh-sent", ME, RAVI1, { can_nudge_now: false }),
+    thing("nudged", ME, RAVI2, { can_nudge_now: false, my_last_nudge_at: new Date(NOW - 30 * 60_000).toISOString() }),
+  );
+  const p = buildPresentation(ws, { ids: ["from-avani-1", "from-avani-2", "snoozed", "fresh-sent", "nudged", "done", "from-avani-1"], groupBy: "lane", heading: "Your Things", mode: "work" });
+  assert.ok(validPresentation(p));
+  const groups = p.blocks.find((b) => b.type === "thing_list").groups;
+  assert.deepEqual(groups.map((g) => [g.title, g.total]), [["Next", 2], ["Waiting with others", 2], ["Snoozed", 1], ["Sorted", 1]]);
+  assert.deepEqual(p.blocks.find((b) => b.type === "counts").items, [{ label: "in your court", count: 2 }, { label: "with others", count: 2 }, { label: "snoozed", count: 1 }]);
+  const byId = Object.fromEntries(groups.flatMap((g) => g.records).map((r) => [r.id, r]));
+  assert.deepEqual(byId["from-avani-1"].actions[0], { kind: "catch", status: "available" });
+  assert.deepEqual(byId["from-avani-2"].actions[0], { kind: "mark_sorted", status: "available" });
+  assert.deepEqual(byId.snoozed.actions[0], { kind: "bring_back", status: "available" }, "snoozed: Bring back, not Catch");
+  assert.equal(byId.snoozed.snoozed_until, iso("2026-10-13", 17 * 60));
+  assert.equal(byId["fresh-sent"].actions[0].status, "unavailable");
+  assert.match(byId["fresh-sent"].actions[0].reason, /^Too soon to nudge\. .*follow-up window/, "the reason is the timing rule, not just “not caught”");
+  assert.match(byId.nudged.actions[0].reason, /nudged this recently/);
+  assert.equal(byId.done.lifecycle, "sorted");
+  assert.deepEqual(byId.done.actions.map((a) => a.kind), ["open"]);
+  assert.equal(p.completeness.matched_total, 6, "duplicates removed");
+  assert.equal(validPresentation({ ...p, blocks: [{ type: "thing_list", groups: [{ key: "a", title: "A", total: 2, records: [byId.done, byId.done] }] }] }), false, "duplicate ids are rejected");
+  assert.equal(recordActions(thing("x", AVANI, RAVI1, { sent_by_me: false, in_my_court: false }), ws).map((a) => a.kind).join(), "open", "someone else's pair: open only");
+});
+
+test("a long first sentence becomes a short heading without losing the text", async () => {
+  const { splitAnswer } = await import("../server/lib/coey/agent/agent.ts");
+  const long = "There are 2 Things you sent to Bharat KTest that are past their usual follow-up time, but neither can be nudged yet because they were sent today.";
+  const out = splitAnswer(long, null);
+  assert.equal(out.heading, "There are 2 Things you sent to Bharat KTest that are past their usual follow-up time");
+  assert.equal(out.description, long);
+  assert.deepEqual(splitAnswer("Nothing overdue. You are clear.", null), { heading: "Nothing overdue", description: "You are clear." });
 });
