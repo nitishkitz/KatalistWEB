@@ -12,7 +12,7 @@ type Row = {
   action_time: (Omit<Anchor, "at"> & { at: string }) | null; event_time: (Omit<Anchor, "at"> & { at: string }) | null;
   activity_type: ThingSchedule["activityType"]; recurrence: ThingSchedule["recurrence"]; promise_at: string | null; snooze_until: string | null;
   blocked_on: ThingSchedule["blockedOn"]; last_activity_at: string; last_nudge_at: string | null; nudge_count_cycle: number;
-  breakthrough_used: boolean; created_at: string;
+  breakthrough_used: boolean; created_at: string; revision?: number;
 };
 
 const ms = (v: string | null) => (v ? new Date(v).getTime() : null);
@@ -26,7 +26,7 @@ export function scheduleFromRow(r: Row): ThingSchedule {
     actionTime: anchor(r.action_time), eventTime: anchor(r.event_time), activityType: r.activity_type, recurrence: r.recurrence,
     promiseAt: ms(r.promise_at), snoozeUntil: ms(r.snooze_until), blockedOn: r.blocked_on,
     lastActivityAt: ms(r.last_activity_at) ?? Date.now(), lastNudgeAt: ms(r.last_nudge_at), nudgeCountCycle: r.nudge_count_cycle,
-    breakthroughUsed: r.breakthrough_used, createdAt: ms(r.created_at) ?? Date.now(),
+    breakthroughUsed: r.breakthrough_used, createdAt: ms(r.created_at) ?? Date.now(), revision: r.revision,
   };
 }
 

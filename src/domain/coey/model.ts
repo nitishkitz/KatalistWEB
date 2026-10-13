@@ -58,6 +58,8 @@ export type ThingSchedule = {
   nudgeCountCycle: number;
   breakthroughUsed: boolean;
   createdAt: number;
+  /** Schedule revision; follow-up plans name it so stale plans are rejected. */
+  revision?: number;
 };
 
 /** A person named in the input after identity resolution (never from the model). */

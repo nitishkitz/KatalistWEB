@@ -27,7 +27,8 @@ import {
   type TurnTimings,
 } from "./assistant-turn";
 import type { AssistantConversationTurn } from "./assistant";
-import { loadSchedulesForFacts, structuredAnswer, type StructuredQuery } from "./coey/ask";
+import { loadSchedulesForFacts, parseStructuredQuery, structuredAnswer, type StructuredQuery } from "./coey/ask";
+import { interpretLine } from "./coey/interpret";
 
 export type TurnInput = {
   question: string;
@@ -53,6 +54,12 @@ export type TurnDeps = {
   verifyChoice: typeof verifyScopeChoice;
   buildFacts: typeof buildAssistantFacts;
   answer: typeof answerAssistantQuestion;
+  /**
+   * Interprets a typed Ask line (and its follow-ups) into a structured read
+   * query, so every entry point uses the same code-executed answer. Null means
+   * "not a structured question" (e.g. an action request) or unavailable.
+   */
+  interpretQuestion?: (question: string, history: AssistantConversationTurn[], context: "work" | "home", signal: AbortSignal) => Promise<StructuredQuery | null>;
   log?: (entry: Record<string, unknown>) => void;
 };
 
@@ -63,6 +70,17 @@ export const defaultTurnDeps = (client: SupabaseClient, userId: string): TurnDep
   verifyChoice: verifyScopeChoice,
   buildFacts: buildAssistantFacts,
   answer: answerAssistantQuestion,
+  interpretQuestion: async (question, history, context, signal) => {
+    const { data: profile } = await client.from("profiles").select("timezone").eq("id", userId).maybeSingle();
+    const earlier = [...history].reverse().find((t) => t.role === "user")?.content;
+    const result = await interpretLine(question, {
+      timezone: (profile as { timezone?: string } | null)?.timezone ?? "Asia/Kolkata",
+      mode: context, requestId: "ask", draftRevision: 0, signal, earlier,
+    });
+    if (!result.ok || result.interpretation.things.length !== 1) return null;
+    const [thing] = result.interpretation.things;
+    return thing!.kind === "question" ? parseStructuredQuery(thing!.question) : null;
+  },
   log: (entry) => console.info(JSON.stringify({ evt: "coey_turn", ...entry })),
 });
 
@@ -109,7 +127,14 @@ export async function runCoeyTurn(
   };
   try {
     send(emit.next({ type: "accepted" }));
-    const decision = input.query ? { kind: "fast" as const, intent: "scope_summary" as const } : routeCoeyQuestion(input.question, input.history);
+    // One interpretation path for Toss-redirected questions, direct Ask and follow-ups.
+    let query = input.query ?? null;
+    if (!query && deps.interpretQuestion) {
+      query = await deps.interpretQuestion(input.question, input.history, input.context, signal).catch(() => null);
+      if (signal.aborted) return;
+    }
+    input = { ...input, query };
+    const decision = query ? { kind: "fast" as const, intent: "scope_summary" as const } : routeCoeyQuestion(input.question, input.history);
     route = decision.kind;
     if (decision.kind === "greeting") {
       emitAnswer(buildGreetingAnswer(input.question), emptyFacts, true);

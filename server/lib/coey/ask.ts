@@ -7,7 +7,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AnswerGroup, AssistantAnswer, AssistantFacts } from "../assistant";
 import { computeSenderConcern } from "../../../src/domain/coey/placement";
-import { defaultCalendar, safeTimezone, type HolderCalendar } from "../../../src/domain/coey/calendar";
+import { addDays, defaultCalendar, localParts, safeTimezone, weekdayOf, zonedInstant, type HolderCalendar } from "../../../src/domain/coey/calendar";
+
+/**
+ * Today and this calendar week (Monday–Sunday) in the viewer's timezone,
+ * as epoch-ms half-open intervals.
+ */
+export function localWindows(now: number, timezone: string) {
+  const tz = safeTimezone(timezone);
+  const today = localParts(now, tz).date;
+  const monday = addDays(today, -((weekdayOf(today) + 6) % 7));
+  return {
+    today: [zonedInstant(today, 0, tz), zonedInstant(addDays(today, 1), 0, tz)] as const,
+    week: [zonedInstant(monday, 0, tz), zonedInstant(addDays(monday, 7), 0, tz)] as const,
+  };
+}
 import type { ThingSchedule } from "../../../src/domain/coey/model";
 
 export type StructuredQuery = {
@@ -96,8 +110,7 @@ export function structuredAnswer(
     }
   }
 
-  const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = dayStart.getTime() + 86_400_000;
+  const windows = localWindows(now, facts.freshness.timezone);
   let staleKnown = true;
   const things = facts.things.filter((t) => {
     const open = !CLOSED.has(t.status);
@@ -114,8 +127,9 @@ export function structuredAnswer(
       if (computeSenderConcern(s.schedule, s.cal, now) !== "stale" && computeSenderConcern(s.schedule, s.cal, now) !== "promise_missed") return false;
     }
     const due = t.due_at ? Date.parse(t.due_at) : null;
-    if (query.window === "today" && !(due !== null && due >= dayStart.getTime() && due < dayEnd)) return false;
-    if (query.window === "this_week" && !(due !== null && due >= dayStart.getTime() && due < dayStart.getTime() + 7 * 86_400_000)) return false;
+    const within = (w: readonly [number, number]) => due !== null && due >= w[0] && due < w[1];
+    if (query.window === "today" && !within(windows.today)) return false;
+    if (query.window === "this_week" && !within(windows.week)) return false;
     if (query.window === "overdue" && !(due !== null && due < now)) return false;
     return true;
   });

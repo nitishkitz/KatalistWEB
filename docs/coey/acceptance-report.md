@@ -69,3 +69,21 @@ These are listed in full in `requirement-register.md`:
 - Sender state-change messages.
 - Personal priors learning.
 - A real labelled set.
+
+## Review fixes (13 October 2026)
+
+An independent review (`output/coey-code-review/review.md`) found seven defects. All seven are fixed, each with a regression test that fails on the previous code:
+
+| # | Defect | Fix | Test |
+| --- | --- | --- | --- |
+| 1 | "Keep it to myself" kept a shared List | `coey_create_things` clears the List for private captures; moving one into a List is refused; no Bucket link | `coey-review-fixes-sql` |
+| 2 | Blocked users could still post in an existing DM | Message-insert trigger: DMs need an accepted, unblocked connection; groups refuse a blocked pair; history stays readable | `coey-review-fixes-sql` |
+| 3 | "Keep it for me" left Catch with the old assignee | Wrong person and resolve holder move the real assignment (one authority); the Court never falls back to a former holder | `coey-review-fixes-sql` |
+| 4 | Early Toss cancelled its own interpretation | Send cancels the pending pause; the pause reuses a request already running for that revision | `coey-typing-race` |
+| 5 | Stale follow-up plans delivered after a promise | Plans carry the schedule revision; every cadence input bumps it; cadence nudges never go out once a promise exists | `coey-review-fixes-sql` |
+| 6 | Direct Ask and follow-ups used the old answer path | The turn runner interprets every Ask line (follow-ups with the earlier question as context) and answers structured questions in code | `coey-review-fixes` |
+| 7 | Ask day/week used server time and a rolling 7 days | Viewer-timezone day and Monday–Sunday week | `coey-review-fixes` |
+
+After the fixes: typecheck and production build pass; 1,675 tests, the same 38 baseline failures and no new ones; 111/111 migrations replay; the reviewer's own reproduction script reports every case fixed; live Sarvam matched 29/29 on two runs and 28/29 on one (an ambiguous "send … to Ravi" read as Ravi doing it, which correctly asked which Ravi).
+
+Calls ride on conversation membership and were not separately audited for block enforcement.

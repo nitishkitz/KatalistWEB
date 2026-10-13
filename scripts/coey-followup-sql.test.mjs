@@ -18,7 +18,12 @@ async function send(from, key, holder, title) {
   const r = await db.query("SELECT coey_create_things($1, $2::jsonb) r", [key, JSON.stringify([{ title, text_raw: title, mode: "work", holder_profile_id: holder, pace: "normal" }])]);
   return r.rows[0].r.things[0].thing_id;
 }
+// A fresh plan names the schedule revision it was made against, as the job does.
 const apply = async (holder, items, date = "2026-10-13", budget = 3) => {
+  await db.exec("RESET ROLE");
+  for (const item of items) {
+    if (item.revision === undefined) item.revision = (await db.query("SELECT revision FROM thing_schedules WHERE thing_id = $1", [item.thing_id])).rows[0]?.revision ?? 0;
+  }
   await actAs(db, null, "service_role");
   return (await db.query("SELECT coey_apply_followups($1, $2::date, $3::jsonb, $4) r", [holder, date, JSON.stringify(items), budget])).rows[0].r;
 };

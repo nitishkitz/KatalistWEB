@@ -67,7 +67,7 @@ async function run(request: Request): Promise<Response> {
     const { data, error: applyError } = await admin.rpc("coey_apply_followups", {
       p_holder: holder,
       p_local_date: localParts(now, cal.timezone).date,
-      p_items: items.map((i) => ({ thing_id: i.thingId, step: i.step, kind: i.kind })),
+      p_items: items.map((i) => ({ thing_id: i.thingId, step: i.step, kind: i.kind, revision: i.revision })),
       p_budget: COEY_CONFIG.F5_DAILY_NUDGE_BUDGET,
     });
     if (applyError) continue;

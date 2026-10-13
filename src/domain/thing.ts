@@ -133,6 +133,8 @@ export function partitionCourt(things: Thing[], myActorId: string) {
         continue;
       }
       if (s.senderProfileId === me) { theirs.push(t); continue; }
+      // The schedule is the authority: a former holder (e.g. after serve back) does not keep it.
+      continue;
     }
     if (t.assignee.id === myActorId) mine.push(t);
     else if (t.owner.id === myActorId) theirs.push(t);

@@ -636,7 +636,7 @@ export function MagicBox({
       const result = await commitCoeyItems(key, items, references.length ? references : undefined);
       const createdIds = result.things.map((t) => t.thing_id);
       const bucketFailedIds: string[] = [];
-      if (effectiveBucketId && !result.replayed) {
+      if (effectiveBucketId && !result.replayed && !input.privateCapture) {
         const links = await Promise.allSettled(createdIds.map((id) => rpcAddToBucket(effectiveBucketId, id)));
         links.forEach((link, index) => { if (link.status === "rejected") bucketFailedIds.push(createdIds[index]!); });
       }

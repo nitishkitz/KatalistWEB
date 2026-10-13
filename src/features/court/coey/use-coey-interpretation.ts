@@ -23,6 +23,7 @@ export function useCoeyInterpretation(text: string, mode: "work" | "home", enabl
   const revision = useRef(0);
   const inflight = useRef<AbortController | null>(null);
   const latest = useRef<{ revision: number; text: string; promise: Promise<InterpretationState> } | null>(null);
+  const timerRef = useRef<number | null>(null);
   const textRef = useRef(text);
   textRef.current = text;
 
@@ -66,8 +67,16 @@ export function useCoeyInterpretation(text: string, mode: "work" | "home", enabl
       setState({ status: "idle" });
       return;
     }
-    const timer = window.setTimeout(() => void run(text, rev), COEY_CONFIG.F10_STAGE2_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
+    // The pause timer reuses a request already started for this revision (e.g. by Send).
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      if (latest.current?.revision === rev && latest.current.text === text) return;
+      void run(text, rev);
+    }, COEY_CONFIG.F10_STAGE2_DEBOUNCE_MS);
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    };
   }, [text, mode, enabled, run]);
 
   useEffect(() => () => inflight.current?.abort(), []);
@@ -76,6 +85,11 @@ export function useCoeyInterpretation(text: string, mode: "work" | "home", enabl
   const resolveNow = useCallback(async (): Promise<InterpretationState> => {
     const rev = revision.current;
     const value = textRef.current;
+    // Send supersedes the pending pause: it must never abort the request Send awaits.
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     if (latest.current && latest.current.revision === rev && latest.current.text === value) return latest.current.promise;
     return run(value, rev);
   }, [run]);

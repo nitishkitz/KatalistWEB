@@ -279,6 +279,8 @@ BEGIN
     ELSE
       v_tracked := NULL;
     END IF;
+    -- "Keep it to myself" is private: never a shared List (review finding 1).
+    IF v_inbox = 'unresolved_capture' THEN v_list := NULL; END IF;
     v_actor := CASE WHEN v_holder IS NULL THEN NULL ELSE katalist_priv.user_actor_of(v_holder) END;
     IF v_holder IS NOT NULL AND v_actor IS NULL THEN RAISE EXCEPTION 'unknown person'; END IF;
 

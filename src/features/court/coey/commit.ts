@@ -105,7 +105,8 @@ export function privateCaptureItem(text: string, common: CommonFields) {
     text_raw: text,
     kind: "task",
     mode: common.mode,
-    list_id: common.listId ?? null,
+    // Private means private: never a shared List (the server enforces this too).
+    list_id: null,
     inbox_reason: "unresolved_capture",
     lane: "none",
     rule_id: "C10+L0",

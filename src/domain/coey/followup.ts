@@ -25,6 +25,8 @@ export type PlannedFollowUp = {
   holderProfileId: string;
   senderProfileId: string;
   step: number;
+  /** Schedule revision the plan was made against; delivery rejects any other. */
+  revision: number;
   kind: FollowUpKind;
   /** When it became due (working time); delivery may be later. */
   dueAt: number;
@@ -44,7 +46,7 @@ export function followUpEligible(s: ThingSchedule): boolean {
 export function nextFollowUp(s: ThingSchedule, cal: HolderCalendar, config: CoeyConfig = COEY_CONFIG): Omit<PlannedFollowUp, "channel"> | null {
   if (!followUpEligible(s)) return null;
   const step = s.nudgeCountCycle + 1;
-  const base = { thingId: s.thingId, holderProfileId: s.holderProfileId!, senderProfileId: s.senderProfileId, step };
+  const base = { thingId: s.thingId, holderProfileId: s.holderProfileId!, senderProfileId: s.senderProfileId, step, revision: s.revision ?? 0 };
   if (s.promiseAt !== null) {
     // M3/M4: nudges stop until the promise is close; then shortly before, then at it.
     if (step === 1) {
