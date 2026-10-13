@@ -1,0 +1,13 @@
+import { chromium } from "playwright";
+import { readFileSync } from "node:fs";
+const env = Object.fromEntries(readFileSync(new URL("../../.env.local", import.meta.url), "utf8").split("\n").filter((l) => /^[A-Z_]+=/.test(l)).map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1).replace(/^"|"$/g, "")]));
+const browser = await chromium.launch();
+const page = await (await browser.newContext({ storageState: `${process.argv[2]}/B.state.json` })).newPage();
+let url = "";
+page.on("websocket", (ws) => { url = url || ws.url(); });
+await page.goto("https://katalist-web.vercel.app/", { waitUntil: "networkidle" });
+await page.waitForTimeout(3000);
+const u = new URL(url);
+const appKey = u.searchParams.get("apikey") || "";
+console.log(JSON.stringify({ host: u.host, appKeyPrefix: appKey.slice(0, 14), appKeyLen: appKey.length, localKeyPrefix: env.VITE_SUPABASE_PUBLISHABLE_KEY.slice(0, 14), localLen: env.VITE_SUPABASE_PUBLISHABLE_KEY.length, same: appKey === env.VITE_SUPABASE_PUBLISHABLE_KEY, otherParams: [...u.searchParams.keys()] }));
+await browser.close();

@@ -1,0 +1,13 @@
+import { signIn, rpc, rest } from "./api-lib.mjs";
+const A = await signIn("A"), B = await signIn("B"), C = await signIn("C");
+const minimal = { headers: { prefer: "return=minimal" } };
+const groups = (await rest(A, "lists?select=id,name&kind=eq.group&name=eq.KTest call group")).body;
+const gid = groups[0].id;
+const send = (u, to, extra = {}) => rest(u, "call_signals", { method: "POST", ...minimal, body: JSON.stringify({ list_id: gid, from_session: "s", to_profile: to.id, kind: "sdp", payload: {}, ...extra }) });
+const out = [];
+let r = await send(B, A); out.push(`${r.status === 201 ? "PASS" : "FAIL"} B can signal A as itself (HTTP ${r.status})`);
+const seen = (await rest(A, "call_signals?select=from_profile&kind=eq.sdp")).body;
+out.push(`${seen.length && seen.every((s) => s.from_profile === B.id) ? "PASS" : "FAIL"} A sees the signal stamped as B`);
+r = await send(B, C); out.push(`${r.status === 201 ? "PASS" : "FAIL"} B (not blocked) can reach C (HTTP ${r.status})`);
+r = await send(B, A, { from_profile: C.id }); out.push(`${r.status >= 400 ? "PASS" : "FAIL"} B still cannot send as C (HTTP ${r.status})`);
+console.log(JSON.stringify(out, null, 1));

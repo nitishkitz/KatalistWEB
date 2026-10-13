@@ -46,6 +46,20 @@ export function mergeFollowUp(previous: StructuredQuery | null, next: Structured
   };
 }
 
+/**
+ * A time window must come from the words the user typed, like names and dates
+ * elsewhere: "what's pending with Ravi?" never silently means "today".
+ */
+const WINDOW_WORDS: Record<Exclude<StructuredQuery["window"], "any">, RegExp> = {
+  today: /\b(today|tonight|aaj|ee roju|eeroju|now)\b/i,
+  this_week: /\b(this week|week|is hafte|hafte|weekly|ee vaaram)\b/i,
+  overdue: /\b(overdue|past due|late|missed|delayed|behind|date passed|past (its|their) date)\b/i,
+};
+export function groundWindow(question: string, query: StructuredQuery): StructuredQuery {
+  if (query.window === "any" || WINDOW_WORDS[query.window].test(question)) return query;
+  return { ...query, window: "any" };
+}
+
 export function parseStructuredQuery(raw: unknown): StructuredQuery | null {
   if (!raw || typeof raw !== "object") return null;
   const q = raw as Record<string, unknown>;
@@ -111,9 +125,12 @@ export function structuredAnswer(
     const wanted = fold(query.about_person);
     const named = [...people].filter(([id]) => id !== me);
     const exact = named.filter(([, name]) => fold(name) === wanted || fold(name).split(" ")[0] === wanted);
-    if (exact.length === 1) personId = exact[0]![0];
+    const isMe = fold(facts.viewer.display_name ?? "") === wanted || fold(facts.viewer.display_name ?? "").split(" ")[0] === wanted;
+    // Asking about yourself means your own court, unless a connection shares the name (then ask).
+    if (isMe && exact.length === 0) personId = me;
+    else if (exact.length === 1 && !isMe) personId = exact[0]![0];
     else {
-      const candidates = exact.length ? exact : named.filter(([, name]) => fold(name).split(" ")[0]!.startsWith(wanted.slice(0, 3)) && wanted.length >= 3);
+      const candidates = exact.length ? (isMe ? [[me, `${facts.viewer.display_name} (you)`] as [string, string], ...exact] : exact) : named.filter(([, name]) => fold(name).split(" ")[0]!.startsWith(wanted.slice(0, 3)) && wanted.length >= 3);
       if (!candidates.length) {
         return { ...base, intent: "person_not_found", structured_query: query, groups: [], answer_markdown: `I can’t find “${query.about_person}” among the people in this view.` };
       }
@@ -162,7 +179,7 @@ export function structuredAnswer(
   }));
   const n = things.length;
   const noun = n === 1 ? "Thing" : "Things";
-  const who = personId ? ` with ${people.get(personId)}` : query.exclude_self ? " with others" : "";
+  const who = personId === me && me ? " in your court" : personId ? ` with ${people.get(personId)}` : query.exclude_self ? " with others" : "";
   const answer_markdown =
     query.state === "stale"
       ? n

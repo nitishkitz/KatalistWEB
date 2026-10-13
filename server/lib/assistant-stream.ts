@@ -27,7 +27,7 @@ import {
   type TurnTimings,
 } from "./assistant-turn";
 import type { AssistantConversationTurn } from "./assistant";
-import { loadSchedulesForFacts, mergeFollowUp, parseStructuredQuery, structuredAnswer, type StructuredQuery } from "./coey/ask";
+import { groundWindow, loadSchedulesForFacts, mergeFollowUp, parseStructuredQuery, structuredAnswer, type StructuredQuery } from "./coey/ask";
 import { interpretLine } from "./coey/interpret";
 
 export type TurnInput = {
@@ -83,7 +83,7 @@ export const defaultTurnDeps = (client: SupabaseClient, userId: string): TurnDep
     const [thing] = result.interpretation.things;
     if (thing!.kind !== "question") return null;
     const parsed = parseStructuredQuery(thing!.question);
-    return parsed ? mergeFollowUp(previousQuery, parsed, thing!.question?.continues_previous === true) : null;
+    return parsed ? mergeFollowUp(previousQuery, groundWindow(question, parsed), thing!.question?.continues_previous === true) : null;
   },
   log: (entry) => console.info(JSON.stringify({ evt: "coey_turn", ...entry })),
 });

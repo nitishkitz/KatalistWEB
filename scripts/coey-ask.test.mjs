@@ -75,3 +75,15 @@ test("results only reference Things in the authorized facts; malformed queries a
   assert.equal(parseStructuredQuery({ state: "drop table", window: "any" }), null);
   assert.deepEqual(parseStructuredQuery({ about_person: " Ravi ", exclude_self: true, state: "stale", window: "any" }), { about_person: "Ravi", exclude_self: true, state: "stale", window: "any" });
 });
+
+test("production regressions: an ungrounded time window is dropped; asking about yourself means your own court", async () => {
+  const { groundWindow } = await import("../server/lib/coey/ask.ts");
+  const pending = { about_person: "Bharat", exclude_self: false, state: "pending", window: "today" };
+  assert.equal(groundWindow("what's pending with Bharat?", pending).window, "any");
+  assert.equal(groundWindow("what's due today with Bharat", pending).window, "today");
+  assert.equal(groundWindow("show Bharat's overdue Things", { ...pending, window: "overdue" }).window, "overdue");
+  const self = structuredAnswer(facts, q({ about_person: "Deva" }), schedules, undefined, now);
+  assert.equal(self.intent, "person_items");
+  assert.deepEqual(ids(self), ["from-priya-to-me", "mine"]);
+  assert.match(self.answer_markdown, /in your court/);
+});

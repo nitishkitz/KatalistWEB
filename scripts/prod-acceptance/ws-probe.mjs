@@ -1,0 +1,13 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ storageState: `${process.argv[2]}/B.state.json`, viewport: { width: 1440, height: 900 } });
+const page = await ctx.newPage();
+const sockets = [], joins = [];
+page.on("websocket", (ws) => { sockets.push(ws.url().replace(/apikey=[^&]+/, "apikey=…").replace(/access_token=[^&]+/, "")); 
+  ws.on("framesent", (f) => { try { const a = JSON.parse(String(f.payload)); if (Array.isArray(a) && a[3] === "phx_join") joins.push(a[2]); } catch {} });
+  ws.on("framereceived", (f) => { try { const a = JSON.parse(String(f.payload)); if (Array.isArray(a) && a[3] === "phx_reply" && /call-rings/.test(a[2])) joins.push(`reply ${a[2]} ${a[4]?.status} ${JSON.stringify(a[4]?.response).slice(0, 200)}`); } catch {} });
+  ws.on("close", () => joins.push("socket closed")); });
+await page.goto("https://katalist-web.vercel.app/", { waitUntil: "networkidle" });
+await page.waitForTimeout(8000);
+console.log(JSON.stringify({ sockets: [...new Set(sockets)].map((u) => u.slice(0, 90)), joins }, null, 1));
+await browser.close();
