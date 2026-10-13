@@ -75,7 +75,7 @@ export type TurnTimings = {
   factsMs?: number;
   modelMs?: number;
   totalMs?: number;
-  route?: "greeting" | "fast" | "model" | "clarify";
+  route?: "greeting" | "fast" | "model" | "clarify" | "agent";
 };
 
 export function makeTimer(now: () => number = () => performance.now()) {

@@ -135,6 +135,21 @@ function dayLabel(date: string): string {
 
 export type TimeIssue = { key: string; phrase: string; reason: "end_of_week" | "unknown_festival" | "malformed" | "empty" };
 
+const TIME_WORDS = new Set([
+  "today", "tomorrow", "tommorow", "tomorow", "tommorrow", "tonight", "yesterday", "kal", "parso", "aaj", "repu", "ee", "roju", "now", "later", "soon",
+  "morning", "afternoon", "evening", "night", "noon", "midnight", "eod", "eow", "am", "pm", "at", "by", "on", "in", "before", "after", "the", "next",
+  "this", "coming", "week", "weekend", "month", "day", "days", "hours", "hour", "mins", "minutes", "of", "end", "o", "clock",
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "mon", "tue", "wed", "thu", "fri", "sat", "sun",
+  "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+  "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec", "st", "nd", "rd", "th",
+]);
+/** The action has no words beyond time words ("tomorrow", "kal 5pm", "next Friday"). */
+export function onlyTime(t: Pick<DraftThing, "action" | "actionTime" | "eventTime" | "textRaw">): boolean {
+  const phrases = [t.actionTime?.phrase, t.eventTime?.phrase].filter(Boolean).join(" ").toLowerCase();
+  const words = (t.action || t.textRaw).toLowerCase().replace(/[^\p{L}\s]/gu, " ").split(/\s+/).filter(Boolean);
+  return words.every((w) => TIME_WORDS.has(w) || phrases.split(/[^\p{L}]+/u).includes(w));
+}
+
 export function runChecks(
   things: DraftThing[],
   timeIssues: TimeIssue[],
@@ -187,6 +202,18 @@ export function runChecks(
   }
 
   // Lens 1: within a slot.
+  // V1.1 missing action: only a time was typed ("tomorrow"). Ask before tossing; Keep it stays available.
+  if (t.kind === "task" && onlyTime(t)) {
+    const phrase = t.actionTime?.phrase ?? t.eventTime?.phrase ?? null;
+    checks.push({
+      id: "V1.1:action",
+      level: 3,
+      severity: "ambiguous",
+      message: phrase ? `What should happen ${phrase}?` : "What needs doing?",
+      detail: "Add what needs doing, then toss.",
+      fixes: [keep("Toss anyway")],
+    });
+  }
   checks.push(...personChecks(t));
   for (const issue of timeIssues) {
     if (issue.reason === "end_of_week") {

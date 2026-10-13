@@ -37,6 +37,17 @@ import { CoeyChips } from "./coey/CoeyChips";
 import { CoeyCommitError, commitCoeyItems, itemsForPlan, privateCaptureItem } from "./coey/commit";
 import type { ComposerSelections } from "@/domain/coey/contract";
 import { localParts, zonedInstant } from "@/domain/coey/calendar";
+import { isCoeyCommand } from "@/domain/coey/command";
+import type { QueryClient } from "@tanstack/react-query";
+
+/** Titles of the person's open Things from the Court cache (no extra request). */
+function courtTitles(qc: QueryClient): string[] {
+  const out: string[] = [];
+  for (const [, data] of qc.getQueriesData<{ things?: Array<{ title?: string; workStatus?: string }> }>({ queryKey: ["court"] })) {
+    for (const t of data?.things ?? []) if (t.title && t.workStatus !== "sorted") out.push(t.title);
+  }
+  return out;
+}
 
 /** Explicit #List and /Bucket syntax the user typed or picked. Links are ignored. */
 function explicitTag(text: string, sigil: "#" | "/"): string | null {
@@ -141,7 +152,9 @@ export function MagicBox({
   // There is no Toss/Ask switch: each Send asks when Coey reads a question and tosses otherwise.
   const composer = useCoeyComposer({ text: value, mode: context, enabled: !isPreviewMode() });
   const plan = composer.plan;
-  const readsAsQuestion = plan?.court.kind === "answer";
+  // An instruction about a Thing the person already has goes to Coey, not into a new Thing.
+  const commandToCoey = !isPreviewMode() && isCoeyCommand(value, courtTitles(qc));
+  const readsAsQuestion = plan?.court.kind === "answer" || commandToCoey;
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantQuery, setAssistantQuery] = useState<import("@/domain/coey/draft").DraftPlan["question"]>(null);
   const [assistantRequestKey, setAssistantRequestKey] = useState(0);
@@ -618,6 +631,7 @@ export function MagicBox({
         items = [privateCaptureItem(value, common)];
         key = composer.idempotencyKey({ ...(input.selections ?? composer.selections), dismissed: ["private-capture"] });
       } else {
+        if (isCoeyCommand(typed, courtTitles(qc))) return { kind: "ask", question: typed, query: null };
         const selections = input.selections ?? composer.selections;
         const decision = await composer.decideSend(selections);
         if (decision.kind === "ask") return { kind: "ask", question: decision.question, query: decision.query };
@@ -1404,7 +1418,7 @@ export function MagicBox({
 
       {value.trim() && !isPreviewMode() ? (
         <CoeyChips
-          plan={plan}
+          plan={commandToCoey && plan ? { ...plan, court: { kind: "answer", rule: "C0a" } } : plan}
           status={interpretationStatus}
           failure={failure}
           calendar={composer.ctx.calendar}

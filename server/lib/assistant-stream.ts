@@ -29,6 +29,7 @@ import {
 import type { AssistantConversationTurn } from "./assistant";
 import { groundWindow, loadSchedulesForFacts, mergeFollowUp, nudgeAnswer, parseStructuredQuery, progressAnswer, structuredAnswer, type StructuredQuery } from "./coey/ask";
 import { interpretLine } from "./coey/interpret";
+import { runAgent } from "./coey/agent/agent";
 
 export type TurnInput = {
   question: string;
@@ -62,6 +63,8 @@ export type TurnDeps = {
    * "not a structured question" (e.g. an action request) or unavailable.
    */
   interpretQuestion?: (question: string, history: AssistantConversationTurn[], context: "work" | "home", signal: AbortSignal, previousQuery: StructuredQuery | null) => Promise<StructuredQuery | null>;
+  /** Ask as an agent (tools + checked answer). Null means "not available": the older paths answer. */
+  agent?: (input: TurnInput, onStatus: (text: string) => void, signal: AbortSignal) => Promise<AssistantAnswer | null>;
   log?: (entry: Record<string, unknown>) => void;
 };
 
@@ -85,6 +88,13 @@ export const defaultTurnDeps = (client: SupabaseClient, userId: string): TurnDep
     const parsed = parseStructuredQuery(thing!.question);
     return parsed ? mergeFollowUp(previousQuery, groundWindow(question, parsed), thing!.question?.continues_previous === true) : null;
   },
+  agent: process.env.KATALIST_ASK_AGENT?.trim() === "off" ? undefined : (input, onStatus, signal) =>
+    runAgent(
+      { question: input.question, history: input.history, mode: input.context, listId: input.listId, bucketId: input.bucketId },
+      { client, userId, apiKey: process.env.SARVAM_API_KEY?.trim() || process.env.CODE_ACTIVITY_SARVAM_API_KEY?.trim(), model: process.env.SARVAM_MODEL?.trim() || "sarvam-105b" },
+      onStatus,
+      signal,
+    ),
   log: (entry) => console.info(JSON.stringify({ evt: "coey_turn", ...entry })),
 });
 
@@ -131,6 +141,22 @@ export async function runCoeyTurn(
   };
   try {
     send(emit.next({ type: "accepted" }));
+    // Ask as an agent first; a List/Bucket/person pick from an older answer keeps the older path.
+    if (deps.agent && !input.scopeChoice && !input.personChoice) {
+      send(emit.next({ type: "status", stage: "reading_facts", text: "Thinking" }));
+      const agentAnswer = await deps.agent(input, (text) => {
+        if (!signal.aborted) send(emit.next({ type: "status", stage: text === "Preparing an action" ? "preparing_action" : "reading_facts", text }));
+      }, signal).catch((error: unknown) => {
+        deps.log?.({ turnId, agent_error: error instanceof Error ? error.message.slice(0, 120) : "unknown" });
+        return null;
+      });
+      if (signal.aborted) return;
+      if (agentAnswer) {
+        route = "agent";
+        emitAnswer(agentAnswer, emptyFacts, true);
+        return finish();
+      }
+    }
     // One interpretation path for Toss-redirected questions, direct Ask and follow-ups.
     let query = input.query ?? null;
     if (!query && deps.interpretQuestion) {

@@ -852,7 +852,8 @@ export function MagicBoxAssistant({
             })()}
             {answer.intent !== "nudge_recommendation" &&
               (answer.actions ?? [])
-                .filter((action) => action.type !== "open_thing" && action.type !== "prepare_nudge")
+                // The agent's nudges are specific proposals, shown as cards to confirm.
+                .filter((action) => action.type !== "open_thing" && (action.type !== "prepare_nudge" || answer.intent === "agent_answer"))
                 .map((action) => (
                   <AssistantActionCard
                     key={action.id}

@@ -128,3 +128,21 @@ test("production regression: nudge, progress and off-topic questions get their o
   assert.doesNotMatch(age.answer_markdown, /open Thing/);
   assert.equal(calls.model, 0, "all three are answered in code from facts");
 });
+
+test("Ask runs as an agent first; when the agent cannot answer, the older path still does", async () => {
+  const agentAnswer = { schema_version: "katalist.assistant.answer.v1", intent: "agent_answer", answer_markdown: "From the agent.", confidence: "high", citations: [], actions: [], freshness: facts.freshness, groups: [] };
+  const { deps: d, calls } = deps(() => null);
+  const statuses = [];
+  d.agent = async (_input, onStatus) => { onStatus("Looking through your Things"); return agentAnswer; };
+  const events = [];
+  await runCoeyTurn({ question: "anything", context: "work", history: [] }, d, "t", (e) => events.push(e), new AbortController().signal);
+  for (const e of events) if (e.type === "status") statuses.push(e.text);
+  assert.equal(events.find((e) => e.type === "answer").answer.answer_markdown, "From the agent.");
+  assert.deepEqual(statuses, ["Thinking", "Looking through your Things"]);
+  assert.equal(events.at(-1).timings.route, "agent");
+  assert.equal(calls.interpret.length, 0);
+  d.agent = async () => null;
+  assert.equal((await answerOf("draft a nudge for the deck", d)).answer_markdown, "model");
+  d.agent = async () => { throw new Error("model_500"); };
+  assert.equal((await answerOf("draft a nudge for the deck", d)).answer_markdown, "model", "an agent failure falls back, never errors the turn");
+});

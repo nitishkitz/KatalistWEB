@@ -22,13 +22,30 @@ function capitalise(title: string): string {
  * The card title is the action in the user's own words. If the model's action
  * does not come from the typed text, the typed text (without @#/ tokens) is used.
  */
+function editDistance(a: string, b: string): number {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let prev = row[0]!;
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const next = Math.min(row[j]! + 1, row[j - 1]! + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = row[j]!;
+      row[j] = next;
+    }
+  }
+  return row[b.length]!;
+}
+
 export function titleFor(draft: DraftThing): string {
   const typed = draft.textRaw.replace(MENTION_TOKEN, "$1").replace(/\s+/g, " ").trim();
   const words = (s: string) => s.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
   const typedWords = new Set(words(draft.textRaw));
   const action = draft.action.trim();
   const actionWords = words(action);
-  const grounded = actionWords.length > 0 && actionWords.filter((w) => typedWords.has(w)).length / actionWords.length >= 0.7;
+  // A word counts as typed when it is, or is a spelling fix of, a typed word ("doicter" → "doctor").
+  const typedList = [...typedWords];
+  const isTyped = (w: string) => typedWords.has(w) || (w.length >= 4 && typedList.some((t) => t[0] === w[0] && Math.abs(t.length - w.length) <= 2 && editDistance(t, w) <= 2));
+  const grounded = actionWords.length > 0 && actionWords.filter(isTyped).length / actionWords.length >= 0.7;
   return capitalise((grounded ? action : typed || action).slice(0, 500));
 }
 

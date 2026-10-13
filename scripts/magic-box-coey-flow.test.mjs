@@ -53,6 +53,8 @@ const READINGS = {
   "Rohit get documnts": [thing({ action: "get documnts", participants: [] })],
   "and Priya?": [thing({ kind: "question", question: { about_person: "Priya", exclude_self: false, state: "any", window: "any" } })],
   "Renew the trade licence": [thing({ action: "Renew the trade licence" })],
+  "tomorrow": [thing({ action: "", action_time: { phrase: "tomorrow", day: "tomorrow", time: null, boundary: null, offset_days: null, said_weekday: null } })],
+  "visit doicter": [thing({ action: "visit doctor" })],
 };
 let failNext = false;
 mock.module("@/lib/authed-fetch", {
@@ -133,7 +135,7 @@ test("a question typed in Toss mode opens Ask and creates nothing", async () => 
   } finally { cleanup(); qc.clear(); }
 });
 
-test("spelling is never rewritten; the microphone is not shown", async () => {
+test("the typed text is never rewritten in the box; the microphone is not shown", async () => {
   const { ui, qc } = mount();
   rpcCalls.length = 0;
   try {
@@ -193,5 +195,36 @@ test("no Toss/Ask switch: a question asks, a follow-up continues, a task tosses 
     await settle();
     assert.equal(created().length, 1);
     assert.equal(ui.queryByRole("region", { name: "Magic Box assistant" }), null, "tossing a Thing closes the answer");
+  } finally { cleanup(); qc.clear(); }
+});
+
+test("production regression: “tomorrow” alone asks what should happen before tossing; Toss anyway still works", async () => {
+  const { ui, qc } = mount();
+  rpcCalls.length = 0;
+  try {
+    await type(ui, "tomorrow");
+    await settle();
+    assert.ok(ui.getByLabelText("Magic Box clarification").textContent.includes("What should happen tomorrow?"));
+    await act(async () => fireEvent.click(ui.getByRole("button", { name: "Toss Thing" })));
+    await settle();
+    assert.equal(created().length, 0, "nothing is tossed without a decision");
+    await act(async () => fireEvent.click(ui.getByLabelText(/Toss anyway/)));
+    await act(async () => fireEvent.click(ui.getByRole("button", { name: "Continue" })));
+    await act(async () => fireEvent.click(ui.getByRole("button", { name: "Toss Thing" })));
+    await settle();
+    assert.equal(created().length, 1, "Keep it is always available (§5.4)");
+  } finally { cleanup(); qc.clear(); }
+});
+
+test("production regression: an obvious misspelling is fixed in the title; what was typed is kept as typed", async () => {
+  const { ui, qc } = mount();
+  rpcCalls.length = 0;
+  try {
+    await type(ui, "visit doicter");
+    await settle();
+    await act(async () => fireEvent.click(ui.getByRole("button", { name: "Toss Thing" })));
+    await settle();
+    assert.equal(created()[0].args.p_items[0].title, "Visit doctor");
+    assert.equal(created()[0].args.p_items[0].text_raw, "visit doicter");
   } finally { cleanup(); qc.clear(); }
 });

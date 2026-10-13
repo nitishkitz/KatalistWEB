@@ -26,7 +26,8 @@ export type AssistantIntent =
   | "clarification"
   | "scope_selection_required"
   | "scope_not_found"
-  | "unsupported";
+  | "unsupported"
+  | "agent_answer";
 
 type ContextKind = "work" | "home";
 

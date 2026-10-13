@@ -15,7 +15,13 @@ export type AssistantActionType =
   | "set_status"
   | "set_due"
   | "assign_person"
-  | "add_to_bucket";
+  | "add_to_bucket"
+  | "catch_thing"
+  | "sort_thing"
+  | "snooze_thing"
+  | "promise_date"
+  | "set_pace"
+  | "add_comment";
 
 export type AssistantAction = {
   id: string;
@@ -35,6 +41,10 @@ export type ActionParams = {
   assigneeActorId?: string;
   bucketId?: string;
   message?: string;
+  /** snooze_thing: when the snooze ends. promise_date: the promised time. */
+  until?: string;
+  pace?: "urgent" | "normal" | "chill";
+  comment?: string;
 };
 
 export type ActionTargetResult = {
@@ -62,6 +72,12 @@ const TYPES: AssistantActionType[] = [
   "set_due",
   "assign_person",
   "add_to_bucket",
+  "catch_thing",
+  "sort_thing",
+  "snooze_thing",
+  "promise_date",
+  "set_pace",
+  "add_comment",
 ];
 const MAX_TARGETS = 20;
 const TTL_MS = 5 * 60 * 1000;
@@ -156,6 +172,16 @@ export function parseActionRequest(body: unknown): {
     params.dueHasTime = raw.dueHasTime === true;
   }
   if (typeof raw.message === "string") params.message = raw.message.trim().slice(0, 500);
+  if (raw.until !== undefined) {
+    if (typeof raw.until !== "string" || Number.isNaN(new Date(raw.until).getTime())) throw new ActionError("Invalid time.", 400);
+    if (new Date(raw.until).getTime() < Date.now() - 60_000) throw new ActionError("That time has already passed.", 400);
+    params.until = new Date(raw.until).toISOString();
+  }
+  if (raw.pace !== undefined) {
+    if (raw.pace !== "urgent" && raw.pace !== "normal" && raw.pace !== "chill") throw new ActionError("Unsupported pace.", 400);
+    params.pace = raw.pace;
+  }
+  if (typeof raw.comment === "string" && raw.comment.trim()) params.comment = raw.comment.trim().slice(0, 1000);
   return { type, targetIds, params };
 }
 
@@ -166,6 +192,11 @@ function requireParams(type: AssistantActionType, params: ActionParams) {
     (type === "set_due" && params.dueAt) ||
     (type === "assign_person" && params.assigneeActorId) ||
     (type === "add_to_bucket" && params.bucketId) ||
+    ((type === "snooze_thing" || type === "promise_date") && params.until) ||
+    (type === "set_pace" && params.pace) ||
+    (type === "add_comment" && params.comment) ||
+    type === "catch_thing" ||
+    type === "sort_thing" ||
     READ_ONLY.has(type);
   if (!ok) throw new ActionError("This action is missing required details.", 400);
 }
@@ -189,7 +220,7 @@ function snapshotOf(row: ThingRow) {
   };
 }
 
-type Evaluation = { results: ActionTargetResult[]; label: string; reason: string };
+type Evaluation = { results: ActionTargetResult[]; label: string; reason: string; myActorId?: string | null; acks?: Map<string, string | null> };
 
 /** Shared by preview and confirm so both apply the same rules to fresh data. */
 async function evaluate(
@@ -237,7 +268,7 @@ async function evaluate(
         nudgeable.set(row.to_actor_id, (nudgeable.get(row.to_actor_id) ?? new Set()).add(row.thing_id));
   }
   let myActorId: string | null = null;
-  if (type === "set_status") {
+  if (type === "set_status" || type === "catch_thing" || type === "sort_thing" || type === "snooze_thing" || type === "promise_date" || type === "add_comment") {
     // set_work_status is limited to the current assignee, so resolve the viewer's actor.
     const { data } = await client.from("actors").select("id").eq("profile_id", viewerId).maybeSingle();
     myActorId = (data?.id as string | undefined) ?? null;
@@ -292,6 +323,26 @@ async function evaluate(
         if (closed) return [id, title, "rejected", "Already closed."];
         if (!people.has(params.assigneeActorId!)) return [id, title, "rejected", "That person is not assignable."];
         break;
+      case "catch_thing":
+        if (row.acknowledgement === "caught") return [id, title, "already_applied"];
+        if (closed) return [id, title, "rejected", "Already closed."];
+        if (!myActorId || row.current_assignee_actor_id !== myActorId) return [id, title, "rejected", "Only the person holding it can catch it."];
+        break;
+      case "sort_thing":
+        if (row.work_status === "sorted") return [id, title, "already_applied"];
+        if (closed) return [id, title, "rejected", "Already closed."];
+        if (!myActorId || row.current_assignee_actor_id !== myActorId) return [id, title, "rejected", "Only the person holding it can mark it sorted."];
+        break;
+      case "snooze_thing":
+      case "promise_date":
+        if (closed) return [id, title, "rejected", "Already closed."];
+        if (!myActorId || row.current_assignee_actor_id !== myActorId) return [id, title, "rejected", "Only Things in your court."];
+        break;
+      case "set_pace":
+        if (closed) return [id, title, "rejected", "Already closed."];
+        break;
+      case "add_comment":
+        break;
       case "add_to_bucket":
         if (bucketOk!.members.has(id)) return [id, title, "already_applied"];
         if (row.context !== bucketOk!.context) return [id, title, "rejected", "Different context from the Bucket."];
@@ -313,8 +364,17 @@ async function evaluate(
     set_due: `Set the due date on ${things_}`,
     assign_person: `Reassign ${things_}`,
     add_to_bucket: `Add ${things_} to ${bucketOk?.name ?? "the Bucket"}`,
+    catch_thing: `Catch ${things_}`,
+    sort_thing: `Mark ${things_} sorted`,
+    snooze_thing: `Snooze ${things_}`,
+    promise_date: `Promise a date on ${things_}`,
+    set_pace: `Set the pace on ${things_} to ${params.pace === "chill" ? "no rush" : params.pace}`,
+    add_comment: `Comment on ${things_}`,
   }[type as "open_thing"];
-  return { results: results(rows), label, reason: "Prepared from your request; nothing changes until you confirm." };
+  return {
+    results: results(rows), label, reason: "Prepared from your request; nothing changes until you confirm.",
+    myActorId, acks: new Map([...things].map(([id, row]) => [id, row.acknowledgement])),
+  };
 }
 
 export async function previewAssistantAction(
@@ -389,6 +449,28 @@ async function run(client: SupabaseClient, payload: TokenPayload): Promise<Confi
           return client.rpc("set_due", { p_thing_id: target.id, p_due_at: params.dueAt, p_due_has_time: params.dueHasTime ?? false });
         case "assign_person":
           return client.rpc("reassign_thing", { p_thing_id: target.id, p_new_assignee_actor_id: params.assigneeActorId });
+        case "catch_thing":
+          return (async () => {
+            const caught = await client.rpc("catch_thing", { p_thing_id: target.id, p_personal_pace: "next" });
+            if (caught.error) return caught;
+            return client.rpc("set_work_status", { p_thing_id: target.id, p_work_status: "under_progress" });
+          })();
+        case "sort_thing":
+          return client.rpc("sort_thing", { p_thing_id: target.id });
+        case "snooze_thing":
+          return client.rpc("snooze_thing", { p_thing_id: target.id, p_snoozed_until: params.until });
+        case "promise_date":
+          return (async () => {
+            if (evaluation.acks?.get(target.id) !== "caught") {
+              const caught = await client.rpc("catch_thing", { p_thing_id: target.id, p_personal_pace: "next" });
+              if (caught.error) return caught;
+            }
+            return client.rpc("coey_promise" as never, { p_thing_id: target.id, p_promise_at: params.until } as never);
+          })();
+        case "set_pace":
+          return client.rpc("coey_set_pace" as never, { p_thing_id: target.id, p_pace: params.pace } as never);
+        case "add_comment":
+          return client.from("thing_comments").insert({ thing_id: target.id, body: params.comment!, author_actor_id: evaluation.myActorId! });
         default:
           return client.rpc("add_to_bucket", { p_bucket_id: params.bucketId, p_thing_id: target.id });
       }
