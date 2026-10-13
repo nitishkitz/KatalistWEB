@@ -185,3 +185,27 @@ test("disconnecting stops new delegation but keeps existing Things and history",
   await actAs(db, PRIYA);
   assert.equal((await db.query("SELECT count(*)::int n FROM things WHERE id = $1", [thingId])).rows[0].n, 1, "history is not deleted");
 });
+
+test("C9 relay: when the first person sorts their step, the next step goes to the next person, once", async () => {
+  await connect(SENDER, PRIYA); // an earlier test disconnected them; a chain needs everyone connected
+  await actAs(db, SENDER);
+  const r = await create("key-chain-0001", [{ title: "Approve scheme", text_raw: "Ask Ravi to get Priya to approve", mode: "work", chain: [RAVI, PRIYA], rule_id: "C9+L7" }]);
+  const first = r.things[0].thing_id;
+  assert.equal((await schedule(first)).holder_profile_id, RAVI);
+  await actAs(db, RAVI);
+  await db.query("SELECT catch_thing($1, 'next')", [first]);
+  await db.query("SELECT sort_thing($1)", [first]);
+  await db.exec("RESET ROLE");
+  const next = (await db.query("SELECT * FROM thing_schedules WHERE chain_step_of = $1", [first])).rows;
+  assert.equal(next.length, 1);
+  assert.equal(next[0].holder_profile_id, PRIYA);
+  assert.equal(next[0].sender_profile_id, SENDER);
+  assert.equal(next[0].chain_index, 1);
+  await actAs(db, PRIYA);
+  assert.equal((await db.query("SELECT count(*)::int n FROM things WHERE id = $1", [next[0].thing_id])).rows[0].n, 1, "Priya now sees her step");
+  await actAs(db, PRIYA);
+  await db.query("SELECT catch_thing($1, 'next')", [next[0].thing_id]);
+  await db.query("SELECT sort_thing($1)", [next[0].thing_id]);
+  await db.exec("RESET ROLE");
+  assert.equal((await db.query("SELECT count(*)::int n FROM thing_schedules WHERE chain_step_of = $1", [next[0].thing_id])).rows[0].n, 0, "the last step ends the relay");
+});
