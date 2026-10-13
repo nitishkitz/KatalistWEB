@@ -159,3 +159,9 @@ test("production regression: picked files are copied before the input is cleared
   const handler = source.slice(source.indexOf("const handleFileSelect"), source.indexOf("const handleFileSelect") + 600);
   assert.ok(handler.indexOf("Array.from(e.target.files") < handler.indexOf('.value = ""'), "files must be copied before value is reset");
 });
+
+test("attaching a file never types its name into the Magic Box", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("../src/features/court/MagicBox.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /applyFirstAsTitleIfEmpty/);
+});

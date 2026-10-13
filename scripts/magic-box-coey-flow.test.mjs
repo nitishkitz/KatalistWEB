@@ -51,6 +51,8 @@ const READINGS = {
   "Ravi send the price list": [thing({ action: "send the price list", participants: [{ mention: "Ravi", role: "doer" }], assign_shape: "single" })],
   "Whos on stale other than me": [thing({ kind: "question", question: { about_person: null, exclude_self: true, state: "stale", window: "any" } })],
   "Rohit get documnts": [thing({ action: "get documnts", participants: [] })],
+  "and Priya?": [thing({ kind: "question", question: { about_person: "Priya", exclude_self: false, state: "any", window: "any" } })],
+  "Renew the trade licence": [thing({ action: "Renew the trade licence" })],
 };
 let failNext = false;
 mock.module("@/lib/authed-fetch", {
@@ -165,4 +167,31 @@ test("when Coey can't read the line, the draft stays; Keep it to myself saves a 
     assert.equal(item.inbox_reason, "unresolved_capture");
     assert.equal(item.holder_profile_id, undefined);
   } finally { failNext = false; cleanup(); qc.clear(); }
+});
+
+test("no Toss/Ask switch: a question asks, a follow-up continues, a task tosses and closes the answer", async () => {
+  const { ui, qc } = mount();
+  rpcCalls.length = 0;
+  try {
+    assert.equal(ui.queryByRole("group", { name: "Magic Box mode" }), null, "the switch is gone");
+    await type(ui, "Whos on stale other than me");
+    await settle();
+    assert.ok(ui.getByRole("button", { name: "Ask Coey" }), "the send button says Ask for a question");
+    await act(async () => fireEvent.keyDown(ui.getByLabelText("Magic Box"), { key: "Enter" }));
+    await settle();
+    assert.ok(ui.getByRole("region", { name: "Magic Box assistant" }).textContent.includes("Whos on stale other than me"));
+    assert.equal(ui.getByLabelText("Magic Box").value, "", "the box is ready for the next line");
+    await type(ui, "and Priya?");
+    await settle();
+    await act(async () => fireEvent.keyDown(ui.getByLabelText("Magic Box"), { key: "Enter" }));
+    await settle();
+    assert.ok(ui.getByRole("region", { name: "Magic Box assistant" }).textContent.includes("and Priya?"), "follow-up continues in the same answer");
+    await type(ui, "Renew the trade licence");
+    await settle();
+    assert.ok(ui.getByRole("button", { name: "Toss Thing" }));
+    await act(async () => fireEvent.click(ui.getByRole("button", { name: "Toss Thing" })));
+    await settle();
+    assert.equal(created().length, 1);
+    assert.equal(ui.queryByRole("region", { name: "Magic Box assistant" }), null, "tossing a Thing closes the answer");
+  } finally { cleanup(); qc.clear(); }
 });

@@ -173,7 +173,9 @@ function describeCreated(createdAt?: string): string | undefined {
 
 async function loadNamedScopes(client: SupabaseClient): Promise<NamedScope[]> {
   const [lists, buckets] = await Promise.all([
-    client.from("lists").select("id,name,context,archived_at,created_at").limit(MAX_SCOPES),
+    // DMs and groups are conversations named after people, not Lists: "pending with Sudheer"
+    // must never be read as "inside the Sudheer DM".
+    client.from("lists").select("id,name,context,archived_at,created_at").not("kind", "in", "(dm,group)").limit(MAX_SCOPES),
     client.from("buckets").select("id,name,context,archived_at,created_at").limit(MAX_SCOPES),
   ]);
   if (lists.error) throw lists.error;

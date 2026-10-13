@@ -60,7 +60,9 @@ test("self exclusion and waiting-on-me are fields, not phrase matches", () => {
 test("a named person resolves exactly; a shared first name asks which; an unknown name says so", () => {
   const priya = structuredAnswer(facts, q({ about_person: "Priya" }), schedules, undefined, now);
   assert.equal(priya.intent, "person_items");
-  assert.deepEqual(ids(priya), ["sent-to-priya-fresh"]);
+  assert.deepEqual(ids(priya), ["from-priya-to-me", "sent-to-priya-fresh"], "in Priya's court, plus what Priya sent me");
+  assert.deepEqual(priya.groups.map((g) => g.title), ["In Priya Shah’s court", "From Priya Shah, in your court"]);
+  assert.match(priya.answer_markdown, /1 open Thing with Priya Shah\. 1 Thing from Priya Shah is in your court\./);
   const ravi = structuredAnswer(facts, q({ about_person: "Ravi" }), schedules, undefined, now);
   assert.equal(ravi.intent, "person_selection_required");
   assert.deepEqual(ravi.person_candidates.map((c) => c.display_name), ["Ravi Kumar", "Ravi Teja"]);
@@ -86,4 +88,12 @@ test("production regressions: an ungrounded time window is dropped; asking about
   assert.equal(self.intent, "person_items");
   assert.deepEqual(ids(self), ["from-priya-to-me", "mine"]);
   assert.match(self.answer_markdown, /in your court/);
+});
+
+test("production regression: someone known only as a sender (they sent me Things) is found, not 'can't find'", () => {
+  const only = { ...facts, people: [], things: [{ ...thing("from-sudheer", "a-sud", ME), owner_name: "Sudheer" }, { ...thing("from-sudheer-2", "a-sud", ME), owner_name: "Sudheer" }] };
+  const a = structuredAnswer(only, q({ about_person: "sudheer" }), schedules, undefined, now);
+  assert.equal(a.intent, "person_items");
+  assert.equal(a.answer_markdown, "No open Things with Sudheer. 2 Things from Sudheer are in your court.");
+  assert.deepEqual(ids(a), ["from-sudheer", "from-sudheer-2"]);
 });

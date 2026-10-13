@@ -137,11 +137,11 @@ export function MagicBox({
   const motionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const motionPhaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [submitHandoff, setSubmitHandoff] = useState(false);
-  const [composerMode, setComposerMode] = useState<"toss" | "ask">("toss");
-  const effectiveComposerMode = composerMode;
   // One semantic path (D12): Sarvam reads the draft; code places and validates it.
-  const composer = useCoeyComposer({ text: value, mode: context, enabled: composerMode === "toss" && !isPreviewMode() });
+  // There is no Toss/Ask switch: each Send asks when Coey reads a question and tosses otherwise.
+  const composer = useCoeyComposer({ text: value, mode: context, enabled: !isPreviewMode() });
   const plan = composer.plan;
+  const readsAsQuestion = plan?.court.kind === "answer";
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantQuery, setAssistantQuery] = useState<import("@/domain/coey/draft").DraftPlan["question"]>(null);
   const [assistantRequestKey, setAssistantRequestKey] = useState(0);
@@ -295,17 +295,6 @@ export function MagicBox({
     return () => window.removeEventListener(MAGIC_BOX_REFERENCES_EVENT, consume);
   }, []);
 
-  const applyFirstAsTitleIfEmpty = (firstNewFile: ThingFile) => {
-    // If input value is empty, auto-populate with the file name (without extension)
-    // so the user immediately sees what they are tossing, can edit it or add tags,
-    // and the Toss button enables immediately.
-    if (value.trim()) return;
-    const cleanName = firstNewFile.name
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[-_]+/g, " ")
-      .trim();
-    if (cleanName) setValue(cleanName);
-  };
 
   const processOneFile = async (opId: string, file: File, opEpoch: number) => {
     setProcessingFiles((n) => n + 1);
@@ -318,7 +307,6 @@ export function MagicBox({
       acquireBlobUrl(processed.url, fileOwnerKey);
       fileObjects.current.set(processed.id, file);
       setAttachedFiles((prev) => [...prev, processed]);
-      applyFirstAsTitleIfEmpty(processed);
       flashMotion("attachment", 630);
     } catch (err) {
       console.error("Failed to process file:", err);
@@ -665,10 +653,12 @@ export function MagicBox({
     onSuccess: async (result, _vars, mutationContext) => {
       if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       if (result.kind === "ask") {
-        setComposerMode("ask");
+        // Opens the answer, or continues it as a follow-up when it is already open.
         setAssistantQuery(result.query ?? null);
         setAssistantQuestion(result.question);
         setAssistantRequestKey((k) => k + 1);
+        setValue("");
+        composer.reset();
         return;
       }
       if (result.kind === "paused") {
@@ -691,6 +681,9 @@ export function MagicBox({
       if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       const stillSameDestination = epochRef.current === mutationContext.opEpoch;
       const stillSameDraft = currentDraftFingerprint.current === mutationContext.draftFingerprint;
+      // Tossing a Thing ends any answer that was open.
+      setAssistantQuestion("");
+      setAssistantQuery(null);
       if (stillSameDestination && stillSameDraft) {
         setTossed(true);
         setValue("");
@@ -760,14 +753,6 @@ export function MagicBox({
     else if (outcome === "send") mutation.mutate({ selections: next, privateCapture: option.fix.type === "save_private" });
   };
 
-  const startAsk = (asked?: string) => {
-    const q = (asked ?? value).trim();
-    if (!q) return;
-    setAssistantQuery(null);
-    setComposerMode("ask");
-    setAssistantQuestion(q);
-    setAssistantRequestKey((key) => key + 1);
-  };
   const startToss = () => {
     if (!canToss) return;
     flashMotion("submitting", 430);
@@ -810,10 +795,10 @@ export function MagicBox({
         !desktop && "mb-3",
       )}
     >
-      {(motionFocused || (effectiveComposerMode === "ask" && assistantQuestion) || question) && (
+      {(motionFocused || assistantQuestion || question) && (
         <div data-testid="magic-box-backdrop" aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-slate-950/30" />
       )}
-      {question && !trigger && effectiveComposerMode === "toss" ? (
+      {question && !trigger ? (
         <MagicBoxClarification
           id={`${suggestionId}-clarification`}
           questionKey={`${draftEntityId}:${value}:${question.check.id}`}
@@ -825,12 +810,9 @@ export function MagicBox({
         />
       ) : null}
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1 text-[10px] font-medium text-muted-foreground" aria-label="Magic Box mode and destination">
-        <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5" role="group" aria-label="Magic Box mode">
-          <button type="button" onClick={() => setComposerMode("toss")} aria-pressed={effectiveComposerMode === "toss"} className={cn("rounded px-2 py-1 text-[10px] font-semibold transition", effectiveComposerMode === "toss" ? "bg-violet-100 text-violet-700" : "text-slate-500 hover:text-slate-800")}>Toss</button>
-          <button type="button" onClick={() => setComposerMode("ask")} aria-pressed={effectiveComposerMode === "ask"} className={cn("rounded px-2 py-1 text-[10px] font-semibold transition", effectiveComposerMode === "ask" ? "bg-violet-100 text-violet-700" : "text-slate-500 hover:text-slate-800")}>Ask</button>
-        </div>
+
       </div>
-      {effectiveComposerMode === "ask" && assistantQuestion && (
+      {assistantQuestion && (
         <MagicBoxAssistant
           question={assistantQuestion}
           requestKey={assistantRequestKey}
@@ -840,7 +822,7 @@ export function MagicBox({
           onOpenThing={openThing}
           query={assistantQuery}
           onAsk={(next) => { setValue(next); setAssistantQuery(null); setAssistantQuestion(next); setAssistantRequestKey((key) => key + 1); }}
-          onClose={() => { setAssistantQuestion(""); setValue(""); setComposerMode("toss"); }}
+          onClose={() => { setAssistantQuestion(""); setAssistantQuery(null); }}
         />
       )}
       {/* Autocomplete Popover for @ People — appears immediately on typing @ */}
@@ -1298,13 +1280,7 @@ export function MagicBox({
               }
             }
 
-            if (e.key === "Enter" && effectiveComposerMode === "ask" && value.trim()) {
-              e.preventDefault();
-              startAsk();
-              return;
-            }
-
-            if (e.key === "Enter" && effectiveComposerMode === "toss" && canToss) {
+            if (e.key === "Enter" && canToss) {
               e.preventDefault();
               startToss();
               return;
@@ -1319,7 +1295,7 @@ export function MagicBox({
               e.currentTarget.blur();
             }
           }}
-          placeholder={effectiveComposerMode === "ask" ? (listName ? `Ask about ${listName}…` : "Ask about your work…") : (listName ? `Toss into ${listName}…` : "Toss a thought...")}
+          placeholder={listName ? `Toss into ${listName}, or ask Coey…` : "Toss a thought, or ask Coey…"}
           className="relative block min-h-[22px] max-h-[132px] w-full resize-none border-0 bg-transparent p-0 text-[13.5px] leading-[22px] outline-none placeholder:text-[#7e7a94] [overflow-wrap:anywhere]"
           style={{ color: "transparent", caretColor: "var(--foreground)" }}
           onScroll={(event) => { if (textMirrorRef.current) textMirrorRef.current.scrollTop = event.currentTarget.scrollTop; }}
@@ -1369,7 +1345,6 @@ export function MagicBox({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="magic-box-attachment inline-flex h-8 w-8 items-center justify-center rounded-full text-slate-400 outline-none hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
-              disabled={effectiveComposerMode === "ask"}
               aria-label="Attach file"
               title="Attach files (photos, videos, doc, excel, etc.)"
             >
@@ -1392,14 +1367,14 @@ export function MagicBox({
             ) : null}
             <button
               type="button"
-              disabled={effectiveComposerMode === "ask" ? !value.trim() : !canToss}
-              onClick={effectiveComposerMode === "ask" ? () => startAsk() : startToss}
+              disabled={!canToss}
+              onClick={startToss}
               className="magic-box-toss inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-              aria-label={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
-              title={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
+              aria-label={readsAsQuestion ? "Ask Coey" : "Toss Thing"}
+              title={readsAsQuestion ? "Ask Coey" : "Toss Thing"}
             >
-              {effectiveComposerMode === "ask" ? <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> : <KatalistIcon name="send-toss" className="h-3.5 w-3.5" />}
-              {effectiveComposerMode === "ask" ? "Ask" : "Toss"}
+              {readsAsQuestion ? <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> : <KatalistIcon name="send-toss" className="h-3.5 w-3.5" />}
+              {readsAsQuestion ? "Ask" : "Toss"}
             </button>
           </div>
         ) : (
@@ -1415,19 +1390,19 @@ export function MagicBox({
             </button>
             <button
               type="button"
-              disabled={effectiveComposerMode === "ask" ? !value.trim() : !canToss}
-              onClick={effectiveComposerMode === "ask" ? () => startAsk() : startToss}
+              disabled={!canToss}
+              onClick={startToss}
               className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground outline-none transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
-              title={effectiveComposerMode === "ask" ? "Ask Coey" : "Toss Thing"}
+              aria-label={readsAsQuestion ? "Ask Coey" : "Toss Thing"}
+              title={readsAsQuestion ? "Ask Coey" : "Toss Thing"}
             >
-              {effectiveComposerMode === "ask" ? "Ask" : "Toss"}
+              {readsAsQuestion ? "Ask" : "Toss"}
             </button>
           </div>
         )}
       </div>
 
-      {effectiveComposerMode === "toss" && value.trim() && !isPreviewMode() ? (
+      {value.trim() && !isPreviewMode() ? (
         <CoeyChips
           plan={plan}
           status={interpretationStatus}

@@ -53,7 +53,7 @@ test("the composer keeps the destination in its placeholder without the removed 
   const { getByLabelText, queryByText } = render(h(Harness, { qc, listName: "Website Launch" }));
   await act(async () => {});
 
-  assert.equal(getByLabelText("Magic Box").placeholder, "Toss into Website Launch…");
+  assert.equal(getByLabelText("Magic Box").placeholder, "Toss into Website Launch, or ask Coey…");
   assert.equal(queryByText("Website Launch"), null);
   assert.equal(queryByText("work"), null);
 

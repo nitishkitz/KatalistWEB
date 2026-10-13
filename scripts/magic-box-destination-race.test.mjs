@@ -90,7 +90,7 @@ test("a file picked for the old destination does not get appended to a new desti
   // Switch destination BEFORE the slow processFileForUpload resolves.
   rerender(h(Harness, { qc, listId: "list-b", listName: "List B" }));
   await act(async () => {});
-  assert.equal(getByLabelText("Magic Box").placeholder, "Toss into List B…", "must now show the new destination");
+  assert.equal(getByLabelText("Magic Box").placeholder, "Toss into List B, or ask Coey…", "must now show the new destination");
 
   // Now let the stale operation resolve.
   await act(async () => {

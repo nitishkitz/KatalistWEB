@@ -93,6 +93,8 @@ export type AssistantFacts = {
     assignee_actor_id: string | null;
     assignee_name: string | null;
     owner_actor_id: string | null;
+    /** Who sent it, so people known only as senders can be named in Ask. */
+    owner_name?: string | null;
     updated_at: string;
     citation_label: string;
   }>;
@@ -365,6 +367,7 @@ export async function buildAssistantFacts(
       is_overdue: overdue,
       is_waiting: waiting,
       assignee_name: person?.display_name ?? null,
+      owner_name: thing.owner_actor_id ? people.get(thing.owner_actor_id)?.display_name ?? null : null,
     };
   });
   const active = facts.filter((thing) => isActive(thing));
@@ -570,6 +573,7 @@ export async function buildAssistantFacts(
       assignee_actor_id: thing.current_assignee_actor_id,
       assignee_name: thing.assignee_name,
       owner_actor_id: thing.owner_actor_id,
+      owner_name: thing.owner_name ?? null,
       updated_at: thing.updated_at,
       citation_label: safeString(thing.title, 100),
     })),

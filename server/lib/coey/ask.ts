@@ -114,7 +114,11 @@ export function structuredAnswer(
   const base = { schema_version: "katalist.assistant.answer.v1" as const, confidence: "high" as const, actions: [], citations: [], freshness: facts.freshness };
   const me = facts.viewer.actor_id ?? "";
   const people = new Map(facts.people.map((p) => [p.actor_id, p.display_name]));
-  for (const t of facts.things) if (t.assignee_actor_id && t.assignee_name && !people.has(t.assignee_actor_id)) people.set(t.assignee_actor_id, t.assignee_name);
+  for (const t of facts.things) {
+    if (t.assignee_actor_id && t.assignee_name && !people.has(t.assignee_actor_id)) people.set(t.assignee_actor_id, t.assignee_name);
+    // Senders count as people too: "pending with Sudheer" works when Sudheer only sent you Things.
+    if (t.owner_actor_id && t.owner_name && !people.has(t.owner_actor_id)) people.set(t.owner_actor_id, t.owner_name);
+  }
 
   // A named person resolves exactly; near names ask, never guess (V1.2).
   let personId: string | null = null;
@@ -144,11 +148,11 @@ export function structuredAnswer(
 
   const windows = localWindows(now, facts.freshness.timezone);
   let staleKnown = true;
-  const things = facts.things.filter((t) => {
+  const matches = (t: AssistantFacts["things"][number], holder: string | null) => {
     const open = !CLOSED.has(t.status);
     if (query.state === "sorted" ? open : !open) return false;
     if (query.exclude_self && t.assignee_actor_id === me) return false;
-    if (personId && t.assignee_actor_id !== personId) return false;
+    if (holder && t.assignee_actor_id !== holder) return false;
     if (query.state === "waiting_on_others" && !(t.owner_actor_id === me && t.assignee_actor_id !== me)) return false;
     if (query.state === "waiting_on_me" && t.assignee_actor_id !== me) return false;
     if (query.state === "stale") {
@@ -164,7 +168,12 @@ export function structuredAnswer(
     if (query.window === "this_week" && !within(windows.week)) return false;
     if (query.window === "overdue" && !(due !== null && due < now)) return false;
     return true;
-  });
+  };
+  const things = facts.things.filter((t) => matches(t, personId));
+  // "Pending with X" also covers what X sent you that is still open in your court.
+  const fromThem = personId && personId !== me && (query.state === "any" || query.state === "pending")
+    ? facts.things.filter((t) => t.owner_actor_id === personId && matches(t, me))
+    : [];
 
   const byHolder = new Map<string, string[]>();
   for (const t of things) {
@@ -177,6 +186,9 @@ export function structuredAnswer(
     thing_ids: ids,
     total: ids.length,
   }));
+  if (fromThem.length) {
+    groups.push({ key: `person:from-${personId}`, title: `From ${people.get(personId!)}, in your court`, thing_ids: fromThem.map((t) => t.id), total: fromThem.length });
+  }
   const n = things.length;
   const noun = n === 1 ? "Thing" : "Things";
   const who = personId === me && me ? " in your court" : personId ? ` with ${people.get(personId)}` : query.exclude_self ? " with others" : "";
@@ -192,12 +204,15 @@ export function structuredAnswer(
           : query.window === "overdue"
             ? n ? `${n} ${noun}${who} ${n === 1 ? "is" : "are"} past ${n === 1 ? "its" : "their"} date.` : `Nothing${who} is past its date.`
             : n ? `${n} open ${noun}${who}.` : `No open Things${who}.`;
+  const fromLine = fromThem.length
+    ? ` ${fromThem.length} ${fromThem.length === 1 ? "Thing" : "Things"} from ${people.get(personId!)} ${fromThem.length === 1 ? "is" : "are"} in your court${query.window === "overdue" ? ` and past ${fromThem.length === 1 ? "its" : "their"} date` : ""}.`
+    : "";
   return {
     ...base,
     structured_query: { ...query, about_person: personId ? people.get(personId) ?? query.about_person : query.about_person },
     intent: personId ? "person_items" : query.state === "stale" ? "stale_items" : "scope_summary",
-    answer_markdown,
+    answer_markdown: answer_markdown + fromLine,
     groups,
-    citations: things.slice(0, 20).map((t) => ({ type: "thing" as const, id: t.id, label: t.citation_label })),
+    citations: [...things, ...fromThem].slice(0, 20).map((t) => ({ type: "thing" as const, id: t.id, label: t.citation_label })),
   };
 }
