@@ -157,7 +157,7 @@ export function placeLane(
   paceResolution: "pace" | "anchor" | null = null,
   config: CoeyConfig = COEY_CONFIG,
 ): LaneDecision {
-  if (court.kind === "inbox" && court.reason === "unresolved_person") return { lane: "none", rule: "L0" };
+  if (court.kind === "inbox" && (court.reason === "unresolved_person" || court.reason === "unresolved_capture")) return { lane: "none", rule: "L0" };
   if (court.kind === "inbox" && court.reason === "thought") return { lane: "later", rule: "L9" };
   if (court.kind === "answer" || court.kind === "note" || court.kind === "split" || court.kind === "ask_owner") {
     return { lane: "none", rule: court.rule };

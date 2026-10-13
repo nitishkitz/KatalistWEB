@@ -139,6 +139,34 @@ function resolveMinutes(time: string, cal: HolderCalendar, mode: Mode): number |
   return parseMinutes(time);
 }
 
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/**
+ * Deterministic reading of an explicit date phrase ("November 30", "30 Nov",
+ * "30th", "15/10") when the model labelled the time but left `day` empty.
+ * Calendar maths only; it never decides whether text is a task.
+ */
+export function explicitDayFromPhrase(phrase: string, today: string): string | null {
+  const p = phrase.toLowerCase();
+  const year = Number(today.slice(0, 4));
+  const pick = (month: number, day: number, explicitYear?: number): string | null => {
+    if (month < 1 || month > 12 || day < 1 || day > daysInMonth(explicitYear ?? year, month)) return null;
+    let date = `${explicitYear ?? year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    if (!explicitYear && date < today) date = `${year + 1}${date.slice(4)}`;
+    return `date:${date}`;
+  };
+  const monthIndex = (word: string) => MONTHS.indexOf(word.slice(0, 3)) + 1;
+  let m = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?([a-z]{3,9})\b(?:\s+(\d{4}))?/.exec(p);
+  if (m && monthIndex(m[2]!) > 0) return pick(monthIndex(m[2]!), Number(m[1]), m[3] ? Number(m[3]) : undefined);
+  m = /\b([a-z]{3,9})\s+(\d{1,2})(?:st|nd|rd|th)?\b(?:,?\s+(\d{4}))?/.exec(p);
+  if (m && monthIndex(m[1]!) > 0) return pick(monthIndex(m[1]!), Number(m[2]), m[3] ? Number(m[3]) : undefined);
+  m = /\b(\d{1,2})[/.-](\d{1,2})(?:[/.-](\d{2,4}))?\b/.exec(p);
+  if (m) return pick(Number(m[2]), Number(m[1]), m[3] ? Number(m[3].length === 2 ? `20${m[3]}` : m[3]) : undefined);
+  m = /\b(\d{1,2})(?:st|nd|rd|th)\b/.exec(p);
+  if (m) return `monthday:${Number(m[1])}`;
+  return null;
+}
+
 /** Resolve one time expression in the holder's calendar. `dayChoice` answers an end-of-week question. */
 export function resolveTimeExpr(
   expr: TimeExpr,
@@ -149,6 +177,10 @@ export function resolveTimeExpr(
 ): ResolvedTime {
   const phrase = expr.phrase;
   const today = localParts(now, cal.timezone).date;
+  if (!expr.day && !dayChoice) {
+    const day = explicitDayFromPhrase(phrase, today);
+    if (day) expr = { ...expr, day };
+  }
   if (!expr.day && !expr.time && !dayChoice) return { ok: false, phrase, reason: "empty" };
 
   let date: string | null = dayChoice ?? null;

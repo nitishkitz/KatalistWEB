@@ -219,9 +219,12 @@ export function buildDraftPlan(input: BuildInput): DraftPlan {
   const drafts = built.map((b) => b.draft);
 
   // Before the user answers a split offer, the input as a whole is the offer.
-  const wholeCourt = drafts.length > 1 && split !== "split" ? placeCourt(drafts) : placeCourt(drafts.slice(0, 1));
+  let wholeCourt = drafts.length > 1 && split !== "split" ? placeCourt(drafts) : placeCourt(drafts.slice(0, 1));
+  // V0.5: no clear meaning. Saved exactly as typed, privately; nobody is notified.
+  const unclear = input.interpretation.gibberish && !input.selections.kindOverride;
+  if (unclear) wholeCourt = { kind: "inbox", reason: "unresolved_capture", rule: "C10" };
   const things: PlannedThing[] = (drafts.length > 1 && split === "split" ? built : built.slice(0, 1)).map((b) => {
-    const court = placeCourt([b.draft]);
+    const court = unclear ? wholeCourt : placeCourt([b.draft]);
     return { draft: b.draft, court, lane: placeLane(b.draft, court, b.holderCal, input.now, input.selections.paceConflict ?? null) };
   });
 

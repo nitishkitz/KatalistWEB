@@ -121,8 +121,8 @@ export function interpretationJsonSchema(): Record<string, unknown> {
         required: ["phrase", "day", "time", "boundary", "offset_days", "said_weekday"],
         properties: {
           phrase: { type: "string", maxLength: 80 },
-          day: nullableString(DAY_EXPR.source),
-          time: nullableString(TIME_EXPR.source),
+          day: nullableString(),
+          time: nullableString(),
           boundary: { anyOf: [{ type: "string", enum: [...BOUNDARIES] }, { type: "null" }] },
           offset_days: { anyOf: [{ type: "integer" }, { type: "null" }] },
           said_weekday: { anyOf: [weekday, { type: "null" }] },
@@ -263,7 +263,37 @@ export type InterpretResponse =
       latency_ms: number;
     };
 
+/**
+ * Models sometimes emit empty slots ("phrase": "") instead of null. Those carry
+ * no meaning, so they become null before strict validation instead of
+ * rejecting the whole reading.
+ */
+function tidy(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object") return raw;
+  const value = raw as { things?: unknown };
+  if (!Array.isArray(value.things)) return raw;
+  for (const t of value.things as Array<Record<string, unknown>>) {
+    if (!t || typeof t !== "object") continue;
+    for (const slot of ["action_time", "event_time"]) {
+      const v = t[slot] as Record<string, unknown> | null | undefined;
+      if (!v) continue;
+      if (typeof v.day === "string" && !DAY_EXPR.test(v.day)) v.day = null;
+      if (typeof v.time === "string" && !TIME_EXPR.test(v.time)) v.time = null;
+      // A phrase with no day/time label stays: code may still read an explicit date from it.
+      if (typeof v.phrase !== "string" || !v.phrase.trim()) t[slot] = null;
+    }
+    const rec = t.recurrence as Record<string, unknown> | null | undefined;
+    if (rec && (typeof rec.phrase !== "string" || !rec.phrase.trim())) t.recurrence = null;
+    if (t.pace_phrase === "") t.pace_phrase = null;
+    if (t.waits_on === "") t.waits_on = null;
+    if (Array.isArray(t.participants))
+      t.participants = (t.participants as Array<{ mention?: unknown }>).filter((x) => typeof x?.mention === "string" && x.mention.trim());
+    if (typeof t.confidence === "number") t.confidence = Math.min(1, Math.max(0, t.confidence));
+  }
+  return raw;
+}
+
 export function parseInterpretation(raw: unknown): Interpretation | null {
-  const result = interpretationSchema.safeParse(raw);
+  const result = interpretationSchema.safeParse(tidy(raw));
   return result.success ? result.data : null;
 }
