@@ -1,0 +1,71 @@
+# Coey rebuild — acceptance report
+
+13 October 2026. Branch `manus/phase1-magic-box-assistant-20261011`, local commits `7b5b2a63` … `0b38664a`. **Not pushed, not deployed, no migration applied to any hosted database.**
+
+## What changed for users
+
+- **Magic Box understands meaning, not keywords.** Sarvam reads the line after a 400 ms pause. Code places it in a Court and a lane, checks it, and saves only when Toss is pressed. Explicit picks (an `@person`, a chip, an answer) are kept as constraints.
+- **Your reported failures:**
+  - **Questions in Toss mode** open Ask and create nothing.
+  - **Mentioned versus doer:** "Call Ravi about GST" stays yours; Ravi receives nothing.
+  - **Duplicate names and near spellings** always ask which person.
+  - **Unknown or unconnected names** are never sent anything.
+  - **EOD** is the holder's work end; **end of week** asks which day.
+  - **Gibberish** is kept privately as typed.
+  - **Spelling is never rewritten.**
+  - **The microphone is gone.**
+- **One compact question at a time**, and "Keep it" is always offered. If Sarvam is unavailable, the draft stays, with *Try again* or *Keep it to myself*. No silent fallback creates a Thing.
+- **Ask answers in code** from a structured query: exact names or a "which person" question, self exclusion, and "stale" only for Things you sent, judged by working-time cadence. The copy describes Things, never a person's activity.
+- **Connections are explicit.** You add people by exact phone, email or a personal `/connect/<handle>` link; opening the link never connects anyone. The recipient must accept. Disconnect and block are available. Things, DMs and groups require an accepted connection, enforced in the database. Google Contacts is removed.
+- **The Court reads each Thing's schedule.** Lanes move with time in the holder's working hours. With Others is ordered by how much the sender should worry. A new **Inbox** strip holds unresolved, wrong-person and parked Things.
+- **Thing detail** lets the holder promise a date, say it is waiting on someone else, ask a question back, or say it is the wrong person. Only the sender changes the pace. A "Why is this here?" line shows the rule behind the lane.
+- **Me → Working time** (days, hours, Saturdays off, holidays, leave, home hours) and **Me → Coey** (Full / Light / Quiet).
+- **Recurring Things** create their next occurrence on Sort. **Relay chains** hand the next step to the next person.
+- **Follow-ups:**
+  - They run on working-time cadence: Urgent at 4, 8 and 12 working hours; Normal at 1, 2 and 3 working days; Chill never.
+  - Nudge 1 is a line on the Thing only, with no push.
+  - Each holder gets at most one batched message per tick, within a budget of 3 per day.
+  - Every Thing is re-checked at delivery.
+  - The old elapsed-hours "gone cold / escalate" job is retired.
+
+## Evidence
+
+| Check | Result |
+| --- | --- |
+| Typecheck | Pass |
+| Lint on the 44 added or modified source files | 0 errors (16 warnings, all on lines not changed by this work) |
+| Production build (`npm run build`) | Pass |
+| Full unit suite | 1,666 tests: 1,628 pass, 38 fail. The 38 failures are identical by name to the baseline recorded before any change (`.work/coey/baseline-failures.txt`); no new failures |
+| New Coey tests | Engine 24, interpretation 7, DOM flow 5, connections SQL 8, scheduling SQL 12, follow-up 9, recurrence 3, Ask 4, quality gates 4, SMS OTP 2 |
+| Empty-database rehearsal | All 110 migrations (103 existing + 7 new) apply in order to an empty PGlite database with a Supabase shim; schema tests then run on it |
+| Real Sarvam (`sarvam-105b-conversations`, strict JSON schema) | 29/29 labelled lines match the expected Court, lane and question; p50 491 ms, p95 643 ms, max 719 ms (synthetic people; no Katalist data sent) |
+
+**Not verified, and why:**
+
+- **No browser run against a real backend.** The only Supabase project is fenced and empty after the reset, and Docker is not installed, so there was no isolated backend to sign in to. The live composer path is covered by DOM tests with a mocked network, and the database behaviour by PGlite. Managed Supabase Auth, Storage and Realtime are not exercised.
+- **Real SMS OTP is unverified.** No SMS provider is configured.
+- **The follow-up job has not run in production.** It is gated off, and Vercel Hobby cron is daily only.
+- **Accuracy is not established.** It rests on 29 synthetic lines; the spec asks for 300–500 field-labelled lines.
+
+## Release steps that need you (P11 is done; P12 not started)
+
+1. **Apply the seven new migrations**, in filename order (`20261013120000` … `20261013170000`), to project `jrdsmmiggezrhiakncwc` after reviewing them. Remote migration history is known to drift, so apply them one by one, not with `db push`.
+2. **Configure an SMS provider** (for example Twilio) under Supabase Auth → Phone, then build with `VITE_KATALIST_PHONE_AUTH=sms`. Keep `VITE_KATALIST_FIXED_OTP` unset in production.
+3. **Provide a scheduler** that calls `/api/jobs/coey-followups` every 5 minutes with `CRON_SECRET`, then set `KATALIST_BACKGROUND_JOBS_ENABLED=true` and `KATALIST_OUTBOUND_DELIVERY_ENABLED=true`. A daily cron cannot honour the Urgent cadence.
+4. **Remove the reset fences, reopen signup and unpause Vercel**, following `docs/existing-backend-reset-status.md`. Set `KATALIST_MAINTENANCE=false`.
+5. **Set the Supabase Auth site URL and redirect allow-list** for the production domain.
+6. **Deploy** with `SARVAM_API_KEY` and `SARVAM_MODEL` set server-side. Then verify with two temporary accounts: sign up, request, accept, toss, clarify, save, open, catch, promise, ask. Remove those accounts afterwards.
+7. **Push to Lovable's connected branch** only when you are ready, because pushes sync to Lovable.
+
+## Biggest remaining gaps
+
+These are listed in full in `requirement-register.md`:
+
+- Part B's engagement engine and habit layer (E, K and H families).
+- The grouped sender card with progress.
+- The Home Mode "Can't wait" breakthrough.
+- Upward (junior-to-boss) rules.
+- Spring Cleaning on the new model.
+- Sender state-change messages.
+- Personal priors learning.
+- A real labelled set.
