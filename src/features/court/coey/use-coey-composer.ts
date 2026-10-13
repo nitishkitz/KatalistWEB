@@ -15,7 +15,7 @@ export type ComposerQuestion = {
 };
 
 export type SendDecision =
-  | { kind: "ask"; question: string }
+  | { kind: "ask"; question: string; query: DraftPlan["question"] }
   | { kind: "commit"; plan: DraftPlan; interpretation: Interpretation }
   | { kind: "question" }
   | { kind: "unavailable"; reason: string }
@@ -154,7 +154,7 @@ export function useCoeyComposer({ text, mode, enabled }: { text: string; mode: "
     const next = buildPlan(state, sel);
     if (!next) return { kind: "unavailable", reason: ctx.error ? "people" : "unavailable" };
     const path = commitPath(next);
-    if (path === "answer") return { kind: "ask", question: state.text };
+    if (path === "answer") return { kind: "ask", question: state.text, query: next.question };
     if (path === "resolve_first" || (next.response.interrupt?.level ?? 0) >= 3) {
       setPausedForSend(true);
       return { kind: "question" };

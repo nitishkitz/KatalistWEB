@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { authedFetch } from "@/lib/authed-fetch";
-import { useCoeyTurn } from "./assistant/use-coey-turn";
+import { useCoeyTurn, type CoeyTurnRequest } from "./assistant/use-coey-turn";
 import { useSession } from "@/hooks/useSession";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { toast } from "sonner";
@@ -123,7 +123,10 @@ export function MagicBoxAssistant({
   voice,
   voiceTurnId = null,
   onProposalChange,
+  query = null,
 }: {
+  /** Structured query when the Magic Box recognised a question; null for typed Ask mode. */
+  query?: CoeyTurnRequest["query"];
   question: string;
   requestKey: number;
   listId?: string;
@@ -196,9 +199,11 @@ export function MagicBoxAssistant({
         context,
         history: historyRef.current.slice(-6),
         reuse,
+        // Follow-ups in the same panel are open questions again.
+        query: historyRef.current.length === 0 ? query : null,
       };
     },
-    [question, listId, bucketId, choice, personChoice, context],
+    [question, listId, bucketId, choice, personChoice, context, query],
   );
   // One turn per question. Re-running is an explicit Refresh, never a timer.
   useEffect(() => {

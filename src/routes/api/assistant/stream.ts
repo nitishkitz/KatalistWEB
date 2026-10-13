@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { parseStructuredQuery } from "../../../../server/lib/coey/ask";
 import { assistantJson, requireAssistantUser } from "@/lib/assistant-route.server";
 import { sanitizeAssistantHistory } from "../../../../server/lib/assistant";
 import {
@@ -59,6 +60,7 @@ export const Route = createFileRoute("/api/assistant/stream")({
                 : undefined,
             reuse: body.reuse === true,
             personChoice: typeof body.personChoice === "string" ? body.personChoice : undefined,
+            query: parseStructuredQuery(body.query),
           };
           const deps = defaultTurnDeps(client, userId);
           const turnId = makeTurnId();

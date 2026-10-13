@@ -27,6 +27,7 @@ import {
   type TurnTimings,
 } from "./assistant-turn";
 import type { AssistantConversationTurn } from "./assistant";
+import { loadSchedulesForFacts, structuredAnswer, type StructuredQuery } from "./coey/ask";
 
 export type TurnInput = {
   question: string;
@@ -37,6 +38,8 @@ export type TurnInput = {
   scopeChoice?: { type: "list" | "bucket"; id: string };
   personChoice?: string;
   reuse?: boolean;
+  /** Set when the Magic Box interpreted the line as a question (C0a): answered in code, no keyword routing. */
+  query?: StructuredQuery | null;
 };
 
 /**
@@ -106,7 +109,7 @@ export async function runCoeyTurn(
   };
   try {
     send(emit.next({ type: "accepted" }));
-    const decision = routeCoeyQuestion(input.question, input.history);
+    const decision = input.query ? { kind: "fast" as const, intent: "scope_summary" as const } : routeCoeyQuestion(input.question, input.history);
     route = decision.kind;
     if (decision.kind === "greeting") {
       emitAnswer(buildGreetingAnswer(input.question), emptyFacts, true);
@@ -162,7 +165,9 @@ export async function runCoeyTurn(
 
     if (decision.kind === "model" && (process.env.SARVAM_API_KEY?.trim() || process.env.CODE_ACTIVITY_SARVAM_API_KEY?.trim()))
       send(emit.next({ type: "status", stage: "calling_model", text: "Asking the language model" }));
-    const answer = await deps.answer(facts, input.question, input.history, signal, input.personChoice);
+    const answer = input.query
+      ? structuredAnswer(facts, input.query, await loadSchedulesForFacts(deps.client, facts), input.personChoice)
+      : await deps.answer(facts, input.question, input.history, signal, input.personChoice);
     timer.mark("modelMs");
     if (signal.aborted) return;
     emitAnswer(answer, resultFacts(facts), decision.kind !== "model");

@@ -141,6 +141,7 @@ export function MagicBox({
   const composer = useCoeyComposer({ text: value, mode: context, enabled: composerMode === "toss" && !isPreviewMode() });
   const plan = composer.plan;
   const [assistantQuestion, setAssistantQuestion] = useState("");
+  const [assistantQuery, setAssistantQuery] = useState<import("@/domain/coey/draft").DraftPlan["question"]>(null);
   const [assistantRequestKey, setAssistantRequestKey] = useState(0);
 
   const flashMotion = (accent: typeof motionAccent, duration: number) => {
@@ -591,7 +592,7 @@ export function MagicBox({
 
   type SendResult =
     | { kind: "created"; createdIds: string[]; title: string; bucketFailedIds: string[] }
-    | { kind: "ask"; question: string }
+    | { kind: "ask"; question: string; query: import("@/domain/coey/draft").DraftPlan["question"] }
     | { kind: "paused" }
     | { kind: "unavailable"; reason: string };
 
@@ -622,7 +623,7 @@ export function MagicBox({
       } else {
         const selections = input.selections ?? composer.selections;
         const decision = await composer.decideSend(selections);
-        if (decision.kind === "ask") return { kind: "ask", question: decision.question };
+        if (decision.kind === "ask") return { kind: "ask", question: decision.question, query: decision.query };
         if (decision.kind === "question" || decision.kind === "empty") return { kind: "paused" };
         if (decision.kind === "unavailable") return { kind: "unavailable", reason: decision.reason };
         const checkIds = [decision.plan.response.interrupt, ...decision.plan.response.chips, ...decision.plan.response.hints]
@@ -646,6 +647,7 @@ export function MagicBox({
       if (!isEpochCurrent(qc, mutationContext.epoch)) return;
       if (result.kind === "ask") {
         setComposerMode("ask");
+        setAssistantQuery(result.query ?? null);
         setAssistantQuestion(result.question);
         setAssistantRequestKey((k) => k + 1);
         return;
@@ -738,6 +740,7 @@ export function MagicBox({
   const startAsk = (asked?: string) => {
     const q = (asked ?? value).trim();
     if (!q) return;
+    setAssistantQuery(null);
     setComposerMode("ask");
     setAssistantQuestion(q);
     setAssistantRequestKey((key) => key + 1);
@@ -812,7 +815,8 @@ export function MagicBox({
           bucketId={effectiveBucketId}
           context={context}
           onOpenThing={openThing}
-          onAsk={(next) => { setValue(next); setAssistantQuestion(next); setAssistantRequestKey((key) => key + 1); }}
+          query={assistantQuery}
+          onAsk={(next) => { setValue(next); setAssistantQuery(null); setAssistantQuestion(next); setAssistantRequestKey((key) => key + 1); }}
           onClose={() => { setAssistantQuestion(""); setValue(""); setComposerMode("toss"); }}
         />
       )}

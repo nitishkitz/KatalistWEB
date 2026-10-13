@@ -14,6 +14,8 @@ export type CoeyTurnRequest = {
   context: "work" | "home";
   history: Array<{ role: "user" | "assistant"; content: string }>;
   reuse: boolean;
+  /** Structured read query from Magic Box interpretation; answered in code on the server. */
+  query?: { about_person: string | null; exclude_self: boolean; state: string; window: string } | null;
 };
 
 const TURN_TIMEOUT_MS = 30_000;
