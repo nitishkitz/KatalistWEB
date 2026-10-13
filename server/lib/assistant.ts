@@ -96,6 +96,7 @@ export type AssistantFacts = {
     /** Who sent it, so people known only as senders can be named in Ask. */
     owner_name?: string | null;
     updated_at: string;
+    created_at?: string;
     citation_label: string;
   }>;
   workload: Array<{
@@ -575,6 +576,7 @@ export async function buildAssistantFacts(
       owner_actor_id: thing.owner_actor_id,
       owner_name: thing.owner_name ?? null,
       updated_at: thing.updated_at,
+      created_at: thing.created_at,
       citation_label: safeString(thing.title, 100),
     })),
     workload,

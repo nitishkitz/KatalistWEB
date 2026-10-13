@@ -8,7 +8,7 @@ import {
   type AssistantFacts,
 } from "./assistant";
 import { wantsActivity } from "./assistant-activity";
-import { buildGreetingAnswer, buildOutOfScopeAnswer } from "./assistant-fast-answer";
+import { buildFastAnswer, buildGreetingAnswer, buildOutOfScopeAnswer } from "./assistant-fast-answer";
 import {
   DeadlineError,
   factsCacheKey,
@@ -27,7 +27,7 @@ import {
   type TurnTimings,
 } from "./assistant-turn";
 import type { AssistantConversationTurn } from "./assistant";
-import { groundWindow, loadSchedulesForFacts, mergeFollowUp, parseStructuredQuery, structuredAnswer, type StructuredQuery } from "./coey/ask";
+import { groundWindow, loadSchedulesForFacts, mergeFollowUp, parseStructuredQuery, progressAnswer, structuredAnswer, type StructuredQuery } from "./coey/ask";
 import { interpretLine } from "./coey/interpret";
 
 export type TurnInput = {
@@ -138,7 +138,16 @@ export async function runCoeyTurn(
       if (signal.aborted) return;
     }
     input = { ...input, query };
-    const decision = query ? { kind: "fast" as const, intent: "scope_summary" as const } : routeCoeyQuestion(input.question, input.history);
+    const topic = query?.topic ?? "things";
+    if (query && topic === "off_topic") {
+      route = "clarify";
+      emitAnswer({ ...buildOutOfScopeAnswer(input.question), structured_query: query }, emptyFacts, true);
+      return finish();
+    }
+    // Nudge questions use the nudge recommendations (cooldowns, permissions); not a Thing count.
+    const decision = query
+      ? { kind: "fast" as const, intent: topic === "nudge" ? ("nudge_recommendation" as const) : ("scope_summary" as const) }
+      : routeCoeyQuestion(input.question, input.history);
     route = decision.kind;
     if (decision.kind === "greeting") {
       emitAnswer(buildGreetingAnswer(input.question), emptyFacts, true);
@@ -194,9 +203,13 @@ export async function runCoeyTurn(
 
     if (decision.kind === "model" && (process.env.SARVAM_API_KEY?.trim() || process.env.CODE_ACTIVITY_SARVAM_API_KEY?.trim()))
       send(emit.next({ type: "status", stage: "calling_model", text: "Asking the language model" }));
-    const answer = input.query
-      ? structuredAnswer(facts, input.query, await loadSchedulesForFacts(deps.client, facts), input.personChoice)
-      : await deps.answer(facts, input.question, input.history, signal, input.personChoice);
+    const answer = !input.query
+      ? await deps.answer(facts, input.question, input.history, signal, input.personChoice)
+      : topic === "nudge"
+        ? { ...buildFastAnswer("nudge_recommendation", facts, input.question), structured_query: input.query }
+        : topic === "progress"
+          ? progressAnswer(facts, input.query)
+          : structuredAnswer(facts, input.query, await loadSchedulesForFacts(deps.client, facts), input.personChoice);
     timer.mark("modelMs");
     if (signal.aborted) return;
     emitAnswer(answer, resultFacts(facts), decision.kind !== "model");

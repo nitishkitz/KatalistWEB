@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { parseStructuredQuery } from "../../../../server/lib/coey/ask";
+import { groundWindow, parseStructuredQuery } from "../../../../server/lib/coey/ask";
 import { assistantJson, requireAssistantUser } from "@/lib/assistant-route.server";
 import { sanitizeAssistantHistory } from "../../../../server/lib/assistant";
 import {
@@ -60,7 +60,7 @@ export const Route = createFileRoute("/api/assistant/stream")({
                 : undefined,
             reuse: body.reuse === true,
             personChoice: typeof body.personChoice === "string" ? body.personChoice : undefined,
-            query: parseStructuredQuery(body.query),
+            query: ((q) => (q ? groundWindow(question, q) : null))(parseStructuredQuery(body.query)),
             previousQuery: parseStructuredQuery(body.previous_query),
           };
           const deps = defaultTurnDeps(client, userId);

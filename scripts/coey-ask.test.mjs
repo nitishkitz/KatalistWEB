@@ -75,7 +75,7 @@ test("results only reference Things in the authorized facts; malformed queries a
   const all = structuredAnswer(facts, q({}), schedules, undefined, now);
   for (const id of ids(all)) assert.ok(facts.things.some((t) => t.id === id));
   assert.equal(parseStructuredQuery({ state: "drop table", window: "any" }), null);
-  assert.deepEqual(parseStructuredQuery({ about_person: " Ravi ", exclude_self: true, state: "stale", window: "any" }), { about_person: "Ravi", exclude_self: true, state: "stale", window: "any" });
+  assert.deepEqual(parseStructuredQuery({ about_person: " Ravi ", exclude_self: true, state: "stale", window: "any" }), { topic: "things", about_person: "Ravi", exclude_self: true, state: "stale", window: "any" });
 });
 
 test("production regressions: an ungrounded time window is dropped; asking about yourself means your own court", async () => {
@@ -96,4 +96,39 @@ test("production regression: someone known only as a sender (they sent me Things
   assert.equal(a.intent, "person_items");
   assert.equal(a.answer_markdown, "No open Things with Sudheer. 2 Things from Sudheer are in your court.");
   assert.deepEqual(ids(a), ["from-sudheer", "from-sudheer-2"]);
+});
+
+test("production regression: “what things are pending from my side waiting to catch” lists only my uncaught Things", () => {
+  const f = { ...facts, things: [...facts.things, thing("caught-mine", PRIYA, ME, { acknowledgement: "caught" })] };
+  const a = structuredAnswer(f, q({ state: "waiting_for_catch" }), schedules, undefined, now);
+  assert.deepEqual(ids(a), ["from-priya-to-me", "mine"]);
+  assert.equal(a.answer_markdown, "2 Things in your court are waiting for you to catch.");
+  const sent = structuredAnswer(f, q({ state: "waiting_for_catch", exclude_self: true }), schedules, undefined, now);
+  assert.ok(!ids(sent).includes("mine") && ids(sent).includes("sent-to-ravi"), "other than me: what others have not caught");
+});
+
+test("production regression: “whats this weeks progress” reports sorted, new and open work — not a Thing count", async () => {
+  const { progressAnswer, groundWindow } = await import("../server/lib/coey/ask.ts");
+  const monday = new Date(zonedInstant("2026-10-12", 12 * 60, IST)).toISOString();
+  const lastWeek = new Date(zonedInstant("2026-10-08", 12 * 60, IST)).toISOString();
+  const f = { ...facts, things: [
+    thing("sorted-this-week", ME, RAVI, { status: "sorted", updated_at: monday, created_at: lastWeek }),
+    thing("sorted-last-week", ME, RAVI, { status: "sorted", updated_at: lastWeek, created_at: lastWeek }),
+    thing("new-moving", PRIYA, ME, { acknowledgement: "caught", created_at: monday }),
+    thing("to-catch", PRIYA, ME, { created_at: lastWeek }),
+    thing("late", ME, ME, { acknowledgement: "caught", due_at: lastWeek, created_at: lastWeek }),
+    thing("not-mine", PRIYA, RAVI, { status: "sorted", updated_at: monday, created_at: monday }),
+  ] };
+  const a = progressAnswer(f, q({ topic: "progress", window: "this_week" }), now);
+  assert.equal(a.answer_markdown, "This week: 1 Thing sorted, 1 new Thing. Open now: 2 Things in progress, 1 Thing waiting for your catch, 1 Thing past its date.");
+  assert.deepEqual(a.groups.map((g) => [g.title, g.thing_ids]), [["Sorted this week", ["sorted-this-week"]], ["Waiting for your catch", ["to-catch"]], ["Past their date", ["late"]]]);
+  assert.equal(groundWindow("whats this weeks progress", q({ window: "this_week" })).window, "this_week", "“weeks” keeps the week window");
+});
+
+test("topics parse strictly; old clients without a topic mean Things; follow-ups keep the topic", async () => {
+  const { mergeFollowUp } = await import("../server/lib/coey/ask.ts");
+  assert.equal(parseStructuredQuery({ state: "any", window: "any" }).topic, "things");
+  assert.equal(parseStructuredQuery({ topic: "nudge", state: "any", window: "any" }).topic, "nudge");
+  assert.equal(parseStructuredQuery({ topic: "weather", state: "any", window: "any" }), null);
+  assert.equal(mergeFollowUp(q({ topic: "nudge" }), q({ topic: "things", about_person: "Priya" }), true).topic, "nudge");
 });

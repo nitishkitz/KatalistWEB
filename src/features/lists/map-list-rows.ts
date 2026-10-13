@@ -59,16 +59,6 @@ function initialsFrom(name: string) {
     .toUpperCase();
 }
 
-const DEFAULT_PERSONAS = [
-  { id: "p-priya", name: "Priya Sharma", initials: "PS", avatarUrl: "/avatars/priya.jpg" },
-  { id: "p-arjun", name: "Arjun Mehta", initials: "AM", avatarUrl: "/avatars/arjun.jpg" },
-  { id: "p-sarah", name: "Sarah Kapoor", initials: "SK", avatarUrl: "/avatars/sarah.jpg" },
-  { id: "p-mike", name: "Mike Fernandes", initials: "MF", avatarUrl: "/avatars/mike.jpg" },
-  { id: "p-neha", name: "Neha Rao", initials: "NR", avatarUrl: "/avatars/neha.jpg" },
-  { id: "p-rahul", name: "Rahul Mehta", initials: "RM", avatarUrl: "/avatars/rahul.jpg" },
-  { id: "p-sai", name: "Sai", initials: "SA", avatarUrl: "/avatars/sai.jpg" },
-];
-
 /**
  * Safe List identity mapping: members + owner via public_identities + profiles + actors lens.
  * Resolves complete display names and real avatars. Never returns "Someone" or "S".
@@ -175,7 +165,7 @@ export async function mapDbListRows(_qc: QueryClient, profileId: string, lists: 
         ? "Owned by you"
         : ownerName && ownerName !== "Someone"
           ? `Owned by ${ownerName}`
-          : "Owned by Priya Sharma";
+          : "Owned by a Katalist member";
 
     const ownerIdent = identities.get(l.owner_profile_id);
     const ownerDisplayName = ownerIdent?.display_name && ownerIdent.display_name !== "Someone"
@@ -202,15 +192,14 @@ export async function mapDbListRows(_qc: QueryClient, profileId: string, lists: 
       if (m.profile_id && seenKeys.has(m.profile_id)) continue;
 
       const ident = identities.get(m.profile_id);
-      const fallback = DEFAULT_PERSONAS[mIdx % DEFAULT_PERSONAS.length]!;
-      const name = ident?.display_name && ident.display_name !== "Someone" ? ident.display_name : fallback.name;
+      const name = ident?.display_name && ident.display_name !== "Someone" ? ident.display_name : "Katalist member";
       const normName = name.toLowerCase().trim();
-      if (seenKeys.has(normName)) continue;
+      if (name !== "Katalist member" && seenKeys.has(normName)) continue;
 
       if (m.profile_id) seenKeys.add(m.profile_id);
       seenKeys.add(normName);
 
-      const avatarUrl = ident?.avatar_url || matchAvatarByName(name) || fallback.avatarUrl;
+      const avatarUrl = ident?.avatar_url || matchAvatarByName(name);
       dedupedCollaborators.push({
         name,
         profileId: m.profile_id,

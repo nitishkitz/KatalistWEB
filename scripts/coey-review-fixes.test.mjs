@@ -113,3 +113,18 @@ test("re-review: the interpreter prompt for a follow-up includes earlier questio
   assert.match(m[1].content, /show Ravi's overdue Things/);
   assert.match(m[1].content, /keep every other field exactly/);
 });
+
+test("production regression: nudge, progress and off-topic questions get their own answers, not “N open Things”", async () => {
+  const base = { about_person: null, exclude_self: false, state: "any", window: "any" };
+  const topics = { "who need the nudge the most": "nudge", "whats this weeks progress": "progress", "whats my age": "off_topic" };
+  const { deps: d, calls } = deps((q) => ({ ...base, topic: topics[q], window: topics[q] === "progress" ? "this_week" : "any" }));
+  const nudge = await answerOf("who need the nudge the most", d);
+  assert.equal(nudge.intent, "nudge_recommendation");
+  assert.equal(nudge.answer_markdown, "No teammate has an eligible nudge right now.");
+  const progress = await answerOf("whats this weeks progress", d);
+  assert.match(progress.answer_markdown, /^This week: .* sorted, .* new .*Open now: /);
+  const age = await answerOf("whats my age", d);
+  assert.equal(age.intent, "unsupported");
+  assert.doesNotMatch(age.answer_markdown, /open Thing/);
+  assert.equal(calls.model, 0, "all three are answered in code from facts");
+});

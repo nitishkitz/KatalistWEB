@@ -48,3 +48,15 @@ test("T06 assignment directory still fetches for a real signed-in user", async (
   await renderProbe();
   assert.ok(requests > 0);
 });
+
+test("production regression: Reassign offers you and your connections only — never demo personas or unconnected people", async () => {
+  const { assignableFromIdentities } = await import("@/features/people/use-assignable");
+  const people = assignableFromIdentities([
+    { profile_id: "me", actor_id: "a-me", display_name: "Nithesh", avatar_url: null, connected: false },
+    { profile_id: "sud", actor_id: "a-sud", display_name: "Sudheer", avatar_url: null, connected: true },
+    { profile_id: "pending", actor_id: "a-pending", display_name: "Requested Person", avatar_url: null, connected: false },
+    { profile_id: "noactor", actor_id: null, display_name: "No Actor", avatar_url: null, connected: true },
+  ], "me");
+  assert.deepEqual(people.map((p) => p.name), ["Nithesh", "Sudheer"]);
+  assert.ok(people.every((p) => !p.id.startsWith("p-")));
+});

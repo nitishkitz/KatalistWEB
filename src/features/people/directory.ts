@@ -157,8 +157,18 @@ export const DEFAULT_AVATARS: Record<string, string> = {
   sai: "/avatars/sai.jpg",
 };
 
+function inDemoSession(): boolean {
+  try {
+    return Boolean(getStoredDemoSession());
+  } catch {
+    return false;
+  }
+}
+
 export function matchAvatarByName(name?: string | null): string | null {
   if (!name) return null;
+  // Stock photos belong to demo personas only; a real person never gets one by name.
+  if (!inDemoSession()) return null;
   const n = name.trim().toLowerCase();
   if (!n || n === "me" || n === "you" || n === "someone") return null;
   for (const [key, url] of Object.entries(DEFAULT_AVATARS)) {
@@ -178,6 +188,8 @@ export function matchProfile(
     if (hit) return hit;
   }
   if (!name) return null;
+  // Stock photos belong to demo personas only; a real person never gets one by name.
+  if (!inDemoSession()) return null;
   const n = name.trim().toLowerCase();
   if (!n || n === "me" || n === "you" || n === "someone") return null;
   return (

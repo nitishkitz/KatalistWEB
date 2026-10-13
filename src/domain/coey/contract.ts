@@ -12,6 +12,8 @@ export const KINDS = ["task", "note", "question", "thought"] as const;
 export const ROLES = ["doer", "mentioned", "tracked"] as const;
 export const SHAPES = ["none", "single", "each", "shared", "chain"] as const;
 export const PACES = ["urgent", "normal", "chill"] as const;
+export const QUESTION_TOPICS = ["things", "progress", "nudge", "off_topic"] as const;
+export const QUESTION_STATES = ["any", "pending", "waiting_for_catch", "waiting_on_others", "waiting_on_me", "stale", "sorted"] as const;
 export const BOUNDARIES = ["at", "by", "before", "after"] as const;
 export const ACTIVITY_TYPES = [
   "meal.breakfast",
@@ -89,9 +91,11 @@ export const thingSchema = z.object({
   /** For questions: a structured read query for Coey's Ask path. */
   question: z
     .object({
+      /** What kind of answer: a list of Things, progress over time, who to nudge, or not about Katalist. */
+      topic: z.enum(QUESTION_TOPICS).default("things"),
       about_person: z.string().max(60).nullable(),
       exclude_self: z.boolean(),
-      state: z.enum(["any", "pending", "waiting_on_others", "waiting_on_me", "stale", "sorted"]),
+      state: z.enum(QUESTION_STATES),
       window: z.enum(["any", "today", "this_week", "overdue"]),
       /** True when the line only adjusts the previous Ask question ("and Priya?"). */
       continues_previous: z.boolean().default(false),
@@ -196,11 +200,12 @@ export function interpretationJsonSchema(): Record<string, unknown> {
                 {
                   type: "object",
                   additionalProperties: false,
-                  required: ["about_person", "exclude_self", "state", "window", "continues_previous"],
+                  required: ["topic", "about_person", "exclude_self", "state", "window", "continues_previous"],
                   properties: {
+                    topic: { type: "string", enum: [...QUESTION_TOPICS] },
                     about_person: nullableString(undefined, 60),
                     exclude_self: { type: "boolean" },
-                    state: { type: "string", enum: ["any", "pending", "waiting_on_others", "waiting_on_me", "stale", "sorted"] },
+                    state: { type: "string", enum: [...QUESTION_STATES] },
                     window: { type: "string", enum: ["any", "today", "this_week", "overdue"] },
                     continues_previous: { type: "boolean" },
                   },

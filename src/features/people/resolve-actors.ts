@@ -4,7 +4,7 @@ import { DEMO_ACTOR_BY_KEY } from "@/features/demo/identities";
 import { matchAvatarByName } from "./directory";
 
 function toPerson(id: string, name: string | null, avatar?: string | null): Person {
-  const n = name && name.trim() && name.toLowerCase() !== "someone" ? name.trim() : "Priya Sharma";
+  const n = name && name.trim() && name.toLowerCase() !== "someone" ? name.trim() : "Katalist member";
   const resolvedAvatar = avatar || matchAvatarByName(n);
   return {
     id,
@@ -127,9 +127,7 @@ export async function resolveActorPeople(actorIds: string[]): Promise<Map<string
   // 6. Try demo personas for remaining IDs
   const missingAfterContacts = unique.filter((id) => !people.has(id));
   for (const id of missingAfterContacts) {
-    const demo = Object.values(DEMO_ACTOR_BY_KEY).find(
-      (p) => p.id === id || id.endsWith(p.id) || id.toLowerCase().includes(p.name.toLowerCase().split(" ")[0] || ""),
-    );
+    const demo = Object.values(DEMO_ACTOR_BY_KEY).find((p) => p.id === id);
     if (demo) {
       people.set(id, toPerson(demo.id, demo.name, demo.avatarUrl));
     }
@@ -142,10 +140,7 @@ export function personOrSomeone(people: Map<string, Person>, id: string): Person
   if (people.has(id)) return people.get(id)!;
   const demo = Object.values(DEMO_ACTOR_BY_KEY).find((p) => p.id === id);
   if (demo) return toPerson(demo.id, demo.name, demo.avatarUrl);
-  const personas = Object.values(DEMO_ACTOR_BY_KEY);
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash << 5) - hash + id.charCodeAt(i);
-  const fallback = personas[Math.abs(hash) % personas.length]!;
-  return toPerson(id, fallback.name, fallback.avatarUrl);
+  // Never dress an unknown person up as a demo persona.
+  return toPerson(id, null);
 }
 

@@ -50,6 +50,7 @@ import { formatCourtDue, type CourtLaneId } from "./court-view-model";
 import { KatalistIcon } from "./KatalistIcon";
 import { courtLaneContent } from "./court-lane-content";
 import { courtLaneDropAction } from "./court-lane-drop";
+import { useCoeyLaneMove } from "./coey/use-coey-lane-move";
 import { ThingStackCard, type CourtStackAction } from "./ThingStackCard";
 import { useStackGesture } from "./use-stack-gesture";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
@@ -233,6 +234,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     ref,
   ) {
     const qc = useQueryClient();
+    const coeyMove = useCoeyLaneMove({ myActorId, onMoved: () => onRefresh(getIdentityEpoch(qc).epoch) });
     // Optimistic removal: when a card is sorted / paced-later / snoozed we hide it
     // instantly and run the RPC in the background, so the stack never freezes while
     // waiting on the network. If the RPC fails we drop the id and the card returns.
@@ -611,6 +613,10 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         // Sort and pace-later remove the card from this lane — do them optimistically.
         if (action === "later") {
           const target = activeThing;
+          if (target.coey) {
+            void coeyMove.move(target, "later");
+            return;
+          }
           void runOptimisticRemoval(target, "snoozed", { personalPace: "later" }, async () => {
             await rpcSetPersonalPace(target.id, "later");
             toast.success("Snoozed.");
@@ -666,6 +672,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         actionCapabilities.canMoveLater,
         capabilities.canCatch,
         capabilities.canSort,
+        coeyMove,
         content.label,
         onRefresh,
         pendingAction,
@@ -796,6 +803,8 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
               .flat()
               .find((thing) => thing.id === data.thingId);
             if (!sourceThing) return;
+            // Coey places scheduled Things from their schedule (§8.4).
+            if (await coeyMove.move(sourceThing, lane)) return;
             const action = courtLaneDropAction(sourceThing, myActorId, lane);
             if (!action) {
               toast.error("Only the assignee can move this Thing between lanes.");
@@ -821,6 +830,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
           }
         }}
       >
+        {coeyMove.dialog}
         {isDragTarget && (
           <div
             className={cn(

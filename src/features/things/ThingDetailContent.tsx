@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CoeyThingActions } from "@/features/court/coey/CoeyThingActions";
+import { useCoeyLaneMove } from "@/features/court/coey/use-coey-lane-move";
 import { ThingReferenceContextMenu } from "@/features/thing-references/ThingReferenceContextMenu";
 import { useReferenceDraft } from "@/features/thing-references/use-reference-draft";
 import { ThingReferencesSection } from "@/features/thing-references/ThingReferencesSection";
@@ -22,6 +23,7 @@ import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { domainErrorMessage } from "@/lib/domain-error";
 import type { Pace, Thing } from "@/domain/thing";
+import { coeyLane } from "@/domain/thing";
 import {
   isUuid,
   rpcAddThingFile,
@@ -212,6 +214,7 @@ export function ThingDetailContent({
     return null;
   }, [court.myActorId, user?.id, people]);
 
+  const coeyMove = useCoeyLaneMove({ myActorId, onMoved: () => qc.invalidateQueries({ queryKey: ["thing", thing?.id] }) });
   const rawCaps = thing ? getThingCapabilities(thing, myActorId) : null;
   const caps = useMemo(() => {
     if (!rawCaps) return null;
@@ -638,7 +641,10 @@ export function ThingDetailContent({
         caps?.canCancel ||
         caps?.canShred,
       );
-  const activePace: Pace = thing.personalPace ?? "next";
+  // A Coey-scheduled Thing sits where its schedule puts it; show that lane.
+  const scheduledLane = coeyLane(thing)?.lane;
+  const paceThing: Thing = scheduledLane === "now" || scheduledLane === "next" || scheduledLane === "later" ? { ...thing, personalPace: scheduledLane } : thing;
+  const activePace: Pace = paceThing.personalPace ?? "next";
   const snoozedUntil = snoozeEnd ?? null;
   const activeSnoozedUntil = snoozedUntil && new Date(snoozedUntil).getTime() > snoozeClock ? snoozedUntil : null;
   const dueLabel = thing.dueAt ? formatCourtDue(thing).label : null;
@@ -653,6 +659,10 @@ export function ThingDetailContent({
   // rpc*/run.mutate/withOptimisticPatch call stays defined here, unchanged
   // from what each button used to do inline.
   const handleSetPace = (pace: Pace) =>
+    thing.coey
+      ? void coeyMove.move(thing, pace).then((handled) => { if (!handled) handleSetLegacyPace(pace); })
+      : handleSetLegacyPace(pace);
+  const handleSetLegacyPace = (pace: Pace) =>
     run.mutate(
       withOptimisticPatch(qc, thing.id, { personalPace: pace }, async () => {
         await rpcSetPersonalPace(thing.id, pace);
@@ -963,6 +973,7 @@ export function ThingDetailContent({
         </section>
       ) : null}
       <CoeyThingActions thing={thing} />
+      {coeyMove.dialog}
       {(!isCourtVariant && (caps?.canCatch || caps?.canNudge || caps?.canSort || caps?.canShred)) || caps?.canCancel ? (
         <div className="mt-3 space-y-3">
           {!isCourtVariant && caps?.canCatch ? (
@@ -1084,7 +1095,7 @@ export function ThingDetailContent({
           <ThingStatusControls
             variant="court"
             reviewActionsExternal={reviewActionsExternal}
-            thing={thing}
+            thing={paceThing}
             caps={caps}
             busy={busy}
             activePace={activePace}
@@ -1232,7 +1243,7 @@ export function ThingDetailContent({
       <div className="grid grid-cols-1 gap-4 px-5 py-4 xl:grid-cols-2">
         <ThingStatusControls
           variant="default"
-          thing={thing}
+          thing={paceThing}
           caps={caps}
           busy={busy}
           activePace={activePace}
