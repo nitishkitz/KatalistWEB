@@ -61,7 +61,9 @@ export function resolveMention(
 ): ResolvedParticipant {
   const key = fold(mention);
   const chosen = selections.people?.[key];
-  if (chosen === "self" || SELF_WORDS.has(key) || key === fold(viewer.name) || key === fold(viewer.name).split(" ")[0]) {
+  // A bare first name is "me" only when no other visible person shares it; otherwise ask (V1.2).
+  const sharesFirstName = candidates.some((c) => c.profileId !== viewer.profileId && fold(c.name).split(" ")[0] === key);
+  if (chosen === "self" || chosen === viewer.profileId || SELF_WORDS.has(key) || key === fold(viewer.name) || (!sharesFirstName && key === fold(viewer.name).split(" ")[0])) {
     return { mention, role, status: "self", profileId: viewer.profileId, actorId: viewer.actorId, name: viewer.name };
   }
   if (chosen === "keep") return { mention, role: "mentioned", status: "resolved", name: mention };
@@ -72,6 +74,14 @@ export function resolveMention(
   if (chosen) {
     const c = others.find((x) => x.profileId === chosen);
     if (c) return asParticipant(c, c.connected ? "resolved" : "not_connected");
+  }
+  if (sharesFirstName && key === fold(viewer.name).split(" ")[0]) {
+    // "Ravi" when I am Ravi Rao and I know Ravi Kumar: ask, offering me too.
+    const same = others.filter((c) => fold(c.name).split(" ")[0] === key);
+    return { mention, role, status: "ambiguous", candidates: [
+      { profileId: viewer.profileId, actorId: viewer.actorId, name: `${viewer.name} (you)` },
+      ...same.map(({ profileId, actorId, name, avatarUrl }) => ({ profileId, actorId, name, avatarUrl })),
+    ] };
   }
   const full = others.filter((c) => fold(c.name) === key);
   const first = others.filter((c) => fold(c.name).split(" ")[0] === key);

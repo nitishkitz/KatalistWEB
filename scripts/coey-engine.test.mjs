@@ -290,3 +290,11 @@ test("M1 / L5: a far anchor sits in Later then rises with time; snooze hides unt
   assert.equal(computeHolderLane(s, cal, at("2026-10-30", "10:00")).lane, "now");
   assert.equal(computeHolderLane({ ...s, snoozeUntil: at("2026-10-14", "09:00") }, cal, at("2026-10-13", "12:00")).lane, "hidden");
 });
+
+test("a first name shared by me and a connection is ambiguous, never silently 'me'", () => {
+  const me = { profileId: "me", actorId: "a-me", name: "Ravi Rao" };
+  const other = { profileId: "ravi", actorId: "a-ravi", name: "Ravi Kumar", connected: true };
+  assert.equal(resolveMention("Ravi", "doer", [other], me, {}).status, "ambiguous");
+  assert.equal(resolveMention("Ravi", "doer", [], me, {}).status, "self");
+  assert.equal(resolveMention("Ravi Rao", "doer", [other], me, {}).status, "self");
+});
