@@ -1,3 +1,7 @@
+import type { ReactNode } from "react";
+import * as CallMenu from "@radix-ui/react-dropdown-menu";
+import "./list-call-panel.css";
+import { fitCallGrid } from "./call-grid-layout";
 import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useProfileDirectory } from "@/features/people/directory";
 import { findCallProfile, isGenericName, useSelfCallIdentity } from "./call-identity";
@@ -33,6 +37,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Smile,
+  MoreHorizontal,
 } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { cn } from "@/lib/utils";
@@ -80,9 +86,10 @@ const VideoTile = forwardRef<
     self?: boolean;
     /** Shrinks the fallback avatar/name — used for the presentation-mode thumbnail rail. */
     compact?: boolean;
+    contain?: boolean;
     raisedHand?: boolean;
   }
->(function VideoTile({ stream, name, avatarUrl, muted, cameraOff, self, compact, raisedHand }, forwardedRef) {
+>(function VideoTile({ stream, name, avatarUrl, muted, cameraOff, self, compact, contain, raisedHand }, forwardedRef) {
   const ref = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     const el = ref.current;
@@ -94,7 +101,7 @@ const VideoTile = forwardRef<
   }, [stream]);
   const hasVideo = Boolean(stream && stream.getVideoTracks().some((t) => t.enabled)) && !cameraOff;
   return (
-    <div className="relative aspect-video overflow-hidden rounded-[10px] bg-[#0b0c29]">
+    <div className="relative aspect-video overflow-hidden rounded-xl bg-[#303138]">
       <video
         ref={(el) => {
           ref.current = el;
@@ -104,7 +111,7 @@ const VideoTile = forwardRef<
         autoPlay
         playsInline
         muted={self || muted}
-        className={cn("h-full w-full object-cover", hasVideo ? "opacity-100" : "opacity-0")}
+        className={cn("h-full w-full", contain ? "object-contain" : "object-cover", hasVideo ? "opacity-100" : "opacity-0")}
       />
       {!hasVideo ? (
         <div className="absolute inset-0 flex items-center justify-center">
@@ -116,8 +123,8 @@ const VideoTile = forwardRef<
           <Hand className="h-3 w-3" />
         </span>
       ) : null}
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 bg-gradient-to-t from-black/60 to-transparent px-2.5 py-1.5">
-        <span className="truncate text-[12px] font-medium text-white">
+      <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2">
+        <span className="truncate rounded-md bg-black/60 px-2.5 py-1.5 text-[12px] font-medium text-white">
           {name}
           {self ? " (You)" : ""}
         </span>
@@ -127,7 +134,23 @@ const VideoTile = forwardRef<
   );
 });
 
-/** One row in the "In this call (N)" dock — mirrors the Figma participants list. */
+/** Fit actual 16:9 tiles to the available stage, including when a dock opens. */
+function CallVideoGrid({ count, children }: { count: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [layout, setLayout] = useState({ columns: 1, width: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const resize = () => setLayout(fitCallGrid(el.clientWidth, el.clientHeight, count));
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [count]);
+  return <div ref={ref} className="call-grid-space"><div className="call-video-grid" style={{ width: layout.width || "100%", gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))` }}>{children}</div></div>;
+}
+
+/** Participant identity and live media state in the people dock. */
 function ParticipantRow({
   name,
   avatarUrl,
@@ -190,7 +213,7 @@ export function ListCallPanel({
     [call.participants, directory],
   );
   const [minimized, setMinimized] = useState(false);
-  const [dock, setDock] = useState<"none" | "chat" | "participants">("participants");
+  const [dock, setDock] = useState<"none" | "chat" | "participants">("none");
   const qc = useQueryClient();
   const chatDraft = useSessionDraft("list-chat", listId, "");
   const draft = chatDraft.value;
@@ -208,7 +231,6 @@ export function ListCallPanel({
   const presenterVideoRef = useRef<HTMLVideoElement | null>(null);
   const annotateRef = useRef<AnnotateCanvasHandle | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [savingShot, setSavingShot] = useState(false);
@@ -264,18 +286,16 @@ export function ListCallPanel({
   useEffect(() => {
     if (!call.joined) {
       setElapsed(0);
-      setStartedAt(null);
       return;
     }
     const started = new Date();
-    setStartedAt(started);
     const id = setInterval(() => setElapsed(Math.floor((Date.now() - started.getTime()) / 1000)), 1000);
     return () => clearInterval(id);
   }, [call.joined]);
 
   // Track fullscreen state (also updates if the user presses Esc).
   useEffect(() => {
-    const onChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
+    const onChange = () => setIsFullscreen(Boolean(rootRef.current && document.fullscreenElement === rootRef.current));
     document.addEventListener("fullscreenchange", onChange);
     return () => document.removeEventListener("fullscreenchange", onChange);
   }, []);
@@ -288,6 +308,13 @@ export function ListCallPanel({
     if (!el) return;
     if (!document.fullscreenElement) void el.requestFullscreen?.().catch(() => {});
     else void document.exitFullscreen?.().catch(() => {});
+  };
+
+  const minimizeCall = async () => {
+    if (document.fullscreenElement === rootRef.current) {
+      try { await document.exitFullscreen(); } catch { return; }
+    }
+    setMinimized(true);
   };
 
   const copyInviteLink = async () => {
@@ -395,7 +422,7 @@ export function ListCallPanel({
   // close prop to wire.
   if (call.lifecycle === "error") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
         <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center katalist-elevation-dialog">
           <p className="text-[14px] font-semibold text-[#000533]">Couldn't join the call</p>
           <p className="mt-2 text-[13px] text-[#6a769c]">{call.lastError}</p>
@@ -432,7 +459,7 @@ export function ListCallPanel({
 
   if (call.lifecycle === "ended") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
         <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center katalist-elevation-dialog">
           <p className="text-[14px] font-semibold text-[#000533]">Call ended</p>
           <button
@@ -450,7 +477,6 @@ export function ListCallPanel({
   if (!call.joined && !call.connecting) return null;
 
   const count = participants.length + 1;
-  const cols = count <= 1 ? "grid-cols-1" : count <= 4 ? "grid-cols-2" : "grid-cols-3";
   const localStream = call.sharing && call.screenStream ? call.screenStream : call.localStream;
 
   // Presentation mode: someone (self or a remote peer) is sharing their
@@ -568,21 +594,20 @@ export function ListCallPanel({
     );
   }
 
-  // Centered call window over a dimmed backdrop (Figma parity) — not a
+  // Centered call window over a dimmed backdrop — not a
   // click-to-dismiss backdrop, since a stray click shouldn't hide an active
   // call; use Minimize for that instead.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-150">
     <div
       ref={rootRef}
-      className={cn(
-        "flex max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-black/10 bg-white transition-[width] duration-200 animate-in zoom-in-98",
-        presenterTile ? "w-[min(96vw,1040px)]" : "w-[min(96vw,780px)]",
-      )}
-      style={{ boxShadow: "0 24px 60px -12px rgba(15,23,42,0.35)" }}
+      className="katalist-call-panel"
+      data-fullscreen={isFullscreen}
+      role="dialog"
+      aria-label={title ? `${title} call` : "Call"}
     >
       {/* Title bar */}
-      <div className="flex items-center justify-between gap-3 border-b border-[#eef0f6] bg-[#f6f6fa]/80 px-4 py-2.5">
+      <div className="call-header">
         <div className="min-w-0">
           <p className="truncate text-[13.5px] font-semibold text-[#000533]">{title ?? "Call"}</p>
           <p className="flex items-center gap-1.5 text-[12px] text-[#6a769c]">
@@ -597,9 +622,7 @@ export function ListCallPanel({
             ) : call.joined ? (
               <span className="inline-flex items-center gap-1">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#12a15f]" />
-                {startedAt
-                  ? `Started ${startedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-                  : formatDuration(elapsed)}
+                {formatDuration(elapsed)}
               </span>
             ) : null}
           </p>
@@ -609,7 +632,7 @@ export function ListCallPanel({
             <button
               type="button"
               onClick={onInvite}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#975ee2] px-3 text-[12px] font-semibold text-white hover:brightness-95"
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#dedee5] bg-white px-3 text-[12px] font-semibold text-[#34343f] hover:bg-[#eeeef3]"
             >
               <UserPlus className="h-3.5 w-3.5" />
               Invite
@@ -635,7 +658,7 @@ export function ListCallPanel({
           </button>
           <button
             type="button"
-            onClick={() => setMinimized(true)}
+            onClick={() => void minimizeCall()}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title="Minimize"
             aria-label="Minimize call"
@@ -645,9 +668,9 @@ export function ListCallPanel({
         </div>
       </div>
 
-      <div className="flex gap-3 p-3">
+      <div className="call-body">
         {/* Tiles + reactions */}
-        <div className="relative min-w-0 flex-1">
+        <div className="call-stage">
           {/* Floating reactions */}
           <div className="pointer-events-none absolute right-2 top-2 z-10 flex flex-col items-end gap-1">
             {call.reactions.slice(-4).map((r) => {
@@ -674,12 +697,12 @@ export function ListCallPanel({
             </div>
           ) : null}
           {presenterTile ? (
-            <div className="flex flex-col gap-2">
+            <div className="call-presentation">
               {/* isolate: contains the video's own stacking/compositing layer
                   so z-10 overlays below are reliably painted (and clickable)
                   above it, instead of depending on browser-specific video
                   compositing behavior. */}
-              <div className="relative isolate">
+              <div className="relative isolate call-presentation-main">
                 {presenterTile.kind === "whiteboard" ? (
                   <div className="flex aspect-video items-center justify-center rounded-[10px] border border-dashed border-[#c5cae0] bg-white">
                     <p className="text-[12.5px] font-medium text-[#8487a7]">Whiteboard</p>
@@ -729,6 +752,7 @@ export function ListCallPanel({
                 ) : (
                   <VideoTile
                     ref={presenterVideoRef}
+                    contain
                     stream={presenterTile.stream}
                     name={presenterTile.name}
                     avatarUrl={"avatarUrl" in presenterTile ? presenterTile.avatarUrl : null}
@@ -808,7 +832,7 @@ export function ListCallPanel({
                 )}
               </div>
               {thumbnailTiles.length > 0 ? (
-                <div className="flex gap-2 overflow-x-auto">
+                <div className="call-thumbnail-rail">
                   {thumbnailTiles.map((t) => (
                     <div key={t.id} className="w-24 shrink-0">
                       <VideoTile
@@ -827,7 +851,7 @@ export function ListCallPanel({
               ) : null}
             </div>
           ) : (
-            <div className={cn("grid gap-2", cols)}>
+            <CallVideoGrid count={count}>
               <VideoTile
                 stream={localStream}
                 name={call.sharing ? `${selfName} (screen)` : selfName}
@@ -848,17 +872,18 @@ export function ListCallPanel({
                   raisedHand={p.raisedHand}
                 />
               ))}
-            </div>
+            </CallVideoGrid>
           )}
         </div>
 
         {/* Docked side panel: Participants or Chat (mutually exclusive to keep the window compact). */}
         {dock === "participants" ? (
-          <div className="flex w-56 shrink-0 flex-col rounded-[10px] border border-[#eef0f6] bg-white">
-            <div className="border-b border-[#eef0f6] px-3 py-2 text-[12px] font-semibold text-foreground">
-              In this call ({count})
+          <div className="call-dock">
+            <div className="call-dock-header">
+              <span>People · {count}</span>
+              <button type="button" aria-label="Close people" onClick={() => setDock("none")}><X size={16} /></button>
             </div>
-            <div className="flex-1 space-y-0.5 overflow-y-auto px-2 py-1.5" style={{ maxHeight: 220 }}>
+            <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 py-3" >
               <ParticipantRow name={selfName} avatarUrl={selfAvatarUrl} roleLabel="You" muted={call.muted} raisedHand={call.handRaised} />
               {participants.map((p) => (
                 <ParticipantRow key={p.id} name={p.name} avatarUrl={p.avatarUrl} muted={p.muted} raisedHand={p.raisedHand} />
@@ -866,16 +891,17 @@ export function ListCallPanel({
             </div>
           </div>
         ) : dock === "chat" ? (
-          <div className="flex w-72 shrink-0 flex-col rounded-[10px] border border-[#eef0f6] bg-white">
-            <div className="border-b border-[#eef0f6] px-3 py-2 text-[12px] font-semibold text-foreground">
-              Chat
+          <div className="call-dock">
+            <div className="call-dock-header">
+              <span>List chat</span>
+              <button type="button" aria-label="Close chat" onClick={() => setDock("none")}><X size={16} /></button>
             </div>
             <div ref={scrollRef} onScroll={(e) => {
               const el = e.currentTarget;
               const fromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
               nearBottomRef.current = fromBottom < 80;
               if (nearBottomRef.current) setNewChatMessages(false);
-            }} className="flex-1 space-y-2 overflow-y-auto px-3 py-2" style={{ maxHeight: 220 }}>
+            }} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4" >
               {chat.hasMore || chat.olderError ? <button type="button" disabled={chat.isLoadingOlder} onClick={() => void loadOlderChat()} className="w-full rounded-md border border-border px-2 py-1 text-xs text-primary disabled:opacity-50">{chat.isLoadingOlder ? "Loading older…" : chat.olderError ? "Couldn't load older. Retry" : "Load older messages"}</button> : null}
               {chat.messages.length === 0 ? (
                 <p role={chat.error ? "alert" : undefined} className={chat.error ? "text-[12px] text-destructive" : "text-[12px] text-muted-foreground"}>{chat.error ? "Couldn't load messages. Reopen the conversation to retry." : "No messages yet."}</p>
@@ -891,8 +917,8 @@ export function ListCallPanel({
                     <div key={m.id} className="flex items-start gap-2">
                       <PersonAvatar name={m.author} initials={m.author.slice(0, 2).toUpperCase()} src={m.avatarUrl} size={24} />
                       <div className="min-w-0 flex-1 text-[12px]">
-                        <span className="font-semibold text-[#000533]">{m.author}</span>
-                        {m.body ? <span className="text-[#3d3f74]"> {m.body}</span> : null}
+                        <div className="flex flex-wrap items-baseline gap-x-2"><span className="font-semibold text-[#000533]">{m.author}</span><span className="text-[10px] text-[#858590]">{Number.isNaN(Date.parse(m.at)) ? m.at : new Date(m.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span></div>
+                        {m.body ? <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-[#4a4a56]">{m.body}</p> : null}
                         {m.thingReferences?.length ? <ThingReferenceList references={m.thingReferences} className="mt-1 grid gap-2" /> : null}
                         {m.attachment ? (
                           m.attachment.mime?.startsWith("image/") && m.attachment.url ? (
@@ -940,6 +966,7 @@ export function ListCallPanel({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onPaste={referenceDraft.onPaste}
+                aria-label="Message the list"
                 placeholder="Message the list…"
                 className="min-w-0 flex-1 rounded-lg border border-border px-2.5 py-1.5 text-[12px] outline-none focus:border-primary"
               />
@@ -956,143 +983,47 @@ export function ListCallPanel({
         ) : null}
       </div>
 
-      {/* Controls */}
-      <div className="flex flex-wrap items-center justify-center gap-2 px-3 pb-3">
-        <button
-          type="button"
-          onClick={call.toggleMute}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            call.muted ? "bg-[#fc404d] text-white" : "bg-muted text-foreground hover:bg-muted/70",
-          )}
-          title={call.muted ? "Unmute" : "Mute"}
-          aria-label={call.muted ? "Unmute" : "Mute"}
-        >
-          {call.muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-        </button>
-        <button
-          type="button"
-          onClick={call.toggleCamera}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            call.cameraOff ? "bg-[#fc404d] text-white" : "bg-muted text-foreground hover:bg-muted/70",
-          )}
-          title={call.cameraOff ? "Turn camera on" : "Turn camera off"}
-          aria-label={call.cameraOff ? "Turn camera on" : "Turn camera off"}
-        >
-          {call.cameraOff ? <VideoOff className="h-4 w-4" /> : <Video className="h-4 w-4" />}
-        </button>
-        <button
-          type="button"
-          onClick={() => void call.toggleScreenShare()}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            call.sharing ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
-          )}
-          title={call.sharing ? "Stop sharing" : "Share screen"}
-          aria-label={call.sharing ? "Stop sharing" : "Share screen"}
-        >
-          <MonitorUp className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={call.toggleWhiteboard}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            call.whiteboardOpenerId ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
-          )}
-          title={call.whiteboardOpenerId ? "Close whiteboard" : "Open whiteboard — no screen share needed"}
-          aria-label={call.whiteboardOpenerId ? "Close whiteboard" : "Open whiteboard"}
-        >
-          <PenTool className="h-4 w-4" />
-        </button>
-        <input
-          ref={docFileInputRef}
-          type="file"
-          accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
-          className="hidden"
-          onChange={(e) => void handleUploadDoc(e.target.files?.[0])}
-        />
-        <button
-          type="button"
-          onClick={() => docFileInputRef.current?.click()}
-          disabled={uploadingDoc}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            call.docOpenerId ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
-            uploadingDoc && "opacity-60",
-          )}
-          title="Present a document (PDF, Word, Excel, or image)"
-          aria-label="Present a document"
-        >
-          <Upload className="h-4 w-4" />
-        </button>
-
-        <button
-          type="button"
-          onClick={call.toggleHand}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            call.handRaised ? "bg-[#fdb412] text-white" : "bg-muted text-foreground hover:bg-muted/70",
-          )}
-          title={call.handRaised ? "Lower hand" : "Raise hand"}
-          aria-label={call.handRaised ? "Lower hand" : "Raise hand"}
-        >
-          <Hand className="h-4 w-4" />
-        </button>
-
-        {/* Reactions */}
-        <div className="mx-1 flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-1">
-          {REACTIONS.map(({ key, Icon, tint }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => call.sendReaction(key)}
-              className={cn("inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", tint)}
-              title={`React: ${key}`}
-              aria-label={`React: ${key}`}
-            >
-              <Icon className="h-4 w-4" />
-            </button>
-          ))}
+      <footer className="call-controls">
+        <div className="call-control-group">
+          <button type="button" onClick={call.toggleMute} className="call-control" data-danger={call.muted} aria-pressed={call.muted} aria-label={call.muted ? "Unmute" : "Mute"} title={call.muted ? "Unmute" : "Mute"}>
+            {call.muted ? <MicOff size={19} /> : <Mic size={19} />}<span>{call.muted ? "Mic off" : "Mic"}</span>
+          </button>
+          <button type="button" onClick={call.toggleCamera} className="call-control" data-danger={call.cameraOff} aria-pressed={call.cameraOff} aria-label={call.cameraOff ? "Turn camera on" : "Turn camera off"} title={call.cameraOff ? "Turn camera on" : "Turn camera off"}>
+            {call.cameraOff ? <VideoOff size={19} /> : <Video size={19} />}<span>Camera</span>
+          </button>
+          <button type="button" onClick={() => void call.toggleScreenShare()} className="call-control" data-active={call.sharing} aria-pressed={call.sharing} aria-label={call.sharing ? "Stop sharing" : "Share screen"} title={call.sharing ? "Stop sharing" : "Share screen"}>
+            <MonitorUp size={19} /><span>{call.sharing ? "Stop share" : "Share"}</span>
+          </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setDock((d) => (d === "participants" ? "none" : "participants"))}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            dock === "participants" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
-          )}
-          title="Participants"
-          aria-label="Participants"
-        >
-          <Users className="h-4 w-4" />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setDock((d) => (d === "chat" ? "none" : "chat"))}
-          className={cn(
-            "inline-flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            dock === "chat" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/70",
-          )}
-          title="Chat"
-          aria-label="Chat"
-        >
-          <MessageSquare className="h-4 w-4" />
-        </button>
-
-        <button
-          type="button"
-          onClick={call.leave}
-          className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#fc404d] px-4 text-[13px] font-semibold text-white hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          title="Leave call"
-        >
-          <PhoneOff className="h-4 w-4" />
-          Leave
-        </button>
-      </div>
+        <div className="call-control-group">
+          <button type="button" onClick={call.toggleHand} className="call-control" data-active={call.handRaised} aria-pressed={call.handRaised} aria-label={call.handRaised ? "Lower hand" : "Raise hand"} title={call.handRaised ? "Lower hand" : "Raise hand"}>
+            <Hand size={19} /><span>{call.handRaised ? "Lower hand" : "Raise hand"}</span>
+          </button>
+          <CallMenu.Root>
+            <CallMenu.Trigger className="call-control" aria-label="Reactions" title="Reactions"><Smile size={19} /><span>Reactions</span></CallMenu.Trigger>
+            <CallMenu.Portal container={rootRef.current}>
+              <CallMenu.Content side="top" sideOffset={12} className="call-menu" aria-label="Choose a reaction">
+                {REACTIONS.map(({ key, Icon, tint }) => <CallMenu.Item key={key} className="call-menu-item" onSelect={() => call.sendReaction(key)}><Icon size={19} className={tint} /><span>{key === "like" ? "Like" : key === "love" ? "Love" : key === "clap" ? "Applause" : "Celebrate"}</span></CallMenu.Item>)}
+              </CallMenu.Content>
+            </CallMenu.Portal>
+          </CallMenu.Root>
+          <CallMenu.Root>
+            <CallMenu.Trigger className="call-control" aria-label="More call tools" title="More call tools"><MoreHorizontal size={19} /><span>More</span></CallMenu.Trigger>
+            <CallMenu.Portal container={rootRef.current}>
+              <CallMenu.Content side="top" sideOffset={12} className="call-menu">
+                <CallMenu.Item className="call-menu-item" onSelect={call.toggleWhiteboard}><PenTool size={18} />{call.whiteboardOpenerId ? "Close whiteboard" : "Open whiteboard"}</CallMenu.Item>
+                <CallMenu.Item className="call-menu-item" disabled={uploadingDoc} onSelect={() => docFileInputRef.current?.click()}><Upload size={18} />{uploadingDoc ? "Uploading document…" : "Present a document"}</CallMenu.Item>
+              </CallMenu.Content>
+            </CallMenu.Portal>
+          </CallMenu.Root>
+          <input ref={docFileInputRef} type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" className="hidden" onChange={(e) => void handleUploadDoc(e.target.files?.[0])} />
+        </div>
+        <div className="call-control-group call-dock-controls">
+          <button type="button" onClick={() => setDock(d => d === "participants" ? "none" : "participants")} className="call-control" data-active={dock === "participants"} aria-expanded={dock === "participants"} aria-label={`People, ${count} in call`} title="People"><Users size={19} /><span>People {count}</span></button>
+          <button type="button" onClick={() => setDock(d => d === "chat" ? "none" : "chat")} className="call-control" data-active={dock === "chat"} aria-expanded={dock === "chat"} aria-label="List chat" title="List chat"><MessageSquare size={19} /><span>Chat</span></button>
+        </div>
+        <button type="button" onClick={call.leave} className="call-leave" aria-label="Leave call"><PhoneOff size={19} /><span>Leave</span></button>
+      </footer>
     </div>
     </div>
   );
