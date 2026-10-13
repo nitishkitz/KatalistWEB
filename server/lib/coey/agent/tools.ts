@@ -182,6 +182,7 @@ export class AgentTools {
       state: t.status === "sorted" ? "sorted" : t.acknowledgement === "waiting_for_catch" ? "waiting_for_catch" : t.status === "under_progress" ? "in_progress" : t.status,
       lane: t.lane, due: this.local(t.due_at), promised_for: this.local(t.promise_at), follow_up: t.concern ? FOLLOW_UP[t.concern] ?? t.concern : null,
       snoozed_until: this.local(t.snoozed_until),
+      ...(t.sent_by_me && t.open ? { can_nudge_now: t.can_nudge_now } : {}),
       created: this.local(t.created_at)?.slice(4, 14) ?? null, sorted_on: this.local(t.sorted_at)?.slice(4, 14) ?? null,
     };
   }
@@ -457,6 +458,7 @@ export class AgentTools {
       }
       case "nudge":
         if (!t.sent_by_me || !t.open) return refuse("the user can nudge only Things they sent to someone else");
+        if (!t.can_nudge_now) return refuse("too soon to nudge this one: a Thing can be nudged a few hours after it was sent or last changed, and not again within 2 hours of a nudge");
         action = { type: "prepare_nudge", label: `Nudge ${t.holder} about “${t.title}”`, params: { actorId: t.holder_actor_id } };
         break;
       case "promise": {

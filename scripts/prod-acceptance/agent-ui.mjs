@@ -7,7 +7,10 @@ const browser = await chromium.launch();
 const ctx = await browser.newContext({ storageState: `${SESS}/A.state.json`, viewport: { width: 1440, height: 900 } });
 const page = await ctx.newPage();
 let creates = 0;
-page.on("request", (r) => { if (r.url().includes("/rpc/coey_create_things")) creates++; });
+page.on("request", (r) => {
+  if (r.url().includes("/rpc/coey_create_things")) creates++;
+  if (r.url().includes("/api/assistant/stream")) { const b = JSON.parse(r.postData() || "{}"); console.log("stream request:", JSON.stringify({ ...b, history: b.history?.length })); }
+});
 await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
 await page.waitForTimeout(3000);
 const box = () => page.locator('textarea[aria-label="Magic Box"]:visible');

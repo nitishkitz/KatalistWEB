@@ -38,6 +38,8 @@ export type WsThing = {
   promise_at: string | null;
   snoozed_until: string | null;
   bucket_ids: string[];
+  /** The server would accept a nudge right now (list_nudgeable_things: timing, cooldown, rights). */
+  can_nudge_now: boolean;
 };
 
 export type WsPerson = { actor_id: string; profile_id: string; name: string; connected: boolean; me: boolean };
@@ -71,7 +73,7 @@ export class Workspace {
 
   private async read() {
     const c = this.client;
-    const [profile, actor, ids, things, lists, buckets, snoozes] = await Promise.all([
+    const [profile, actor, ids, things, lists, buckets, snoozes, nudgeable] = await Promise.all([
       c.from("profiles").select("display_name,timezone").eq("id", this.userId).maybeSingle(),
       c.from("actors").select("id").eq("profile_id", this.userId).maybeSingle(),
       c.rpc("list_visible_identities"),
@@ -84,7 +86,9 @@ export class Workspace {
       c.from("lists").select("id,name,context").is("archived_at", null).not("kind", "in", "(dm,group)").limit(200),
       c.from("buckets").select("id,name,context").is("archived_at", null).limit(200),
       c.from("thing_snooze").select("thing_id,snoozed_until").gt("snoozed_until", new Date(this.now).toISOString()).limit(500),
+      c.rpc("list_nudgeable_things", {}),
     ]);
+    const canNudge = new Set(((nudgeable.data ?? []) as Array<{ thing_id?: string }>).map((r) => r.thing_id).filter(Boolean));
     if (things.error) throw things.error;
     const p = profile.data as { display_name?: string; timezone?: string } | null;
     this.timezone = safeTimezone(p?.timezone);
@@ -131,6 +135,7 @@ export class Workspace {
         promise_at: s ? iso(s.schedule.promiseAt) : null,
         snoozed_until: snoozed.get(r.id) ?? null,
         bucket_ids: bucketItems.get(r.id) ?? [],
+        can_nudge_now: canNudge.has(r.id),
       };
     });
   }

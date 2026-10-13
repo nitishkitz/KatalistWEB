@@ -17,7 +17,7 @@ const thing = (id, owner, holder, over = {}) => ({
   owner_actor_id: owner, owner: { [ME]: "You", [AVANI]: "Avani Rao", [RAVI1]: "Ravi Kumar", [RAVI2]: "Ravi Teja" }[owner],
   holder_actor_id: holder, holder: { [ME]: "You", [AVANI]: "Avani Rao", [RAVI1]: "Ravi Kumar", [RAVI2]: "Ravi Teja" }[holder],
   sent_by_me: owner === ME && holder !== ME, in_my_court: holder === ME, open: true, lane: holder === ME ? "next" : null,
-  concern: owner === ME && holder !== ME ? "not_caught" : null, promise_at: null, snoozed_until: null, bucket_ids: [], ...over,
+  concern: owner === ME && holder !== ME ? "not_caught" : null, promise_at: null, snoozed_until: null, bucket_ids: [], can_nudge_now: owner === ME && holder !== ME, ...over,
 });
 function workspace() {
   const ws = new Workspace(null, "me", NOW);
@@ -33,7 +33,7 @@ function workspace() {
     lists: [], buckets: [],
     things: [
       thing("from-avani-1", AVANI, ME), thing("from-avani-2", AVANI, ME, { acknowledgement: "caught", status: "under_progress" }),
-      thing("to-avani", ME, AVANI, { concern: "stale" }), thing("to-ravi", ME, RAVI1),
+      thing("to-avani", ME, AVANI, { concern: "stale" }), thing("to-ravi", ME, RAVI1), thing("to-ravi-fresh", ME, RAVI1, { can_nudge_now: false }),
       thing("mine", ME, ME), thing("done", ME, ME, { status: "sorted", open: false, sorted_at: iso("2026-10-13") }),
     ],
   });
@@ -66,6 +66,7 @@ test("propose_action: only what the person may do; batch requests become one con
   const tools = new AgentTools(workspace(), "work");
   assert.equal((await run(tools, "propose_action", { type: "nudge", thing_id: "from-avani-1" })).result.proposed, false, "cannot nudge a Thing in your own court");
   assert.equal((await run(tools, "propose_action", { type: "set_pace", thing_id: "from-avani-1", args: { pace: "chill" } })).result.proposed, false, "the holder cannot lower the sender's pace (§8.4)");
+  assert.match((await run(tools, "propose_action", { type: "nudge", thing_id: "to-ravi-fresh" })).result.reason ?? "", /too soon/, "never offers a nudge the server would refuse");
   const nudge = await run(tools, "propose_action", { type: "nudge", thing_id: "to-avani" });
   assert.deepEqual([nudge.action.type, nudge.action.params.actorId, nudge.action.requires_confirmation], ["prepare_nudge", AVANI, true]);
   const batch = await run(tools, "propose_action", { type: "catch", thing_ids: ["from-avani-1", "mine", "from-avani-2"] });
