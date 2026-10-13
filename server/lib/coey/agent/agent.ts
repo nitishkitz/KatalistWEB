@@ -60,7 +60,7 @@ export function systemPrompt(ws: Workspace, mode: "work" | "home") {
     "- About one Thing (summary, comments, files, history): find it, then get_thing.",
     "- Never write a \"Showing:\" line yourself; the app adds it.",
     "- Follow-ups (\"only overdue\", \"and Sudheer?\", \"what about Home?\", \"this week instead\") change the previous search: run it again with the same filters plus the change (\"Showing:\" in your previous answer lists them). A new, complete question starts fresh.",
-    "- What changed / history / comments: activity or search_comments. About one Thing: get_thing. Then call the show_answer tool with those refs in results; never write refs in the text.",
+    "- What changed / history / comments: activity or search_comments. About one Thing (summarise X, what happened to X): call get_thing with its title first (no relation or state filters; if no single match, find_things with text and state any). Then call the show_answer tool with those refs in results; never write refs in the text.",
     "- \"pending with X\" / \"what's with X\": both what is with X and what X sent the user; find_things with person and relation any returns that breakdown.",
     "- \"sent me today\" / \"new today\": date_field created. \"due today\": date_field due.",
     "- Files, images, photos, PDFs, attachments: find_things has_files (image, pdf, document, spreadsheet, video or any), state any unless they say open.",
