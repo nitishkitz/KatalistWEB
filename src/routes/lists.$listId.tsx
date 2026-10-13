@@ -15,7 +15,7 @@ import { ThingStatusCapsule } from "@/features/catchup/ThingStatusCapsule";
 import { useListCall } from "@/features/calls/use-list-call";
 import { useSelfCallIdentity } from "@/features/calls/call-identity";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
-import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
+import { ringPeople } from "@/features/calls/call-lobby";
 import { useListMeetings } from "@/features/lists/use-list-meetings";
 import { ScheduleMeetingDialog } from "@/features/lists/ScheduleMeetingDialog";
 import { StartCallDialog, type CallPerson } from "@/features/calls/StartCallDialog";
@@ -23,7 +23,6 @@ import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
 import { ListDetailSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
-import { supabase } from "@/integrations/supabase/client";
 import { type ThingFile } from "@/features/things/PDFViewer";
 import { formatCourtDue } from "@/features/court/court-view-model";
 import { laneOf, type Person } from "@/domain/thing";
@@ -123,32 +122,10 @@ function ListDetailPage() {
   // Ring + push a chosen set of people (client picker's selection, or "everyone"
   // as a default) without touching the caller's own join state.
   const ringAndAnnounce = (selectedProfileIds: string[], meetingTitle?: string) => {
-    void announceCall({
-      listId,
-      listName: list?.name ?? "a list",
-      fromDeviceId: getDeviceId(),
-      fromName: selfName,
-      fromUserId: user?.id,
-      memberIds: selectedProfileIds,
-    });
     // Record a call-history entry that renders inline in the chat timeline.
     chat.sendSystem.mutate(meetingTitle ? `started the meeting "${meetingTitle}"` : "started a call");
     // Also push to members who don't have the app open (best-effort).
-    void (async () => {
-      try {
-        const { data: sess } = await supabase.auth.getSession();
-        const at = sess.session?.access_token;
-        if (at) {
-          void fetch("/api/calls/ring", {
-            method: "POST",
-            headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
-            body: JSON.stringify({ listId, memberIds: selectedProfileIds }),
-          });
-        }
-      } catch {
-        // push is best-effort
-      }
-    })();
+    void ringPeople({ listId, memberIds: selectedProfileIds });
   };
 
   // Start (or leave) a call. Starting also rings the given (or every) list

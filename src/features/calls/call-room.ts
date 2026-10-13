@@ -205,6 +205,8 @@ export class CallRoom {
   private readonly sessionId = crypto.randomUUID();
   private readonly onState: (state: CallRoomState) => void;
   private channel: RealtimeChannel | null = null;
+  /** Rows addressed to this participant; the sender is stamped by the database. */
+  private signalChannel: RealtimeChannel | null = null;
   private readonly peers = new Map<string, PeerSlot>();
   private graceTimer: ReturnType<typeof setTimeout> | null = null;
   private stateTimer: ReturnType<typeof setTimeout> | null = null;
@@ -287,14 +289,26 @@ export class CallRoom {
     }
     this.resolvedIce = resolvedIce;
 
+    // Private: only participants of this conversation may join (realtime.messages policies).
     const channel = supabase.channel(`call:${this.listId}`, {
-      config: { presence: { key: this.selfId }, broadcast: { self: false } },
+      config: { private: true, presence: { key: this.selfId }, broadcast: { self: false } },
     });
     this.channel = channel;
 
+    // Offers, answers, ICE and hang-ups arrive as rows addressed to us. The
+    // sender's profile comes from the database, so nobody can speak for
+    // another member, and blocked or unconnected-DM pairs cannot signal.
+    const [selfProfile, selfSession] = splitPeerId(this.selfId);
+    this.signalChannel = supabase
+      .channel(`call-signals:${this.selfId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "call_signals", filter: `to_profile=eq.${selfProfile}` },
+        ({ new: row }) => this.onSignalRow(row as SignalRow, selfProfile, selfSession),
+      )
+      .subscribe();
+
     channel
-      .on("broadcast", { event: "sdp" }, ({ payload }) => this.enqueue(payload as SdpMsg, () => this.onSdp(payload as SdpMsg)))
-      .on("broadcast", { event: "ice" }, ({ payload }) => this.enqueue(payload as IceMsg, () => this.onIce(payload as IceMsg)))
       // R-05: removeChannel() in leave() is not synchronous -- an event
       // already queued by Realtime before unsubscribe completes can still
       // reach these handlers after `this.closed` is set. Guard each one
@@ -759,7 +773,33 @@ export class CallRoom {
   }
 
   private send(event: "sdp" | "ice", payload: SdpMsg | IceMsg) {
-    void this.channel?.send({ type: "broadcast", event, payload });
+    const [toProfile, toSession] = splitPeerId(payload.to);
+    const [, fromSession] = splitPeerId(this.selfId);
+    if (!toProfile) return;
+    void supabase
+      .from("call_signals" as never)
+      .insert({ list_id: this.listId, from_session: fromSession, to_profile: toProfile, to_session: toSession, kind: event, payload } as never)
+      .then(({ error }) => {
+        // A refused signal (blocked pair, not connected) simply never reaches them.
+        if (error) console.warn("[call] signal refused", error.code ?? "");
+      });
+  }
+
+  private onSignalRow(row: SignalRow, selfProfile: string, selfSession: string | null) {
+    if (this.closed || !row || row.to_profile !== selfProfile) return;
+    if (row.list_id && row.list_id !== this.listId) return;
+    if (row.to_session && selfSession && row.to_session !== selfSession) return;
+    if (row.kind === "bye") {
+      // Server hang-up (e.g. a block) drops every connection from that person.
+      for (const id of [...this.peers.keys()]) if (splitPeerId(id)[0] === row.from_profile) this.dropPeer(id);
+      this.emit();
+      return;
+    }
+    // Identity comes from the row, never from the payload.
+    const from = `${row.from_profile}:${row.from_session}`;
+    const msg = { ...(row.payload as object), from, to: this.selfId };
+    if (row.kind === "sdp") this.enqueue(msg as SdpMsg, () => this.onSdp(msg as SdpMsg));
+    else if (row.kind === "ice") this.enqueue(msg as IceMsg, () => this.onIce(msg as IceMsg));
   }
 
   /** Replace the outgoing video track on all peers (camera <-> screen). */
@@ -961,7 +1001,27 @@ export class CallRoom {
       void supabase.removeChannel(this.channel);
       this.channel = null;
     }
+    if (this.signalChannel) {
+      void supabase.removeChannel(this.signalChannel);
+      this.signalChannel = null;
+    }
   }
+}
+
+type SignalRow = {
+  list_id: string | null;
+  from_profile: string;
+  from_session: string;
+  to_profile: string;
+  to_session: string | null;
+  kind: "sdp" | "ice" | "bye";
+  payload: unknown;
+};
+
+/** Call participant ids are "<profile id>:<tab session>". */
+export function splitPeerId(id: string): [string, string | null] {
+  const i = id.indexOf(":");
+  return i < 0 ? [id, null] : [id.slice(0, i), id.slice(i + 1) || null];
 }
 
 type PeerState = {

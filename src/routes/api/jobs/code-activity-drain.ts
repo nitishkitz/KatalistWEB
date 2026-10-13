@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { backgroundJobsEnabled, resetUnavailable } from "@/lib/reset-controls.server";
 
 // E15. Scheduled drain: processes queued webhook deliveries and reconciles due connections. Not registered with
 // any scheduler by this code; an operator wires it up (see the runbook). Authenticated with the cron secret.
 async function run(request: Request): Promise<Response> {
+  if (!backgroundJobsEnabled()) return resetUnavailable("background_jobs_disabled");
   const http = await import("@/features/code-activity/server/http.server");
   const drainer = await import("@/features/code-activity/server/drain.server");
   if (!drainer.authorizeDrain(request, process.env.CRON_SECRET)) {

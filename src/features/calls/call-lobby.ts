@@ -23,7 +23,6 @@ export type RingPayload = {
   kind?: "dm" | "group" | "list";
 };
 
-const LOBBY = "calls-lobby";
 
 /**
  * Rings handed over in-process, e.g. from a foreground push message. The
@@ -64,52 +63,66 @@ export function getDeviceId(): string {
   return deviceId;
 }
 
-/** Broadcast an incoming-call ring to a list's members (fire-and-forget). */
-export async function announceCall(payload: RingPayload): Promise<void> {
-  const channel = supabase.channel(LOBBY);
-  await new Promise<void>((resolve) => {
-    let settled = false;
-    const done = () => {
-      if (!settled) {
-        settled = true;
-        resolve();
-      }
-    };
-    channel.subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        void channel.send({ type: "broadcast", event: "ring", payload }).finally(done);
-      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
-        done();
-      }
+/**
+ * Ring people through the server. The database records one ring per allowed
+ * recipient with the caller taken from this session (never from the payload),
+ * then the server pushes to devices. Returns how many people were rung.
+ */
+export async function ringPeople(input: { listId: string; memberIds: string[]; callType?: "audio" | "video" }): Promise<number> {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return 0;
+    const res = await fetch("/api/calls/ring", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify(input),
     });
-  });
-  setTimeout(() => void supabase.removeChannel(channel), 2000);
+    if (!res.ok) return 0;
+    return ((await res.json()) as { rung?: number }).rung ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
-/** Subscribe to incoming rings addressed to `selfUserId` (excluding this device). */
+type RingRow = {
+  id: string; list_id: string; caller_profile_id: string; recipient_profile_id: string; call_type: "audio" | "video" | null;
+  caller_name: string; caller_avatar_url: string | null; list_name: string; list_kind: string; expires_at: string;
+};
+
+/**
+ * Incoming rings are this user's own call_rings rows (Realtime applies RLS, so
+ * only rows addressed to them arrive). The caller id comes from the database.
+ */
 export function subscribeToRings(
   selfUserId: string,
-  selfDeviceId: string,
+  _selfDeviceId: string,
   onRing: (p: RingPayload) => void,
 ): () => void {
-  const channel = supabase.channel(LOBBY);
-  channel
-    .on("broadcast", { event: "ring" }, ({ payload }) => {
-      const p = payload as RingPayload | undefined;
-      if (!p || p.fromDeviceId === selfDeviceId) return;
-      if (!Array.isArray(p.memberIds) || !p.memberIds.includes(selfUserId)) return;
-      // The lobby is a broadcast channel: ask the server whether this caller may ring me
-      // (conversation membership, no block either way, connected for DMs).
-      if (!p.fromUserId || !p.listId) return;
-      void (supabase.rpc as unknown as (fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
-        "can_receive_call", { p_list_id: p.listId, p_from_profile: p.fromUserId },
-      ).then(({ data, error }) => { if (!error && data === true) onRing(p); }, () => undefined);
-    })
+  const channel = supabase
+    .channel(`call-rings:${selfUserId}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "call_rings", filter: `recipient_profile_id=eq.${selfUserId}` },
+      ({ new: row }) => {
+        const r = row as RingRow;
+        if (!r || r.recipient_profile_id !== selfUserId || Date.parse(r.expires_at) < Date.now()) return;
+        onRing({
+          listId: r.list_id,
+          listName: r.list_name,
+          fromDeviceId: "server",
+          fromName: r.caller_name,
+          fromUserId: r.caller_profile_id,
+          fromAvatarUrl: r.caller_avatar_url,
+          memberIds: [selfUserId],
+          callType: r.call_type ?? undefined,
+          kind: r.list_kind === "dm" || r.list_kind === "group" ? r.list_kind : "list",
+        });
+      },
+    )
     .subscribe();
-  // Already addressed to us by the server; only skip our own device.
-  const local = (p: RingPayload) => {
-    if (p.fromDeviceId !== selfDeviceId) onRing(p);
-  };
+  // Foreground push handed over in-process; the server already filtered it.
+  const local = (p: RingPayload) => onRing(p);
   localRingListeners.add(local);
   return () => {
     localRingListeners.delete(local);

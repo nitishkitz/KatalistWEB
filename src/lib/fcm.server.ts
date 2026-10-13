@@ -1,5 +1,6 @@
 import { getApps, initializeApp, cert, type App, type ServiceAccount } from "firebase-admin/app";
 import { getMessaging } from "firebase-admin/messaging";
+import { outboundDeliveryEnabled } from "./reset-controls.server";
 
 /**
  * Firebase Admin sender (server-only). Credentials come from the
@@ -31,7 +32,7 @@ function getAdminApp(): App | null {
 export type PushSendResult = {
   sent: number;
   attempted: number;
-  reason?: "not_configured" | "no_tokens" | "send_failed";
+  reason?: "not_configured" | "no_tokens" | "send_failed" | "delivery_disabled";
 };
 
 export async function sendPushDetailed(
@@ -39,6 +40,7 @@ export async function sendPushDetailed(
   notification: { title: string; body: string },
   data?: Record<string, string>,
 ): Promise<PushSendResult> {
+  if (!outboundDeliveryEnabled()) return { sent: 0, attempted: 0, reason: "delivery_disabled" };
   const clean = [...new Set(tokens.filter(Boolean))];
   if (clean.length === 0) return { sent: 0, attempted: 0, reason: "no_tokens" };
   const app = getAdminApp();

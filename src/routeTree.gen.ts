@@ -18,6 +18,7 @@ import { Route as NudgesRouteImport } from './routes/nudges'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as ApiVersionRouteImport } from './routes/api/version'
 import { Route as BridgeTokenRouteImport } from './routes/bridge.$token'
 import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
 import { Route as BucketsBucketIdRouteImport } from './routes/buckets.$bucketId'
@@ -30,6 +31,8 @@ import { Route as ApiAssistantNudgeRouteImport } from './routes/api/assistant/nu
 import { Route as ApiAssistantQueryRouteImport } from './routes/api/assistant/query'
 import { Route as ApiAssistantStreamRouteImport } from './routes/api/assistant/stream'
 import { Route as ApiAssistantVoiceConfigRouteImport } from './routes/api/assistant/voice-config'
+import { Route as ApiAuthLoginConfigRouteImport } from './routes/api/auth/login-config'
+import { Route as ApiAuthPhoneLoginRouteImport } from './routes/api/auth/phone-login'
 import { Route as ApiCallsRingRouteImport } from './routes/api/calls/ring'
 import { Route as ApiCodeActivityAssigneeCandidatesRouteImport } from './routes/api/code-activity/assignee-candidates'
 import { Route as ApiCodeActivityBranchesRouteImport } from './routes/api/code-activity/branches'
@@ -114,6 +117,11 @@ const WelcomeRoute = WelcomeRouteImport.update({
   path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiVersionRoute = ApiVersionRouteImport.update({
+  id: '/api/version',
+  path: '/api/version',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BridgeTokenRoute = BridgeTokenRouteImport.update({
   id: '/bridge/$token',
   path: '/bridge/$token',
@@ -172,6 +180,16 @@ const ApiAssistantStreamRoute = ApiAssistantStreamRouteImport.update({
 const ApiAssistantVoiceConfigRoute = ApiAssistantVoiceConfigRouteImport.update({
   id: '/api/assistant/voice-config',
   path: '/api/assistant/voice-config',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthLoginConfigRoute = ApiAuthLoginConfigRouteImport.update({
+  id: '/api/auth/login-config',
+  path: '/api/auth/login-config',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAuthPhoneLoginRoute = ApiAuthPhoneLoginRouteImport.update({
+  id: '/api/auth/phone-login',
+  path: '/api/auth/phone-login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiCallsRingRoute = ApiCallsRingRouteImport.update({
@@ -394,6 +412,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/team': typeof TeamRouteWithChildren
   '/welcome': typeof WelcomeRoute
+  '/api/version': typeof ApiVersionRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
   '/connect/$handle': typeof ConnectHandleRoute
@@ -406,6 +425,8 @@ export interface FileRoutesByFullPath {
   '/api/assistant/query': typeof ApiAssistantQueryRoute
   '/api/assistant/stream': typeof ApiAssistantStreamRoute
   '/api/assistant/voice-config': typeof ApiAssistantVoiceConfigRoute
+  '/api/auth/login-config': typeof ApiAuthLoginConfigRoute
+  '/api/auth/phone-login': typeof ApiAuthPhoneLoginRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
   '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
@@ -452,6 +473,7 @@ export interface FileRoutesByTo {
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
   '/welcome': typeof WelcomeRoute
+  '/api/version': typeof ApiVersionRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
   '/connect/$handle': typeof ConnectHandleRoute
@@ -464,6 +486,8 @@ export interface FileRoutesByTo {
   '/api/assistant/query': typeof ApiAssistantQueryRoute
   '/api/assistant/stream': typeof ApiAssistantStreamRoute
   '/api/assistant/voice-config': typeof ApiAssistantVoiceConfigRoute
+  '/api/auth/login-config': typeof ApiAuthLoginConfigRoute
+  '/api/auth/phone-login': typeof ApiAuthPhoneLoginRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
   '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
@@ -514,6 +538,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/team': typeof TeamRouteWithChildren
   '/welcome': typeof WelcomeRoute
+  '/api/version': typeof ApiVersionRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
   '/connect/$handle': typeof ConnectHandleRoute
@@ -526,6 +551,8 @@ export interface FileRoutesById {
   '/api/assistant/query': typeof ApiAssistantQueryRoute
   '/api/assistant/stream': typeof ApiAssistantStreamRoute
   '/api/assistant/voice-config': typeof ApiAssistantVoiceConfigRoute
+  '/api/auth/login-config': typeof ApiAuthLoginConfigRoute
+  '/api/auth/phone-login': typeof ApiAuthPhoneLoginRoute
   '/api/calls/ring': typeof ApiCallsRingRoute
   '/api/code-activity/assignee-candidates': typeof ApiCodeActivityAssigneeCandidatesRoute
   '/api/code-activity/branches': typeof ApiCodeActivityBranchesRoute
@@ -577,6 +604,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/team'
     | '/welcome'
+    | '/api/version'
     | '/bridge/$token'
     | '/buckets/$bucketId'
     | '/connect/$handle'
@@ -589,6 +617,8 @@ export interface FileRouteTypes {
     | '/api/assistant/query'
     | '/api/assistant/stream'
     | '/api/assistant/voice-config'
+    | '/api/auth/login-config'
+    | '/api/auth/phone-login'
     | '/api/calls/ring'
     | '/api/code-activity/assignee-candidates'
     | '/api/code-activity/branches'
@@ -635,6 +665,7 @@ export interface FileRouteTypes {
     | '/nudges'
     | '/onboarding'
     | '/welcome'
+    | '/api/version'
     | '/bridge/$token'
     | '/buckets/$bucketId'
     | '/connect/$handle'
@@ -647,6 +678,8 @@ export interface FileRouteTypes {
     | '/api/assistant/query'
     | '/api/assistant/stream'
     | '/api/assistant/voice-config'
+    | '/api/auth/login-config'
+    | '/api/auth/phone-login'
     | '/api/calls/ring'
     | '/api/code-activity/assignee-candidates'
     | '/api/code-activity/branches'
@@ -696,6 +729,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/team'
     | '/welcome'
+    | '/api/version'
     | '/bridge/$token'
     | '/buckets/$bucketId'
     | '/connect/$handle'
@@ -708,6 +742,8 @@ export interface FileRouteTypes {
     | '/api/assistant/query'
     | '/api/assistant/stream'
     | '/api/assistant/voice-config'
+    | '/api/auth/login-config'
+    | '/api/auth/phone-login'
     | '/api/calls/ring'
     | '/api/code-activity/assignee-candidates'
     | '/api/code-activity/branches'
@@ -758,12 +794,15 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   TeamRoute: typeof TeamRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
+  ApiVersionRoute: typeof ApiVersionRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
   ConnectHandleRoute: typeof ConnectHandleRoute
   ApiAssistantNudgeRoute: typeof ApiAssistantNudgeRoute
   ApiAssistantQueryRoute: typeof ApiAssistantQueryRoute
   ApiAssistantStreamRoute: typeof ApiAssistantStreamRoute
   ApiAssistantVoiceConfigRoute: typeof ApiAssistantVoiceConfigRoute
+  ApiAuthLoginConfigRoute: typeof ApiAuthLoginConfigRoute
+  ApiAuthPhoneLoginRoute: typeof ApiAuthPhoneLoginRoute
   ApiCallsRingRoute: typeof ApiCallsRingRoute
   ApiCodeActivityAssigneeCandidatesRoute: typeof ApiCodeActivityAssigneeCandidatesRoute
   ApiCodeActivityBranchesRoute: typeof ApiCodeActivityBranchesRoute
@@ -869,6 +908,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WelcomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/version': {
+      id: '/api/version'
+      path: '/api/version'
+      fullPath: '/api/version'
+      preLoaderRoute: typeof ApiVersionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bridge/$token': {
       id: '/bridge/$token'
       path: '/bridge/$token'
@@ -951,6 +997,20 @@ declare module '@tanstack/react-router' {
       path: '/api/assistant/voice-config'
       fullPath: '/api/assistant/voice-config'
       preLoaderRoute: typeof ApiAssistantVoiceConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/login-config': {
+      id: '/api/auth/login-config'
+      path: '/api/auth/login-config'
+      fullPath: '/api/auth/login-config'
+      preLoaderRoute: typeof ApiAuthLoginConfigRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/auth/phone-login': {
+      id: '/api/auth/phone-login'
+      path: '/api/auth/phone-login'
+      fullPath: '/api/auth/phone-login'
+      preLoaderRoute: typeof ApiAuthPhoneLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/calls/ring': {
@@ -1269,12 +1329,15 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   TeamRoute: TeamRouteWithChildren,
   WelcomeRoute: WelcomeRoute,
+  ApiVersionRoute: ApiVersionRoute,
   BridgeTokenRoute: BridgeTokenRoute,
   ConnectHandleRoute: ConnectHandleRoute,
   ApiAssistantNudgeRoute: ApiAssistantNudgeRoute,
   ApiAssistantQueryRoute: ApiAssistantQueryRoute,
   ApiAssistantStreamRoute: ApiAssistantStreamRoute,
   ApiAssistantVoiceConfigRoute: ApiAssistantVoiceConfigRoute,
+  ApiAuthLoginConfigRoute: ApiAuthLoginConfigRoute,
+  ApiAuthPhoneLoginRoute: ApiAuthPhoneLoginRoute,
   ApiCallsRingRoute: ApiCallsRingRoute,
   ApiCodeActivityAssigneeCandidatesRoute:
     ApiCodeActivityAssigneeCandidatesRoute,

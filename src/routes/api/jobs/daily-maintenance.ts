@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { backgroundJobsEnabled, resetUnavailable } from "@/lib/reset-controls.server";
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -13,6 +14,7 @@ const json = (data: unknown, status = 200) =>
 // morning_brief/spring_clean notifications from the last 24h, so this route
 // should run shortly before it in vercel.json.
 async function run(request: Request): Promise<Response> {
+  if (!backgroundJobsEnabled()) return resetUnavailable("background_jobs_disabled");
   const secret = process.env.CRON_SECRET;
   const bearer = request.headers.get("authorization");
   const viaBearer = Boolean(secret) && bearer === `Bearer ${secret}`;

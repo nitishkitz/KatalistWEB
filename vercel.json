@@ -1,12 +1,3 @@
 {
-  "crons": [
-    {
-      "path": "/api/jobs/daily-maintenance",
-      "schedule": "15 3 * * *"
-    },
-    {
-      "path": "/api/jobs/escalate-nudges",
-      "schedule": "30 3 * * *"
-    }
-  ]
+  "crons": []
 }

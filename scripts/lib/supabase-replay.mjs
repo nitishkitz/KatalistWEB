@@ -45,6 +45,19 @@ CREATE OR REPLACE FUNCTION storage.extension(name text) RETURNS text LANGUAGE sq
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN CREATE PUBLICATION supabase_realtime; END IF; END $$;
 GRANT USAGE ON SCHEMA public, auth, storage, extensions TO anon, authenticated, service_role;
 CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
+-- Stand-ins for hosted extensions PGlite cannot install (pg_cron, pg_net) and Vault views.
+CREATE SCHEMA IF NOT EXISTS cron;
+CREATE TABLE IF NOT EXISTS cron.job (jobid bigserial PRIMARY KEY, jobname text UNIQUE, schedule text, command text);
+CREATE OR REPLACE FUNCTION cron.schedule(p_name text, p_schedule text, p_command text) RETURNS bigint LANGUAGE sql AS $f$
+  INSERT INTO cron.job (jobname, schedule, command) VALUES (p_name, p_schedule, p_command)
+  ON CONFLICT (jobname) DO UPDATE SET schedule = excluded.schedule, command = excluded.command RETURNING jobid $f$;
+CREATE OR REPLACE FUNCTION cron.unschedule(p_name text) RETURNS boolean LANGUAGE sql AS $f$ DELETE FROM cron.job WHERE jobname = p_name RETURNING true $f$;
+CREATE SCHEMA IF NOT EXISTS net;
+CREATE TABLE IF NOT EXISTS net.requests (id bigserial PRIMARY KEY, url text, headers jsonb, body jsonb);
+CREATE OR REPLACE FUNCTION net.http_post(url text, headers jsonb DEFAULT '{}', body jsonb DEFAULT '{}', timeout_milliseconds int DEFAULT 5000) RETURNS bigint
+  LANGUAGE sql AS $f$ INSERT INTO net.requests (url, headers, body) VALUES (url, headers, body) RETURNING id $f$;
+CREATE TABLE IF NOT EXISTS vault.secrets (name text PRIMARY KEY, secret text);
+CREATE OR REPLACE VIEW vault.decrypted_secrets AS SELECT name, secret AS decrypted_secret FROM vault.secrets;
 -- Supabase platform event-trigger helper referenced by early migrations.
 CREATE OR REPLACE FUNCTION public.rls_auto_enable() RETURNS event_trigger LANGUAGE plpgsql AS $f$ BEGIN END $f$;
 `;
@@ -60,7 +73,8 @@ export async function replayMigrations({ stopOnError = true, only } = {}) {
   const report = [];
   for (const file of migrationFiles()) {
     if (only && !only(file)) continue;
-    const sql = readFileSync(new URL(file, dir), "utf8");
+    // Hosted-only extensions are stood in for by the shim above.
+    const sql = readFileSync(new URL(file, dir), "utf8").replace(/^CREATE EXTENSION IF NOT EXISTS (pg_net|pg_cron)\b.*$/gm, "");
     try {
       await db.exec(sql);
       report.push({ file, ok: true });

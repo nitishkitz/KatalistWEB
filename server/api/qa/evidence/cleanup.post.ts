@@ -1,6 +1,7 @@
 import { defineEventHandler, getHeader } from "h3";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { noStore, qaError } from "../../../lib/qa/http";
+import { backgroundJobsEnabled, resetUnavailable } from "../../../../src/lib/reset-controls.server";
 
 /**
  * Orphan sweep for abandoned pending uploads (older than a day). Guarded by CRON_SECRET; it is NOT
@@ -8,6 +9,7 @@ import { noStore, qaError } from "../../../lib/qa/http";
  */
 export default defineEventHandler(async (event) => {
   noStore(event);
+  if (!backgroundJobsEnabled()) return resetUnavailable("background_jobs_disabled");
   const secret = process.env.CRON_SECRET;
   if (!secret || getHeader(event, "authorization") !== `Bearer ${secret}`) throw qaError(401, "not_authenticated", "Unauthorized.");
   const admin = getSupabaseAdmin();

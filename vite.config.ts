@@ -6,12 +6,27 @@ import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
 import { getSupabaseAdmin, isTransientAuthFailure, withAuthNetworkRetry } from "./server/lib/supabase-admin.ts";
-import { findAuthUserByPhone } from "./server/lib/find-phone-user.ts";
 import { resolvePersonToProfileId } from "./server/lib/resolve-person.ts";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { extractErrorMessage } from "./src/lib/domain-error.ts";
-import { serverFixedOtp } from "./server/lib/fixed-otp.ts";
-import { normalizeTestPhone } from "./server/lib/test-phone.ts";
+import { maintenanceActive } from "./src/lib/reset-controls.server.ts";
+
+function resetMaintenancePlugin(): Plugin {
+  return {
+    name: "katalist:reset-maintenance",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((_req, res, next) => {
+        if (!maintenanceActive()) return next();
+        res.statusCode = 503;
+        res.setHeader("content-type", "application/json");
+        res.setHeader("cache-control", "no-store");
+        res.setHeader("retry-after", "300");
+        res.end(JSON.stringify({ error: "maintenance" }));
+      });
+    },
+  };
+}
 
 /**
  * Dev-middleware equivalent of server/lib/require-user.ts. Vite middleware
@@ -149,135 +164,6 @@ function authPopupPlugin(): Plugin {
             res.statusCode = 500;
             res.setHeader("content-type", "text/plain; charset=utf-8");
             res.end("auth popup failed");
-          }
-        }
-      });
-    },
-  };
-}
-
-function phoneAuthPlugin(): Plugin {
-  return {
-    name: "app-builder:phone-auth",
-    apply: "serve",
-    configureServer(server) {
-      server.middlewares.use(async (req, res, next) => {
-        const startedAt = Date.now();
-        let stage = "request";
-        try {
-          const rawUrl = req.url ?? "";
-          const pathOnly = rawUrl.split("?", 1)[0] ?? "";
-          if (pathOnly !== "/api/auth/phone-login") {
-            next();
-            return;
-          }
-
-          if ((req.method ?? "GET").toUpperCase() !== "POST") {
-            res.statusCode = 405;
-            res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: "Method Not Allowed" }));
-            return;
-          }
-
-          let body = "";
-          for await (const chunk of req) {
-            body += chunk;
-          }
-
-          const fixedOtp = serverFixedOtp();
-          if (!fixedOtp) {
-            res.statusCode = 404;
-            res.setHeader("content-type", "application/json");
-            res.end(
-              JSON.stringify({
-                error: "Phone sign-in is not available in this deployment. Use email instead.",
-              }),
-            );
-            return;
-          }
-
-          let payload: { phone?: unknown; otp?: unknown } | null;
-          try {
-            payload = JSON.parse(body || "{}");
-          } catch {
-            res.statusCode = 400;
-            res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: "Invalid login request." }));
-            return;
-          }
-          const phone = normalizeTestPhone(payload?.phone);
-          const otp = payload?.otp;
-          if (!phone || otp !== fixedOtp) {
-            res.statusCode = 400;
-            res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({ error: "Invalid or expired code." }));
-            return;
-          }
-
-          stage = "lookup-user";
-          const admin = getSupabaseAdmin();
-
-          const cleanDigits = phone.replace(/\D/g, "");
-          let user = await findAuthUserByPhone(admin, phone);
-
-          if (!user) {
-            stage = "create-user";
-            const email = `user-${cleanDigits}@users.katalist.invalid`;
-            const { data: created, error: createErr } = await admin.auth.admin.createUser({
-              email,
-              email_confirm: true,
-              user_metadata: {
-                phone,
-                display_name: "Katalist User",
-                full_name: "Katalist User",
-              },
-            });
-            if (createErr) {
-              // Another device may create the same phone account concurrently.
-              // Re-scan once so both requests can finish against that account.
-              user = await findAuthUserByPhone(admin, phone);
-              if (!user) throw createErr;
-            } else {
-              user = created.user;
-            }
-          }
-
-          stage = "generate-link";
-          const userEmail = user.email || `user-${cleanDigits}@users.katalist.invalid`;
-          const linkData = await withAuthNetworkRetry(async () => {
-            const { data, error } = await admin.auth.admin.generateLink({
-              type: "magiclink",
-              email: userEmail,
-            });
-            if (error) throw error;
-            return data;
-          }, stage);
-          if (!linkData.properties?.hashed_token) {
-            throw new Error("Supabase did not return a verification token.");
-          }
-
-          res.statusCode = 200;
-          res.setHeader("content-type", "application/json");
-          res.end(JSON.stringify({
-            token_hash: linkData.properties.hashed_token,
-            email: userEmail,
-          }));
-          console.info("[phone-auth] ready", { durationMs: Date.now() - startedAt });
-        } catch (err: unknown) {
-          console.error("[phone-auth] failed", {
-            stage,
-            durationMs: Date.now() - startedAt,
-            error: extractErrorMessage(err) ?? "Unknown error",
-          });
-          const message = extractErrorMessage(err);
-          if (!res.headersSent) {
-            const transient = isTransientAuthFailure(err);
-            res.statusCode = transient ? 503 : 500;
-            res.setHeader("content-type", "application/json");
-            res.end(JSON.stringify({
-              error: transient ? "Supabase sign-in is temporarily unreachable. Try again." : message || "Authentication failed",
-              stage,
-            }));
           }
         }
       });
@@ -768,6 +654,7 @@ export default defineConfig(({ command, isPreview, mode }) => {
     "SARVAM_API_KEY", "SARVAM_MODEL",
     "CODE_ACTIVITY_SARVAM_API_KEY", "CODE_ACTIVITY_SARVAM_MODEL",
     "COEY_VOICE_ENABLED", "ASSISTANT_ACTION_SECRET",
+    "KATALIST_MAINTENANCE", "KATALIST_BACKGROUND_JOBS_ENABLED", "KATALIST_OUTBOUND_DELIVERY_ENABLED",
   ]) {
     if (process.env[key] === undefined && privateEnv[key] !== undefined)
       process.env[key] = privateEnv[key];
@@ -798,10 +685,10 @@ export default defineConfig(({ command, isPreview, mode }) => {
   },
   resolve: { tsconfigPaths: true },
   plugins: [
+    resetMaintenancePlugin(),
     pgliteBootstrapPlugin(),
     // Before tanstackStart so /auth/popup never falls through to the SPA.
     authPopupPlugin(),
-    phoneAuthPlugin(),
     listMemberPlugin(),
     thingsReopenPlugin(),
     completeAttachmentPlugin(),

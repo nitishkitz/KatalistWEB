@@ -773,3 +773,7 @@
   animation: none !important;
   transition: none !important;
 }
+
+/* Temporary test code stays directly below the OTP cells. */
+.kg-test-otp { margin: 10px 0 0; font-size: 13px; line-height: 1.5; }
+.kg-test-otp strong { font-variant-numeric: tabular-nums; letter-spacing: .12em; }

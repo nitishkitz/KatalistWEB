@@ -6,13 +6,12 @@ import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useSession } from "@/hooks/useSession";
 import { usePresence } from "@/features/people/presence";
-import { supabase } from "@/integrations/supabase/client";
 import { useListMessages, useListMessageSearch, useListSystemHistory, type ListChatMessage } from "@/features/lists/use-list-messages";
 import { ListChatPanel, type ListChatPanelHandle } from "@/features/lists/ListChatPanel";
 import { useListCall } from "@/features/calls/use-list-call";
 import { useSelfCallIdentity } from "@/features/calls/call-identity";
 import { ListCallPanel } from "@/features/calls/ListCallPanel";
-import { announceCall, getDeviceId } from "@/features/calls/call-lobby";
+import { ringPeople } from "@/features/calls/call-lobby";
 import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
 import { StartCallDialog, type CallPerson } from "@/features/calls/StartCallDialog";
 import { useConversation } from "@/features/hub/use-conversations";
@@ -191,33 +190,8 @@ export function ConversationWorkspace({
   // Ring + push a chosen set of people without touching the caller's own join
   // state (used both when starting a call and when inviting mid-call).
   const ringAndAnnounce = (selectedIds: string[], withVideo: boolean) => {
-    void announceCall({
-      listId,
-      listName: title,
-      fromDeviceId: getDeviceId(),
-      fromName: selfName,
-      fromUserId: user?.id,
-      fromAvatarUrl: (user?.user_metadata?.avatar_url as string | undefined) ?? null,
-      memberIds: selectedIds,
-      callType: withVideo ? "video" : "audio",
-      kind: conversation?.kind ?? "group",
-    });
     chat.sendSystem.mutate("started a call");
-    void (async () => {
-      try {
-        const { data: sess } = await supabase.auth.getSession();
-        const at = sess.session?.access_token;
-        if (at) {
-          void fetch("/api/calls/ring", {
-            method: "POST",
-            headers: { "content-type": "application/json", authorization: `Bearer ${at}` },
-            body: JSON.stringify({ listId, memberIds: selectedIds, callType: withVideo ? "video" : "audio" }),
-          });
-        }
-      } catch {
-        // push is best-effort
-      }
-    })();
+    void ringPeople({ listId, memberIds: selectedIds, callType: withVideo ? "video" : "audio" });
   };
 
   const startOrJoinCall = async (withVideo: boolean, selectedIds?: string[]) => {

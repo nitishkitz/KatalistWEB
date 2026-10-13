@@ -81,7 +81,7 @@ function Note({ id, auth }: { id: string; auth: OtpSignIn }) {
   );
 }
 
-/* ---------- Number / email ---------- */
+/* ---------- Mobile number ---------- */
 
 export function ContactStep({
   auth,
@@ -96,7 +96,6 @@ export function ContactStep({
   onSubmit: () => void;
   onShowDemo?: () => void;
 }) {
-  const isPhone = auth.channel === "phone";
   const invalid = Boolean(auth.note?.error);
   const clearError = () => {
     if (auth.note?.error) auth.setNote(null);
@@ -108,15 +107,7 @@ export function ContactStep({
         Unlock your space.
       </h1>
       <p className="kg-lede" style={stagger(1)}>
-        {isPhone ? (
-          <>
-            Sign in with your phone. We will text you a <span style={{ whiteSpace: "nowrap" }}>6-digit</span> code.
-          </>
-        ) : (
-          <>
-            Sign in with your email. We will send you a <span style={{ whiteSpace: "nowrap" }}>6-digit</span> code.
-          </>
-        )}
+        {auth.testOtp ? "Sign in with your mobile number. A temporary sign-in code appears on the next step." : "Sign in with your mobile number using a 6-digit code."}
       </p>
       <form
         noValidate
@@ -126,93 +117,51 @@ export function ContactStep({
           onSubmit();
         }}
       >
-        {isPhone ? (
-          <>
-            <label className="kg-label" htmlFor="kg-tel">
-              Phone number
-            </label>
-            <div className="kg-well" data-invalid={invalid}>
-              <select
-                id="kg-cc"
-                name="country-code"
-                autoComplete="tel-country-code"
-                aria-label="Country code"
-                value={auth.dialCode}
-                onChange={(event) => {
-                  auth.setDialCode(event.target.value);
-                  auth.setPhone(formatPhoneInput(event.target.value, auth.phone));
-                }}
-              >
-                {COUNTRY_CODES.map((c) => (
-                  <option key={c.code} value={c.code} title={c.label}>
-                    {c.code}
-                  </option>
-                ))}
-              </select>
-              <input
-                ref={inputRef}
-                id="kg-tel"
-                name="tel"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel-national"
-                placeholder="98765 43210"
-                enterKeyHint="send"
-                aria-describedby="kg-contact-note"
-                aria-invalid={invalid}
-                value={auth.phone}
-                onChange={(event) => {
-                  auth.setPhone(formatPhoneInput(auth.dialCode, event.target.value));
-                  clearError();
-                }}
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            <label className="kg-label" htmlFor="kg-email">
-              Email address
-            </label>
-            <div className="kg-well" data-invalid={invalid}>
-              <input
-                ref={inputRef}
-                id="kg-email"
-                name="email"
-                type="email"
-                inputMode="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                enterKeyHint="send"
-                aria-describedby="kg-contact-note"
-                aria-invalid={invalid}
-                value={auth.email}
-                onChange={(event) => {
-                  auth.setEmail(event.target.value);
-                  clearError();
-                }}
-              />
-            </div>
-          </>
-        )}
+        <label className="kg-label" htmlFor="kg-tel">
+          Phone number
+        </label>
+        <div className="kg-well" data-invalid={invalid}>
+          <select
+            id="kg-cc"
+            name="country-code"
+            autoComplete="tel-country-code"
+            aria-label="Country code"
+            value={auth.dialCode}
+            onChange={(event) => {
+              auth.setDialCode(event.target.value);
+              auth.setPhone(formatPhoneInput(event.target.value, auth.phone));
+            }}
+          >
+            {COUNTRY_CODES.map((c) => (
+              <option key={c.code} value={c.code} title={c.label}>
+                {c.code}
+              </option>
+            ))}
+          </select>
+          <input
+            ref={inputRef}
+            id="kg-tel"
+            name="tel"
+            type="tel"
+            inputMode="tel"
+            autoComplete="tel-national"
+            placeholder="98765 43210"
+            enterKeyHint="send"
+            aria-describedby="kg-contact-note"
+            aria-invalid={invalid}
+            value={auth.phone}
+            onChange={(event) => {
+              auth.setPhone(formatPhoneInput(auth.dialCode, event.target.value));
+              clearError();
+            }}
+          />
+        </div>
         <Note id="kg-contact-note" auth={auth} />
-        <GateButton busy={sending} label={sending ? "Sending code" : "Send code"} />
+        <GateButton busy={sending} label={sending ? "Preparing code" : auth.testOtp ? "Continue" : "Send code"} />
       </form>
-      {auth.phoneAvailable || onShowDemo ? (
+      {onShowDemo ? (
         <div className="kg-row" style={stagger(3)}>
-          {auth.phoneAvailable ? (
-            <button
-              className="kg-link"
-              type="button"
-              onClick={() => auth.chooseChannel(isPhone ? "email" : "phone")}
-            >
-              {isPhone ? "Use email instead" : "Use phone instead"}
-            </button>
-          ) : null}
-          {onShowDemo ? (
-            <button className="kg-link" type="button" onClick={onShowDemo}>
-              Demo accounts
-            </button>
-          ) : null}
+          <button className="kg-link" type="button" onClick={onShowDemo}>Demo accounts</button>
         </div>
       ) : null}
     </section>
@@ -270,7 +219,7 @@ export function CodeStep({
         Enter the code.
       </h1>
       <p className="kg-lede" style={stagger(1)}>
-        Sent to <b>{sentTo}</b>. Coey is holding the gate.
+        {auth.testOtp ? "Signing in as" : "Sent to"} <b>{sentTo}</b>.
       </p>
       <form
         noValidate
@@ -295,7 +244,7 @@ export function CodeStep({
             pattern="[0-9]{6}"
             maxLength={6}
             enterKeyHint="done"
-            aria-describedby="kg-code-note"
+            aria-describedby={auth.testOtp ? "kg-test-otp kg-code-note" : "kg-code-note"}
             aria-invalid={rejected}
             readOnly={verifying || recovering || expired}
             value={otp}
@@ -325,6 +274,11 @@ export function CodeStep({
             );
           })}
         </div>
+        {auth.testOtp ? (
+          <p id="kg-test-otp" className="kg-test-otp">
+            Temporary sign-in code: <strong>{auth.testOtp}</strong> · No SMS sent.
+          </p>
+        ) : null}
         <Note id="kg-code-note" auth={auth} />
         <GateButton ref={ctaRef} busy={verifying || (expired && auth.busy)} disabled={recovering} label={ctaLabel} />
         <p className="kg-verification-status" role="status">
@@ -447,9 +401,9 @@ export function ProfileStep({
         </ProfileField>
         <ProfileField
           id="kg-profile-email"
-          label="Email address"
+          label="Email address (optional)"
           error={errors.email}
-          hint="Your contact email. Sign-in still uses a one-time code."
+          hint="Optional contact email. Sign-in uses your mobile number."
         >
           <input
             id="kg-profile-email"
@@ -511,7 +465,7 @@ export function DemoStep({ auth, onUseOtp }: { auth: OtpSignIn; onUseOtp: () => 
       </div>
       <div className="kg-row" style={stagger(3)}>
         <button className="kg-link" type="button" onClick={onUseOtp}>
-          Use phone or email
+          Use mobile number
         </button>
       </div>
     </section>

@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 
 import { useMotionPreference } from "@/hooks/use-motion-preference";
 import { demoEnabled } from "@/lib/session-mode";
-import { localFixedOtp } from "@/lib/fixed-otp";
 import { holdIdentityTransition } from "@/features/realtime/identity-transition-hold";
 import { contactProblem, OTP_TTL_MS, useOtpSignIn } from "../use-otp-sign-in";
 import { clearGateHandoff, peekGateHandoff, setGateHandoff } from "./gate-handoff";
@@ -290,7 +289,6 @@ export function AuthGate({ returnTo }: { returnTo: string }) {
     enterTimerRef.current = setTimeout(finish, ENTER_DELAY_MS);
   }
 
-  const fixedCode = auth.channel === "phone" && auth.phoneAvailable ? localFixedOtp() : null;
   const welcomeName = (handoff?.welcomeName ?? auth.welcomeName).split(" ")[0];
 
   return (
@@ -335,21 +333,10 @@ export function AuthGate({ returnTo }: { returnTo: string }) {
 
         {view === "contact" || view === "demo" ? (
           <div className="kg-foot">
-            {fixedCode ? (
-              <p>
-                Test mode. Code <b>{fixedCode}</b> unlocks.
-              </p>
-            ) : null}
             <p>
               New to Katalist? <Link to="/welcome">Take the tour</Link>
             </p>
             <p>By continuing, you agree to our Terms of Service and Privacy Policy.</p>
-          </div>
-        ) : view === "code" && fixedCode ? (
-          <div className="kg-foot">
-            <p>
-              Test mode. Code <b>{fixedCode}</b> unlocks.
-            </p>
           </div>
         ) : null}
       </main>

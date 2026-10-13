@@ -1,6 +1,11 @@
 import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
 import { renderErrorPage } from "./lib/error-page";
+import { maintenanceBlocks, resetUnavailable } from "./lib/reset-controls.server";
+
+const resetMiddleware = createMiddleware().server(({ next, request }) =>
+  maintenanceBlocks(new URL(request.url).pathname) ? resetUnavailable() : next(),
+);
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
   try {
@@ -25,5 +30,5 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [errorMiddleware, csrfMiddleware],
+  requestMiddleware: [resetMiddleware, errorMiddleware, csrfMiddleware],
 }));

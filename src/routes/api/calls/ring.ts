@@ -38,14 +38,22 @@ export const Route = createFileRoute("/api/calls/ring")({
         // DM/group conversations live under /team; task Lists under /lists.
         const isHub = list.kind === "dm" || list.kind === "group";
 
-        const { data: members } = await supabaseAdmin
-          .from("list_members")
-          .select("profile_id")
-          .eq("list_id", listId);
-        const memberIds = new Set<string>(
-          [list.owner_profile_id, ...(members ?? []).map((m) => m.profile_id)].filter(Boolean) as string[],
+        // The ring itself is written by the database as this user (auth.uid() is the caller),
+        // which also decides who may be rung: participants only, no block either way,
+        // connected for DMs. In-app delivery is the resulting call_rings rows.
+        const { createClient } = await import("@supabase/supabase-js");
+        const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+        const anonKey = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+        if (!url || !anonKey) return json({ error: "not configured" }, 500);
+        const asUser = createClient(url, anonKey, { auth: { persistSession: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
+        const requested = Array.isArray(body.memberIds) ? body.memberIds.filter((id) => typeof id === "string").slice(0, 50) : [];
+        const { data: rung, error: ringError } = await (asUser.rpc as unknown as (
+          fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string } | null }>)(
+          "ring_call", { p_list_id: listId, p_recipients: requested, p_call_type: body.callType === "audio" || body.callType === "video" ? body.callType : null },
         );
-        if (!memberIds.has(uid)) return json({ error: "forbidden" }, 403);
+        if (ringError) return json({ error: "could not start the call" }, /not found/i.test(ringError.message) ? 404 : 500);
+        const recipientIds = (Array.isArray(rung) ? rung : []) as string[];
+        if (recipientIds.length === 0) return json({ sent: 0, rung: 0 });
 
         const { data: caller } = await supabaseAdmin
           .from("profiles")
@@ -54,23 +62,6 @@ export const Route = createFileRoute("/api/calls/ring")({
           .maybeSingle();
         const fromName = caller?.display_name || "Someone";
         const callType = body.callType === "audio" || body.callType === "video" ? body.callType : "";
-
-        // If the caller picked a subset of people to ring, only push to those —
-        // but always intersect with actual list membership so a client can
-        // never make this endpoint push to someone outside the list.
-        const requested = Array.isArray(body.memberIds) ? new Set(body.memberIds) : null;
-        const candidateIds = [...memberIds].filter(
-          (id) => id !== uid && (!requested || requested.has(id)),
-        );
-        if (candidateIds.length === 0) return json({ sent: 0 });
-        // Blocked people (either direction), and unconnected people in a DM, are never rung.
-        const { data: allowed, error: allowError } = await (supabaseAdmin.rpc as unknown as (
-          fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>)(
-          "call_ring_recipients", { p_list_id: listId, p_caller: uid, p_recipients: candidateIds },
-        );
-        if (allowError) return json({ error: "could not check who can be called" }, 500);
-        const recipientIds = (Array.isArray(allowed) ? allowed : []) as string[];
-        if (recipientIds.length === 0) return json({ sent: 0 });
 
         const { data: toks } = await supabaseAdmin
           .from("device_tokens")
@@ -97,7 +88,7 @@ export const Route = createFileRoute("/api/calls/ring")({
             listKind: list.kind ?? "list",
           },
         );
-        return json({ sent });
+        return json({ sent, rung: recipientIds.length });
       },
     },
   },

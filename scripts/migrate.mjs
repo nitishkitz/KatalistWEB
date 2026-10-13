@@ -2,11 +2,11 @@
 /**
  * Deploy-time database migrator (node-postgres, `pg`).
  *
- * Runs during `npm run build` — on every Vercel deploy — applying pending files
+ * Runs explicitly via `npm run db:migrate`, applying pending files
  * in ../migrations to DATABASE_URL. Each file is applied in one transaction and
  * recorded in a `_migrations` table, so it runs once and is safe to re-run.
  *
- * No DATABASE_URL (local / preview builds) -> skip; the PGLite fallback applies
+ * Does NOT apply supabase/migrations/. No DATABASE_URL -> skip; the PGLite fallback applies
  * the same files at startup instead (see src/lib/db.ts).
  */
 import { readdir, readFile } from "node:fs/promises";

@@ -5,7 +5,20 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession, signInAsDemo, type DemoPersona } from "@/hooks/useSession";
 import { demoEnabled } from "@/lib/session-mode";
-import { smsOtpEnabled, localFixedOtp, localFixedOtpEnabled } from "@/lib/fixed-otp";
+type LoginConfig = { mode: "static" | "sms" | "off" | "unavailable"; staticCode: string | null; maintenance?: boolean };
+
+/** The server decides the sign-in mode and, in temporary static mode, the code shown. Never cached. */
+async function fetchLoginConfig(): Promise<LoginConfig> {
+  try {
+    const res = await fetch("/api/auth/login-config", { cache: "no-store" });
+    if (!res.ok) return { mode: res.status === 503 ? "off" : "unavailable", staticCode: null, maintenance: res.status === 503 };
+    const data = (await res.json()) as Partial<LoginConfig>;
+    const mode = data.mode === "static" || data.mode === "sms" || data.mode === "off" ? data.mode : "unavailable";
+    return { mode, staticCode: mode === "static" && typeof data.staticCode === "string" ? data.staticCode : null, maintenance: data.maintenance === true };
+  } catch {
+    return { mode: "unavailable", staticCode: null };
+  }
+}
 import { extractErrorMessage } from "@/lib/domain-error";
 
 /**
@@ -96,14 +109,32 @@ export function formatPhoneInput(dialCode: string, value: string) {
 export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) {
   const navigate = useNavigate();
   const { session, loading } = useSession();
-  // The fixed code exists only in test builds; otherwise phone uses real SMS verification.
-  const fixedPhone = localFixedOtpEnabled();
-  const phoneAvailable = fixedPhone || smsOtpEnabled();
+  const [loginConfig, setLoginConfig] = useState<LoginConfig | null>(null);
+  const loginConfigRef = useRef<LoginConfig | null>(null);
+  useEffect(() => {
+    let active = true;
+    void fetchLoginConfig().then((config) => {
+      if (!active) return;
+      loginConfigRef.current = config;
+      setLoginConfig(config);
+    });
+    return () => { active = false; };
+  }, []);
+  const ensureConfig = async () => {
+    if (loginConfigRef.current && loginConfigRef.current.mode !== "unavailable") return loginConfigRef.current;
+    const config = await fetchLoginConfig();
+    loginConfigRef.current = config;
+    setLoginConfig(config);
+    return config;
+  };
+  // Temporary static mode shows a shared code; it does not prove the number belongs to the person.
+  const fixedPhone = loginConfig?.mode === "static";
+  const phoneAvailable = loginConfig === null || fixedPhone || loginConfig.mode === "sms";
 
-  const [channel, setChannel] = useState<Channel>(phoneAvailable ? "phone" : "email");
+  const channel = "phone" as const;
   const [dialCode, setDialCode] = useState("+91");
   const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
+  const email = "";
   const [otp, setOtp] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<SignInNote>(null);
@@ -154,7 +185,6 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
           !profile ||
           !savedName ||
           savedName.toLowerCase() === "katalist user" ||
-          !hasRealEmail ||
           !profile.phone_e164;
 
         if (incomplete) {
@@ -240,20 +270,29 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
     setOtp("");
     setOtpSentAt(at);
     setNow(at);
-    setNote(resend ? { text: "We sent a new code.", error: false } : null);
+    setNote(resend ? { text: loginConfigRef.current?.mode === "static" ? "Your temporary code is shown below." : "We sent a new code.", error: false } : null);
   }
 
   /** Sends (or re-sends) a code. Validate with `contactProblem` first. */
   async function sendCode({ resend = false } = {}): Promise<boolean> {
-    if (channel === "phone" && !phoneAvailable) {
-      setNote({ text: "Phone sign-in is not available here. Use email instead.", error: true });
+    const config = await ensureConfig();
+    if (config.maintenance) {
+      setNote({ text: "Katalist is being updated. Please try again shortly.", error: true });
+      return false;
+    }
+    if (config.mode === "unavailable") {
+      setNote({ text: "We couldn’t reach Katalist. Check your connection, then try again.", error: true });
+      return false;
+    }
+    if (config.mode === "off") {
+      setNote({ text: "Phone sign-in is not configured yet. Please try again later.", error: true });
       return false;
     }
     setBusy(true);
     setNote(resend ? { text: "Sending a new code.", error: false } : null);
 
-    if (channel === "phone" && fixedPhone) {
-      // Test deployments only: the fixed code is checked server-side at /api/auth/phone-login.
+    if (config.mode === "static") {
+      // No SMS is sent; the server checks the code when it is submitted.
       setBusy(false);
       markSent(resend);
       return true;
@@ -273,30 +312,11 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
       return true;
     }
 
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: destination,
-        options: { shouldCreateUser: true },
-      });
-      if (error) throw error;
-    } catch (err: unknown) {
-      logAuthRequestFailure("send-email-code", err);
-      setBusy(false);
-      setNote({
-        text: resend
-          ? authErrorCopy(err, "We could not send a new code. Try again in a moment.", "send-email-code")
-          : authErrorCopy(err, "We could not send the code. Check your connection, then try again.", "send-email-code"),
-        error: true,
-      });
-      return false;
-    }
-    setBusy(false);
-    markSent(resend);
-    return true;
+    return false;
   }
 
   async function verifyPhone(code: string): Promise<VerifyOutcome> {
-    if (!fixedPhone) {
+    if (loginConfigRef.current?.mode !== "static") {
       // Real verification: Supabase checks the code it sent to this number.
       try {
         authCompletionPendingRef.current = true;
@@ -311,17 +331,6 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
         return "rejected";
       }
     }
-    const fixedCode = localFixedOtp();
-    if (!fixedCode || code !== fixedCode) {
-      setNote({
-        text: fixedCode
-          ? "That code did not match. Check it and try again."
-          : "Phone sign-in is not available here. Use email instead.",
-        error: true,
-      });
-      return "rejected";
-    }
-
     let stage: AuthRequestStage = "phone-login";
     try {
       const res = await fetch("/api/auth/phone-login", {
@@ -339,6 +348,12 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
         statusMessage?: string;
       };
       if (!res.ok) {
+        // The server is the only judge of the code; show its specific reason.
+        const reason = (data as { code?: string }).code;
+        if (reason === "wrong_code" || reason === "invalid_phone" || reason === "rate_limited" || reason === "maintenance" || reason === "disabled") {
+          setNote({ text: data.error || "We couldn’t sign you in. Try again.", error: true });
+          return "rejected";
+        }
         throw new Error(data.error || data.message || data.statusMessage || "Authentication failed");
       }
 
@@ -396,35 +411,6 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
     }
   }
 
-  async function verifyEmail(code: string): Promise<VerifyOutcome> {
-    try {
-      authCompletionPendingRef.current = true;
-      const { data: authData, error } = await supabase.auth.verifyOtp({
-        email: destination,
-        token: code,
-        type: "email",
-      });
-      if (error) {
-        authCompletionPendingRef.current = false;
-        setNote({
-          text: authErrorCopy(error, "That code did not match. Check the latest email and try again.", "verify-email-code"),
-          error: true,
-        });
-        return "rejected";
-      }
-      await waitForSessionReady(authData.session?.access_token);
-      return await continueAfterAuth(authData.user);
-    } catch (err: unknown) {
-      authCompletionPendingRef.current = false;
-      logAuthRequestFailure("verify-email-code", err);
-      setNote({
-        text: authErrorCopy(err, "We couldn’t verify that code. Try again.", "verify-email-code"),
-        error: true,
-      });
-      return "rejected";
-    }
-  }
-
   async function verifyCode(code: string): Promise<VerifyOutcome> {
     if (verifyingOtpRef.current) return "rejected";
     verifyingOtpRef.current = true;
@@ -437,7 +423,7 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
 
     setBusy(true);
     setNote(null);
-    const outcome = channel === "phone" ? await verifyPhone(code) : await verifyEmail(code);
+    const outcome = await verifyPhone(code);
     if (outcome === "rejected") {
       setBusy(false);
       setOtp("");
@@ -453,11 +439,6 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
     setNote(null);
   }
 
-  function chooseChannel(next: Channel) {
-    setChannel(next);
-    setNote(null);
-  }
-
   async function saveProfile(): Promise<boolean> {
     const name = fullName.trim().replace(/\s+/g, " ");
     const emailAddress = profileEmail.trim().toLowerCase();
@@ -466,7 +447,7 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
     const errors: ProfileErrors = {};
     if (!name || name.length > 100) errors.fullName = "Enter your name (up to 100 characters).";
     if (digits.length < 8 || digits.length > 15) errors.phone = "Enter a valid mobile number.";
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailAddress)) errors.email = "Enter a valid email address.";
+    if (emailAddress && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailAddress)) errors.email = "Enter a valid email address.";
     if (Object.keys(errors).length) {
       setProfileErrors(errors);
       return false;
@@ -488,7 +469,7 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
           id: profileUserId,
           display_name: name,
           phone_e164: normalizedPhone,
-          email: emailAddress,
+          email: emailAddress || null,
         },
         { onConflict: "id" },
       );
@@ -516,14 +497,13 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
 
   return {
     phoneAvailable,
+    testOtp: fixedPhone ? loginConfig?.staticCode ?? null : null,
     channel,
-    chooseChannel,
     dialCode,
     setDialCode,
     phone,
     setPhone,
     email,
-    setEmail,
     destination,
     otp,
     setOtp,
