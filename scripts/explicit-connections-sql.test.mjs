@@ -204,3 +204,25 @@ test("first-login profile upsert works as the signed-in user (column defaults ar
     assert.equal((await db.query("SELECT display_name FROM public.profiles WHERE id = $1", [id])).rows[0].display_name, "Katalist Verify A");
   } finally { await db.close(); }
 });
+
+test("profiles are private: others' phone and email are never readable; names only for people you share something with", async () => {
+  const { replayMigrations, actAs, createUser } = await import("./lib/supabase-replay.mjs");
+  const { db } = await replayMigrations();
+  try {
+    const A = "94000000-0000-4000-8000-00000000000a", B = "94000000-0000-4000-8000-00000000000b", C = "94000000-0000-4000-8000-00000000000c";
+    await createUser(db, { id: A, name: "Avani", phone: "+919000000201" });
+    await createUser(db, { id: B, name: "Bharat", phone: "+919000000202" });
+    await createUser(db, { id: C, name: "Chitra", phone: "+919000000203" });
+    await actAs(db, A);
+    const id = (await db.query("SELECT (send_contact_request($1)).id", [B])).rows[0].id;
+    await actAs(db, B);
+    await db.query("SELECT respond_contact_request($1, true)", [id]);
+    await actAs(db, C);
+    assert.deepEqual((await db.query("SELECT id FROM public.profiles")).rows.map((r) => r.id), [C], "C reads only its own profile");
+    assert.deepEqual((await db.query("SELECT display_name FROM public.public_identities")).rows.map((r) => r.display_name), ["Chitra"], "C shares nothing with A or B");
+    await actAs(db, A);
+    assert.deepEqual((await db.query("SELECT display_name FROM public.public_identities ORDER BY 1")).rows.map((r) => r.display_name), ["Avani", "Bharat"]);
+    assert.equal((await db.query("SELECT count(*)::int n FROM public.profiles WHERE id = $1", [B])).rows[0].n, 0, "B's phone and email stay private even to a connection");
+    await assert.rejects(db.query("SELECT phone_e164 FROM public.public_identities"), /column .*phone_e164.* does not exist/);
+  } finally { await db.close(); }
+});

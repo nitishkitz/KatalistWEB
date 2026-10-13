@@ -41,7 +41,9 @@ function initialsOf(name: string): string {
 
 async function resolvePeople(qc: QueryClient): Promise<Map<string, ContactPerson>> {
   const identities = await getProfileIdentities(qc);
-  const { data: profRows } = await supabase.from("profiles").select("id, occupation");
+  // Other people's details come from the privacy-limited identity view (never their phone or email).
+  const { data } = await supabase.from("public_identities" as never).select("id, occupation");
+  const profRows = (data ?? []) as Array<{ id: string; occupation: string | null }>;
   const roleById = new Map((profRows ?? []).map((r) => [r.id, (r as { occupation: string | null }).occupation]));
   const map = new Map<string, ContactPerson>();
   for (const p of identities) {

@@ -1,0 +1,12 @@
+import { chromium } from "playwright";
+const browser = await chromium.launch();
+const ctx = await browser.newContext({ storageState: `${process.argv[2]}/A.state.json`, viewport: { width: 1440, height: 900 } });
+const page = await ctx.newPage();
+await page.goto("https://katalist-web.vercel.app/", { waitUntil: "networkidle" });
+await page.waitForTimeout(2500);
+const box = page.locator('textarea[aria-label="Magic Box"]:visible');
+await box.fill("This is a very long line typed into the Magic Box to check that the text wraps onto several lines");
+await page.waitForTimeout(3000);
+const hits = await page.getByRole("button", { name: /voice|microphone|mic/i }).evaluateAll((els) => els.map((e) => (e.getAttribute("aria-label") || e.textContent || "").trim().slice(0, 80)));
+console.log(JSON.stringify(hits));
+await browser.close();
