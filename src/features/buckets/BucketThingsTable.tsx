@@ -349,6 +349,8 @@ type Props = {
   bucketName: string;
 };
 
+const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
 export function BucketThingsTable({
   bucketId,
   items,
@@ -427,7 +429,7 @@ export function BucketThingsTable({
       <div className="flex h-[55px] flex-wrap items-center gap-[16px] border-b-[0.72px] border-[#e7ecf7] px-[16px]">
         <span aria-live="polite" className="inline-flex h-[30px] max-w-[220px] shrink-0 items-center gap-1.5 rounded-full bg-[#f1ecff] px-3 text-[12.5px] font-semibold text-[#5b2ed1]" title={bucketName}>
           <span className="truncate">{bucketName}</span>
-          <span className="font-normal text-[#7d68c4]">· {items.filter((i) => i.kind === "thing").length} things · {items.filter((i) => i.kind === "list").length} lists</span>
+          <span className="font-normal text-[#7d68c4]">· {count(items.filter((i) => i.kind === "thing").length, "thing")} · {count(items.filter((i) => i.kind === "list").length, "list")}</span>
         </span>
         <label className="flex h-[36px] w-full max-w-[443px] flex-1 items-center gap-[11px] rounded-[8px] border-[1.08px] border-[#e1e6f5] bg-[#f8f9fd] px-[14px]">
           <Search className="h-[17px] w-[17px] shrink-0 text-[#858bb2]" />

@@ -50,17 +50,13 @@ export function AddToBucketDialog({
 
   const addPicked = async () => {
     setBusy(true);
-    let added = 0;
-    const failed: string[] = [];
-    for (const key of picked) {
+    // All at once; the Bucket list refreshes once they settle.
+    const results = await Promise.allSettled([...picked].map((key) => {
       const [kind, id] = key.split(":") as ["thing" | "list", string];
-      try {
-        await onAdd(kind === "thing" ? { thingId: id } : { listId: id });
-        added++;
-      } catch (err) {
-        failed.push(domainErrorMessage(err));
-      }
-    }
+      return onAdd(kind === "thing" ? { thingId: id } : { listId: id });
+    }));
+    const added = results.filter((r) => r.status === "fulfilled").length;
+    const failed = results.flatMap((r) => (r.status === "rejected" ? [domainErrorMessage(r.reason)] : []));
     setBusy(false);
     if (added) toast.success(`Added ${added} to ${bucketName}.`);
     if (failed.length) toast.error(failed[0]!);
