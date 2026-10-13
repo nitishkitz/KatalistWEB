@@ -105,7 +105,9 @@ export const defaultTurnDeps = (client: SupabaseClient, userId: string): TurnDep
     if (!answer.groups?.length || ["nudge_recommendation", "person_selection_required", "scope_selection_required"].includes(answer.intent)) return answer;
     const ws = new Workspace(client, userId);
     await ws.load();
-    const { heading, description } = splitAnswer(answer.answer_markdown, null);
+    // Short code-written answers read best whole ("No open Things with X. 13 Things from X are in your court.").
+    const whole = answer.answer_markdown.replace(/\*\*/g, "").trim();
+    const { heading, description } = whole.length <= 100 && !whole.includes("\n") ? { heading: whole.replace(/\.$/, ""), description: undefined } : splitAnswer(answer.answer_markdown, null);
     const presentation = presentFromGroups(ws, { heading, description, mode, groups: answer.groups });
     return presentation.blocks.length ? { ...answer, presentation } : answer;
   },

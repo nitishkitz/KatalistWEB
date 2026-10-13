@@ -43,7 +43,7 @@ export function systemPrompt(ws: Workspace, mode: "work" | "home") {
   return [
     `You are Coey, the assistant inside Katalist, a work app where people toss each other "Things" (tasks). You talk with ${ws.viewerName || "the user"}.`,
     `Now: ${WEEKDAYS[wd]} ${today} ${time} (${ws.timezone}). This week: ${monday} to ${addDays(monday, 6)}. Last week: ${addDays(monday, -7)} to ${addDays(monday, -1)}. The user is in ${mode === "work" ? "Work" : "Home"} mode.`,
-    "Katalist words: a Thing is in someone's court when they hold it. Catch = the holder accepts it (until then it is waiting for catch). Sorted = done. The user's court has lanes Now, Next and Later; With Others is what the user sent to others. A nudge is a gentle reminder on a Thing the user sent. A promise is the date the holder commits to. Pace (urgent, normal, no rush) is set only by the sender. Snooze hides a Thing from the user's lanes until the chosen time, then it comes back to the same lane. Lists are shared spaces; Buckets are private folders. Work and Home are separate modes.",
+    "Katalist words: a Thing is in someone's court when they hold it. Catch = the holder accepts it (until then it is waiting for catch). Sorted = done. The user's court has lanes Now, Next and Later; With Others is what the user sent to others. A nudge is a gentle reminder on a Thing the user sent. A promise is the date the holder commits to. Pace (urgent, normal, no rush) is set only by the sender. promised_for is the date the person HOLDING the Thing promised (if the user holds it, the user promised). Snooze hides a Thing from the user's lanes until the chosen time, then it comes back to the same lane. Lists are shared spaces; Buckets are private folders. Work and Home are separate modes.",
     "How to work:",
     "- Use tools for every fact. Never guess names, counts, dates or titles. If a tool says a person is ambiguous or not found, say so or ask which one.",
     "- Look again with another tool when the first result is not enough (for example find_things, then get_thing for detail or comments).",
@@ -269,10 +269,13 @@ export async function runAgent(
   const lastRef = [...tools.results.keys()].pop();
   const filterRefs = refs.some((r) => tools.results.has(r)) ? refs : !refs.length && lastRef ? [lastRef] : [];
   const filters = [...new Set(filterRefs.flatMap((r) => tools.results.get(r)?.filters ?? []))];
-  const detailOnly = extras.length > 0 && !fromRefs.length;
+  // A Thing shown in full is not repeated as a row.
+  const detailIds = new Set(extras.flatMap((b) => (b.type === "thing_detail" ? [b.record.id] : [])));
+  const detailOnly = extras.length > 0 && fromRefs.every((id) => detailIds.has(id));
   let ids = fromRefs.length ? fromRefs : detailOnly ? [] : named.length ? named : lastList;
   const { heading, description } = splitAnswer(answer, tools.final);
   // Rows must match the count the heading states: prefer the search that matched exactly that many.
+  ids = ids.filter((id) => !detailIds.has(id));
   const stated = /\b(\d+)\b/.exec(heading);
   if (stated && new Set(ids).size !== Number(stated[1])) {
     const exact = [...tools.results.values()].filter((r) => r.ids.length === Number(stated[1]));
