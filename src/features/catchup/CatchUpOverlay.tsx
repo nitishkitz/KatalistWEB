@@ -77,7 +77,7 @@ export function CatchUpOverlay({
           responsive layout off of); full-height, edge-to-edge on mobile so
           the sticky action row at the bottom of CatchUpStack stays
           reachable without the dialog itself needing to scroll. */}
-      <DialogContent aria-label="Morning Brief" data-brief-motion={open ? "pending" : undefined} ref={panelRef} overlayClassName="morning-brief-backdrop" className="morning-brief flex h-dvh max-h-dvh w-full flex-col gap-0 overflow-hidden rounded-none border-none bg-white p-0">
+      <DialogContent aria-label="Morning Brief" data-brief-motion={open ? "pending" : undefined} ref={panelRef} overlayClassName="morning-brief-backdrop" className="morning-brief flex h-dvh max-h-dvh w-full flex-col gap-0 overflow-y-auto overscroll-contain rounded-none border-none bg-white p-0">
         <header className="brief-header">
           <img
             src={sunriseLandscape}
@@ -147,7 +147,8 @@ export function CatchUpOverlay({
             </div>
           </div>
         </header>
-        <div className="brief-body min-h-0 flex-1 overflow-y-auto">
+        {/* The whole Brief scrolls as one page: the header scrolls away with the content. */}
+        <div className="brief-body flex-1">
           <AsyncState
             isLoading={isLoading}
             data={moments}
