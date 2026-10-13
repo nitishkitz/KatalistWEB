@@ -7,6 +7,7 @@ import { getThing } from "./local-state";
 import { calculateCommentCounts } from "./read-state";
 import { fetchRealAttachments } from "./attachments";
 import { fetchThingOverviewStats } from "./fetch-thing-overview-stats";
+import { fetchCoeySchedules } from "@/features/court/coey/schedules";
 
 export const THING_COLUMNS =
   "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at,created_at,notes";
@@ -147,13 +148,14 @@ export async function mapDbThingRows(
   const thingIds = rows.map((r) => r.id);
 
   if (mode === "overview") {
-    const [people, listNames, statsResult] = await Promise.all([
+    const [people, listNames, statsResult, schedules] = await Promise.all([
       resolveActorPeople([...actorIds]),
       resolveListNames(listIds),
       fetchThingOverviewStats(rows, myActorId).then(
         (map) => ({ available: true as const, map }),
         () => ({ available: false as const, map: null }),
       ),
+      fetchCoeySchedules(thingIds),
     ]);
     return rows.map((r) => {
       const stats = statsResult.map?.get(r.id);
@@ -175,6 +177,7 @@ export async function mapDbThingRows(
         unreadCommentCount: stats?.unreadCommentCount,
         detailLevel: "overview",
         overviewStatsUnavailable: !stats,
+        coey: schedules.get(r.id),
       } satisfies Thing;
     });
   }
@@ -188,7 +191,7 @@ export async function mapDbThingRows(
   // scripts/map-thing-rows-concurrency.test.mjs for a deterministic
   // (event-order, not wall-clock) proof that all four start before any
   // of them resolves.
-  const [people, listNames, commentCountsResult, attachmentResult] = await Promise.all([
+  const [people, listNames, commentCountsResult, attachmentResult, schedules] = await Promise.all([
     resolveActorPeople([...actorIds]),
     resolveListNames(listIds),
     // Comment counts are stats, not decorative — a failed read must not
@@ -208,6 +211,7 @@ export async function mapDbThingRows(
       (map) => ({ available: true as const, map }),
       () => ({ available: false as const, map: null }),
     ),
+    fetchCoeySchedules(thingIds),
   ]);
   const fallback = (id: string) => personOrSomeone(people, id);
 
@@ -257,6 +261,7 @@ export async function mapDbThingRows(
       updatedAt: r.updated_at,
       createdAt: r.created_at ?? undefined,
       description: descriptionText,
+      coey: schedules.get(r.id),
       files: finalFiles,
       detailLevel: "detail",
       attachmentCount: attachmentResult.available ? finalFiles?.length ?? 0 : undefined,

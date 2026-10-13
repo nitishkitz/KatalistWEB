@@ -133,6 +133,7 @@ mock.module("@/features/court/use-court", {
     }),
   },
 });
+mock.module("@/features/court/coey/CoeyInbox", { namedExports: { CoeyInbox: () => null } });
 mock.module("@/features/court/MagicBox", {
   namedExports: { MagicBox: () => h("div", { "data-testid": "magic-box" }) },
 });

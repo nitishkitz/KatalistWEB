@@ -48,6 +48,7 @@ import { Route as ApiCodeActivityWorkspaceSourceRouteImport } from './routes/api
 import { Route as ApiCoeyInterpretRouteImport } from './routes/api/coey/interpret'
 import { Route as ApiHubNotifyMessageRouteImport } from './routes/api/hub/notify-message'
 import { Route as ApiJobsCodeActivityDrainRouteImport } from './routes/api/jobs/code-activity-drain'
+import { Route as ApiJobsCoeyFollowupsRouteImport } from './routes/api/jobs/coey-followups'
 import { Route as ApiJobsDailyMaintenanceRouteImport } from './routes/api/jobs/daily-maintenance'
 import { Route as ApiJobsEscalateNudgesRouteImport } from './routes/api/jobs/escalate-nudges'
 import { Route as ApiNudgesNotifyRouteImport } from './routes/api/nudges/notify'
@@ -272,6 +273,11 @@ const ApiJobsCodeActivityDrainRoute =
     path: '/api/jobs/code-activity-drain',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiJobsCoeyFollowupsRoute = ApiJobsCoeyFollowupsRouteImport.update({
+  id: '/api/jobs/coey-followups',
+  path: '/api/jobs/coey-followups',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiJobsDailyMaintenanceRoute = ApiJobsDailyMaintenanceRouteImport.update({
   id: '/api/jobs/daily-maintenance',
   path: '/api/jobs/daily-maintenance',
@@ -418,6 +424,7 @@ export interface FileRoutesByFullPath {
   '/api/coey/interpret': typeof ApiCoeyInterpretRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
+  '/api/jobs/coey-followups': typeof ApiJobsCoeyFollowupsRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
@@ -475,6 +482,7 @@ export interface FileRoutesByTo {
   '/api/coey/interpret': typeof ApiCoeyInterpretRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
+  '/api/jobs/coey-followups': typeof ApiJobsCoeyFollowupsRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
@@ -536,6 +544,7 @@ export interface FileRoutesById {
   '/api/coey/interpret': typeof ApiCoeyInterpretRoute
   '/api/hub/notify-message': typeof ApiHubNotifyMessageRoute
   '/api/jobs/code-activity-drain': typeof ApiJobsCodeActivityDrainRoute
+  '/api/jobs/coey-followups': typeof ApiJobsCoeyFollowupsRoute
   '/api/jobs/daily-maintenance': typeof ApiJobsDailyMaintenanceRoute
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
@@ -598,6 +607,7 @@ export interface FileRouteTypes {
     | '/api/coey/interpret'
     | '/api/hub/notify-message'
     | '/api/jobs/code-activity-drain'
+    | '/api/jobs/coey-followups'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
@@ -655,6 +665,7 @@ export interface FileRouteTypes {
     | '/api/coey/interpret'
     | '/api/hub/notify-message'
     | '/api/jobs/code-activity-drain'
+    | '/api/jobs/coey-followups'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
@@ -715,6 +726,7 @@ export interface FileRouteTypes {
     | '/api/coey/interpret'
     | '/api/hub/notify-message'
     | '/api/jobs/code-activity-drain'
+    | '/api/jobs/coey-followups'
     | '/api/jobs/daily-maintenance'
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
@@ -770,6 +782,7 @@ export interface RootRouteChildren {
   ApiCoeyInterpretRoute: typeof ApiCoeyInterpretRoute
   ApiHubNotifyMessageRoute: typeof ApiHubNotifyMessageRoute
   ApiJobsCodeActivityDrainRoute: typeof ApiJobsCodeActivityDrainRoute
+  ApiJobsCoeyFollowupsRoute: typeof ApiJobsCoeyFollowupsRoute
   ApiJobsDailyMaintenanceRoute: typeof ApiJobsDailyMaintenanceRoute
   ApiJobsEscalateNudgesRoute: typeof ApiJobsEscalateNudgesRoute
   ApiNudgesNotifyRoute: typeof ApiNudgesNotifyRoute
@@ -1066,6 +1079,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiJobsCodeActivityDrainRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/jobs/coey-followups': {
+      id: '/api/jobs/coey-followups'
+      path: '/api/jobs/coey-followups'
+      fullPath: '/api/jobs/coey-followups'
+      preLoaderRoute: typeof ApiJobsCoeyFollowupsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/jobs/daily-maintenance': {
       id: '/api/jobs/daily-maintenance'
       path: '/api/jobs/daily-maintenance'
@@ -1274,6 +1294,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCoeyInterpretRoute: ApiCoeyInterpretRoute,
   ApiHubNotifyMessageRoute: ApiHubNotifyMessageRoute,
   ApiJobsCodeActivityDrainRoute: ApiJobsCodeActivityDrainRoute,
+  ApiJobsCoeyFollowupsRoute: ApiJobsCoeyFollowupsRoute,
   ApiJobsDailyMaintenanceRoute: ApiJobsDailyMaintenanceRoute,
   ApiJobsEscalateNudgesRoute: ApiJobsEscalateNudgesRoute,
   ApiNudgesNotifyRoute: ApiNudgesNotifyRoute,

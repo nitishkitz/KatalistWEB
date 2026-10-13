@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import type { Thing } from "@/domain/thing";
 import { laneOf, theirStateFor } from "@/domain/thing";
+import { CoeyInbox } from "./coey/CoeyInbox";
 import type { UseCatchup } from "@/features/catchup/use-catchup";
 import type { UseMorningBrief } from "@/features/catchup/use-morning-brief";
 import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
@@ -808,6 +809,8 @@ export function CourtDesktop({
           )}
         </div>
       ) : null}
+
+      {!focusSelection ? <CoeyInbox className="mb-3" /> : null}
 
       <div className="flex w-full min-w-0 items-start gap-4">
         {/* Lanes */}

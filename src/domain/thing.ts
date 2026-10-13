@@ -1,3 +1,6 @@
+import type { CoeyThingView } from "./coey/model";
+import { computeHolderLane, computeSenderConcern, CONCERN_ORDER } from "./coey/placement";
+
 export type Importance = "now" | "next" | "later";
 export type Pace = "now" | "next" | "later";
 export type Acknowledgement = "waiting_for_catch" | "caught";
@@ -48,6 +51,8 @@ export type Thing = {
   /** A detail attachment read failed; an empty files array is not authoritative. */
   attachmentsUnavailable?: boolean;
   commentCountsUnavailable?: boolean;
+  /** Coey schedule projection, when this Thing was captured through the Magic Box. */
+  coey?: CoeyThingView;
 };
 
 export type ThingFileType = "image" | "video" | "pdf" | "docx" | "excel" | "other" | "png" | "jpg";
@@ -71,7 +76,17 @@ export type ThingFile = {
 export type CourtLane = "now" | "next" | "later";
 export type TheirState = "waiting_for_catch" | "moving" | "needs_attention";
 
+/** The holder's lane, recomputed from the schedule on every read so it moves with time (M1). */
+export function coeyLane(thing: Thing, now = Date.now()) {
+  const view = thing.coey;
+  if (!view) return null;
+  // The personal snooze lens hides snoozed Things separately; here the lane is the waking lane.
+  return computeHolderLane({ ...view.schedule, snoozeUntil: null }, view.holderCal, now);
+}
+
 export function laneOf(thing: Thing): CourtLane {
+  const lane = coeyLane(thing)?.lane;
+  if (lane === "now" || lane === "next" || lane === "later") return lane;
   // Caught Things follow the assignee's personal pace. Uncaught (waiting for
   // catch) Things surface in the lane matching the owner's stated importance,
   // so a Thing tossed as "later" stays in Later — not forced into Now.
@@ -79,6 +94,12 @@ export function laneOf(thing: Thing): CourtLane {
 }
 
 export function theirStateFor(thing: Thing): TheirState {
+  if (thing.coey) {
+    const concern = computeSenderConcern(thing.coey.schedule, thing.coey.holderCal, Date.now());
+    if (concern === "not_caught") return "waiting_for_catch";
+    if (concern === "promise_missed" || concern === "stale") return "needs_attention";
+    return "moving";
+  }
   if (thing.acknowledgement === "waiting_for_catch") return "waiting_for_catch";
   const overdue =
     thing.dueAt != null &&
@@ -94,13 +115,37 @@ export function isActiveThing(thing: Thing): boolean {
 
 export function partitionCourt(things: Thing[], myActorId: string) {
   const active = things.filter(isActiveThing);
-  const mine = active.filter((t) => t.assignee.id === myActorId);
-  const theirs = active.filter((t) => t.owner.id === myActorId && t.assignee.id !== myActorId);
+  const mine: Thing[] = [];
+  const theirs: Thing[] = [];
+  const inbox: Thing[] = [];
+  for (const t of active) {
+    const view = t.coey;
+    if (view) {
+      const s = view.schedule;
+      const me = view.viewerProfileId;
+      if (s.state === "sorted") continue;
+      if (s.senderProfileId === me && s.inboxReason && s.inboxReason !== "thought") { inbox.push(t); continue; }
+      if (s.privateWait) { if (s.senderProfileId === me) theirs.push(t); continue; }
+      if (s.holderProfileId === me) {
+        // A third-party blocker parks the Thing outside the lanes (M10).
+        if (s.state === "blocked") inbox.push(t);
+        else mine.push(t);
+        continue;
+      }
+      if (s.senderProfileId === me) { theirs.push(t); continue; }
+    }
+    if (t.assignee.id === myActorId) mine.push(t);
+    else if (t.owner.id === myActorId) theirs.push(t);
+  }
+  // With Others is ordered by how much the sender should worry (§8.2).
+  const concernRank = (t: Thing) => (t.coey ? CONCERN_ORDER[computeSenderConcern(t.coey.schedule, t.coey.holderCal, Date.now())] : 3);
+  theirs.sort((a, b) => concernRank(a) - concernRank(b));
   return {
     mine,
     now: mine.filter((t) => laneOf(t) === "now"),
     next: mine.filter((t) => laneOf(t) === "next"),
     later: mine.filter((t) => laneOf(t) === "later"),
     theirs,
+    inbox,
   };
 }

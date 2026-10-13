@@ -3,7 +3,7 @@
  * the holder's lane and the sender's concern are projections computed by
  * placement.ts, never written from UI code.
  */
-import type { Mode } from "./calendar";
+import type { HolderCalendar, Mode } from "./calendar";
 import type { ActivityType, AssignShape, Pace, ParticipantRole, ThingKind } from "./contract";
 
 export type AnchorSource = "typed" | "inferred";
@@ -110,4 +110,11 @@ export type LaneDecision = {
   /** L10: the lane is provisional until the user answers. */
   ask?: "pace_conflict";
   wakeAt?: number | null;
+};
+
+/** A Thing's schedule plus what the viewer needs to project it (spec §8.2). */
+export type CoeyThingView = {
+  schedule: ThingSchedule;
+  holderCal: HolderCalendar;
+  viewerProfileId: string;
 };

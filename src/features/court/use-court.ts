@@ -134,6 +134,8 @@ export function useCourt() {
     next: parts.next,
     later: parts.later,
     theirs,
+    /** Captures waiting on the sender: unresolved person, wrong person, or parked on a blocker. */
+    inbox: parts.inbox,
     completedCount,
     all: source.things.filter(isActiveThing),
     myActorId: source.myActorId,

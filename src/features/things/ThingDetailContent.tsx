@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { CoeyThingActions } from "@/features/court/coey/CoeyThingActions";
 import { ThingReferenceContextMenu } from "@/features/thing-references/ThingReferenceContextMenu";
 import { useReferenceDraft } from "@/features/thing-references/use-reference-draft";
 import { ThingReferencesSection } from "@/features/thing-references/ThingReferencesSection";
@@ -961,6 +962,7 @@ export function ThingDetailContent({
           ) : null}
         </section>
       ) : null}
+      <CoeyThingActions thing={thing} />
       {(!isCourtVariant && (caps?.canCatch || caps?.canNudge || caps?.canSort || caps?.canShred)) || caps?.canCancel ? (
         <div className="mt-3 space-y-3">
           {!isCourtVariant && caps?.canCatch ? (

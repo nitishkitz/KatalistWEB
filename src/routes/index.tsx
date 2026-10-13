@@ -14,6 +14,7 @@ import {
 import { AppShell } from "@/components/layout/AppShell";
 import { CourtSkeleton } from "@/components/katalist/ScreenSkeletons";
 import { MagicBox } from "@/features/court/MagicBox";
+import { CoeyInbox } from "@/features/court/coey/CoeyInbox";
 import { CourtDesktop } from "@/features/court/CourtDesktop";
 import { useCourt } from "@/features/court/use-court";
 import { ThingRow, ThingTableHeader } from "@/components/katalist/ThingRow";
@@ -359,6 +360,7 @@ function CourtPage() {
       />
 
       <div className="lg:hidden">
+        {!error ? <CoeyInbox className="px-4 pt-3" /> : null}
         {error ? (
           // Court's query settled into an error, not an empty result — the
           // mobile branch had no error handling of its own, so this used to
