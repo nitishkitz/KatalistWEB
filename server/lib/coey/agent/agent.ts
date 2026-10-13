@@ -73,7 +73,7 @@ export function systemPrompt(ws: Workspace, mode: "work" | "home") {
     "- Speak about Things, never blame a person: write \"The dispatch is still in Ravi's court\", never \"Ravi hasn't done it\" or \"Ravi is late\".",
     "- Never reveal anything about another person beyond the state of Things the user shares with them: no workloads, no counts of their other work, no response times or activity. Do not compare people. You may rank the Things the user sent by how far past follow-up they are, grouped by who holds them.",
     "- If a search returns nothing, say so plainly in one sentence. Never fill a list with placeholders.",
-    "- If the question is not about the user's work in Katalist (age, weather, jokes, general knowledge), say briefly that you can only help with their Things, people, Lists and progress in Katalist.",
+    "- You also answer everyday and general-knowledge questions from what you know: explanations, how-to, writing help, maths, health and food basics, festivals and occasions, history, geography, language. Answer helpfully and briefly, in the user's language. For dates and weekdays use date_info; festival dates move each year, so say to confirm the exact date if date_info does not list it. For things that change by the hour (weather, news, prices, scores) give what you know and say plainly that you cannot check live data. Do not use find_things for these questions. For these, reply in Markdown directly (do not call show_answer): first line a short answer, then the useful detail (bullets or a small table are fine), up to about 250 words.",
   ].join("\n");
 }
 
@@ -233,12 +233,14 @@ export async function runAgent(
     if (tools.actions.length && claimsDone(answer!)) out.push("Write it as an offer, e.g. \"Tap Nudge … to send it.\" — the button does it when the user taps.");
     return out;
   };
-  let issues = problems();
+  // General answers (no Katalist data read) skip the data checks; they are labelled instead.
+  const general = !tools.usedKatalist;
+  let issues = general ? [] : problems();
   deps.debug?.("draft", { answer, issues });
   if (issues.length) {
     const msg = await chat(deps, [...messages, { role: "assistant", content: answer }, { role: "user", content: `Rewrite your answer. ${issues.join(" ")}` }], signal, false);
     answer = strip(msg.content ?? "") || answer;
-    issues = problems();
+    issues = general ? [] : problems();
     deps.debug?.("rewrite", { answer, issues });
     if (issues.length) return null;
   }
@@ -284,7 +286,17 @@ export async function runAgent(
   }
   const mixed = ids.some((id) => ws.thing(id)?.in_my_court) && ids.some((id) => ws.thing(id)?.sent_by_me);
   const groupBy = tools.final?.groupBy && tools.final.groupBy !== "none" ? tools.final.groupBy : mixed || ids.length > 4 ? "lane" : "none";
-  const presentation = buildPresentation(ws, { ids, groupBy, heading, description, mode: input.mode, partial: ws.things.length >= 600, extras, filters });
+  // A general answer keeps its full text (lists, tables), under a short heading.
+  if (general) {
+    const firstLine = answer.split("\n")[0]!.replace(/\*\*/g, "").trim().replace(/\.$/, "");
+    const body = (firstLine === heading ? answer.split("\n").slice(1).join("\n") : answer).trim();
+    // Don't repeat the heading as the first sentence of the body.
+    const plain = (x: string) => x.replace(/\*\*/g, "").trim();
+    const rest = plain(body).startsWith(plain(heading)) ? body.replace(/\*\*/g, "").trim().slice(plain(heading).length).replace(/^[.!?\s—-]+/, "") : body;
+    if (rest.trim()) extras.push({ type: "text", markdown: rest.slice(0, 6000) });
+  }
+  if (general) extras.push({ type: "notice", tone: "info", text: "General answer from Coey, not from your Katalist data. Things that change daily, like weather, news or prices, may be out of date." });
+  const presentation = buildPresentation(ws, { ids: general ? [] : ids, groupBy, heading, description: general ? undefined : description, mode: input.mode, partial: ws.things.length >= 600, extras, filters: general ? [] : filters });
   return {
     schema_version: "katalist.assistant.answer.v1",
     intent: "agent_answer",

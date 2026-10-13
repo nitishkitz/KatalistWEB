@@ -4,6 +4,7 @@ import { format, isToday, isTomorrow } from "date-fns";
 import type { CoeyPresentation, CoeyRecord, RecordAction, RecordGroup, ResultBlock, ResultEntry } from "@/domain/coey/presentation";
 import { cn } from "@/lib/utils";
 import { useRecordActions, type RowState } from "./use-record-actions";
+import { CoeyMarkdown } from "./CoeyMarkdown";
 
 /**
  * One renderer for Coey's results: a clear outcome, optional counts, and
@@ -62,6 +63,8 @@ export function CoeyResults({ presentation, onOpenThing }: { presentation: CoeyP
           <ThingDetail key={i} block={block} actions={actions} onOpenThing={onOpenThing} />
         ) : block.type === "timeline" || block.type === "comments" ? (
           <Entries key={i} title={block.title} entries={block.entries} quote={block.type === "comments"} onOpenThing={onOpenThing} />
+        ) : block.type === "text" ? (
+          <CoeyMarkdown key={i} text={block.markdown} />
         ) : block.type === "notice" ? (
           <p key={i} role="status" className={cn("rounded-lg px-3 py-2 text-xs", block.tone === "warning" ? "bg-amber-50 text-amber-800" : "bg-slate-50 text-slate-600")}>{block.text}</p>
         ) : null,

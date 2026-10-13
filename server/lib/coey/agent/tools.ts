@@ -1,6 +1,8 @@
 import { addDays, localParts, zonedInstant } from "../../../../src/domain/coey/calendar";
 import { summarizeEvent } from "../../assistant-activity";
 import type { ActionParams, AssistantActionType } from "../../assistant-actions";
+import { FESTIVAL_DATES } from "../../../../src/domain/coey/time";
+const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 import type { Workspace, WsThing } from "./workspace";
 
 /**
@@ -47,6 +49,14 @@ export const TOOL_DEFINITIONS = [
           limit: nullable({ type: "integer", minimum: 1, maximum: 50 }),
         },
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "date_info",
+      description: "Exact calendar facts: today's date, the weekday of a date, days from today, and known dates of festivals and of the user's own holidays.",
+      parameters: { type: "object", additionalProperties: false, properties: { date: nullable({ type: "string", description: "YYYY-MM-DD" }), occasion: nullable({ type: "string", description: "A festival or occasion name" }) } },
     },
   },
   {
@@ -154,6 +164,8 @@ export class AgentTools {
   /** get_thing (d…), activity (a…) and search_comments (c…) results the answer can show. */
   readonly details = new Map<string, { thingId: string; comments: Entry[]; history: Entry[]; nudgedAt: string[] }>();
   readonly timelines = new Map<string, Entry[]>();
+  /** Whether the answer used the person's Katalist data (decides which checks apply). */
+  usedKatalist = false;
   readonly commentSets = new Map<string, Entry[]>();
   hasRef(ref: string) { return this.results.has(ref) || this.details.has(ref) || this.timelines.has(ref) || this.commentSets.has(ref); }
   /** Set when the model calls show_answer. */
@@ -168,7 +180,9 @@ export class AgentTools {
   async run(name: string, raw: unknown): Promise<ToolOutcome> {
     await this.ws.load();
     const args = (raw && typeof raw === "object" ? raw : {}) as Json;
+    if (["find_things", "get_thing", "search_comments", "activity", "people_lists_buckets", "propose_action"].includes(name)) this.usedKatalist = true;
     switch (name) {
+      case "date_info": return this.dateInfo(args);
       case "find_things": return this.findThings(args);
       case "get_thing": return this.getThing(args);
       case "search_comments": return this.searchComments(args);
@@ -447,6 +461,25 @@ export class AgentTools {
       thingIds: [...new Set(rows.map((r) => r.thing_id))].slice(0, 20),
       status: "Checking what changed",
     };
+  }
+
+  private dateInfo(a: Json): ToolOutcome {
+    const tz = this.ws.timezone;
+    const today = todayIn(this.ws.now, tz);
+    const days = (d: string) => Math.round((zonedInstant(d, 0, tz) - zonedInstant(today, 0, tz)) / 86_400_000);
+    const out: Json = { today, today_weekday: WEEKDAY_NAMES[localParts(this.ws.now, tz).weekday] };
+    const date = str(a.date);
+    if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) out.date = { date, weekday: WEEKDAY_NAMES[localParts(zonedInstant(date, 12 * 60, tz), tz).weekday], days_from_today: days(date) };
+    const occasion = str(a.occasion);
+    if (occasion) {
+      const key = occasion.toLowerCase().replace(/[^a-z]/g, "");
+      const known = Object.entries(FESTIVAL_DATES).find(([k]) => key.includes(k) || k.includes(key));
+      const upcoming = known?.[1].filter((d) => d >= today) ?? [];
+      out.occasion = upcoming.length
+        ? { name: occasion, next_date: upcoming[0], weekday: WEEKDAY_NAMES[localParts(zonedInstant(upcoming[0]!, 12 * 60, tz), tz).weekday], days_from_today: days(upcoming[0]!), source: "Katalist festival calendar" }
+        : { name: occasion, known: false, note: "Not in Katalist's festival calendar. Give your best knowledge and tell the user to confirm the exact date, since many festival dates change each year." };
+    }
+    return { result: out, thingIds: [], status: "Checking the calendar" };
   }
 
   private peopleListsBuckets(): ToolOutcome {

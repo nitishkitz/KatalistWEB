@@ -46,6 +46,7 @@ export type ResultBlock =
   | { type: "thing_detail"; record: CoeyRecord; notes: string | null; files: string[]; history: ResultEntry[]; comments: ResultEntry[]; nudged_at: string[] }
   | { type: "timeline"; title: string; entries: ResultEntry[] }
   | { type: "comments"; title: string; entries: ResultEntry[] }
+  | { type: "text"; markdown: string }
   | { type: "notice"; tone: "info" | "warning"; text: string };
 
 export type CoeyPresentation = {
@@ -85,6 +86,8 @@ export function validPresentation(p: unknown): p is CoeyPresentation {
       if (!isRecord(b.record) || !Array.isArray(b.history) || !Array.isArray(b.comments) || !Array.isArray(b.files)) return false;
     } else if (b.type === "timeline" || b.type === "comments") {
       if (!Array.isArray(b.entries) || !b.entries.every((e) => isStr(e.at) && isStr(e.text) && isStr(e.thing_id))) return false;
+    } else if (b.type === "text") {
+      if (!isStr(b.markdown)) return false;
     } else if (b.type !== "notice") return false;
   }
   return true;
