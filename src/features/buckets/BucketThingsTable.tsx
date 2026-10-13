@@ -343,6 +343,10 @@ type Props = {
   onOpenThing: (t: Thing) => void;
   onRemoveThing?: (t: Thing) => void;
   onRemoveList?: (l: ListRow) => void;
+  /** Opens the Thing/List picker for this Bucket (no separate workspace). */
+  onAdd: () => void;
+  /** The selected Bucket, shown as a capsule that follows the selection. */
+  bucketName: string;
 };
 
 export function BucketThingsTable({
@@ -354,6 +358,8 @@ export function BucketThingsTable({
   onOpenThing,
   onRemoveThing,
   onRemoveList,
+  onAdd,
+  bucketName,
 }: Props) {
   const [query, setQuery] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -419,12 +425,16 @@ export function BucketThingsTable({
       className="overflow-hidden rounded-[10px] border-[1.08px] border-[#e7ecf7] bg-white/65 font-['Inter',sans-serif]"
     >
       <div className="flex h-[55px] flex-wrap items-center gap-[16px] border-b-[0.72px] border-[#e7ecf7] px-[16px]">
+        <span aria-live="polite" className="inline-flex h-[30px] max-w-[220px] shrink-0 items-center gap-1.5 rounded-full bg-[#f1ecff] px-3 text-[12.5px] font-semibold text-[#5b2ed1]" title={bucketName}>
+          <span className="truncate">{bucketName}</span>
+          <span className="font-normal text-[#7d68c4]">· {items.filter((i) => i.kind === "thing").length} things · {items.filter((i) => i.kind === "list").length} lists</span>
+        </span>
         <label className="flex h-[36px] w-full max-w-[443px] flex-1 items-center gap-[11px] rounded-[8px] border-[1.08px] border-[#e1e6f5] bg-[#f8f9fd] px-[14px]">
           <Search className="h-[17px] w-[17px] shrink-0 text-[#858bb2]" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search things, lists, notes..."
+            placeholder="Search things, lists..."
             aria-label="Search things in bucket"
             className="w-full bg-transparent text-[12.96px] text-[#100d36] outline-none placeholder:text-[#858bb2]"
           />
@@ -488,14 +498,14 @@ export function BucketThingsTable({
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <Link
-          to="/buckets/$bucketId"
-          params={{ bucketId }}
+        <button
+          type="button"
+          onClick={onAdd}
           className="flex h-[36px] w-[148px] items-center justify-center gap-[11px] rounded-[7px] bg-[#793aff] text-[14.4px] text-white outline-none transition-colors hover:bg-[#6a2ee8] focus-visible:ring-2 focus-visible:ring-[#9a70ff] focus-visible:ring-offset-2"
         >
           <Plus className="h-[19px] w-[19px]" strokeWidth={1.6} />
           Add thing
-        </Link>
+        </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -507,11 +517,6 @@ export function BucketThingsTable({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-white">
-            <DropdownMenuItem asChild>
-              <Link to="/buckets/$bucketId" params={{ bucketId }} className="text-[12.5px]">
-                Open bucket workspace
-              </Link>
-            </DropdownMenuItem>
             {filtering ? (
               <DropdownMenuItem
                 className="text-[12.5px]"

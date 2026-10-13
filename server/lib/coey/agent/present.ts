@@ -31,11 +31,7 @@ export function recordActions(t: WsThing, ws: Workspace): RecordAction[] {
       actions.push({
         kind: "nudge",
         status: "unavailable",
-        reason: recent
-          ? "You nudged this recently. Another nudge opens after the cooldown."
-          : t.acknowledgement === "waiting_for_catch"
-            ? `Too soon to nudge. ${t.holder} hasn’t caught it yet, and the follow-up window opens a few hours after it was sent or last changed.`
-            : "Too soon to nudge. The follow-up window hasn’t opened yet.",
+        reason: recent ? "Nudged recently — try again later." : "Too soon to nudge — it was sent or changed only a few hours ago.",
       });
     }
   }
@@ -55,7 +51,8 @@ export function toRecord(t: WsThing, ws: Workspace): CoeyRecord {
     due_at: t.due_at,
     promise_at: t.promise_at,
     snoozed_until: t.lane === "hidden" ? t.snoozed_until : null,
-    follow_up: t.sent_by_me && t.concern ? FOLLOW_UP[t.concern] ?? null : null,
+    // Only concerns the row doesn't already say ("Waiting for Catch" covers not caught).
+    follow_up: t.sent_by_me && t.concern && ["stale", "promise_missed", "blocked"].includes(t.concern) ? FOLLOW_UP[t.concern] ?? null : null,
     file_count: t.files.length,
     actions: recordActions(t, ws),
   };

@@ -211,8 +211,8 @@ test("presentation: server-decided states and actions; snoozed and sorted Things
   assert.deepEqual(byId.snoozed.actions[0], { kind: "bring_back", status: "available" }, "snoozed: Bring back, not Catch");
   assert.equal(byId.snoozed.snoozed_until, iso("2026-10-13", 17 * 60));
   assert.equal(byId["fresh-sent"].actions[0].status, "unavailable");
-  assert.match(byId["fresh-sent"].actions[0].reason, /^Too soon to nudge\. .*follow-up window/, "the reason is the timing rule, not just “not caught”");
-  assert.match(byId.nudged.actions[0].reason, /nudged this recently/);
+  assert.match(byId["fresh-sent"].actions[0].reason, /^Too soon to nudge — it was sent or changed only a few hours ago\.$/, "the reason is the timing rule, not just “not caught”");
+  assert.match(byId.nudged.actions[0].reason, /^Nudged recently/);
   assert.equal(byId.done.lifecycle, "sorted");
   assert.deepEqual(byId.done.actions.map((a) => a.kind), ["open"]);
   assert.equal(p.completeness.matched_total, 6, "duplicates removed");

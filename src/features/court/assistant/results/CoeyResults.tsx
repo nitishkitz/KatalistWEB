@@ -41,7 +41,7 @@ export function CoeyResults({ presentation, onOpenThing }: { presentation: CoeyP
         <h3 className="text-[19px] font-bold leading-snug tracking-[-0.01em] text-slate-900">{presentation.summary.heading}</h3>
         {presentation.summary.description ? <p className="mt-1 text-sm leading-relaxed text-slate-600">{presentation.summary.description}</p> : null}
       </div>
-      {presentation.scope.filters?.length ? (
+      {presentation.scope.filters?.length && total > 3 ? (
         <div className="flex flex-wrap items-center gap-1.5" aria-label="Showing">
           <span className="text-xs text-slate-500">Showing</span>
           {presentation.scope.filters.map((f) => (

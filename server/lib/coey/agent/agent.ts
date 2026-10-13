@@ -59,6 +59,7 @@ export function systemPrompt(ws: Workspace, mode: "work" | "home") {
     "- \"what should I do first\": find_things relation in_my_court lane now sort due_soonest, then lane next.",
     "- About one Thing (summary, comments, files, history): find it, then get_thing.",
     "- Never write a \"Showing:\" line yourself; the app adds it.",
+    "- Keep it short: heading up to 8 words; description one short sentence, only what the rows do not show. The rows already show who, state, dates and whether Nudge is available, so do not repeat them. Never offer something you cannot do (reminders, scheduling).",
     "- Follow-ups (\"only overdue\", \"and Sudheer?\", \"what about Home?\", \"this week instead\") change the previous search: run it again with the same filters plus the change (\"Showing:\" in your previous answer lists them). A new, complete question starts fresh.",
     "- What changed / history / comments: activity or search_comments. About one Thing (summarise X, what happened to X): call get_thing with its title first (no relation or state filters; if no single match, find_things with text and state any). Then call the show_answer tool with those refs in results; never write refs in the text.",
     "- \"pending with X\" / \"what's with X\": both what is with X and what X sent the user; find_things with person and relation any returns that breakdown.",

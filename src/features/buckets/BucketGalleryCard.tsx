@@ -1,12 +1,4 @@
-import { Link } from "@tanstack/react-router";
-import { MoreVertical } from "lucide-react";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import type { BucketCard } from "./fixtures";
 import bucketArt1 from "@/assets/buckets/bucket-1.png";
@@ -35,12 +27,11 @@ export function bucketTheme(index: number) {
 type Props = {
   bucket: BucketCard;
   index: number;
-  noteCount: number;
   selected: boolean;
   onSelect: () => void;
 };
 
-export function BucketGalleryCard({ bucket, index, noteCount, selected, onSelect }: Props) {
+export function BucketGalleryCard({ bucket, index, selected, onSelect }: Props) {
   const theme = bucketTheme(index);
   const total = bucket.progressTotal ?? 0;
   const completed = Math.min(bucket.progressCompleted ?? 0, total);
@@ -71,31 +62,11 @@ export function BucketGalleryCard({ bucket, index, noteCount, selected, onSelect
       <div className="pointer-events-none relative z-10 flex h-[108px] shrink-0 items-start justify-center">
         <img src={theme.art} alt="" className="h-[108px] w-[108px] object-contain" draggable={false} />
       </div>
-      <div className="absolute right-[9px] top-[12px] z-20">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label={`${bucket.name} actions`}
-              className="flex h-5 w-5 items-center justify-center rounded text-[#7a81ab] outline-none hover:bg-[#f1ecff] focus-visible:ring-2 focus-visible:ring-[#9a70ff]"
-            >
-              <MoreVertical className="h-[13px] w-[13px]" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-white">
-            <DropdownMenuItem asChild>
-              <Link to="/buckets/$bucketId" params={{ bucketId: bucket.id }} className="text-[12.5px]">
-                Open bucket
-              </Link>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
       <p className="pointer-events-none relative z-10 shrink-0 truncate text-[14.4px] font-bold leading-normal text-[#100d36]">
         {bucket.name}
       </p>
       <p className="pointer-events-none relative z-10 shrink-0 text-[12px] leading-normal text-[#858bb2]">
-        {plural(bucket.thingCount, "thing")} • {plural(bucket.listCount, "list")} • {plural(noteCount, "note")}
+        {plural(bucket.thingCount, "thing")} • {plural(bucket.listCount, "list")}
       </p>
       <div className="pointer-events-none relative z-10 flex h-[26px] shrink-0 items-center gap-[3.6px]">
         {visible.length > 0 ? (

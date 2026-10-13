@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
@@ -10,7 +10,7 @@ import type { Thing } from "@/domain/thing";
 import { BucketGalleryCard } from "@/features/buckets/BucketGalleryCard";
 import { BucketThingsTable } from "@/features/buckets/BucketThingsTable";
 import { useBucketItems } from "@/features/buckets/use-bucket-items";
-import { useBucketNoteCounts } from "@/features/buckets/use-bucket-note-counts";
+import { AddToBucketDialog } from "@/features/buckets/AddToBucketDialog";
 import { CourtDetailModal } from "@/features/court/CourtDetailModal";
 import { domainErrorMessage } from "@/lib/domain-error";
 import { toast } from "sonner";
@@ -32,11 +32,12 @@ function BucketsPage() {
   const [name, setName] = useState("");
   const [selectedBucketId, setSelectedBucketId] = useState<string | null>(null);
   const [openThing, setOpenThing] = useState<Thing | null>(null);
+  const [adding, setAdding] = useState(false);
 
-  const noteCounts = useBucketNoteCounts(useMemo(() => buckets.map((b) => b.id), [buckets]));
   const activeBucket = buckets.find((b) => b.id === selectedBucketId) ?? buckets[0] ?? null;
   const {
     items,
+    add,
     remove,
     isLoading: itemsLoading,
     error: itemsError,
@@ -46,8 +47,8 @@ function BucketsPage() {
   return (
     <AppShell>
       <div className="font-['Inter',sans-serif]">
-        <div className="mb-[14px] flex min-h-[58px] items-center justify-between gap-4">
-          <h1 className="text-[34.56px] font-bold leading-normal text-[#100d36]">Buckets</h1>
+        <div className="mb-[14px] flex items-center justify-end gap-4">
+          <h1 className="sr-only">Buckets</h1>
           <button
             type="button"
             onClick={() => setCreating(true)}
@@ -77,7 +78,6 @@ function BucketsPage() {
                     key={b.id}
                     bucket={b}
                     index={i}
-                    noteCount={noteCounts[b.id] ?? 0}
                     selected={b.id === activeBucket?.id}
                     onSelect={() => setSelectedBucketId(b.id)}
                   />
@@ -92,6 +92,8 @@ function BucketsPage() {
                   error={itemsError}
                   onRetry={() => void refetchItems()}
                   onOpenThing={setOpenThing}
+                  onAdd={() => setAdding(true)}
+                  bucketName={activeBucket.name}
                   onRemoveThing={(t) =>
                     void remove.mutateAsync({ thingId: t.id }).then(
                       () => toast.success("Removed from bucket."),
@@ -111,6 +113,16 @@ function BucketsPage() {
         </AsyncState>
       </div>
 
+      {activeBucket ? (
+        <AddToBucketDialog
+          open={adding}
+          bucketName={activeBucket.name}
+          referencedThingIds={new Set(items.flatMap((i) => (i.kind === "thing" ? [i.thingId] : [])))}
+          referencedListIds={new Set(items.flatMap((i) => (i.kind === "list" ? [i.listId] : [])))}
+          onClose={() => setAdding(false)}
+          onAdd={(target) => add.mutateAsync(target)}
+        />
+      ) : null}
       <CourtDetailModal thing={openThing} isOpen={Boolean(openThing)} onClose={() => setOpenThing(null)} />
 
       {creating ? (

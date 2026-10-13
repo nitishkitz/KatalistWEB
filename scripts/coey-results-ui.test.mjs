@@ -29,7 +29,7 @@ const presentation = {
       { key: "now", title: "Now", total: 1, records: [rec("Submit all the findings", { due_at: new Date(Date.now() + 3600_000).toISOString() })] },
       { key: "next", title: "Next", total: 1, records: [rec("Review this image", { lifecycle: "in_progress", lane: "next", file_count: 1, actions: [{ kind: "mark_sorted", status: "available" }, { kind: "open", status: "available" }] })] },
       { key: "with_others", title: "Waiting with others", total: 1, records: [rec("Please review the mobile figma", { from: "You", holder: "Sudheer", relation: "you_sent", lane: null,
-        actions: [{ kind: "nudge", status: "unavailable", reason: "Too soon to nudge. Sudheer hasn’t caught it yet, and the follow-up window opens a few hours after it was sent or last changed." }, { kind: "open", status: "available" }] })] },
+        actions: [{ kind: "nudge", status: "unavailable", reason: "Too soon to nudge — it was sent or changed only a few hours ago." }, { kind: "open", status: "available" }] })] },
       { key: "snoozed", title: "Snoozed", total: 1, records: [rec("Get all the docs required", { from: "You", lane: null, snoozed_until: new Date(Date.now() + 3600_000).toISOString(), actions: [{ kind: "bring_back", status: "available" }, { kind: "open", status: "available" }] })] },
     ] },
   ],
@@ -70,7 +70,7 @@ test("an unavailable Nudge is disabled and says why — the timing rule, not jus
     const r = row(ui, "Please review the mobile figma");
     const nudge = within(r).getByRole("button", { name: /Nudge/ });
     assert.equal(nudge.disabled, true);
-    assert.match(r.textContent, /Too soon to nudge\. .*follow-up window opens/);
+    assert.match(r.textContent, /Too soon to nudge — it was sent or changed only a few hours ago\./);
     await act(async () => fireEvent.click(nudge));
     assert.equal(calls.filter((c) => c[0] === "nudge").length, 0);
   } finally { cleanup(); qc.clear(); }
