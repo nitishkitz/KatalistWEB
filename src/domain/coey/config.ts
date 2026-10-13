@@ -44,7 +44,7 @@ export type CoeyConfig = {
   BRIDGE_DELIVERY_ENABLED: false;
 };
 
-export const COEY_CONFIG: Readonly<CoeyConfig> = Object.freeze({
+export const COEY_CONFIG: Readonly<CoeyConfig> = Object.freeze<CoeyConfig>({
   F1_STALE_RAISES_LANE: false,
   F2_BREAKTHROUGH_LIMIT_PER_SENDER_MONTH: 3,
   F3_INFERRED_TIME_ACTS_BEFORE_ACCEPT: false,
