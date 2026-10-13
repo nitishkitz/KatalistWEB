@@ -1,4 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { WorkingTimeSettings } from "@/features/me/WorkingTimeSettings";
+import { CoeyPresenceSettings } from "@/features/me/CoeyPresenceSettings";
 import { useRef, useState } from "react";
 import {
   Bell,
@@ -76,6 +78,8 @@ const COVER_THEMES: { key: string; label: string; className: string }[] = [
 
 const settingsRows = [
   { id: "preferences", title: "Work / Home Context", body: "Set your default workspace and context", icon: Home, tint: "bg-[#f3ebfe] text-[#975ee2]" },
+  { id: "working-time", title: "Working time", body: "Days, hours, holidays and leave Coey respects", icon: Clock, tint: "bg-[#e9f4ff] text-[#2874f4]" },
+  { id: "coey", title: "Coey", body: "Full, Light or Quiet", icon: Sparkles, tint: "bg-[#f3ebfe] text-[#975ee2]" },
   { id: "notifications", title: "Notifications", body: "Manage push delivery on this device", icon: Bell, tint: "bg-[#fef4ec] text-[#fd983f]" },
   { id: "appearance", title: "Appearance", body: "Theme, reduced motion, and display preferences", icon: Palette, tint: "bg-[#e4fcee] text-[#12a15f]" },
   { id: "privacy", title: "Privacy", body: "Manage what others can see", icon: Shield, tint: "bg-[#f3ebfe] text-[#975ee2]" },
@@ -742,7 +746,11 @@ function MePage() {
                     {settingsRows.find((s) => s.id === panel)?.body}
                   </DialogDescription>
                 </DialogHeader>
-                {panel === "devices" ? (
+                {panel === "working-time" ? (
+                  <WorkingTimeSettings />
+                ) : panel === "coey" ? (
+                  <CoeyPresenceSettings />
+                ) : panel === "devices" ? (
                   <LoggedInDevices />
                 ) : panel === "appearance" ? (
                   <div className="mt-4 space-y-5">

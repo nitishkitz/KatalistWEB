@@ -8,6 +8,7 @@ import { currentDemoActorId } from "@/features/demo/identities";
 import { useCatchup } from "./use-catchup";
 import { useInteractionBlocker } from "@/components/katalist/use-interaction-blocker";
 import { morningBriefAutoOpenEnabled } from "./morning-brief-flag";
+import { useCoeyPresence } from "@/features/me/use-coey-presence";
 import {
   isEligibleToAutoOpen,
   isPastMorningThreshold,
@@ -123,6 +124,10 @@ export function useMorningBrief(): UseMorningBrief {
   const qc = useQueryClient();
   const catchup = useCatchup();
   const { isBlocked: hasBlockingInteraction } = useInteractionBlocker();
+  // Quiet Coey (§12.9): opening by itself is an optional appearance; manual review still works.
+  const { presence } = useCoeyPresence();
+  const presenceRef = useRef(presence);
+  presenceRef.current = presence;
   const profileQuery = useProfile();
 
   // The scope this review is currently visibly open/presented for -- `open`
@@ -395,7 +400,7 @@ export function useMorningBrief(): UseMorningBrief {
   );
 
   const maybeAttempt = useCallback(() => {
-    if (!morningBriefAutoOpenEnabled()) return;
+    if (!morningBriefAutoOpenEnabled() || presenceRef.current === "quiet") return;
     const now = new Date();
     const scope = computeScope(now);
     if (!scope) return;
