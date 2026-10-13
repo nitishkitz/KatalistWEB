@@ -192,3 +192,15 @@ test("visible identities: self, connections and request counterparts only; email
     assert.deepEqual(rows, [{ profile_id: A, email: "asha@example.test", connected: false }, { profile_id: B, email: null, connected: true }]);
   } finally { await db.close(); }
 });
+
+test("first-login profile upsert works as the signed-in user (column defaults are evaluable)", async () => {
+  const { replayMigrations, actAs, createUser } = await import("./lib/supabase-replay.mjs");
+  const { db } = await replayMigrations();
+  try {
+    const id = "93000000-0000-4000-8000-000000000001";
+    await createUser(db, { id, name: "Katalist User", phone: "+919000000101" });
+    await actAs(db, id);
+    await db.query("INSERT INTO public.profiles (id, display_name, phone_e164, email) VALUES ($1, 'Katalist Verify A', '+919000000101', NULL) ON CONFLICT (id) DO UPDATE SET display_name = excluded.display_name, email = excluded.email", [id]);
+    assert.equal((await db.query("SELECT display_name FROM public.profiles WHERE id = $1", [id])).rows[0].display_name, "Katalist Verify A");
+  } finally { await db.close(); }
+});
