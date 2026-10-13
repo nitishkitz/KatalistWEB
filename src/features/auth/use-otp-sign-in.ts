@@ -5,7 +5,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession, signInAsDemo, type DemoPersona } from "@/hooks/useSession";
 import { demoEnabled } from "@/lib/session-mode";
-import { localFixedOtp, localFixedOtpEnabled } from "@/lib/fixed-otp";
+import { smsOtpEnabled, localFixedOtp, localFixedOtpEnabled } from "@/lib/fixed-otp";
 import { extractErrorMessage } from "@/lib/domain-error";
 
 /**
@@ -47,7 +47,7 @@ async function waitForSessionReady(expectedAccessToken: string | undefined, time
   }
 }
 
-type AuthRequestStage = "phone-login" | "set-session" | "verify-otp" | "send-email-code" | "verify-email-code";
+type AuthRequestStage = "phone-login" | "set-session" | "verify-otp" | "send-email-code" | "verify-email-code" | "send-phone-code" | "verify-phone-code";
 
 function authErrorCopy(error: unknown, fallback: string, stage?: AuthRequestStage) {
   const message = extractErrorMessage(error) ?? fallback;
@@ -96,7 +96,9 @@ export function formatPhoneInput(dialCode: string, value: string) {
 export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) {
   const navigate = useNavigate();
   const { session, loading } = useSession();
-  const phoneAvailable = localFixedOtpEnabled();
+  // The fixed code exists only in test builds; otherwise phone uses real SMS verification.
+  const fixedPhone = localFixedOtpEnabled();
+  const phoneAvailable = fixedPhone || smsOtpEnabled();
 
   const [channel, setChannel] = useState<Channel>(phoneAvailable ? "phone" : "email");
   const [dialCode, setDialCode] = useState("+91");
@@ -250,9 +252,22 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
     setBusy(true);
     setNote(resend ? { text: "Sending a new code.", error: false } : null);
 
+    if (channel === "phone" && fixedPhone) {
+      // Test deployments only: the fixed code is checked server-side at /api/auth/phone-login.
+      setBusy(false);
+      markSent(resend);
+      return true;
+    }
     if (channel === "phone") {
-      // Phone sign-in currently runs on the deployment's fixed test code; the
-      // number is checked server-side at /api/auth/phone-login on verify.
+      try {
+        const { error } = await supabase.auth.signInWithOtp({ phone: destination, options: { shouldCreateUser: true } });
+        if (error) throw error;
+      } catch (err: unknown) {
+        logAuthRequestFailure("send-phone-code", err);
+        setBusy(false);
+        setNote({ text: authErrorCopy(err, "We could not send the SMS code. Check the number, then try again.", "send-phone-code"), error: true });
+        return false;
+      }
       setBusy(false);
       markSent(resend);
       return true;
@@ -281,6 +296,21 @@ export function useOtpSignIn(returnTo: string, { resumeUnlocked = false } = {}) 
   }
 
   async function verifyPhone(code: string): Promise<VerifyOutcome> {
+    if (!fixedPhone) {
+      // Real verification: Supabase checks the code it sent to this number.
+      try {
+        authCompletionPendingRef.current = true;
+        const { data: authData, error } = await supabase.auth.verifyOtp({ phone: destination, token: code, type: "sms" });
+        if (error) throw error;
+        await waitForSessionReady(authData.session?.access_token);
+        return await continueAfterAuth(authData.user);
+      } catch (err: unknown) {
+        authCompletionPendingRef.current = false;
+        logAuthRequestFailure("verify-phone-code", err);
+        setNote({ text: authErrorCopy(err, "That code did not match or has expired. Check it or request a new one.", "verify-phone-code"), error: true });
+        return "rejected";
+      }
+    }
     const fixedCode = localFixedOtp();
     if (!fixedCode || code !== fixedCode) {
       setNote({

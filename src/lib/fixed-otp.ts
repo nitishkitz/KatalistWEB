@@ -16,3 +16,12 @@ export function localFixedOtp(): string | null {
 export function localFixedOtpEnabled(): boolean {
   return localFixedOtp() !== null;
 }
+
+/**
+ * Real phone verification through Supabase Auth's SMS provider. Requires an
+ * SMS provider (e.g. Twilio) configured on the Supabase project; the browser
+ * never sees or chooses the code.
+ */
+export function smsOtpEnabled(): boolean {
+  return import.meta.env.VITE_KATALIST_PHONE_AUTH === "sms";
+}
