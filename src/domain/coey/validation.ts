@@ -259,7 +259,8 @@ export function runChecks(
         id: `V4.1:${key}`,
         level: 3,
         severity: "impossible",
-        message: `${anchor.phrase ?? "That time"} has already passed.`,
+        // Name the actual moment ("9:00 am today"), not just the word the user typed.
+        message: `${anchor.precision === "time" ? new Date(anchor.at).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: ctx.senderCal.timezone }) + (anchor.date === todayIn(ctx.senderCal, ctx.now) ? " today" : ` on ${dayLabel(anchor.date)}`) : anchor.phrase ?? "That time"} has already passed.`,
         fixes: [
           { id: "pick-date", label: "Choose a new time", fix: { type: "pick_date", key } },
           keep(),

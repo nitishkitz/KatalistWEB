@@ -35,7 +35,7 @@ test("a successful single-Thing capture identifies the Thing by title and offers
 });
 
 test("the mutation threads the saved title back through the create result, for the success toast to read", () => {
-  assert.match(magicBox, /return \{ kind: "created", createdIds, title: String\(items\[0\]\?\.title \?\? "New Thing"\), bucketFailedIds \};/);
+  assert.match(magicBox, /return \{ kind: "created", createdIds, title: String\(items\[0\]\?\.title \?\? "New Thing"\), bucketFailedIds, uploadFailed \};/);
 });
 
 test("CourtDesktop wires onThingCreated by looking the Thing up in a ref that tracks the current view (not a stale capture-time snapshot), reusing the existing no-hero-animation open path", () => {
