@@ -22,6 +22,7 @@ import { getIdentityEpoch, isEpochCurrent, registerIdentityDisposer } from "@/fe
  * away and back within the same identity.
  */
 export type DraftComposerKind =
+  | "thing-description"
   | "thing-comment"
   | "list-chat"
   | "bucket-note"

@@ -66,11 +66,11 @@ function newClient() {
   });
 }
 
-function Harness({ qc, listId, listName }) {
+function Harness({ qc, listId, listName, onCaptureCommitted }) {
   return h(
     QueryClientProvider,
     { client: qc },
-    h(InteractionBlockerProvider, null, h(MagicBox, { listId, listName })),
+    h(InteractionBlockerProvider, null, h(MagicBox, { listId, listName, onCaptureCommitted })),
   );
 }
 
@@ -153,6 +153,74 @@ test("a Toss completing in the same destination preserves text edited while it w
     await new Promise(resolve => setTimeout(resolve, 30));
   });
   assert.equal(getByLabelText("Magic Box").value, "next thought, do not erase");
+  cleanup();
+  qc.clear();
+});
+
+test("onCaptureCommitted emits creation notice immediately upon commit for opted-in caller", async () => {
+  const qc = newClient();
+  let committedNotice = null;
+  const { getByLabelText } = render(
+    h(Harness, {
+      qc,
+      listId: "committed-test",
+      listName: "Committed",
+      onCaptureCommitted: (notice) => {
+        committedNotice = notice;
+      },
+    }),
+  );
+
+  const input = getByLabelText("Magic Box");
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "A new confirmed task" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  });
+
+  await act(async () => {
+    resolveCreateThing({ id: "confirmed-1" });
+    await new Promise((r) => setTimeout(r, 30));
+  });
+
+  assert.ok(committedNotice, "onCaptureCommitted was invoked");
+  assert.deepEqual(committedNotice.createdIds, ["confirmed-1"]);
+  assert.equal(committedNotice.title, "A new confirmed task");
+
+  cleanup();
+  qc.clear();
+});
+
+test("an identity switch while a Toss is in flight prevents onCaptureCommitted from emitting (identity guard)", async () => {
+  const qc = newClient();
+  let committedNotice = null;
+  const { getByLabelText } = render(
+    h(Harness, {
+      qc,
+      listId: "identity-race-test",
+      listName: "Identity Race",
+      onCaptureCommitted: (notice) => {
+        committedNotice = notice;
+      },
+    }),
+  );
+
+  const input = getByLabelText("Magic Box");
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "Task started under user 1" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+  });
+
+  // Advance identity epoch while Toss RPC is in flight (simulate logout / switch)
+  const { advanceIdentityEpoch } = await import("@/features/realtime/identity-cache-policy");
+  advanceIdentityEpoch(qc, { kind: "live", profileId: "user-2" });
+
+  await act(async () => {
+    resolveCreateThing({ id: "stale-user-thing" });
+    await new Promise((r) => setTimeout(r, 30));
+  });
+
+  assert.equal(committedNotice, null, "onCaptureCommitted must not emit for a stale identity epoch");
+
   cleanup();
   qc.clear();
 });

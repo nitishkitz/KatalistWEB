@@ -24,7 +24,7 @@ mock.module("@/features/things/fetch-thing-overview-stats", {
   },
 });
 mock.module("@/integrations/supabase/client", {
-  namedExports: { supabase: { from: () => { commentRowReads++; throw new Error("overview read full rows"); } } },
+  namedExports: { supabase: { from: (table) => { if (table === "thing_court_placement") return {select: () => ({in: async () => ({data:[{thing_id:"thing-1",assignee_actor_id:"actor",lane:"later"}],error:null})})}; commentRowReads++; throw new Error("overview read full rows"); } } },
 });
 
 const { mapDbThingRows } = await import("@/features/things/map-thing-rows");
@@ -38,6 +38,7 @@ test("overview carries exact counts and one preview without masquerading as full
     updated_at: "2026-09-24T12:00:00Z", created_at: "2026-09-24T12:00:00Z",
   };
   const [thing] = await mapDbThingRows([row], "actor", "overview");
+  assert.equal(thing.personalCourtLane, "later", "overview hydrates the authenticated viewer’s explicit placement");
   assert.equal(thing.detailLevel, "overview");
   assert.equal(thing.description, null);
   assert.equal(thing.commentCount, 7);

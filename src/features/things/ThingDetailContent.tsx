@@ -1,3 +1,6 @@
+import { calendarDate } from "@/components/ui/date-time-value";
+import { DateTimeField } from "@/components/ui/date-time-field";
+import { LIST_SECONDARY_SECTIONS_ENABLED } from "@/features/lists/secondary-section-gate";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CoeyThingActions } from "@/features/court/coey/CoeyThingActions";
 import { useCoeyLaneMove } from "@/features/court/coey/use-coey-lane-move";
@@ -23,7 +26,7 @@ import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { domainErrorMessage } from "@/lib/domain-error";
 import type { Pace, Thing } from "@/domain/thing";
-import { coeyLane } from "@/domain/thing";
+import { coeyLane, laneOf } from "@/domain/thing";
 import {
   isUuid,
   rpcAddThingFile,
@@ -37,7 +40,6 @@ import {
   rpcRemoveFromBucket,
   rpcReassignThing,
   rpcSetDue,
-  rpcSetPersonalPace,
   rpcSetOwnerImportance,
   rpcSetWorkStatus,
   rpcShred,
@@ -71,7 +73,7 @@ import { ThingIdentityHeader } from "./components/ThingIdentityHeader";
 import { LinkPreviewCards } from "./components/LinkPreviewCards";
 import { mergeMentionPeople, type MentionPerson } from "@/features/mentions/mention-trigger";
 import type { SelectedMention } from "@/features/lists/chat-mentions";
-import { Linkified } from "@/components/katalist/Linkified";
+import { ThingDescription } from "./description/ThingDescription";
 import { ThingStatusControls } from "./components/ThingStatusControls";
 import { ThingAttachments } from "./components/ThingAttachments";
 import { LinkedDesigns } from "@/features/designs/LinkedDesigns";
@@ -223,6 +225,7 @@ export function ThingDetailContent({
         ...rawCaps,
         canCatch: false,
         canSetPace: false,
+        canSetCourtLane: false,
         canSetImportance: false,
         canSetDue: false,
         canSetStatus: false,
@@ -447,8 +450,10 @@ export function ThingDetailContent({
         }
       }
       if (!isEpochCurrent(qc, uploadEpoch)) return;
-      await qc.invalidateQueries({ queryKey: ["thing", targetThingId] });
-      await qc.invalidateQueries({ queryKey: ["court"] });
+      // A background refresh is not an upload stage. Do not keep the progress
+      // UI busy while unrelated reads retry or wait for their network timeout.
+      void qc.invalidateQueries({ queryKey: ["thing", targetThingId] });
+      void qc.invalidateQueries({ queryKey: ["court"] });
     } finally {
       if (isMountedRef.current && thingUploadOperationRef.current === operationId) {
         setThingUploadStatus(null);
@@ -644,7 +649,7 @@ export function ThingDetailContent({
   // A Coey-scheduled Thing sits where its schedule puts it; show that lane.
   const scheduledLane = coeyLane(thing)?.lane;
   const paceThing: Thing = scheduledLane === "now" || scheduledLane === "next" || scheduledLane === "later" ? { ...thing, personalPace: scheduledLane } : thing;
-  const activePace: Pace = paceThing.personalPace ?? "next";
+  const activePace: Pace = laneOf(thing);
   const snoozedUntil = snoozeEnd ?? null;
   const activeSnoozedUntil = snoozedUntil && new Date(snoozedUntil).getTime() > snoozeClock ? snoozedUntil : null;
   const dueLabel = thing.dueAt ? formatCourtDue(thing).label : null;
@@ -658,16 +663,8 @@ export function ThingDetailContent({
   // dropdowns, sections) into src/features/things/components/, but every
   // rpc*/run.mutate/withOptimisticPatch call stays defined here, unchanged
   // from what each button used to do inline.
-  const handleSetPace = (pace: Pace) =>
-    thing.coey
-      ? void coeyMove.move(thing, pace).then((handled) => { if (!handled) handleSetLegacyPace(pace); })
-      : handleSetLegacyPace(pace);
-  const handleSetLegacyPace = (pace: Pace) =>
-    run.mutate(
-      withOptimisticPatch(qc, thing.id, { personalPace: pace }, async () => {
-        await rpcSetPersonalPace(thing.id, pace);
-      }),
-    );
+  const handleSetPace = (pace: Pace) => { if (!viewOnly) void coeyMove.move(thing, pace); };
+  const handleResetCourtLane = () => { if (!viewOnly) void coeyMove.move(thing, null); };
 
   const handleSetRequestedPace = (pace: Pace) =>
     run.mutate(
@@ -765,7 +762,7 @@ export function ThingDetailContent({
   const toLocalInputValue = (iso: string | null | undefined) => {
     if (!iso) return "";
     const date = new Date(iso);
-    return Number.isNaN(date.getTime()) ? "" : format(date, "yyyy-MM-dd'T'HH:mm");
+    return Number.isNaN(date.getTime()) ? "" : format(date, thing.dueHasTime ? "yyyy-MM-dd'T'HH:mm" : "yyyy-MM-dd");
   };
 
   const toggleMoreActions = () => {
@@ -788,10 +785,11 @@ export function ThingDetailContent({
   const draftUnchanged = Boolean(draftValid && thing.dueAt && dueDraft === toLocalInputValue(thing.dueAt));
   const canSaveDue = !busy && Boolean(dueDraft) && !draftUnchanged;
 
-  const handleSaveDue = () => {
-    if (busy || !dueDraft) return;
-    const parsed = new Date(dueDraft);
-    if (Number.isNaN(parsed.getTime())) {
+  const handleSaveDue = (value = dueDraft) => {
+    if (busy || !value) return;
+    const hasTime = value.includes("T");
+    const parsed = hasTime ? new Date(value) : calendarDate(value);
+    if (!parsed || Number.isNaN(parsed.getTime())) {
       setDueError("Choose a valid date and time.");
       return;
     }
@@ -799,8 +797,8 @@ export function ThingDetailContent({
     const iso = parsed.toISOString();
     const hadDue = hasPersistedDue;
     run.mutate(
-      withOptimisticPatch(qc, thing.id, { dueAt: iso, dueHasTime: true }, async () => {
-        await rpcSetDue(thing.id, iso, true);
+      withOptimisticPatch(qc, thing.id, { dueAt: iso, dueHasTime: hasTime }, async () => {
+        await rpcSetDue(thing.id, iso, hasTime);
         setDueOpen(false);
         toast.success(hadDue ? "Due date updated." : "Due date added.");
       }),
@@ -840,41 +838,25 @@ export function ThingDetailContent({
     );
   };
 
-  const dueControl = (
-    <Popover open={dueOpen} onOpenChange={(open) => {
-      if (open) {
-        setDueDraft(toLocalInputValue(thing.dueAt));
-        setDueError(null);
-      }
-      setDueOpen(open);
-    }}>
-      <PopoverTrigger asChild>
-        <button type="button" aria-label={caps?.canSetDue ? (hasPersistedDue ? "Edit due date" : "Add due date") : "View due date"}
+  const dueTrigger = (
+    <button type="button" disabled={busy} aria-label={caps?.canSetDue ? (hasPersistedDue ? "Edit due date" : "Add due date") : "View due date"}
           className="group -mx-2 -my-1 flex min-h-11 flex-col items-start gap-1 rounded-md px-2 py-1 text-left outline-none transition-colors duration-150 hover:bg-[#f5f3fa] focus-visible:ring-2 focus-visible:ring-[#975ee2]/40">
           <span className="flex items-center gap-1.5 text-[12px] text-[#3a4675]"><Calendar className="h-3.5 w-3.5" /><span>Due</span></span>
           <span className={`flex min-h-7 items-center text-[12px] font-medium ${dueLabel ? "text-[#f71a24]" : "text-muted-foreground"}`}>
             {dueLabel ?? (caps?.canSetDue ? "Add date" : "No due date")}
           </span>
         </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" sideOffset={8} aria-label={caps?.canSetDue ? "Edit due date" : "Due date"}
-        className="z-[80] w-[280px] max-w-[calc(100vw-32px)] rounded-xl border-[#e9e6ee] bg-white p-3 text-[#1b2955] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.12),0_16px_40px_-12px_rgba(0,0,0,0.15)]">
-        {caps?.canSetDue ? (<>
-        <label htmlFor={dueInputId} className="mb-2 block text-[12px] font-medium">Due date and time</label>
-        <input id={dueInputId} type="datetime-local" value={dueDraft} disabled={busy}
-          aria-invalid={dueError ? true : undefined}
-          onChange={(event) => { setDueDraft(event.target.value); setDueError(null); }}
-          className="h-9 w-full min-w-0 rounded-md border border-[#e5e2eb] bg-white px-2 text-[13px] outline-none focus:border-[#975ee2] focus:ring-2 focus:ring-[#975ee2]/10 disabled:opacity-50" />
-        {dueError ? <p role="alert" className="mt-2 text-[12px] text-destructive">{dueError}</p> : null}
-        <div className="mt-3 flex items-center justify-between gap-2">
-          {hasPersistedDue ? <button type="button" disabled={busy} onClick={handleRemoveDue}
-            className="min-h-9 rounded-md px-2 text-[12px] text-[#777183] transition-colors hover:bg-red-50 hover:text-red-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#975ee2]/40 disabled:opacity-40">Remove due date</button> : <span />}
-          <button type="button" disabled={!canSaveDue} onClick={handleSaveDue}
-            className="min-h-9 rounded-md bg-[#975ee2] px-3 text-[12px] font-medium text-white transition-colors hover:bg-[#854bd0] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#975ee2]/40 focus-visible:ring-offset-2 disabled:bg-[#f0edf5] disabled:text-[#a49bac]">
-            {hasPersistedDue ? "Update date" : "Add date"}
-          </button>
-        </div>
-        </>) : (
+  );
+  const dueControl = caps?.canSetDue ? (
+    <DateTimeField type="datetime-local" allowDateOnly trigger={dueTrigger}
+      value={toLocalInputValue(thing.dueAt)} disabled={busy} error={dueError}
+      open={dueOpen} onOpenChange={(open) => { setDueOpen(open); if (open) setDueError(null); }}
+      onChange={(event) => setDueDraft(event.target.value)}
+      onApply={handleSaveDue} onRemove={handleRemoveDue} />
+  ) : (
+    <Popover open={dueOpen} onOpenChange={setDueOpen}>
+      <PopoverTrigger asChild>{dueTrigger}</PopoverTrigger>
+      <PopoverContent align="start" sideOffset={8} collisionPadding={16} className="z-[80] w-[280px] max-w-[calc(100vw-32px)] rounded-xl bg-white p-3">
           <div className="space-y-2">
             <p className="text-[13px] font-medium">
               {thing.dueAt && !Number.isNaN(new Date(thing.dueAt).getTime())
@@ -887,7 +869,6 @@ export function ThingDetailContent({
                 : `Only ${thing.owner.name}, the owner, can change this date.`}
             </p>
           </div>
-        )}
       </PopoverContent>
     </Popover>
   );
@@ -934,7 +915,9 @@ export function ThingDetailContent({
             Due date and time
           </label>
           <div className="flex gap-1.5">
-            <input
+            <DateTimeField
+              allowDateOnly
+              removable={false}
               id={dueInputId}
               type="datetime-local"
               value={dueDraft}
@@ -950,7 +933,7 @@ export function ThingDetailContent({
               type="button"
               disabled={!canSaveDue}
               className="h-7 rounded-md border border-border bg-white px-2 text-[12px] disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={handleSaveDue}
+              onClick={() => handleSaveDue()}
             >
               {hasPersistedDue ? "Update date" : "Add date"}
             </button>
@@ -1082,6 +1065,7 @@ export function ThingDetailContent({
         <ThingIdentityHeader
           variant="court"
           title={thing.title}
+          referenceNumber={thing.referenceNumber}
           headerAction={headerAction}
           viewOnly={viewOnly}
           onRetry={() => void live.refetch()}
@@ -1094,12 +1078,14 @@ export function ThingDetailContent({
         <div className="space-y-4 pt-4">
           <ThingStatusControls
             variant="court"
+            descriptionSection={<ThingDescription key={`${thing.id}:${user?.id ?? myActorId}`} thing={thing} canEdit={Boolean(rawCaps?.isOwner) && !viewOnly && thing.detailLevel !== "overview"} />}
             reviewActionsExternal={reviewActionsExternal}
             thing={paceThing}
             caps={caps}
             busy={busy}
             activePace={activePace}
             onSetPace={handleSetPace}
+            onResetCourtLane={handleResetCourtLane}
             onSetRequestedPace={handleSetRequestedPace}
             currentBuckets={currentBuckets}
             buckets={buckets}
@@ -1121,22 +1107,12 @@ export function ThingDetailContent({
             moreActionsPanel={moreActionsPanel}
           />
 
-          {/* Description Section */}
-          {thing.description ? (
-            <div className="py-3 border-b border-[#eef0f6]">
-              <h3 className="text-[13px] font-medium text-[#000533] mb-1.5">Description</h3>
-              <p className="text-[12px] leading-relaxed text-[#6a769c] whitespace-pre-wrap">
-                <Linkified text={thing.description} />
-              </p>
-            </div>
-          ) : null}
-
           <ThingReferencesSection thingId={thing.id} />
 
-          <LinkPreviewCards texts={[thing.title, thing.description]} />
+          <LinkPreviewCards texts={[thing.title]} />
 
           <div className="py-3 empty:hidden">
-            <LinkedDesigns thingId={thing.id} listId={thing.listId} />
+            {LIST_SECONDARY_SECTIONS_ENABLED && <LinkedDesigns thingId={thing.id} listId={thing.listId} />}
           </div>
 
           <ThingAttachments
@@ -1227,6 +1203,7 @@ export function ThingDetailContent({
       <ThingIdentityHeader
         variant="default"
         title={thing.title}
+        referenceNumber={thing.referenceNumber}
         headerAction={headerAction}
         viewOnly={viewOnly}
         onRetry={() => void live.refetch()}
@@ -1243,11 +1220,13 @@ export function ThingDetailContent({
       <div className="grid grid-cols-1 gap-4 px-5 py-4 xl:grid-cols-2">
         <ThingStatusControls
           variant="default"
+          descriptionSection={<ThingDescription key={`${thing.id}:${user?.id ?? myActorId}`} thing={thing} canEdit={Boolean(rawCaps?.isOwner) && !viewOnly && thing.detailLevel !== "overview"} />}
           thing={paceThing}
           caps={caps}
           busy={busy}
           activePace={activePace}
           onSetPace={handleSetPace}
+          onResetCourtLane={handleResetCourtLane}
             onSetRequestedPace={handleSetRequestedPace}
           currentBuckets={currentBuckets}
           buckets={buckets}
@@ -1285,7 +1264,7 @@ export function ThingDetailContent({
           ) : null}
 
           <div className="col-span-2 empty:hidden">
-            <LinkedDesigns thingId={thing.id} listId={thing.listId} />
+            {LIST_SECONDARY_SECTIONS_ENABLED && <LinkedDesigns thingId={thing.id} listId={thing.listId} />}
           </div>
 
           {thing.listName ? (

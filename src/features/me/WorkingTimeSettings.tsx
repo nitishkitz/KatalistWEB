@@ -1,3 +1,4 @@
+import { DateTimeField } from "@/components/ui/date-time-field";
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -78,17 +79,17 @@ export function WorkingTimeSettings() {
         </label>
       </fieldset>
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">Work starts<input type="time" value={start} onChange={(e) => setStart(e.target.value)} className={input} /></label>
-        <label className="flex flex-col gap-1">Work ends<input type="time" value={end} onChange={(e) => setEnd(e.target.value)} className={input} /></label>
-        <label className="flex flex-col gap-1">Home time starts<input type="time" value={homeStart} onChange={(e) => setHomeStart(e.target.value)} className={input} /></label>
-        <label className="flex flex-col gap-1">Home time ends<input type="time" value={homeEnd} onChange={(e) => setHomeEnd(e.target.value)} className={input} /></label>
+        <label className="flex flex-col gap-1">Work starts<DateTimeField required timezone={calendar.timezone} type="time" value={start} onChange={(e) => setStart(e.target.value)} className={input} /></label>
+        <label className="flex flex-col gap-1">Work ends<DateTimeField required timezone={calendar.timezone} type="time" value={end} onChange={(e) => setEnd(e.target.value)} className={input} /></label>
+        <label className="flex flex-col gap-1">Home time starts<DateTimeField required timezone={calendar.timezone} type="time" value={homeStart} onChange={(e) => setHomeStart(e.target.value)} className={input} /></label>
+        <label className="flex flex-col gap-1">Home time ends<DateTimeField required timezone={calendar.timezone} type="time" value={homeEnd} onChange={(e) => setHomeEnd(e.target.value)} className={input} /></label>
       </div>
       <label className="flex flex-col gap-1">Holidays (YYYY-MM-DD, comma separated)
         <input value={holidays} onChange={(e) => setHolidays(e.target.value)} placeholder="2026-11-08, 2026-12-25" className={input} />
       </label>
       <div className="grid grid-cols-2 gap-3">
-        <label className="flex flex-col gap-1">Leave from<input type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} className={input} /></label>
-        <label className="flex flex-col gap-1">Leave until<input type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)} className={input} /></label>
+        <label className="flex flex-col gap-1">Leave from<DateTimeField type="date" value={leaveStart} onChange={(e) => setLeaveStart(e.target.value)} className={input} /></label>
+        <label className="flex flex-col gap-1">Leave until<DateTimeField type="date" value={leaveEnd} onChange={(e) => setLeaveEnd(e.target.value)} className={input} /></label>
       </div>
       <button type="button" disabled={saving} onClick={() => void save()} className="h-9 rounded-lg bg-violet-600 px-4 font-semibold text-white disabled:opacity-50">{saving ? "Saving…" : "Save working time"}</button>
     </div>

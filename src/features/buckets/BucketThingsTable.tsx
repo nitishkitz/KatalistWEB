@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { format, formatDistanceToNowStrict } from "date-fns";
 import {
   ChevronDown,
-  ChevronUp,
+  ArrowUpRight,
   FileText,
   List as ListIcon,
   MoreVertical,
@@ -26,11 +26,11 @@ import type { BucketItem } from "./fetch-bucket-items";
 type StatusKey = "todo" | "waiting" | "progress" | "done" | "cancelled";
 
 const STATUS_STYLE: Record<StatusKey, { label: string; bg: string; text: string; dot: string }> = {
-  todo: { label: "Todo", bg: "#eff1f8", text: "#727b9e", dot: "#8b92b3" },
-  waiting: { label: "Waiting", bg: "#fff3dc", text: "#ff9600", dot: "#ff9600" },
-  progress: { label: "In progress", bg: "#e5eeff", text: "#007bff", dot: "#007bff" },
-  done: { label: "Done", bg: "#e0fbee", text: "#04bd74", dot: "#04bd74" },
-  cancelled: { label: "Cancelled", bg: "#ffe5ea", text: "#ff304e", dot: "#ff304e" },
+  todo: { label: "Todo", bg: "#eff1f8", text: "#596382", dot: "#8b92b3" },
+  waiting: { label: "Waiting", bg: "#fff3dc", text: "#996000", dot: "#ff9600" },
+  progress: { label: "In progress", bg: "#e5eeff", text: "#1264cc", dot: "#007bff" },
+  done: { label: "Done", bg: "#e0fbee", text: "#087d51", dot: "#04bd74" },
+  cancelled: { label: "Cancelled", bg: "#ffe5ea", text: "#c72746", dot: "#ff304e" },
 };
 
 const STATUS_FILTERS: { id: StatusKey | "all"; label: string }[] = [
@@ -69,8 +69,7 @@ function relative(iso: string | null | undefined) {
   return `${formatDistanceToNowStrict(d)} ago`;
 }
 
-const GRID =
-  "grid grid-cols-[minmax(220px,2.3fr)_minmax(120px,1.3fr)_minmax(110px,1.2fr)_minmax(100px,1.1fr)_minmax(70px,1fr)_36px] items-center";
+const GRID = "buckets-table-grid";
 
 type Assignee = { id: string; name: string; initials: string; avatarUrl?: string | null };
 
@@ -94,7 +93,8 @@ export function buildBucketEntries(items: BucketItem[]): Entry[] {
   const grouped = new Map<string, Thing[]>();
   const loose: Thing[] = [];
   for (const t of things) {
-    if (t.listId && listIds.has(t.listId)) grouped.set(t.listId, [...(grouped.get(t.listId) ?? []), t]);
+    if (t.listId && listIds.has(t.listId))
+      grouped.set(t.listId, [...(grouped.get(t.listId) ?? []), t]);
     else loose.push(t);
   }
   const time = (iso?: string | null) => {
@@ -109,7 +109,12 @@ export function buildBucketEntries(items: BucketItem[]): Entry[] {
       things: grouped.get(list.id) ?? [],
       sortAt: time(list.updatedAtIso),
     })),
-    ...loose.map<Entry>((thing) => ({ kind: "thing", key: `thing:${thing.id}`, thing, sortAt: time(thing.updatedAt) })),
+    ...loose.map<Entry>((thing) => ({
+      kind: "thing",
+      key: `thing:${thing.id}`,
+      thing,
+      sortAt: time(thing.updatedAt),
+    })),
   ];
   return entries.sort((a, b) => b.sortAt - a.sortAt);
 }
@@ -117,10 +122,7 @@ export function buildBucketEntries(items: BucketItem[]): Entry[] {
 function StatusBadge({ status }: { status: StatusKey }) {
   const s = STATUS_STYLE[status];
   return (
-    <span
-      className="inline-flex items-center gap-[8px] rounded-full px-[11px] py-[5px] text-[12px] leading-normal"
-      style={{ background: s.bg, color: s.text }}
-    >
+    <span className="buckets-status" style={{ background: s.bg, color: s.text }}>
       <span className="h-[7px] w-[7px] rounded-full" style={{ background: s.dot }} />
       {s.label}
     </span>
@@ -128,11 +130,16 @@ function StatusBadge({ status }: { status: StatusKey }) {
 }
 
 function AssigneeCell({ person }: { person: Assignee | null }) {
-  if (!person) return <span className="text-[12.24px] text-[#858bb2]">—</span>;
+  if (!person) return <span className="text-[13px] text-[#647093]">—</span>;
   return (
     <div className="flex min-w-0 items-center gap-[10px]">
-      <PersonAvatar name={person.name} src={person.avatarUrl} initials={person.initials} size={26} />
-      <span className="truncate text-[12.24px] text-[#858bb2]">{person.name}</span>
+      <PersonAvatar
+        name={person.name}
+        src={person.avatarUrl}
+        initials={person.initials}
+        size={26}
+      />
+      <span className="truncate text-[13px] text-[#647093]">{person.name}</span>
     </div>
   );
 }
@@ -151,15 +158,15 @@ function ThingRow({
   last?: boolean;
 }) {
   const status = thingStatus(thing);
-  const overdue = thing.dueAt && status !== "done" && status !== "cancelled" && new Date(thing.dueAt).getTime() < Date.now();
+  const overdue =
+    thing.dueAt &&
+    status !== "done" &&
+    status !== "cancelled" &&
+    new Date(thing.dueAt).getTime() < Date.now();
   return (
     <div
       data-testid="bucket-thing-row"
-      className={cn(
-        GRID,
-        "group relative min-h-[38px] cursor-pointer px-[13px] py-[6px] transition-colors hover:rounded-[8.64px] hover:bg-[#f3eeff]",
-        !last && "border-b-[0.72px] border-[#e7ecf7] hover:border-transparent",
-      )}
+      className={cn(GRID, "buckets-thing-row", !last && "border-b border-[#eceef5]")}
       onClick={() => onOpen(thing)}
     >
       <div className={cn("flex min-w-0 items-center gap-[16px]", nested && "pl-[31px]")}>
@@ -168,7 +175,8 @@ function ThingRow({
         </span>
         <button
           type="button"
-          className="min-w-0 truncate text-left text-[12.24px] font-medium text-[#100d36] outline-none focus-visible:underline"
+          className="buckets-thing-title"
+          title={thing.title}
           onClick={(e) => {
             e.stopPropagation();
             onOpen(thing);
@@ -182,19 +190,19 @@ function ThingRow({
         <StatusBadge status={status} />
       </div>
       <span
-        className="text-[12.24px]"
-        style={{ color: status === "done" ? "#09bd77" : overdue ? "#ff304e" : "#858bb2" }}
+        className="text-[13px]"
+        style={{ color: status === "done" ? "#087d51" : overdue ? "#c72746" : "#647093" }}
       >
         {formatDue(thing.dueAt)}
       </span>
-      <span className="text-[12.24px] text-[#858bb2]">{relative(thing.updatedAt)}</span>
+      <span className="text-[13px] text-[#647093]">{relative(thing.updatedAt)}</span>
       <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
               aria-label={`Actions for ${thing.title}`}
-              className="flex h-6 w-6 items-center justify-center rounded text-[#7a81ab] outline-none hover:bg-white focus-visible:ring-2 focus-visible:ring-[#9a70ff]"
+              className="buckets-row-menu"
             >
               <MoreVertical className="h-[15px] w-[15px]" />
             </button>
@@ -255,49 +263,68 @@ function ListGroup({
       <div
         data-testid="bucket-list-row"
         data-expanded={expanded}
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        onClick={onToggle}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onToggle();
-          }
-        }}
-        className={cn(
-          GRID,
-          "min-h-[49px] cursor-pointer rounded-[8.64px] px-[13px] py-[6px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#9a70ff]",
-          expanded ? "bg-[#f3eeff]" : "hover:bg-[#f3eeff]",
-        )}
+        className={cn(GRID, "buckets-list-row")}
       >
-        <div className="flex min-w-0 items-center gap-[16px]">
+        <button
+          type="button"
+          className="buckets-list-toggle"
+          aria-expanded={expanded}
+          onClick={onToggle}
+        >
           <span className="flex h-[36px] w-[22px] shrink-0 items-center justify-center rounded-[5.76px] bg-[#eae0ff] text-[#793aff]">
             <ListIcon className="h-[18px] w-[18px]" strokeWidth={1.8} />
           </span>
-          <div className="flex min-w-0 flex-col gap-[3.6px] text-[12.24px] leading-normal">
+          <ChevronDown
+            className={cn("buckets-list-chevron", !expanded && "-rotate-90")}
+            aria-hidden="true"
+          />
+          <span className="flex min-w-0 flex-col gap-1 text-[13px] leading-normal">
             <span className="truncate font-medium text-[#100d36]">{list.name}</span>
-            <span className="text-[#858bb2]">
+            <span className="text-[#647093]">
               List • {count} {count === 1 ? "thing" : "things"}
             </span>
-          </div>
-        </div>
+          </span>
+        </button>
         <AssigneeCell person={owner ? { id: owner.actorId ?? owner.name, ...owner } : null} />
         <div>
           <StatusBadge status={status} />
         </div>
-        <span className="text-[12.24px] text-[#858bb2]">—</span>
-        <span className="text-[12.24px] text-[#858bb2]">{relative(list.updatedAtIso)}</span>
-        <div className="flex justify-center text-[#7a81ab]">
-          {expanded ? <ChevronUp className="h-[15px] w-[15px]" /> : <ChevronDown className="h-[15px] w-[15px]" />}
-        </div>
+        <span className="text-[13px] text-[#647093]">—</span>
+        <span className="text-[13px] text-[#647093]">{relative(list.updatedAtIso)}</span>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="buckets-row-menu"
+              aria-label={`Actions for list ${list.name}`}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-white">
+            <DropdownMenuItem asChild>
+              <Link to="/lists/$listId" params={{ listId: list.id }}>
+                Open list
+              </Link>
+            </DropdownMenuItem>
+            {onRemoveList ? (
+              <DropdownMenuItem onSelect={() => onRemoveList(list)}>
+                Remove list from bucket
+              </DropdownMenuItem>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {expanded ? (
         <div className="relative mb-[2px] before:absolute before:bottom-[6px] before:left-[24px] before:top-0 before:w-[1.5px] before:bg-[#e4dbff] before:content-['']">
           {isLoading && children.length === 0 ? (
-            <p className="px-[13px] py-[10px] pl-[55px] text-[12px] text-[#858bb2]">Loading things…</p>
+            <p className="px-[13px] py-[10px] pl-[55px] text-[12px] text-[#647093]">
+              Loading things…
+            </p>
           ) : children.length === 0 ? (
-            <p className="px-[13px] py-[10px] pl-[55px] text-[12px] text-[#858bb2]">No things in this list match.</p>
+            <p className="px-[13px] py-[10px] pl-[55px] text-[12px] text-[#647093]">
+              No things in this list match.
+            </p>
           ) : (
             children.map((t, i) => (
               <ThingRow
@@ -314,19 +341,10 @@ function ListGroup({
             <Link
               to="/lists/$listId"
               params={{ listId: list.id }}
-              className="font-medium text-[#793aff] hover:underline"
+              className="inline-flex items-center gap-1 font-medium text-[#6c2aee] hover:underline"
             >
-              Open list
+              Open list <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
             </Link>
-            {onRemoveList ? (
-              <button
-                type="button"
-                onClick={() => onRemoveList(list)}
-                className="text-[#858bb2] hover:text-[#100d36] hover:underline"
-              >
-                Remove list from bucket
-              </button>
-            ) : null}
           </div>
         </div>
       ) : null}
@@ -349,10 +367,7 @@ type Props = {
   bucketName: string;
 };
 
-const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
 export function BucketThingsTable({
-  bucketId,
   items,
   isLoading,
   error,
@@ -361,7 +376,6 @@ export function BucketThingsTable({
   onRemoveThing,
   onRemoveList,
   onAdd,
-  bucketName,
 }: Props) {
   const [query, setQuery] = useState("");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -375,7 +389,13 @@ export function BucketThingsTable({
     const add = (p: Assignee | null | undefined) => {
       if (!p || !p.name || p.name.toLowerCase() === "someone") return;
       const key = p.name.trim().toLowerCase();
-      if (!map.has(key)) map.set(key, { id: key, name: p.name.trim(), initials: p.initials, avatarUrl: p.avatarUrl });
+      if (!map.has(key))
+        map.set(key, {
+          id: key,
+          name: p.name.trim(),
+          initials: p.initials,
+          avatarUrl: p.avatarUrl,
+        });
     };
     for (const e of entries) {
       if (e.kind === "thing") add(e.thing.assignee);
@@ -390,7 +410,8 @@ export function BucketThingsTable({
   const q = query.trim().toLowerCase();
   const matchesThing = useMemo(
     () => (t: Thing) => {
-      if (q && !t.title.toLowerCase().includes(q) && !t.assignee.name.toLowerCase().includes(q)) return false;
+      if (q && !t.title.toLowerCase().includes(q) && !t.assignee.name.toLowerCase().includes(q))
+        return false;
       if (assigneeId && t.assignee.name.trim().toLowerCase() !== assigneeId) return false;
       if (statusFilter !== "all" && thingStatus(t) !== statusFilter) return false;
       return true;
@@ -422,35 +443,28 @@ export function BucketThingsTable({
   const filtering = Boolean(q || assigneeId || statusFilter !== "all");
 
   return (
-    <section
-      aria-label="Things in this bucket"
-      className="overflow-hidden rounded-[10px] border-[1.08px] border-[#e7ecf7] bg-white/65 font-['Inter',sans-serif]"
-    >
-      <div className="flex h-[55px] flex-wrap items-center gap-[16px] border-b-[0.72px] border-[#e7ecf7] px-[16px]">
-        <span aria-live="polite" className="inline-flex h-[30px] max-w-[220px] shrink-0 items-center gap-1.5 rounded-full bg-[#f1ecff] px-3 text-[12.5px] font-semibold text-[#5b2ed1]" title={bucketName}>
-          <span className="truncate">{bucketName}</span>
-          <span className="font-normal text-[#7d68c4]">· {count(items.filter((i) => i.kind === "thing").length, "thing")} · {count(items.filter((i) => i.kind === "list").length, "list")}</span>
-        </span>
-        <label className="flex h-[36px] w-full max-w-[443px] flex-1 items-center gap-[11px] rounded-[8px] border-[1.08px] border-[#e1e6f5] bg-[#f8f9fd] px-[14px]">
-          <Search className="h-[17px] w-[17px] shrink-0 text-[#858bb2]" />
+    <section aria-label="Things in this bucket" className="buckets-table">
+      <div className="buckets-toolbar">
+        <label className="buckets-search">
+          <Search className="h-[17px] w-[17px] shrink-0 text-[#647093]" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search things, lists..."
+            placeholder="Search Things and Lists"
             aria-label="Search things in bucket"
-            className="w-full bg-transparent text-[12.96px] text-[#100d36] outline-none placeholder:text-[#858bb2]"
+            className="w-full bg-transparent text-[12.96px] text-[#100d36] outline-none placeholder:text-[#647093]"
           />
         </label>
-        <div className="flex-1" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="Filter by assignee"
-              className="flex h-[36px] items-center gap-[9px] rounded-[8px] border-[1.08px] border-[#e7ecf7] px-[9px] text-[12.24px] text-[#100d36] outline-none focus-visible:ring-2 focus-visible:ring-[#9a70ff]"
-            >
+            <button type="button" aria-label="Filter by assignee" className="buckets-filter">
               {activePerson ? (
-                <PersonAvatar name={activePerson.name} src={activePerson.avatarUrl} initials={activePerson.initials} size={25} />
+                <PersonAvatar
+                  name={activePerson.name}
+                  src={activePerson.avatarUrl}
+                  initials={activePerson.initials}
+                  size={25}
+                />
               ) : (
                 <span className="flex items-center -space-x-2">
                   {people.slice(0, 3).map((p) => (
@@ -474,7 +488,11 @@ export function BucketThingsTable({
               Everyone
             </DropdownMenuItem>
             {people.map((p) => (
-              <DropdownMenuItem key={p.id} className="gap-2 text-[12.5px]" onSelect={() => setAssigneeId(p.id)}>
+              <DropdownMenuItem
+                key={p.id}
+                className="gap-2 text-[12.5px]"
+                onSelect={() => setAssigneeId(p.id)}
+              >
                 <PersonAvatar name={p.name} src={p.avatarUrl} initials={p.initials} size={20} />
                 {p.name}
               </DropdownMenuItem>
@@ -486,7 +504,7 @@ export function BucketThingsTable({
             <button
               type="button"
               aria-label="Filter by status"
-              className="flex h-[36px] w-[130px] items-center justify-between rounded-[8px] border-[1.44px] border-[#e7ecf7] bg-white/60 px-[13px] text-[12.24px] text-[#100d36] outline-none focus-visible:ring-2 focus-visible:ring-[#9a70ff]"
+              className="buckets-filter buckets-status-filter"
             >
               {STATUS_FILTERS.find((s) => s.id === statusFilter)?.label}
               <ChevronDown className="h-[14px] w-[14px] text-[#7a81ab]" />
@@ -494,120 +512,119 @@ export function BucketThingsTable({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-white">
             {STATUS_FILTERS.map((s) => (
-              <DropdownMenuItem key={s.id} className="text-[12.5px]" onSelect={() => setStatusFilter(s.id)}>
+              <DropdownMenuItem
+                key={s.id}
+                className="text-[12.5px]"
+                onSelect={() => setStatusFilter(s.id)}
+              >
                 {s.label}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="flex h-[36px] w-[148px] items-center justify-center gap-[11px] rounded-[7px] bg-[#793aff] text-[14.4px] text-white outline-none transition-colors hover:bg-[#6a2ee8] focus-visible:ring-2 focus-visible:ring-[#9a70ff] focus-visible:ring-offset-2"
-        >
+        <button type="button" onClick={onAdd} className="buckets-add">
           <Plus className="h-[19px] w-[19px]" strokeWidth={1.6} />
-          Add thing
+          Add reference
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label="More actions"
-              className="flex h-[36px] w-[53px] items-center justify-center rounded-[8px] border-[1.44px] border-[#e7ecf7] text-[#7a81ab] outline-none focus-visible:ring-2 focus-visible:ring-[#9a70ff]"
-            >
+            <button type="button" aria-label="More actions" className="buckets-more">
               <MoreVertical className="h-[19px] w-[19px]" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="bg-white">
-            {filtering ? (
-              <DropdownMenuItem
-                className="text-[12.5px]"
-                onSelect={() => {
-                  setQuery("");
-                  setAssigneeId(null);
-                  setStatusFilter("all");
-                }}
-              >
-                Clear filters
-              </DropdownMenuItem>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-
-      <div className="px-[10px] pb-[10px]">
-        <div className={cn(GRID, "h-[32px] px-[13px] text-[12px] font-semibold uppercase leading-normal text-[#858bb2]")}>
-          <span>Thing</span>
-          <span>Assignee</span>
-          <span>Status</span>
-          <span>Due</span>
-          <span>Updated</span>
-          <span />
-        </div>
-
-        {isLoading ? (
-          <div className="space-y-2 py-2" aria-hidden="true">
-            {[0, 1, 2, 3].map((i) => (
-              <div key={i} className="h-[38px] animate-pulse rounded-[8px] bg-[#f3f4fa]" />
-            ))}
-          </div>
-        ) : error ? (
-          <div role="alert" className="py-10 text-center text-[13px] text-[#6a769c]">
-            <p>Things in this bucket could not be loaded.</p>
-            <button
-              type="button"
-              onClick={onRetry}
-              className="mt-3 rounded-lg border border-[#e7ecf7] px-3 py-2 text-[12px] font-semibold text-[#793aff]"
-            >
-              Retry
-            </button>
-          </div>
-        ) : entries.length === 0 ? (
-          <div className="py-10 text-center">
-            <p className="text-[14px] font-bold text-[#100d36]">This bucket is empty.</p>
-            <p className="mt-1 text-[12.5px] text-[#858bb2]">Add a Thing or List you already have access to.</p>
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="py-10 text-center text-[12.5px] text-[#858bb2]">
-            <p>No things match the current filters.</p>
-            <button
-              type="button"
-              onClick={() => {
+            <DropdownMenuItem
+              disabled={!filtering}
+              className="text-[12.5px]"
+              onSelect={() => {
                 setQuery("");
                 setAssigneeId(null);
                 setStatusFilter("all");
               }}
-              className="mt-3 rounded-lg border border-[#e7ecf7] px-3 py-2 font-semibold text-[#793aff]"
             >
               Clear filters
-            </button>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="buckets-table-scroll">
+        <div className="buckets-table-body">
+          <div className={cn(GRID, "buckets-table-head")}>
+            <span>Thing</span>
+            <span>Assignee</span>
+            <span>Status</span>
+            <span>Due</span>
+            <span>Updated</span>
+            <span />
           </div>
-        ) : (
-          visible.map((e, i) =>
-            e.kind === "list" ? (
-              <ListGroup
-                key={e.key}
-                list={e.list}
-                bucketThings={e.things}
-                expanded={expanded.has(e.key)}
-                onToggle={() => toggle(e.key)}
-                onOpenThing={onOpenThing}
-                onRemoveThing={onRemoveThing}
-                onRemoveList={onRemoveList}
-                matches={matchesThing}
-                last={i === visible.length - 1}
-              />
-            ) : (
-              <ThingRow
-                key={e.key}
-                thing={e.thing}
-                onOpen={onOpenThing}
-                onRemove={onRemoveThing}
-                last={i === visible.length - 1}
-              />
-            ),
-          )
-        )}
+
+          {isLoading ? (
+            <div className="space-y-2 py-2" aria-hidden="true">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-[38px] animate-pulse rounded-[8px] bg-[#f3f4fa]" />
+              ))}
+            </div>
+          ) : error ? (
+            <div role="alert" className="py-10 text-center text-[13px] text-[#6a769c]">
+              <p>Things in this bucket could not be loaded.</p>
+              <button
+                type="button"
+                onClick={onRetry}
+                className="mt-3 rounded-lg border border-[#e7ecf7] px-3 py-2 text-[12px] font-semibold text-[#793aff]"
+              >
+                Retry
+              </button>
+            </div>
+          ) : entries.length === 0 ? (
+            <div className="py-10 text-center">
+              <p className="text-[14px] font-bold text-[#100d36]">This bucket is empty.</p>
+              <p className="mt-1 text-[12.5px] text-[#647093]">
+                Add a Thing or List you already have access to.
+              </p>
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="py-10 text-center text-[12.5px] text-[#647093]">
+              <p>No things match the current filters.</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery("");
+                  setAssigneeId(null);
+                  setStatusFilter("all");
+                }}
+                className="mt-3 rounded-lg border border-[#e7ecf7] px-3 py-2 font-semibold text-[#793aff]"
+              >
+                Clear filters
+              </button>
+            </div>
+          ) : (
+            visible.map((e, i) =>
+              e.kind === "list" ? (
+                <ListGroup
+                  key={e.key}
+                  list={e.list}
+                  bucketThings={e.things}
+                  expanded={expanded.has(e.key)}
+                  onToggle={() => toggle(e.key)}
+                  onOpenThing={onOpenThing}
+                  onRemoveThing={onRemoveThing}
+                  onRemoveList={onRemoveList}
+                  matches={matchesThing}
+                  last={i === visible.length - 1}
+                />
+              ) : (
+                <ThingRow
+                  key={e.key}
+                  thing={e.thing}
+                  onOpen={onOpenThing}
+                  onRemove={onRemoveThing}
+                  last={i === visible.length - 1}
+                />
+              ),
+            )
+          )}
+        </div>
       </div>
     </section>
   );

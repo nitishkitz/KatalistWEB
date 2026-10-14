@@ -7,12 +7,13 @@ import { getThing } from "./local-state";
 import { calculateCommentCounts } from "./read-state";
 import { fetchRealAttachments } from "./attachments";
 import { fetchThingOverviewStats } from "./fetch-thing-overview-stats";
+import { fetchPersonalCourtLanes } from "./personal-court-lane";
 import { fetchCoeySchedules } from "@/features/court/coey/schedules";
 
 export const THING_COLUMNS =
-  "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at,created_at,notes";
+  "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at,created_at,reference_number,notes,description_document,description_revision,description_updated_at,description_updated_by";
 export const THING_OVERVIEW_COLUMNS =
-  "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at,created_at";
+  "id,title,acknowledgement,work_status,owner_importance,assignee_personal_pace,due_at,due_has_time,context,list_id,creator_actor_id,owner_actor_id,current_assignee_actor_id,cancelled_at,sorted_at,caught_at,updated_at,created_at,reference_number";
 
 export type DbThingRow = {
   id: string;
@@ -33,7 +34,12 @@ export type DbThingRow = {
   caught_at: string | null;
   updated_at: string;
   created_at: string | null;
+  reference_number?: number;
   notes?: string | null;
+  description_document?: Thing["descriptionDocument"];
+  description_revision?: number;
+  description_updated_at?: string | null;
+  description_updated_by?: string | null;
 };
 
 async function resolveListNames(listIds: string[]): Promise<Map<string, string>> {
@@ -148,7 +154,7 @@ export async function mapDbThingRows(
   const thingIds = rows.map((r) => r.id);
 
   if (mode === "overview") {
-    const [people, listNames, statsResult, schedules] = await Promise.all([
+    const [people, listNames, statsResult, schedules, courtLanes] = await Promise.all([
       resolveActorPeople([...actorIds]),
       resolveListNames(listIds),
       fetchThingOverviewStats(rows, myActorId).then(
@@ -156,12 +162,14 @@ export async function mapDbThingRows(
         () => ({ available: false as const, map: null }),
       ),
       fetchCoeySchedules(thingIds),
+      fetchPersonalCourtLanes(thingIds),
     ]);
     return rows.map((r) => {
       const stats = statsResult.map?.get(r.id);
       const fallback = (id: string) => personOrSomeone(people, id);
       return {
         id: r.id, title: r.title,
+      referenceNumber: r.reference_number,
         creator: fallback(r.creator_actor_id), owner: fallback(r.owner_actor_id),
         assignee: fallback(r.current_assignee_actor_id),
         acknowledgement: r.acknowledgement, workStatus: r.work_status,
@@ -178,6 +186,7 @@ export async function mapDbThingRows(
         detailLevel: "overview",
         overviewStatsUnavailable: !stats,
         coey: schedules.get(r.id),
+        personalCourtLane: courtLanes.get(r.id)?.assigneeActorId === r.current_assignee_actor_id ? courtLanes.get(r.id)!.lane : null,
       } satisfies Thing;
     });
   }
@@ -191,7 +200,7 @@ export async function mapDbThingRows(
   // scripts/map-thing-rows-concurrency.test.mjs for a deterministic
   // (event-order, not wall-clock) proof that all four start before any
   // of them resolves.
-  const [people, listNames, commentCountsResult, attachmentResult, schedules] = await Promise.all([
+  const [people, listNames, commentCountsResult, attachmentResult, schedules, courtLanes] = await Promise.all([
     resolveActorPeople([...actorIds]),
     resolveListNames(listIds),
     // Comment counts are stats, not decorative — a failed read must not
@@ -212,6 +221,7 @@ export async function mapDbThingRows(
       () => ({ available: false as const, map: null }),
     ),
     fetchCoeySchedules(thingIds),
+    fetchPersonalCourtLanes(thingIds),
   ]);
   const fallback = (id: string) => personOrSomeone(people, id);
 
@@ -243,6 +253,7 @@ export async function mapDbThingRows(
     return {
       id: r.id,
       title: r.title,
+      referenceNumber: r.reference_number,
       creator: fallback(r.creator_actor_id),
       owner: fallback(r.owner_actor_id),
       assignee: fallback(r.current_assignee_actor_id),
@@ -261,7 +272,12 @@ export async function mapDbThingRows(
       updatedAt: r.updated_at,
       createdAt: r.created_at ?? undefined,
       description: descriptionText,
+      descriptionDocument: r.description_document ?? null,
+      descriptionRevision: r.description_revision ?? 0,
+      descriptionUpdatedAt: r.description_updated_at ?? null,
+      descriptionUpdatedBy: r.description_updated_by ?? null,
       coey: schedules.get(r.id),
+        personalCourtLane: courtLanes.get(r.id)?.assigneeActorId === r.current_assignee_actor_id ? courtLanes.get(r.id)!.lane : null,
       files: finalFiles,
       detailLevel: "detail",
       attachmentCount: attachmentResult.available ? finalFiles?.length ?? 0 : undefined,

@@ -29,7 +29,7 @@ export const DEFAULT_COURT_FILTERS: CourtFilterState = {
 };
 
 function searchableText(thing: Thing) {
-  return [thing.title, thing.owner.name, thing.assignee.name, thing.listName ?? ""]
+  return [thing.referenceNumber ? `KT-${thing.referenceNumber}` : "", thing.title, thing.owner.name, thing.assignee.name, thing.listName ?? ""]
     .join(" ")
     .toLocaleLowerCase();
 }

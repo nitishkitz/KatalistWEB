@@ -56,7 +56,7 @@ function requestFor(action: CapsuleAction, thing: Thing): ThingActionRequest | n
     case "catch":
       return { kind: "catch", thingId: thing.id, pace: "next" };
     case "move":
-      return { kind: "move_now", thingId: thing.id };
+      return { kind: "set_court_lane", thingId: thing.id, lane: "now" };
     case "sort":
       return { kind: "sort", thingId: thing.id };
     case "nudge":

@@ -16,11 +16,12 @@
   border-radius: 28px;
   background: #fff;
   box-shadow: 0 3px 12px rgb(52 34 90 / 5%);
+  will-change: width, height, border-radius, box-shadow;
   transition:
-    width 250ms cubic-bezier(0.32, 0.72, 0, 1),
-    height 250ms cubic-bezier(0.32, 0.72, 0, 1),
-    border-radius 250ms ease,
-    box-shadow 250ms ease,
+    width 220ms cubic-bezier(0.25, 1, 0.5, 1),
+    height 220ms cubic-bezier(0.25, 1, 0.5, 1),
+    border-radius 220ms cubic-bezier(0.25, 1, 0.5, 1),
+    box-shadow 220ms cubic-bezier(0.25, 1, 0.5, 1),
     border-color 180ms ease;
 }
 .coey-capsule[data-expanded="true"] {
@@ -28,15 +29,21 @@
   border-radius: 25px;
   border-color: #d6c4fa;
   box-shadow:
-    0 18px 46px rgb(63 37 111 / 13%),
-    0 4px 12px rgb(63 37 111 / 3%);
+    0 22px 48px -8px rgba(63, 37, 111, 0.18),
+    0 8px 18px -4px rgba(63, 37, 111, 0.08);
+  transition:
+    width 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    height 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-radius 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 340ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 220ms ease;
 }
 .coey-capsule-header {
   height: 56px;
   display: flex;
   align-items: center;
   padding: 0 11px;
-  transition: height 250ms cubic-bezier(0.32, 0.72, 0, 1);
+  transition: height 240ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .coey-capsule[data-expanded="true"] .coey-capsule-header {
   height: 70px;
@@ -107,15 +114,22 @@
 }
 .coey-capsule-reveal {
   opacity: 0;
-  transform: translateY(-4px);
+  transform: translateY(-6px) scale(0.98);
+  filter: blur(1.5px);
+  will-change: opacity, transform, filter;
   transition:
-    opacity 130ms ease,
-    transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+    opacity 110ms ease-out 0ms,
+    transform 120ms ease-out 0ms,
+    filter 100ms ease-out 0ms;
 }
 .coey-capsule[data-expanded="true"] .coey-capsule-reveal {
   opacity: 1;
-  transform: translateY(0);
-  transition-delay: 40ms;
+  transform: translateY(0) scale(1);
+  filter: blur(0px);
+  transition:
+    opacity 240ms ease-out 60ms,
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1) 60ms,
+    filter 200ms ease-out 60ms;
 }
 .coey-capsule-details {
   padding: 0 18px 17px;
@@ -223,7 +237,10 @@
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 140ms ease;
+  transition: background-color 140ms ease, transform 120ms ease-out;
+}
+.coey-capsule-primary:active {
+  transform: scale(0.97);
 }
 .coey-capsule-link {
   display: inline-flex;
@@ -234,6 +251,22 @@
   font-size: 12px;
   cursor: pointer;
   border-radius: 4px;
+  transition: color 140ms ease, transform 120ms ease-out;
+}
+.coey-capsule-link:active {
+  transform: scale(0.97);
+}
+.coey-capsule-trigger {
+  transition: transform 120ms ease-out;
+}
+.coey-capsule-trigger:active {
+  transform: scale(0.985);
+}
+.coey-capsule-dismiss {
+  transition: background-color 140ms ease, transform 120ms ease-out;
+}
+.coey-capsule-dismiss:active {
+  transform: scale(0.94);
 }
 .coey-capsule :is(button):focus-visible {
   outline: 2px solid #9a6fdc;

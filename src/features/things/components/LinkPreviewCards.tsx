@@ -15,9 +15,13 @@ type LinkPreview = {
 const MAX_CARDS = 3;
 
 async function fetchPreview(url: string, signal?: AbortSignal): Promise<LinkPreview | null> {
-  const res = await authedFetch(`/api/link-preview?url=${encodeURIComponent(url)}`, { signal });
-  if (!res.ok) return null;
-  const json = (await res.json()) as { preview?: LinkPreview | null };
+  const res = await authedFetch(`/api/link-preview?url=${encodeURIComponent(url)}`, { signal, cache: "no-store" });
+  if (!res.ok) {
+    console.warn("[link-preview] request failed", { status: res.status });
+    return null;
+  }
+  const json = (await res.json()) as { preview?: LinkPreview | null; failureCode?: string };
+  if (!json.preview) console.warn("[link-preview] metadata unavailable", json.failureCode ?? "NO_METADATA");
   return json.preview ?? null;
 }
 
@@ -29,11 +33,11 @@ function hostOf(url: string): string {
   }
 }
 
-function LinkCard({ url }: { url: string }) {
-  const { data: preview } = useQuery({
+export function LinkCard({ url }: { url: string }) {
+  const { data: preview, isFetching } = useQuery({
     queryKey: ["link-preview", url],
     queryFn: ({ signal }) => fetchPreview(url, signal),
-    staleTime: 60 * 60 * 1000,
+    staleTime: (query) => query.state.data ? 60 * 60 * 1000 : 30_000,
     gcTime: 60 * 60 * 1000,
     retry: false,
   });
@@ -60,8 +64,15 @@ function LinkCard({ url }: { url: string }) {
       ) : null}
       <span className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 py-2 pr-3 pl-3 first:pl-3">
         <span className="truncate text-[13px] font-medium text-[#000533]">{title}</span>
+        {isFetching ? (
+          <span role="status" className="text-[11px] text-muted-foreground">
+            Loading preview…
+          </span>
+        ) : null}
         {preview?.description ? (
-          <span className="line-clamp-2 text-[12px] leading-snug text-[#6a769c]">{preview.description}</span>
+          <span className="line-clamp-2 text-[12px] leading-snug text-[#6a769c]">
+            {preview.description}
+          </span>
         ) : null}
         <span className="flex items-center gap-1 truncate text-[12px] text-[#8487a7]">
           <ExternalLink className="h-3 w-3 shrink-0" />

@@ -1,3 +1,4 @@
+import { DateTimeField } from "@/components/ui/date-time-field";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -89,7 +90,8 @@ export function ScheduleMeetingDialog({
             <label htmlFor="meeting-starts" className="text-[12px] font-medium text-[#6a769c]">
               Starts
             </label>
-            <input
+            <DateTimeField
+              required
               id="meeting-starts"
               type="datetime-local"
               value={startsAt}

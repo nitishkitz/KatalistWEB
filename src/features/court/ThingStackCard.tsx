@@ -1,3 +1,4 @@
+import { ThingTitle } from "@/features/things/components/ThingTitle";
 import { forwardRef, type MouseEvent, type MutableRefObject } from "react";
 import { Play } from "lucide-react";
 
@@ -248,7 +249,7 @@ export const ThingStackCard = forwardRef<HTMLButtonElement, ThingStackCardProps>
 
           {/* Title */}
           <span className="mt-2 text-[15px] font-medium leading-[1.35] tracking-[-0.01em] text-slate-900 break-words line-clamp-3">
-            {thing.title}
+            <ThingTitle thing={thing} />
           </span>
           {hasList && thing.listName && (
             <span className="mt-1 inline-flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground font-medium truncate">

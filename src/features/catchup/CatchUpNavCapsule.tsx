@@ -10,6 +10,7 @@ import { CourtDetailModal } from "@/features/court/CourtDetailModal";
 import { useMotionPreference } from "@/hooks/use-motion-preference";
 import { useCatchup, type CatchUpMoment } from "./use-catchup";
 import { reasonLabelFor, type CatchUpMomentKind } from "./catchup-logic";
+import "./capsule-motion.css";
 
 const SEVERITY: Record<CatchUpMomentKind, { label: string; dot: string; text: string }> = {
   nudge: { label: "High", dot: "bg-[#f04438]", text: "text-[#d92d20]" },
@@ -41,31 +42,41 @@ export function CatchUpNavCapsule() {
   const [autoExpanded, setAutoExpanded] = useState(false);
   const [selectedThing, setSelectedThing] = useState<Thing | null>(null);
   const [expandedHeight, setExpandedHeight] = useState(44);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const detailsRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const previousMomentsRef = useRef<{ context: string; keys: Set<string> } | null>(null);
   const expansionTimerRef = useRef<number | null>(null);
+  const hoverTimerRef = useRef<number | null>(null);
+  const leaveTimerRef = useRef<number | null>(null);
+
   const count = catchup.count;
   const isChecking = catchup.isLoading && !catchup.hasFetchedOnce;
   const activeMoment = catchup.moments[activeIndex] ?? catchup.moments[0] ?? null;
   const severity = severityFor(activeMoment?.kind);
   const isExpanded = isHovered || hasFocus || isPinned || autoExpanded;
 
+  // Fluid height measurement tracking actual content
   useEffect(() => {
     const details = detailsRef.current;
     if (!details) return;
-    const measure = () => setExpandedHeight(56 + details.getBoundingClientRect().height);
+    const measure = () => {
+      const detailsH = details.getBoundingClientRect().height;
+      setExpandedHeight(Math.ceil(46 + detailsH));
+    };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measure);
     observer.observe(details);
     return () => observer.disconnect();
-  }, []);
+  }, [catchup.moments, count, isChecking]);
 
   useEffect(() => {
     setActiveIndex((current) => (count > 0 ? Math.min(current, count - 1) : 0));
   }, [count]);
 
+  // Gentle auto-expansion when a new moment arrives
   useEffect(() => {
     if (!catchup.hasFetchedOnce) return;
     const keys = new Set(catchup.moments.map((moment) => moment.momentKey));
@@ -85,10 +96,7 @@ export function CatchUpNavCapsule() {
     previousMomentsRef.current = { context, keys };
   }, [catchup.hasFetchedOnce, catchup.moments, context]);
 
-  useEffect(() => () => {
-    if (expansionTimerRef.current !== null) window.clearTimeout(expansionTimerRef.current);
-  }, []);
-
+  // Auto-cycle through moments when idle
   useEffect(() => {
     if (reduceMotion || isPaused || isExpanded || count < 2) return;
     const timer = window.setInterval(() => {
@@ -97,92 +105,270 @@ export function CatchUpNavCapsule() {
     return () => window.clearInterval(timer);
   }, [count, isExpanded, isPaused, reduceMotion]);
 
+  // Clean timer cleanup on unmount
+  useEffect(() => () => {
+    if (expansionTimerRef.current !== null) window.clearTimeout(expansionTimerRef.current);
+    if (hoverTimerRef.current !== null) window.clearTimeout(hoverTimerRef.current);
+    if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+  }, []);
+
+  // Hover intent (120ms): prevents accidental opening when cursor crosses the navigation bar
+  const handleMouseEnter = () => {
+    if (leaveTimerRef.current !== null) {
+      window.clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+    setIsPaused(true);
+    if (isExpanded) {
+      setIsHovered(true);
+      return;
+    }
+    if (hoverTimerRef.current !== null) window.clearTimeout(hoverTimerRef.current);
+    hoverTimerRef.current = window.setTimeout(() => {
+      setIsHovered(true);
+      hoverTimerRef.current = null;
+    }, 120);
+  };
+
+  // Leave grace (220ms): forgiving boundary crossing so user doesn't lose the popover
+  const handleMouseLeave = () => {
+    if (hoverTimerRef.current !== null) {
+      window.clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+    setIsPaused(false);
+    if (leaveTimerRef.current !== null) window.clearTimeout(leaveTimerRef.current);
+    leaveTimerRef.current = window.setTimeout(() => {
+      setIsHovered(false);
+      setAutoExpanded(false);
+      leaveTimerRef.current = null;
+    }, 220);
+  };
+
+  // Outside click listener to cleanly dismiss when pinned/expanded
+  useEffect(() => {
+    if (!isExpanded) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsHovered(false);
+        setHasFocus(false);
+        setIsPinned(false);
+        setAutoExpanded(false);
+        if (leaveTimerRef.current !== null) {
+          window.clearTimeout(leaveTimerRef.current);
+          leaveTimerRef.current = null;
+        }
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => window.removeEventListener("pointerdown", handlePointerDown);
+  }, [isExpanded]);
+
+  // Escape key support
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "Escape" && isExpanded) {
+      event.preventDefault();
+      setIsHovered(false);
+      setHasFocus(false);
+      setIsPinned(false);
+      setAutoExpanded(false);
+      triggerRef.current?.focus();
+    }
+  };
+
   const openThing = (thing: Thing) => {
     setIsPinned(false);
     setAutoExpanded(false);
+    setIsHovered(false);
     setSelectedThing(thing);
   };
 
   return (
     <>
-    <div
-      className="group/catchup relative h-11 w-[224px] shrink-0 md:w-[236px] lg:w-[292px]"
-      onMouseEnter={() => { setIsHovered(true); setIsPaused(true); }}
-      onMouseLeave={() => { setIsHovered(false); setIsPaused(false); setAutoExpanded(false); }}
-      onFocusCapture={() => { setHasFocus(true); setIsPaused(true); }}
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-          setHasFocus(false);
-          setIsPaused(false);
-          setIsPinned(false);
-        }
-      }}
-    >
       <div
-        style={{ height: isExpanded ? expandedHeight : 44 }}
-        className={cn(
-          "absolute left-1/2 top-0 z-50 -translate-x-1/2 overflow-hidden border bg-white transition-[width,height,border-radius,box-shadow,border-color] duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
-          isExpanded ? "w-[min(440px,calc(100vw-32px))] rounded-[25px] border-[#c9b4f4] shadow-[0_20px_48px_rgba(61,35,111,0.22)]" : "w-full rounded-full border-[#e4e8f1] shadow-[0_3px_12px_rgba(35,31,75,0.08)]",
-        )}
+        ref={containerRef}
+        className="group/catchup relative h-11 w-[224px] shrink-0 md:w-[236px] lg:w-[292px]"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onFocusCapture={() => {
+          if (leaveTimerRef.current !== null) {
+            window.clearTimeout(leaveTimerRef.current);
+            leaveTimerRef.current = null;
+          }
+          setHasFocus(true);
+          setIsPaused(true);
+        }}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setHasFocus(false);
+            setIsPaused(false);
+            setIsPinned(false);
+          }
+        }}
+        onKeyDown={handleKeyDown}
       >
-        <button
-          ref={triggerRef}
-          data-brief-anchor
-          type="button"
-          onClick={() => setIsPinned((current) => !current)}
-          aria-expanded={isExpanded}
-          aria-controls="catchup-island-details"
-          aria-label={isChecking ? "Checking Catch Up" : count && activeMoment ? `Catch Up, ${activeIndex + 1} of ${count}: ${momentLabel(activeMoment)} about ${activeMoment.thing.title}` : "All caught up"}
-          className={cn("flex w-full items-center gap-2 px-2 text-left outline-none transition-[height,padding] duration-[250ms] ease-[cubic-bezier(0.32,0.72,0,1)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8b5cf6] motion-reduce:transition-none", isExpanded ? "h-14 px-3" : "h-[42px]", count > 0 && "bg-[linear-gradient(110deg,#fbf9ff_0%,#f4edff_52%,#fff9f3_100%)]")}
+        <div
+          data-expanded={isExpanded}
+          style={{ height: isExpanded ? expandedHeight : 44 }}
+          className="capsule-nav-shell"
         >
-          <span data-brief-origin-avatar className={cn("relative inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#eee5ff] shadow-sm transition-transform duration-300 group-hover/catchup:scale-105", count > 0 && "ring-2 ring-[#e7d9ff] ring-offset-1 ring-offset-[#faf8ff]")}>
-            <img src={coeyAvatar} alt="" className="h-full w-full object-cover" aria-hidden="true" />
-            {count > 0 ? <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white bg-[#f04438]" aria-hidden="true" /> : null}
-          </span>
-          <span className="min-w-0 flex-1 overflow-hidden">
-            <span className="flex min-w-0 items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#6941c6]">
-              <Sparkles className="h-3 w-3 shrink-0" aria-hidden="true" />
-              <span className="truncate">{isChecking ? "Checking" : activeMoment?.kind === "nudge" ? "New nudge" : count > 0 ? "Catch Up" : "All caught up"}</span>
-              {count > 0 ? <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[#eee5ff] px-1 text-[10px] font-bold tracking-normal text-[#6941c6]">{count}</span> : null}
+          <button
+            ref={triggerRef}
+            data-brief-anchor
+            type="button"
+            onClick={() => setIsPinned((current) => !current)}
+            aria-expanded={isExpanded}
+            aria-controls="catchup-island-details"
+            aria-label={
+              isChecking
+                ? "Checking Catch Up"
+                : count && activeMoment
+                  ? `Catch Up, ${activeIndex + 1} of ${count}: ${momentLabel(activeMoment)} about ${activeMoment.thing.title}`
+                  : "All caught up"
+            }
+            className={cn(
+              "capsule-trigger-btn h-[44px] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#8b5cf6]",
+              count > 0 && !isExpanded && "bg-[linear-gradient(110deg,#fbf9ff_0%,#f4edff_52%,#fff9f3_100%)]",
+            )}
+          >
+            <span
+              data-brief-origin-avatar
+              className={cn(
+                "relative inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/90 bg-[#eee5ff] shadow-xs transition-transform duration-300 group-hover/catchup:scale-105",
+                count > 0 && "ring-2 ring-[#e7d9ff] ring-offset-1 ring-offset-[#faf8ff]",
+              )}
+            >
+              <img src={coeyAvatar} alt="" className="h-full w-full object-cover" aria-hidden="true" />
+              {count > 0 ? (
+                <span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white bg-[#f04438]" aria-hidden="true" />
+              ) : null}
             </span>
-            <span key={activeMoment?.momentKey ?? (isChecking ? "checking" : "empty")} className="mt-0.5 block truncate text-[11px] font-semibold leading-tight text-[#2f234c] motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300 sm:text-[12px]">
-              {isChecking ? "Looking for moments…" : activeMoment ? activeMoment.thing.title : "Nothing needs you"}
-            </span>
-          </span>
-          {count > 0 && activeMoment ? <span className={cn("inline-flex shrink-0 items-center gap-1 rounded-full bg-white/75 px-1.5 py-0.5 text-[9px] font-semibold", severity?.text)}><span className={cn("h-1.5 w-1.5 rounded-full", severity?.dot)} aria-hidden="true" />{severity?.label}</span> : !isChecking ? <AlertCircle className="mr-1 h-3.5 w-3.5 shrink-0 text-[#98a2b3]" aria-hidden="true" /> : null}
-          <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 text-[#6941c6] transition-[transform,opacity] duration-[180ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none", isExpanded && "rotate-180 opacity-0")} aria-hidden="true" />
-        </button>
-        <div id="catchup-island-details" aria-hidden={!isExpanded} inert={!isExpanded} className={cn("w-[min(440px,calc(100vw-32px))] transition-[opacity,transform] duration-[180ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none", isExpanded ? "translate-y-0 opacity-100 delay-[40ms]" : "-translate-y-1 opacity-0 delay-0")}>
-          <div ref={detailsRef} className="border-t border-[#eee8fa] px-4 pb-4 pt-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsPinned(false);
-                  setAutoExpanded(false);
-                  requestCatchupOpen();
-                  void navigate({ to: "/" });
-                }}
-                className="float-right ml-3 mb-2 inline-flex h-8 items-center gap-1.5 rounded-full border border-[#e5d7ec] bg-[#faf4ed] px-2.5 text-[#3a1259] transition-colors hover:bg-[#f3e9f5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5cf6]"
-                aria-label={`Open Morning Brief, ${count} ${count === 1 ? "moment" : "moments"}`}
-                title="Morning Brief"
+
+            <span className="min-w-0 flex-1 overflow-hidden">
+              <span className="flex min-w-0 items-center gap-1.5 capsule-eyebrow">
+                <Sparkles className="h-3 w-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">
+                  {isChecking
+                    ? "Checking"
+                    : activeMoment?.kind === "nudge"
+                      ? "New nudge"
+                      : count > 0
+                        ? "Catch Up"
+                        : "All caught up"}
+                </span>
+                {count > 0 ? (
+                  <span className="capsule-count-badge">
+                    {count}
+                  </span>
+                ) : null}
+              </span>
+              <span
+                key={activeMoment?.momentKey ?? (isChecking ? "checking" : "empty")}
+                className="capsule-headline-text motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:duration-300"
               >
-                <Pin className="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span className="text-[11px] font-semibold tabular-nums" aria-hidden="true">{count}</span>
-              </button>
-              <p className="mb-2 flex min-h-8 items-center text-[11px] font-semibold uppercase tracking-[0.09em] text-[#6941c6]">{isChecking ? "Checking your Court" : count > 0 ? `${count} ${count === 1 ? "moment" : "moments"} need you` : "You’re all caught up"}</p>
-              {isChecking ? <p className="text-xs text-slate-500">Looking for updates…</p> : count === 0 ? <p className="text-xs leading-relaxed text-slate-600">No nudges, snoozes, or follow-ups need your attention right now.</p> : (
-                <div className="max-h-[300px] space-y-1 overflow-y-auto">
+                {isChecking ? "Looking for moments…" : activeMoment ? activeMoment.thing.title : "Nothing needs you"}
+              </span>
+            </span>
+
+            {count > 0 && activeMoment ? (
+              <span className={cn("capsule-severity-pill", severity?.text)}>
+                <span className={cn("h-1.5 w-1.5 rounded-full", severity?.dot)} aria-hidden="true" />
+                {severity?.label}
+              </span>
+            ) : !isChecking ? (
+              <AlertCircle className="mr-1 h-3.5 w-3.5 shrink-0 text-[#98a2b3]" aria-hidden="true" />
+            ) : null}
+
+            <ChevronDown className="capsule-chevron-icon h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+
+          <div
+            id="catchup-island-details"
+            aria-hidden={!isExpanded}
+            inert={!isExpanded}
+            className="capsule-details-reveal"
+          >
+            <div ref={detailsRef} className="border-t border-[#f0ebfa] px-4 pb-4 pt-3">
+              <div className="mb-2.5 flex items-center justify-between">
+                <p className="capsule-section-title flex items-center">
+                  {isChecking
+                    ? "Checking your Court"
+                    : count > 0
+                      ? `${count} ${count === 1 ? "moment" : "moments"} need you`
+                      : "You’re all caught up"}
+                </p>
+                <button
+                  type="button"
+                  data-pinned={isPinned}
+                  onClick={() => {
+                    setIsPinned(false);
+                    setAutoExpanded(false);
+                    requestCatchupOpen();
+                    void navigate({ to: "/" });
+                  }}
+                  className="capsule-pin-btn"
+                  aria-label={`Open Morning Brief, ${count} ${count === 1 ? "moment" : "moments"}`}
+                  title="Morning Brief"
+                >
+                  <Pin className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isPinned && "rotate-45 text-[#6941c6]")} aria-hidden="true" />
+                  <span className="text-xs font-semibold tabular-nums" aria-hidden="true">
+                    {count}
+                  </span>
+                </button>
+              </div>
+
+              {isChecking ? (
+                <p className="py-2 text-xs text-slate-500">Looking for updates…</p>
+              ) : count === 0 ? (
+                <p className="py-2 text-xs leading-relaxed text-slate-600">
+                  No nudges, snoozes, or follow-ups need your attention right now.
+                </p>
+              ) : (
+                <div className="max-h-[300px] space-y-2 overflow-y-auto pr-0.5">
                   {catchup.moments.map((moment) => {
                     const level = severityFor(moment.kind);
-                    return <div key={moment.momentKey} className={cn("rounded-xl border px-3 py-2.5", moment.momentKey === activeMoment?.momentKey ? "border-[#d9c5fa] bg-[#f4efff]" : "border-transparent bg-[#f8f6fd]")}><div className="flex items-start gap-2"><span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", level?.dot)} /><div className="min-w-0"><p className="text-[11px] font-semibold text-[#6941c6]">{momentLabel(moment)}</p><p className="mt-0.5 break-words text-[12px] font-semibold leading-snug text-[#2f234c]">{moment.thing.title}</p><button type="button" onClick={() => openThing(moment.thing)} className="mt-2 inline-flex min-h-8 items-center gap-1 rounded-lg bg-[#e9defb] px-3 text-[11px] font-semibold text-[#6541ad] transition-colors hover:bg-[#decdf8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8b5cf6]">Open Thing<ArrowRight className="h-3 w-3" aria-hidden="true" /></button></div></div></div>;
+                    const isActive = moment.momentKey === activeMoment?.momentKey;
+                    return (
+                      <div
+                        key={moment.momentKey}
+                        className={cn(
+                          "capsule-moment-item rounded-xl border p-3",
+                          isActive
+                            ? "border-[#d9c5fa] bg-[#f6f0ff] shadow-2xs"
+                            : "border-[#f0ecf6] bg-[#faf8fe] hover:border-[#e2d5f8] hover:bg-[#f6f1fd]",
+                        )}
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", level?.dot)} aria-hidden="true" />
+                          <div className="min-w-0 flex-1">
+                            <p className="capsule-moment-tag">
+                              {momentLabel(moment)}
+                            </p>
+                            <p className="capsule-moment-title">
+                              {moment.thing.title}
+                            </p>
+                            <div className="mt-2.5 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openThing(moment.thing)}
+                                className="capsule-action-btn"
+                              >
+                                <span>Open Thing</span>
+                                <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
                   })}
                 </div>
               )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <CourtDetailModal thing={selectedThing} isOpen={Boolean(selectedThing)} onClose={() => setSelectedThing(null)} />
+      <CourtDetailModal thing={selectedThing} isOpen={Boolean(selectedThing)} onClose={() => setSelectedThing(null)} />
     </>
   );
 }

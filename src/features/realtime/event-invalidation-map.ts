@@ -10,6 +10,7 @@
 
 export type RealtimeTable =
   | "things"
+  | "thing_court_placement"
   | "thing_attachments"
   | "thing_comments"
   | "thing_activity"
@@ -46,6 +47,7 @@ function targetsFor(prefixes: string[]): InvalidationTarget[] {
  * static list) since that's how it already works today.
  */
 const STATIC_TARGETS: Record<Exclude<RealtimeTable, "profile_object_state">, string[]> = {
+  thing_court_placement: ["court", "thing", "accessible-things", "list-things", "bucket-items", "assistant"],
   things: [
     "assistant",
     "court",

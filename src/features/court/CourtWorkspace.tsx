@@ -6,6 +6,7 @@ import { CourtLaneStack, type CourtLaneStackHandle } from "./CourtLaneStack";
 import type { CourtFocusSelection, FocusViewTabId } from "./court-stack-model";
 import type { CourtLaneId } from "./court-view-model";
 import { useLists } from "@/features/lists/use-lists";
+import type { CardFeedbackState } from "./toss-feedback-model";
 
 type CourtWorkspaceProps = {
   selection: CourtFocusSelection | null;
@@ -14,6 +15,7 @@ type CourtWorkspaceProps = {
   myActorId: string | null;
   initialPositions: Partial<Record<CourtLaneId, { activeIndex: number; activeThingId: string | null }>>;
   laneRefs: MutableRefObject<Partial<Record<CourtLaneId, CourtLaneStackHandle | null>>>;
+  feedbackByThingId?: Record<string, CardFeedbackState>;
   onOpen: (lane: FocusViewTabId, thing: Thing, origin: HTMLElement) => void;
   onSelectThing: (thingId: string, lane?: FocusViewTabId) => void;
   onClose: () => void;
@@ -29,6 +31,7 @@ export function CourtWorkspace({
   myActorId,
   initialPositions,
   laneRefs,
+  feedbackByThingId,
   heroRect,
   onOpen,
   onSelectThing,
@@ -68,6 +71,7 @@ export function CourtWorkspace({
           things={lanes[lane]}
           courtThings={lanes}
           listCoversById={listCoversById}
+          feedbackByThingId={feedbackByThingId}
           myActorId={myActorId}
           initialPosition={initialPositions[lane]}
           onOpen={(thing, origin) => onOpen(lane, thing, origin)}

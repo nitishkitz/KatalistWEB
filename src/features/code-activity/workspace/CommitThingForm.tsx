@@ -1,3 +1,4 @@
+import { DateTimeField } from "@/components/ui/date-time-field";
 import { useEffect, useRef, useState } from "react";
 import { workspaceApi } from "../live/workspace-api";
 import type { RegisteredSource } from "../live/workspace-api";
@@ -125,7 +126,7 @@ export function CommitThingForm({ item, listId, canCreate, onClose, onOpenThings
           </select>
           {candidates.error ? <p role="alert" className="mt-1 text-[12px] text-[var(--ca-bad-ink)]">{candidates.error}{candidates.retryable ? <button type="button" onClick={candidates.retry} className="ml-1 underline">Retry</button> : null}</p> : null}
         </div>
-        <div><label className={LABEL} htmlFor="ct-due">Due date (optional)</label><input id="ct-due" type="date" className={FIELD} value={due} onChange={(e) => setDue(e.target.value)} /></div>
+        <div><label className={LABEL} htmlFor="ct-due">Due date (optional)</label><DateTimeField id="ct-due" type="date" className={FIELD} value={due} onChange={(e) => setDue(e.target.value)} /></div>
         <div><label className={LABEL} htmlFor="ct-importance">Importance</label><select id="ct-importance" className={FIELD} value={importance} onChange={(e) => setImportance(e.target.value as typeof importance)}><option value="now">Now</option><option value="next">Next</option><option value="later">Later</option></select></div>
       </div>
       {moved || sourceMoved ? <label className="flex items-start gap-2 text-[13px]"><input type="checkbox" checked={acknowledge} onChange={(e) => setAcknowledge(e.target.checked)} className="mt-0.5 h-4 w-4" />The change moved on since I reviewed it. Create the Thing anyway.</label> : null}

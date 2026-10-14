@@ -1,3 +1,4 @@
+import { DateTimeField } from "@/components/ui/date-time-field";
 import { Suspense, lazy, useId, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AtSign, Hash, Layers, List, Paperclip, RotateCw, Sparkles, X } from "lucide-react";
 import { format } from "date-fns";
@@ -32,6 +33,8 @@ import {
 } from "@/features/thing-references/thing-reference";
 import { MagicBoxClarification } from "./MagicBoxClarification";
 import { MagicBoxAssistant } from "./MagicBoxAssistant";
+import { MagicBoxCalculation } from "./MagicBoxCalculation";
+import { calculateMagicBox, type Calculation } from "./magic-box-calculations";
 import { useCoeyComposer } from "./coey/use-coey-composer";
 import { CoeyChips } from "./coey/CoeyChips";
 import { CoeyCommitError, commitCoeyItems, itemsForPlan, privateCaptureItem } from "./coey/commit";
@@ -39,6 +42,7 @@ import type { ComposerSelections } from "@/domain/coey/contract";
 import { localParts, zonedInstant } from "@/domain/coey/calendar";
 import { isCoeyCommand } from "@/domain/coey/command";
 import type { QueryClient } from "@tanstack/react-query";
+import type { TossCreationNotice } from "./toss-feedback-model";
 
 /** Titles of the person's open Things from the Court cache (no extra request). */
 function courtTitles(qc: QueryClient): string[] {
@@ -87,6 +91,7 @@ export function MagicBox({
   desktop = false,
   extraPeople,
   onThingCreated,
+  onCaptureCommitted,
 }: {
   listId?: string;
   listName?: string;
@@ -102,6 +107,8 @@ export function MagicBox({
    *  caller with no such mechanism (e.g. a bare mobile composer) can omit
    *  it and the success toast just identifies the Thing by title instead. */
   onThingCreated?: (thingId: string, title: string) => void;
+  /** Emits confirmed creation outcomes to opt-in desktop feedback */
+  onCaptureCommitted?: (notice: TossCreationNotice) => void;
 }) {
   const { context } = useAppContext();
   const qc = useQueryClient();
@@ -148,13 +155,6 @@ export function MagicBox({
   const motionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const motionPhaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [submitHandoff, setSubmitHandoff] = useState(false);
-  // One semantic path (D12): Sarvam reads the draft; code places and validates it.
-  // There is no Toss/Ask switch: each Send asks when Coey reads a question and tosses otherwise.
-  const composer = useCoeyComposer({ text: value, mode: context, enabled: !isPreviewMode() });
-  const plan = composer.plan;
-  // An instruction about a Thing the person already has goes to Coey, not into a new Thing.
-  const commandToCoey = !isPreviewMode() && isCoeyCommand(value, courtTitles(qc));
-  const readsAsQuestion = plan?.court.kind === "answer" || commandToCoey;
   const [assistantQuestion, setAssistantQuestion] = useState("");
   const [assistantQuery, setAssistantQuery] = useState<import("@/domain/coey/draft").DraftPlan["question"]>(null);
   const [assistantRequestKey, setAssistantRequestKey] = useState(0);
@@ -200,9 +200,23 @@ export function MagicBox({
   const [failedAttachments, setFailedAttachments] = useState<
     Array<{ id: string; file: File; name: string; sizeLabel: string; error: string }>
   >([]);
+  const [calculationHistory, setCalculationHistory] = useState<{ input: string; calculation: Calculation } | null>(null);
+  // Files and references always retain the existing capture path.
+  const calculation = useMemo(() => attachedFiles.length || references.length || processingFiles || failedAttachments.length
+    ? null : calculateMagicBox(value, calculationHistory?.calculation.value),
+  [value, calculationHistory, attachedFiles.length, references.length, processingFiles, failedAttachments.length]);
+  const displayedCalculation = calculation ? { input: value, calculation } : !value.trim() && !attachedFiles.length && !references.length && !processingFiles && !failedAttachments.length ? calculationHistory : null;
+  // Calculations stay local; all other drafts keep the existing semantic path.
+  // There is no Toss/Ask switch: each Send asks when Coey reads a question and tosses otherwise.
+  const composer = useCoeyComposer({ text: value, mode: context, enabled: !isPreviewMode() && !calculation });
+  const plan = composer.plan;
+  // An instruction about a Thing the person already has goes to Coey, not into a new Thing.
+  const commandToCoey = !isPreviewMode() && isCoeyCommand(value, courtTitles(qc));
+  const readsAsQuestion = plan?.court.kind === "answer" || commandToCoey;
+
   // Completion may arrive after the user starts their next capture in this
   // same destination. A successful old request must never erase newer edits.
-  const draftFingerprint = JSON.stringify([value, attachedFiles, references, composer.selections]);
+  const draftFingerprint = JSON.stringify([value, attachedFiles, references, composer.selections, calculationHistory]);
   const currentDraftFingerprint = useRef(draftFingerprint);
   currentDraftFingerprint.current = draftFingerprint;
 
@@ -243,6 +257,7 @@ export function MagicBox({
     const draft = getDraft<string>(qc, "magic-box", draftEntityId);
     const recovered = recoverLegacyThingDraft(draft?.value ?? "", readDraftReferences(draft?.metadata));
     setValue(recovered.value);
+    setCalculationHistory(null);
     composer.reset();
     setAttachedFiles((draft?.attachments as ThingFile[] | undefined) ?? []);
     setReferences(recovered.references);
@@ -503,6 +518,7 @@ export function MagicBox({
   }, [bucketTag, buckets]);
 
   const checkMentionTrigger = (text: string, cursor: number) => {
+    if (calculateMagicBox(text, calculationHistory?.calculation.value)) { setTrigger(null); return; }
     const textBefore = text.slice(0, cursor);
     const atMatch = textBefore.match(/(?:^|\s)@([^\s@#/]*)$/);
     const hashMatch = textBefore.match(/(?:^|\s)#([^\s@#/]*)$/);
@@ -603,18 +619,22 @@ export function MagicBox({
     | { kind: "unavailable"; reason: string };
 
   const mutation = useMutation({
-    mutationFn: async (input: { privateCapture?: boolean; selections?: ComposerSelections } = {}): Promise<SendResult> => {
+    mutationFn: async (input: { privateCapture?: boolean; selections?: ComposerSelections; calculationNote?: string } = {}): Promise<SendResult> => {
       const files = attachedFiles.length > 0 ? attachedFiles : undefined;
       // Live saves upload real attachments after the Thing exists; only files whose
       // original is gone (a restored draft) fall back to the inline file list.
       const uploadable = (files ?? []).filter((f) => fileObjects.current.has(f.id));
       const inlineOnly = (files ?? []).filter((f) => !fileObjects.current.has(f.id));
       const common = { mode: context, listId: effectiveListId, files: inlineOnly.length ? inlineOnly : undefined, checkIds: [] as string[] };
-      const typed = value.trim();
+      const typed = input.calculationNote ?? value.trim();
       let items: Array<Record<string, unknown>>;
       let key: string;
 
-      if (isPreviewMode()) {
+      if (input.calculationNote && !isPreviewMode()) {
+        items = [{ title: typed.slice(0, 500), text_raw: typed, kind: "note", mode: context,
+          list_id: effectiveListId ?? null, lane: "later", rule_id: "C8+L7", notes: null }];
+        key = composer.idempotencyKey({ dismissed: [`calculation:${typed}`] });
+      } else if (isPreviewMode()) {
         // Preview sessions are local-only demos: no interpretation service, no recipients.
         const title = typed || (attachedFiles[0]?.name ? `Attachment: ${attachedFiles[0].name}` : "");
         if (!title) return { kind: "paused" };
@@ -684,6 +704,15 @@ export function MagicBox({
         if (result.reason === "people") toast.error("Couldn’t load your connections. Try again in a moment.");
         return;
       }
+      if (!isEpochCurrent(qc, mutationContext.epoch)) return;
+      if (onCaptureCommitted && result.createdIds.length > 0) {
+        onCaptureCommitted({
+          createdIds: result.createdIds,
+          title: result.title,
+          bucketFailedIds: result.bucketFailedIds,
+          uploadFailed: result.uploadFailed,
+        });
+      }
       await qc.invalidateQueries({ queryKey: keys.court("preview", context) });
       await qc.invalidateQueries({ queryKey: ["court"] });
       void qc.invalidateQueries({ queryKey: ["coey"] });
@@ -699,6 +728,10 @@ export function MagicBox({
       setAssistantQuestion("");
       setAssistantQuery(null);
       if (stillSameDestination && stillSameDraft) {
+        // Keep the input ready for another thought, but end the completed
+        // composition's backdrop even while the textarea retains focus.
+        setMotionFocused(false);
+        setCalculationHistory(null);
         setTossed(true);
         setValue("");
         composer.reset();
@@ -727,13 +760,15 @@ export function MagicBox({
               .catch(() => toast.error("Bucket link failed. Your saved Things are unchanged."));
           } },
         });
-      } else if (count === 1) {
-        const thingId = result.createdIds[0]!;
-        toast.success(`“${result.title}” tossed`, {
-          action: onThingCreated ? { label: "Open", onClick: () => onThingCreated(thingId, result.title) } : undefined,
-        });
-      } else if (count > 1) {
-        toast.success(`${count} Things tossed`);
+      } else if (!onCaptureCommitted) {
+        if (count === 1) {
+          const thingId = result.createdIds[0]!;
+          toast.success(`“${result.title}” tossed`, {
+            action: onThingCreated ? { label: "Open", onClick: () => onThingCreated(thingId, result.title) } : undefined,
+          });
+        } else if (count > 1) {
+          toast.success(`${count} Things tossed`);
+        }
       }
     },
     onError: (err, _vars, mutationContext) => {
@@ -747,7 +782,7 @@ export function MagicBox({
   });
   const canToss = (Boolean(value.trim()) || attachedFiles.length > 0 || references.length > 0) && !mutation.isPending;
 
-  const question = composer.question;
+  const question = calculation ? null : composer.question;
   const runFix = async (optionId: string) => {
     const check = question?.check ?? null;
     const option = question?.options.find((o) => o.id === optionId);
@@ -769,6 +804,18 @@ export function MagicBox({
 
   const startToss = () => {
     if (!canToss) return;
+    if (calculation) {
+      if (!calculation.error) {
+        setCalculationHistory({ input: value, calculation });
+        setAssistantQuestion("");
+        setAssistantQuery(null);
+        setValue("");
+        setTrigger(null);
+        composer.reset();
+      }
+      return;
+    }
+    setCalculationHistory(null);
     flashMotion("submitting", 430);
     setSubmitHandoff(true);
     if (motionPhaseTimer.current) clearTimeout(motionPhaseTimer.current);
@@ -809,8 +856,17 @@ export function MagicBox({
         !desktop && "mb-3",
       )}
     >
-      {(motionFocused || assistantQuestion || question) && (
+      {((motionFocused && Boolean(value.trim() || attachedFiles.length || references.length)) || assistantQuestion || question) && (
         <div data-testid="magic-box-backdrop" aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 bg-slate-950/30" />
+      )}
+      {displayedCalculation && (
+        <MagicBoxCalculation
+          calculation={displayedCalculation.calculation}
+          input={displayedCalculation.input}
+          saving={mutation.isPending}
+          onSave={() => mutation.mutate({ calculationNote: `${displayedCalculation.input} = ${displayedCalculation.calculation.result} — ${displayedCalculation.calculation.detail}` })}
+          onClose={() => { setCalculationHistory(null); if (calculation) { setValue(""); composer.reset(); setTrigger(null); } }}
+        />
       )}
       {question && !trigger ? (
         <MagicBoxClarification
@@ -826,7 +882,7 @@ export function MagicBox({
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5 px-1 text-[10px] font-medium text-muted-foreground" aria-label="Magic Box mode and destination">
 
       </div>
-      {assistantQuestion && (
+      {assistantQuestion && !displayedCalculation && (
         <MagicBoxAssistant
           question={assistantQuestion}
           requestKey={assistantRequestKey}
@@ -1208,6 +1264,7 @@ export function MagicBox({
             }}
             onChange={(e) => {
               const next = e.target.value;
+              setMotionFocused(true);
               if (!value && next) flashMotion("first-character", 280);
               setValue(next);
               const cursor = e.target.selectionStart ?? next.length;
@@ -1384,11 +1441,11 @@ export function MagicBox({
               disabled={!canToss}
               onClick={startToss}
               className="magic-box-toss inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-[#975ee2] px-4 text-[12px] font-medium text-white outline-none hover:brightness-95 transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-              aria-label={readsAsQuestion ? "Ask Coey" : "Toss Thing"}
-              title={readsAsQuestion ? "Ask Coey" : "Toss Thing"}
+              aria-label={calculation ? "Calculate" : readsAsQuestion ? "Ask Coey" : "Toss Thing"}
+              title={calculation ? "Calculate" : readsAsQuestion ? "Ask Coey" : "Toss Thing"}
             >
               {readsAsQuestion ? <Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> : <KatalistIcon name="send-toss" className="h-3.5 w-3.5" />}
-              {readsAsQuestion ? "Ask" : "Toss"}
+              {calculation ? "Calculate" : readsAsQuestion ? "Ask" : "Toss"}
             </button>
           </div>
         ) : (
@@ -1407,16 +1464,16 @@ export function MagicBox({
               disabled={!canToss}
               onClick={startToss}
               className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-3 text-[12px] font-semibold text-primary-foreground outline-none transition hover:brightness-95 disabled:cursor-not-allowed disabled:opacity-40 focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={readsAsQuestion ? "Ask Coey" : "Toss Thing"}
-              title={readsAsQuestion ? "Ask Coey" : "Toss Thing"}
+              aria-label={calculation ? "Calculate" : readsAsQuestion ? "Ask Coey" : "Toss Thing"}
+              title={calculation ? "Calculate" : readsAsQuestion ? "Ask Coey" : "Toss Thing"}
             >
-              {readsAsQuestion ? "Ask" : "Toss"}
+              {calculation ? "Calculate" : readsAsQuestion ? "Ask" : "Toss"}
             </button>
           </div>
         )}
       </div>
 
-      {value.trim() && !isPreviewMode() ? (
+      {value.trim() && !calculation && !isPreviewMode() ? (
         <CoeyChips
           plan={commandToCoey && plan ? { ...plan, court: { kind: "answer", rule: "C0a" } } : plan}
           status={interpretationStatus}
@@ -1435,7 +1492,9 @@ export function MagicBox({
           dateEditor={(
             <>
               <label className="block text-xs font-semibold text-foreground" htmlFor="magic-box-due">When should this happen?</label>
-              <input
+              <DateTimeField
+                timezone={composer.ctx.calendar.timezone}
+                required
                 id="magic-box-due"
                 type="datetime-local"
                 defaultValue={manualDefault}

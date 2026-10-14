@@ -1,3 +1,4 @@
+import { ThingTitle } from "@/features/things/components/ThingTitle";
 import {
   forwardRef,
   useCallback,
@@ -18,7 +19,6 @@ import { getThingCapabilities } from "@/domain/capabilities";
 import type { Thing } from "@/domain/thing";
 import {
   rpcCatchAndStart,
-  rpcSetPersonalPace,
   rpcSnoozeThing,
   rpcSortThing,
 } from "@/features/things/rpc";
@@ -62,12 +62,15 @@ import {
 import { motionDurationSeconds } from "@/lib/motion-tokens";
 import catchRevealAsset from "@/assets/court-actions/catch.png";
 import snoozeRevealAsset from "@/assets/court-actions/snooze.png";
+import type { CardFeedbackState } from "./toss-feedback-model";
+import "./toss-feedback.css";
 
 gsap.registerPlugin(Observer);
 
 export type CourtLaneStackHandle = {
   getPosition: () => { activeIndex: number; activeThingId: string | null };
   focusThing: (thingId: string | null) => void;
+  revealThing: (thingId: string, options?: { focus?: boolean }) => boolean;
 };
 
 export type CourtLaneStackProps = {
@@ -77,6 +80,7 @@ export type CourtLaneStackProps = {
   listCoversById?: ReadonlyMap<string, string | null>;
   myActorId: string | null;
   initialPosition?: { activeIndex: number; activeThingId: string | null };
+  feedbackByThingId?: Record<string, CardFeedbackState>;
   onOpen: (thing: Thing, origin: HTMLElement) => void;
   /** `epoch` is the caller's own captured epoch (before its mutation's first await) -- see query-updates.ts's withOptimisticPatch for why this can't be read fresh inside onRefresh itself. */
   onRefresh: (epoch: number) => unknown;
@@ -191,16 +195,16 @@ function PeekQueueCard({
             )}
           </div>
           <p className="mt-1 line-clamp-2 text-[12.5px] font-medium leading-[1.25] text-slate-900">
-            {thing.title}
+            <ThingTitle thing={thing} />
           </p>
           <div className="grid grid-rows-[0fr] opacity-0 transition-[grid-template-rows,opacity,margin] duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] group-hover/queue:mt-2 group-hover/queue:grid-rows-[1fr] group-hover/queue:opacity-100 group-focus-visible/queue:mt-2 group-focus-visible/queue:grid-rows-[1fr] group-focus-visible/queue:opacity-100 motion-reduce:transition-none">
             <div className="overflow-hidden">
               {queueMeta.length > 0 ? (
-                <p className="truncate text-[11px] font-medium text-slate-500">
+                <p className="truncate text-[12px] font-medium text-slate-500">
                   {queueMeta.join(" · ")}
                 </p>
               ) : (
-                <p className="text-[11px] font-medium text-slate-500">Open Thing</p>
+                <p className="text-[12px] font-medium text-slate-500">Open Thing</p>
               )}
             </div>
           </div>
@@ -227,6 +231,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
       listCoversById,
       myActorId,
       initialPosition,
+      feedbackByThingId,
       onOpen,
       onRefresh,
       onViewAll,
@@ -329,11 +334,19 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     const content = courtLaneContent[lane];
     const renderIndex = reconcileStackIndex(activeIndex, activeThingIdRef.current, things);
     const activeThing = things[renderIndex] ?? null;
+    const activeFeedback =
+      activeThing && feedbackByThingId ? feedbackByThingId[activeThing.id] : undefined;
+    const buriedFeedbackCount = useMemo(() => {
+      if (!feedbackByThingId) return 0;
+      return things.filter(
+        (t) => t.id !== activeThing?.id && feedbackByThingId[t.id]?.badge === "just-added",
+      ).length;
+    }, [feedbackByThingId, things, activeThing?.id]);
     const capabilities = activeThing
       ? getThingCapabilities(activeThing, myActorId)
-      : { canCatch: false, canSetPace: false, canSort: false };
+      : { canCatch: false, canSetPace: false, canSort: false, canSetCourtLane: false };
     const actionCapabilities = {
-      canMoveLater: capabilities.canSetPace && lane !== "later",
+      canMoveLater: capabilities.canSetCourtLane && lane !== "later",
     };
     // Swipe-left now defers via a timed Snooze (June BRD v1.1). It is available
     // for any card in the person's own Court, regardless of lane.
@@ -612,15 +625,7 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
 
         // Sort and pace-later remove the card from this lane — do them optimistically.
         if (action === "later") {
-          const target = activeThing;
-          if (target.coey) {
-            void coeyMove.move(target, "later");
-            return;
-          }
-          void runOptimisticRemoval(target, "snoozed", { personalPace: "later" }, async () => {
-            await rpcSetPersonalPace(target.id, "later");
-            toast.success("Snoozed.");
-          });
+          void coeyMove.move(activeThing, "later");
           return;
         }
         if (action === "sort") {
@@ -742,8 +747,66 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             (activeButtonRef.current ?? headingRef.current)?.focus();
           });
         },
+        revealThing: (thingId, options) => {
+          if (!thingId || pendingAction !== null) return false;
+          const targetIndex = things.findIndex((t) => t.id === thingId);
+          if (targetIndex === -1) return false;
+          if (activeThing?.id === thingId || renderIndex === targetIndex) {
+            if (options?.focus) {
+              requestAnimationFrame(() => {
+                (activeButtonRef.current ?? headingRef.current)?.focus();
+              });
+            }
+            return true;
+          }
+
+          if (animatingRef.current) {
+            gsap.killTweensOf(activeCardRef.current);
+            gsap.killTweensOf(outgoingCardRef.current);
+            if (activeCardRef.current) {
+              gsap.set(activeCardRef.current, { clearProps: "transform,scale,opacity" });
+            }
+            animatingRef.current = false;
+          }
+
+          navigationVersionRef.current += 1;
+          const initialNavVersion = navigationVersionRef.current;
+          const targetThing = things[targetIndex];
+          const reduceMotion = getEffectiveReducedMotion();
+
+          if (reduceMotion) {
+            setActiveIndex(targetIndex);
+            activeThingIdRef.current = targetThing.id;
+            setAnnouncement(`Card ${targetIndex + 1} of ${things.length}`);
+            if (options?.focus) {
+              requestAnimationFrame(() => {
+                if (navigationVersionRef.current === initialNavVersion) {
+                  (activeButtonRef.current ?? headingRef.current)?.focus();
+                }
+              });
+            }
+            return true;
+          }
+
+          animatingRef.current = true;
+          const direction: 1 | -1 = targetIndex > renderIndex ? 1 : -1;
+          setAnim({ outgoing: activeThing, direction });
+          setActiveIndex(targetIndex);
+          activeThingIdRef.current = targetThing.id;
+          setAnnouncement(`Card ${targetIndex + 1} of ${things.length}`);
+
+          if (options?.focus) {
+            setTimeout(() => {
+              if (navigationVersionRef.current === initialNavVersion) {
+                (activeButtonRef.current ?? headingRef.current)?.focus();
+              }
+            }, 270);
+          }
+
+          return true;
+        },
       }),
-      [activeThing?.id, renderIndex, things],
+      [activeThing, pendingAction, renderIndex, things],
     );
 
     const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -881,6 +944,14 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 >
                   {things.length}
                 </span>
+                {buriedFeedbackCount > 0 && (
+                  <span
+                    className="court-lane-added-badge"
+                    aria-label={`${buriedFeedbackCount} new item added to ${content.label}`}
+                  >
+                    +{buriedFeedbackCount} added
+                  </span>
+                )}
               </div>
               {/* E02: this section's own ancestor has `overflow-hidden`
                   (for the drag/scroll boundary) -- at 200% zoom the
@@ -994,7 +1065,8 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                 ref={activeCardRef}
                 {...swipePointerProps}
                 className={cn(
-                  "relative z-20 touch-pan-y select-none will-change-transform motion-reduce:!transform-none motion-reduce:transition-none",
+                  "relative z-20 touch-pan-y select-none will-change-transform motion-reduce:!transform-none motion-reduce:transition-none rounded-[12px]",
+                  activeFeedback?.ring && "court-card-emphasis-ring",
                   !gesture.dragging &&
                     !anim &&
                     // D02: 260ms mirrors motion-tokens.ts's "workspace" band
@@ -1003,11 +1075,22 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                     // with MOTION_DURATIONS_MS.workspace by hand.
                     "transition-transform duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
                 )}
+                data-feedback-lane={lane}
                 style={{
                   transformOrigin: "50% 50%",
                   transform: `translate3d(${gesture.offset.x}px, 0, 0)`,
                 }}
               >
+                {activeFeedback?.badge && (
+                  <span
+                    className={cn(
+                      "court-card-feedback-badge",
+                      activeFeedback.badge,
+                    )}
+                  >
+                    {activeFeedback.badge === "just-added" ? "Just added" : "Here it is"}
+                  </span>
+                )}
                 <ThingStackCard
                   ref={activeButtonRef}
                   thing={activeThing}

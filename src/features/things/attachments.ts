@@ -138,37 +138,45 @@ export async function fetchRealAttachments(thingIds: string[]): Promise<Map<stri
  * doesn't have). Returns the real, persisted ThingFile - never a blob: URL.
  */
 export async function uploadThingAttachment(thingId: string, file: File): Promise<ThingFile> {
+  const signal = AbortSignal.timeout(120_000);
+  const wait = <T,>(operation: PromiseLike<T>): Promise<T> => new Promise((resolve, reject) => {
+    const timeout = () => reject(new Error("Upload timed out. Check your connection and try attaching the file again."));
+    if (signal.aborted) { timeout(); return; }
+    signal.addEventListener("abort", timeout, { once: true });
+    Promise.resolve(operation).then(resolve, reject).finally(() => signal.removeEventListener("abort", timeout));
+  });
   // H01: same 50MB cap as processFileForUpload (file-utils.ts) -- checked
   // here too since this is a separate upload path (real storage + the
   // reserve_thing_attachment RPC), not a caller of that function.
   if (file.size > MAX_THING_ATTACHMENT_BYTES) {
     throw new Error(`${file.name} is larger than 50 MB.`);
   }
-  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  const { data: authData, error: authErr } = await wait(supabase.auth.getUser());
   if (authErr || !authData.user) throw new Error("Sign in to attach files.");
 
   const clientId = crypto.randomUUID();
   const safeName = file.name.replace(/[^\w.-]+/g, "_").slice(0, 80) || "file";
   const stagingKey = `staging/${authData.user.id}/${clientId}/${safeName}`;
 
-  const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(stagingKey, file, {
+  const { error: uploadErr } = await wait(supabase.storage.from(BUCKET).upload(stagingKey, file, {
     contentType: file.type || undefined,
-  });
+  }));
   if (uploadErr) throw uploadErr;
 
-  const { data: reservedRaw, error: reserveErr } = await supabase.rpc("reserve_thing_attachment", {
+  const { data: reservedRaw, error: reserveErr } = await wait(supabase.rpc("reserve_thing_attachment", {
     p_thing_id: thingId,
     p_client_id: clientId,
     p_staging_key: stagingKey,
     p_file_name: file.name,
-  });
+  }).abortSignal(signal));
   if (reserveErr) throw reserveErr;
   const reserved = (Array.isArray(reservedRaw) ? reservedRaw[0] : reservedRaw) as {
     id: string;
     storage_key: string;
   };
 
-  const res = await authedFetch("/api/things/complete-attachment", {
+  const res = await wait(authedFetch("/api/things/complete-attachment", {
+    signal,
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -176,15 +184,21 @@ export async function uploadThingAttachment(thingId: string, file: File): Promis
       stagingKey,
       storageKey: reserved.storage_key,
     }),
-  });
+  }));
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Failed to finalize attachment (${res.status})`);
   }
 
-  const { data: signedData } = await supabase.storage
+  const { data: signedData } = await wait(supabase.storage
     .from(BUCKET)
-    .createSignedUrl(reserved.storage_key, SIGNED_URL_TTL_SECONDS);
+    .createSignedUrl(reserved.storage_key, SIGNED_URL_TTL_SECONDS))
+    // Finalization already saved the attachment. Preview signing must not
+    // turn that success into a failed upload and encourage duplicate retries.
+    .catch((error) => {
+      if (signal.aborted) return { data: null };
+      throw error;
+    });
 
   return {
     id: reserved.id,

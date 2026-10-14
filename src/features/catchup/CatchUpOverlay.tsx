@@ -78,48 +78,49 @@ export function CatchUpOverlay({
           the sticky action row at the bottom of CatchUpStack stays
           reachable without the dialog itself needing to scroll. */}
       <DialogContent aria-label="Morning Brief" data-brief-motion={open ? "pending" : undefined} ref={panelRef} overlayClassName="morning-brief-backdrop" className="morning-brief flex h-dvh max-h-dvh w-full flex-col gap-0 overflow-y-auto overscroll-contain rounded-none border-none bg-white p-0">
-        <header className="brief-header">
+        <header className="brief-header relative overflow-hidden flex-shrink-0">
           <img
             src={sunriseLandscape}
             alt=""
             aria-hidden="true"
             draggable={false}
-            className="pointer-events-none absolute left-[-4.41%] top-[-14.25%] h-[365.21%] w-[108.81%] max-w-none select-none object-cover"
+            className="pointer-events-none absolute inset-0 h-full w-full select-none object-cover object-top opacity-90"
           />
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute left-[76px] top-[14px] hidden h-[116px] w-[440px] bg-gradient-to-r from-[#fff7f0] to-[#f6e0eb] blur-[5.8px] lg:block"
+            className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white/95 via-white/85 to-white/40"
           />
-          <div className="relative z-10 flex flex-col gap-4 px-5 pb-5 pt-6 lg:block lg:h-full lg:w-full lg:p-0">
-            <div className="flex items-start gap-[14px] lg:contents">
+          <div className="relative z-10 flex flex-col gap-3 px-5 py-3.5 lg:h-full lg:flex-row lg:items-center lg:justify-between lg:px-7 lg:py-2">
+            <div className="flex items-center gap-3.5">
               <img
                 src={morningSymbol}
                 alt=""
                 aria-hidden="true"
-                className="h-[44px] w-[50px] shrink-0 lg:absolute lg:left-[82.2px] lg:top-[28.9px] lg:h-[44.3px] lg:w-[50.1px]"
+                className="h-10 w-11 shrink-0"
               />
-              <div className="lg:contents">
+              <div>
                 {/* The accessible dialog name stays "Morning Brief"; the visible hero heading follows the Figma design. */}
                 <DialogTitle className="sr-only">Morning Brief</DialogTitle>
                 <p
                   aria-hidden="true"
-                  className="font-bold leading-normal text-[#30104d] [font-size:28.255px] lg:absolute lg:left-[145.77px] lg:top-[31.47px] lg:whitespace-nowrap"
+                  className="text-xl font-bold leading-tight text-[#30104d] lg:text-[22px]"
                 >
                   Morning Digest
                 </p>
                 <DialogDescription asChild>
-                  <div className="mt-[7px] text-[15.412px] font-semibold leading-[1.4] !text-black lg:absolute lg:left-[145.77px] lg:top-[73.21px] lg:mt-0 lg:w-[395px]">
-                    <p>A fresh day to make progress.</p>
-                    <p>
+                  <div className="mt-0.5 text-xs font-semibold leading-normal text-[#4a2e66]">
+                    <span>A fresh day to make progress. </span>
+                    <span>
                       {hasFetchedOnce
                         ? `${moments.length} ${moments.length === 1 ? "moment needs" : "moments need"} your attention.`
                         : "Checking for updates…"}
-                    </p>
+                    </span>
                   </div>
                 </DialogDescription>
               </div>
             </div>
-            <div className="flex flex-wrap gap-[12.843px] lg:absolute lg:left-[82.2px] lg:top-[132.93px]">
+
+            <div className="flex flex-wrap items-center gap-2.5 lg:mr-12">
               {tiles.map(({ category, label, icon: Icon, bg, chip }) => (
                 <button
                   key={category}
@@ -127,19 +128,21 @@ export function CatchUpOverlay({
                   data-testid={`digest-tile-${category}`}
                   onClick={() => setJump({ category, nonce: (jump?.nonce ?? 0) + 1 })}
                   style={{ background: bg }}
-                  className="flex h-[81.554px] w-[201.639px] cursor-pointer items-center gap-[16.054px] rounded-[5.137px] px-[17.338px] text-left shadow-[0_3.211px_11.559px_rgba(87,65,99,0.1)] outline-none transition-transform hover:-translate-y-px focus-visible:ring-2 focus-visible:ring-[#8d2bf5]"
+                  className="flex h-[52px] min-w-[145px] cursor-pointer items-center gap-2.5 rounded-xl border border-white/80 px-3.5 text-left shadow-xs outline-none transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-[#8d2bf5] active:scale-95"
                 >
                   <span
                     style={{ background: chip }}
-                    className="flex h-[44.309px] w-[43.667px] shrink-0 items-center justify-center rounded-[10.917px] text-white"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-2xs"
                   >
-                    <Icon className="h-[22.476px] w-[22.476px]" strokeWidth={1.6} />
+                    <Icon className="h-4 w-4" strokeWidth={1.8} />
                   </span>
                   <span className="flex flex-col">
-                    <span className="text-[26.971px] font-semibold leading-[1.1] text-[#30104d]">{counts[category]}</span>
-                    <span className="flex items-center gap-[5.137px] text-[12.843px] font-medium text-[#30104d]">
+                    <span className="text-base font-bold leading-none text-[#30104d]">
+                      {counts[category]}
+                    </span>
+                    <span className="mt-1 flex items-center gap-1 text-xs font-medium text-[#4a2e66]">
                       {label}
-                      <ChevronRight className="h-[12.843px] w-[12.843px]" strokeWidth={1.6} />
+                      <ChevronRight className="h-3 w-3 opacity-60" strokeWidth={1.8} />
                     </span>
                   </span>
                 </button>

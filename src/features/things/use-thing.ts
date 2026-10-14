@@ -12,7 +12,7 @@ async function fetchThing(thingId: string): Promise<Thing | null> {
   const { data, error } = await supabase.from("things").select(THING_COLUMNS).eq("id", thingId).maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  const [thing] = await mapDbThingRows([data as DbThingRow]);
+  const [thing] = await mapDbThingRows([data as unknown as DbThingRow]);
   return thing ?? null;
 }
 

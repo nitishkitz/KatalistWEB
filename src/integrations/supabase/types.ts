@@ -1901,6 +1901,7 @@ export type Database = {
       }
       things: {
         Row: {
+          reference_number: number
           acknowledgement: Database["public"]["Enums"]["acknowledgement_state"]
           assignee_personal_pace: Database["public"]["Enums"]["pace"] | null
           cancelled_at: string | null
@@ -1914,6 +1915,10 @@ export type Database = {
           due_has_time: boolean
           id: string
           list_id: string | null
+          description_document: Json | null
+          description_revision: number
+          description_updated_at: string | null
+          description_updated_by: string | null
           notes: string | null
           owner_actor_id: string
           owner_importance: Database["public"]["Enums"]["importance"]
@@ -1923,6 +1928,7 @@ export type Database = {
           work_status: Database["public"]["Enums"]["work_status"]
         }
         Insert: {
+          reference_number?: number
           acknowledgement?: Database["public"]["Enums"]["acknowledgement_state"]
           assignee_personal_pace?: Database["public"]["Enums"]["pace"] | null
           cancelled_at?: string | null
@@ -1936,6 +1942,10 @@ export type Database = {
           due_has_time?: boolean
           id?: string
           list_id?: string | null
+          description_document?: Json | null
+          description_revision?: number
+          description_updated_at?: string | null
+          description_updated_by?: string | null
           notes?: string | null
           owner_actor_id: string
           owner_importance?: Database["public"]["Enums"]["importance"]
@@ -1945,6 +1955,7 @@ export type Database = {
           work_status?: Database["public"]["Enums"]["work_status"]
         }
         Update: {
+          reference_number?: never
           acknowledgement?: Database["public"]["Enums"]["acknowledgement_state"]
           assignee_personal_pace?: Database["public"]["Enums"]["pace"] | null
           cancelled_at?: string | null
@@ -1958,6 +1969,10 @@ export type Database = {
           due_has_time?: boolean
           id?: string
           list_id?: string | null
+          description_document?: Json | null
+          description_revision?: number
+          description_updated_at?: string | null
+          description_updated_by?: string | null
           notes?: string | null
           owner_actor_id?: string
           owner_importance?: Database["public"]["Enums"]["importance"]

@@ -1,3 +1,4 @@
+import { DateTimeField } from "@/components/ui/date-time-field";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -10,6 +11,7 @@ type LooseRpc = (fn: string, args: Record<string, unknown>) => Promise<{ error: 
 const rpc = (fn: string, args: Record<string, unknown>) => (supabase.rpc as unknown as LooseRpc)(fn, args);
 
 const RULE_TEXT: Record<string, string> = {
+  PERSONAL: "you chose this placement in your Court",
   L1: "the sender marked it urgent", L2: "the sender said no rush", L3: "its date is within a working day",
   L4: "its date is a few working days away", L5: "its date is more than five working days away", L6: "no time is set yet",
   L7: "nothing set a date, so it waits in Next", L8: "nothing set a date, so it waits in Next", L9: "it is a thought, not a commitment yet",
@@ -79,7 +81,7 @@ export function CoeyThingActions({ thing }: { thing: Thing }) {
         </div>
       ) : null}
 
-      {isSender && s.holderProfileId !== me ? (
+      {isSender ? (
         <div className="mt-2 flex flex-wrap items-center gap-1.5" role="group" aria-label="Pace you asked for">
           <span className="text-slate-500">Pace you asked for:</span>
           {(["urgent", "normal", "chill"] as const).map((pace) => (
@@ -96,7 +98,7 @@ export function CoeyThingActions({ thing }: { thing: Thing }) {
       {panel === "promise" ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <label className="text-slate-600" htmlFor={`promise-${thing.id}`}>I’ll have it by</label>
-          <input id={`promise-${thing.id}`} type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="rounded-md border border-border px-2 py-1" />
+          <DateTimeField required timezone={view.holderCal.timezone} id={`promise-${thing.id}`} type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="rounded-md border border-border px-2 py-1" />
           <button type="button" disabled={busy || !promiseAt()} onClick={() => void run("coey_promise", { p_thing_id: thing.id, p_promise_at: promiseAt() }, "Promise saved")} className="rounded-md bg-violet-600 px-3 py-1 font-semibold text-white disabled:opacity-50">Save</button>
         </div>
       ) : null}

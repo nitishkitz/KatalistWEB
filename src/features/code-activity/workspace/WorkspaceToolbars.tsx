@@ -1,3 +1,4 @@
+import { DateTimeField } from "@/components/ui/date-time-field";
 import { useMemo, useState } from "react";
 import { Check, ChevronDown, Ellipsis, GitBranch, Github, Plus, RefreshCw, Search, Settings2, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -258,10 +259,10 @@ function FilterControls(p: FilterBarProps) {
       <FilterPopover label="Date" count={p.filters.dateFrom || p.filters.dateTo ? 1 : 0} width={260}>
         <div className="space-y-2 p-1">
           <label className="block text-[12px] text-[var(--ca-muted)]">From
-            <input type="date" value={p.filters.dateFrom ?? ""} onChange={(e) => p.onFilters({ ...p.filters, dateFrom: e.target.value || null })} className="mt-1 h-9 w-full rounded-lg border border-[var(--ca-line)] px-2 text-[13px] text-[var(--ca-ink)]" />
+            <DateTimeField type="date" value={p.filters.dateFrom ?? ""} onChange={(e) => p.onFilters({ ...p.filters, dateFrom: e.target.value || null })} className="mt-1 h-9 w-full rounded-lg border border-[var(--ca-line)] px-2 text-[13px] text-[var(--ca-ink)]" />
           </label>
           <label className="block text-[12px] text-[var(--ca-muted)]">To
-            <input type="date" value={p.filters.dateTo ?? ""} onChange={(e) => p.onFilters({ ...p.filters, dateTo: e.target.value || null })} className="mt-1 h-9 w-full rounded-lg border border-[var(--ca-line)] px-2 text-[13px] text-[var(--ca-ink)]" />
+            <DateTimeField type="date" value={p.filters.dateTo ?? ""} onChange={(e) => p.onFilters({ ...p.filters, dateTo: e.target.value || null })} className="mt-1 h-9 w-full rounded-lg border border-[var(--ca-line)] px-2 text-[13px] text-[var(--ca-ink)]" />
           </label>
           <p className="text-[12px] text-[var(--ca-muted)]">Your local calendar days.</p>
           {p.issues.date ? <p role="alert" className="text-[12px] text-[var(--ca-bad-ink)]">{p.issues.date}</p> : null}

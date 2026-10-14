@@ -23,6 +23,10 @@ import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailW
 import { ThingDetailContent } from "@/features/things/ThingDetailContent";
 import type { CourtLaneStackHandle } from "./CourtLaneStack";
 import { CourtWorkspace } from "./CourtWorkspace";
+import { useAppContext } from "@/features/context/use-app-context";
+import { toast } from "sonner";
+import { useTossFeedback } from "./use-toss-feedback";
+import { TossReceipt } from "./TossReceipt";
 import { CourtBucketsSidePanel } from "./CourtBucketsSidePanel";
 import { CourtWithOthersSidebar } from "./CourtWithOthersSidebar";
 import { CourtDetailModal } from "./CourtDetailModal";
@@ -265,6 +269,23 @@ export function CourtDesktop({
   const viewRef = useRef(view);
   viewRef.current = view;
 
+  const { context } = useAppContext();
+  const rawCourt = useMemo(
+    () => ({ now, next, later, theirs }),
+    [now, next, later, theirs],
+  );
+  const visibleCourt = useMemo(
+    () => ({ now: view.now, next: view.next, later: view.later, theirs: view.theirs }),
+    [view.now, view.next, view.later, view.theirs],
+  );
+  const tossFeedback = useTossFeedback({
+    userId: myActorId,
+    context,
+    rawCourt,
+    visibleCourt,
+    laneRefs,
+  });
+
   // T09/E-04: "nothing to show" used to render the same per-lane "No
   // Things match this view." regardless of WHY -- a genuinely empty Court
   // (nothing tossed yet) and a Court with plenty of Things that a search/
@@ -448,6 +469,94 @@ export function CourtDesktop({
     const lane: FocusViewTabId = thing.assignee.id === myActorId ? laneOf(thing) : "theirs";
     setModalSelection({ lane, thing });
   };
+
+  const handleShowInCourt = useCallback(
+    (thingId: string) => {
+      const allRaw = [...now, ...next, ...later, ...theirs];
+      const target = allRaw.find((t) => t.id === thingId);
+      if (!target) {
+        toast.error("That Thing was deleted or is no longer accessible.");
+        return;
+      }
+
+      if (focusSelection) {
+        closeFocus();
+      }
+
+      const isInTheirs = theirs.some((t) => t.id === thingId);
+      if (isInTheirs) {
+        const isVisibleInTheirs = view.theirs.some((t) => t.id === thingId);
+        if (!isVisibleInTheirs) {
+          toast.info(`"${target.title || "Thing"}" is in With Others, hidden by current filters.`, {
+            action: {
+              label: "Clear filters & show",
+              onClick: () => {
+                clearAllFilters();
+                setTimeout(() => {
+                  setWithOthersOpenNarrow(true);
+                  setTheirFocus(theirStateFor(target));
+                  setTheirSelectedId(target.id);
+                }, 50);
+              },
+            },
+          });
+          return;
+        }
+
+        setWithOthersOpenNarrow(true);
+        setTheirFocus(theirStateFor(target));
+        setTheirSelectedId(target.id);
+        return;
+      }
+
+      const lane = now.some((t) => t.id === thingId)
+        ? "now"
+        : next.some((t) => t.id === thingId)
+          ? "next"
+          : "later";
+
+      const isVisibleInLane = view[lane].some((t) => t.id === thingId);
+      if (!isVisibleInLane) {
+        toast.info(`"${target.title || "Thing"}" is hidden by current filters.`, {
+          action: {
+            label: "Clear filters & show",
+            onClick: () => {
+              clearAllFilters();
+              setTimeout(() => {
+                const revealed = laneRefs.current[lane]?.revealThing(thingId, { focus: true });
+                if (revealed) {
+                  tossFeedback.triggerCardEmphasis(thingId);
+                }
+              }, 50);
+            },
+          },
+        });
+        return;
+      }
+
+      const revealed = laneRefs.current[lane]?.revealThing(thingId, { focus: true });
+      if (revealed) {
+        tossFeedback.triggerCardEmphasis(thingId);
+      } else {
+        toast.info("Please wait for the current action to finish, then try again.");
+      }
+    },
+    [now, next, later, theirs, view, focusSelection, closeFocus, tossFeedback],
+  );
+
+  const handleOpenThingFromFeedback = useCallback(
+    (thingId: string) => {
+      const allRaw = [...now, ...next, ...later, ...theirs];
+      const target = allRaw.find((t) => t.id === thingId);
+      if (!target) {
+        toast.error("That Thing was deleted or is no longer accessible.");
+        return;
+      }
+      tossFeedback.clearEmphasis(thingId);
+      openCatchUpThing(target);
+    },
+    [now, next, later, theirs, tossFeedback],
+  );
 
   // Open a permalinked Thing once. No hero animation: there is no origin card for a link.
   useEffect(() => {
@@ -822,6 +931,7 @@ export function CourtDesktop({
             myActorId={myActorId}
             initialPositions={savedPositionsRef.current}
             laneRefs={laneRefs}
+            feedbackByThingId={tossFeedback.feedbackByThingId}
             heroRect={heroRect}
             onOpen={handleOpen}
             onSelectThing={(thingId, lane) =>
@@ -863,12 +973,30 @@ export function CourtDesktop({
         )}
       </div>
 
+      <div aria-live="polite" className="sr-only">
+        {tossFeedback.announcement}
+      </div>
+
       {!focusSelection && (
         <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-6">
           <div className="pointer-events-auto w-full max-w-2xl">
+            <TossReceipt
+              items={tossFeedback.items}
+              collapsed={tossFeedback.collapsed}
+              expandedDetails={tossFeedback.expandedDetails}
+              onExpandDetails={tossFeedback.setExpandedDetails}
+              onShow={handleShowInCourt}
+              onOpen={handleOpenThingFromFeedback}
+              onDismiss={tossFeedback.dismissReceipt}
+              onMouseEnter={() => tossFeedback.setIsHovered(true)}
+              onMouseLeave={() => tossFeedback.setIsHovered(false)}
+              onFocus={() => tossFeedback.setIsFocused(true)}
+              onBlur={() => tossFeedback.setIsFocused(false)}
+            />
             <MagicBox
               desktop
               extraPeople={collaborators}
+              onCaptureCommitted={tossFeedback.recordCommit}
               onThingCreated={(thingId) => {
                 const currentView = viewRef.current;
                 const created = [

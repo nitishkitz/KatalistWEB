@@ -5,15 +5,11 @@ import { useRef, useState } from "react";
 import {
   Bell,
   Briefcase,
-  ChevronRight,
   Home,
   LogOut,
   Palette,
-  Shield,
   Sparkles,
   Flame,
-  Crown,
-  BarChart3,
   Mail,
   Phone,
   Calendar,
@@ -24,9 +20,13 @@ import {
   Camera,
   Loader2,
   RotateCcw,
-  Plug,
-  Laptop,
-  Target,
+  UserRound,
+  MapPin,
+  Link,
+  LockKeyhole,
+  Monitor,
+  Trash2,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -36,9 +36,17 @@ import { useSession } from "@/hooks/useSession";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAppContext } from "@/features/context/use-app-context";
 import { useProfile, useUploadAvatar, useUpdateProfile } from "@/features/me/use-profile";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SortedActivityIcon, CaughtActivityIcon } from "@/features/me/ProfileActivityIcons";
+import "@/features/me/profile-page.css";
 import { useTrophy } from "@/features/me/use-trophy";
 import { SolvedThingsDialog } from "@/features/me/SolvedThingsDialog";
 import { useAvatarUrl } from "@/features/people/directory";
@@ -46,8 +54,17 @@ import { isDoormanEnabled } from "@/features/doorman/use-doorman";
 import { cn } from "@/lib/utils";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { useStoredMotionPreference } from "@/hooks/use-motion-preference";
-import { FONT_OPTIONS, setFontPreference, useStoredFontPreference } from "@/hooks/use-font-preference";
-import { getPushPermissionState, registerPushForUser, sendTestPush, type PushPermissionState } from "@/features/push/push-registration";
+import {
+  FONT_OPTIONS,
+  setFontPreference,
+  useStoredFontPreference,
+} from "@/hooks/use-font-preference";
+import {
+  getPushPermissionState,
+  registerPushForUser,
+  sendTestPush,
+  type PushPermissionState,
+} from "@/features/push/push-registration";
 import coverImage from "@/assets/profile/cover.png";
 import { LoggedInDevices } from "@/features/me/devices/LoggedInDevices";
 
@@ -61,12 +78,14 @@ export const Route = createFileRoute("/me")({
   component: MePage,
 });
 
-const CARD_SHADOW = "0 3px 9.4px 0 rgba(0,0,0,0.05)";
-
 /** Selectable profile cover wallpapers (gradient presets). "photo" keeps the
  *  illustrated Katalist banner; the rest are the existing gradient options. */
 const COVER_THEMES: { key: string; label: string; className: string }[] = [
-  { key: "violet", label: "Violet", className: "bg-gradient-to-r from-[#7c4ddb] via-[#8b5cf0] to-[#5b8def]" },
+  {
+    key: "violet",
+    label: "Violet",
+    className: "bg-gradient-to-r from-[#7c4ddb] via-[#8b5cf0] to-[#5b8def]",
+  },
   { key: "sunset", label: "Sunset", className: "bg-gradient-to-r from-[#ff7e5f] to-[#feb47b]" },
   { key: "ocean", label: "Ocean", className: "bg-gradient-to-r from-[#2193b0] to-[#6dd5ed]" },
   { key: "forest", label: "Forest", className: "bg-gradient-to-r from-[#11998e] to-[#38ef7d]" },
@@ -77,14 +96,62 @@ const COVER_THEMES: { key: string; label: string; className: string }[] = [
 ];
 
 const settingsRows = [
-  { id: "preferences", title: "Work / Home Context", body: "Set your default workspace and context", icon: Home, tint: "bg-[#f3ebfe] text-[#975ee2]" },
-  { id: "working-time", title: "Working time", body: "Days, hours, holidays and leave Coey respects", icon: Clock, tint: "bg-[#e9f4ff] text-[#2874f4]" },
-  { id: "coey", title: "Coey", body: "Full, Light or Quiet", icon: Sparkles, tint: "bg-[#f3ebfe] text-[#975ee2]" },
-  { id: "notifications", title: "Notifications", body: "Manage push delivery on this device", icon: Bell, tint: "bg-[#fef4ec] text-[#fd983f]" },
-  { id: "appearance", title: "Appearance", body: "Theme, reduced motion, and display preferences", icon: Palette, tint: "bg-[#e4fcee] text-[#12a15f]" },
-  { id: "privacy", title: "Privacy", body: "Manage what others can see", icon: Shield, tint: "bg-[#f3ebfe] text-[#975ee2]" },
-  { id: "integrations", title: "Integrations", body: "Connect your favourite tools", icon: Plug, tint: "bg-[#e9f4ff] text-[#2874f4]" },
-  { id: "devices", title: "Logged-in devices", body: "See and sign out of devices using your account", icon: Laptop, tint: "bg-[#f3ebfe] text-[#975ee2]" },
+  {
+    id: "preferences",
+    title: "Work / Home Context",
+    body: "Set your default workspace and context",
+    icon: Home,
+    tint: "bg-[#f3ebfe] text-[#975ee2]",
+  },
+  {
+    id: "working-time",
+    title: "Working time",
+    body: "Days, hours, holidays and leave Coey respects",
+    icon: Clock,
+    tint: "bg-[#e9f4ff] text-[#2874f4]",
+  },
+  {
+    id: "coey",
+    title: "Coey",
+    body: "Full, Light or Quiet",
+    icon: Sparkles,
+    tint: "bg-[#f3ebfe] text-[#975ee2]",
+  },
+  {
+    id: "notifications",
+    title: "Notifications",
+    body: "Manage push delivery on this device",
+    icon: Bell,
+    tint: "bg-[#fef4ec] text-[#fd983f]",
+  },
+  {
+    id: "appearance",
+    title: "Appearance",
+    body: "Theme, reduced motion, and display preferences",
+    icon: Palette,
+    tint: "bg-[#e4fcee] text-[#12a15f]",
+  },
+  {
+    id: "privacy",
+    title: "Privacy",
+    body: "Manage what others can see",
+    icon: LockKeyhole,
+    tint: "bg-[#f3ebfe] text-[#975ee2]",
+  },
+  {
+    id: "integrations",
+    title: "Integrations",
+    body: "Connect your favourite tools",
+    icon: Link,
+    tint: "bg-[#e9f4ff] text-[#2874f4]",
+  },
+  {
+    id: "devices",
+    title: "Logged-in devices",
+    body: "See and sign out of devices using your account",
+    icon: Monitor,
+    tint: "bg-[#f3ebfe] text-[#975ee2]",
+  },
 ];
 
 function MePage() {
@@ -94,9 +161,16 @@ function MePage() {
   const { data: profile, isLoading: profileLoading } = useProfile();
   const uploadAvatar = useUploadAvatar();
   const updateProfile = useUpdateProfile();
-  const { stats, restore, readState: trophyReadState, retry: retryTrophy, sortedCount } = useTrophy();
+  const {
+    stats,
+    restore,
+    readState: trophyReadState,
+    retry: retryTrophy,
+    sortedCount,
+  } = useTrophy();
   const [solvedOpen, setSolvedOpen] = useState(false);
   const sortedCardRef = useRef<HTMLButtonElement | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const { context } = useAppContext();
 
   const [panel, setPanel] = useState<string | null>(null);
@@ -108,7 +182,10 @@ function MePage() {
   // G13: per-file avatar-upload state -- keeps the actual File so Retry
   // never has to ask the user to re-pick it, and distinguishes an in-flight
   // upload from a failed one instead of leaving no visible state at all.
-  const [avatarAttempt, setAvatarAttempt] = useState<{ file: File; status: "uploading" | "failed" } | null>(null);
+  const [avatarAttempt, setAvatarAttempt] = useState<{
+    file: File;
+    status: "uploading" | "failed";
+  } | null>(null);
   const { reduceMotion: reduced, setReduceMotion: setReduced } = useStoredMotionPreference();
   const selectedFont = useStoredFontPreference();
   // G06: real push permission state, shown honestly in the notifications
@@ -116,7 +193,9 @@ function MePage() {
   // only, for now" copy (which was simply false -- real browser push
   // already existed via PushRegistrar, it just had no user-facing
   // control and auto-prompted for permission on every sign-in instead).
-  const [pushPermission, setPushPermission] = useState<PushPermissionState>(() => getPushPermissionState());
+  const [pushPermission, setPushPermission] = useState<PushPermissionState>(() =>
+    getPushPermissionState(),
+  );
   const [pushEnabling, setPushEnabling] = useState(false);
   const [pushTesting, setPushTesting] = useState(false);
   const [doorman, setDoorman] = useState(() => isDoormanEnabled());
@@ -130,7 +209,12 @@ function MePage() {
   const role = profile?.occupation || user?.user_metadata?.role_label || "Member";
   const initials =
     user?.user_metadata?.initials ||
-    name.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase();
+    name
+      .split(" ")
+      .map((n: string) => n[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
   const avatarUrl = useAvatarUrl(name, user?.email, profile?.avatar_url);
   // G06: phone-based sign-in synthesizes a fake "local-<digits>@katalist.local"
   // address (see src/lib/auth/local-user.ts) so Supabase's email-shaped auth
@@ -141,7 +225,8 @@ function MePage() {
   // internals work: "@katalist.local" (local-user.ts) and "@users.katalist.invalid"
   // (phone-login middleware). `.invalid` is an RFC 2606 reserved TLD and is never
   // a real address, so neither should ever be shown as a contact email.
-  const isSyntheticAuthEmail = rawEmail.endsWith("@katalist.local") || rawEmail.endsWith(".invalid");
+  const isSyntheticAuthEmail =
+    rawEmail.endsWith("@katalist.local") || rawEmail.endsWith(".invalid");
   const email = isSyntheticAuthEmail ? "" : rawEmail;
   const phone = profile?.phone_e164 || user?.phone || "";
   const timezone = profile?.timezone || "";
@@ -156,7 +241,9 @@ function MePage() {
     ...(phone ? [{ icon: Phone, label: "Phone", value: phone }] : []),
     ...(memberSince ? [{ icon: Calendar, label: "Member since", value: memberSince }] : []),
     ...(timezone ? [{ icon: Clock, label: "Time zone", value: timezone }] : []),
-    ...(profile?.occupation ? [{ icon: Briefcase, label: "Occupation", value: profile.occupation }] : []),
+    ...(profile?.occupation
+      ? [{ icon: Briefcase, label: "Occupation", value: profile.occupation }]
+      : []),
   ];
 
   async function handleSignOut() {
@@ -177,7 +264,9 @@ function MePage() {
       if (result.ok) {
         toast.success("Notifications enabled.");
       } else if (result.reason === "denied") {
-        toast.error("Notifications were blocked. You can allow them again in your browser's site settings.");
+        toast.error(
+          "Notifications were blocked. You can allow them again in your browser's site settings.",
+        );
       } else if (result.reason === "unsupported") {
         toast.error("This browser doesn't support push notifications.");
       } else {
@@ -245,7 +334,8 @@ function MePage() {
       { cover_theme: key },
       {
         onError: (err) => {
-          if (isEpochCurrent(qc, epoch)) toast.error(err instanceof Error ? err.message : "Couldn’t save cover.");
+          if (isEpochCurrent(qc, epoch))
+            toast.error(err instanceof Error ? err.message : "Couldn’t save cover.");
         },
       },
     );
@@ -281,7 +371,8 @@ function MePage() {
           // A genuine server/network rejection stays a toast -- unlike the
           // empty-name case above, this isn't a locally-knowable failure
           // mode, so there's no specific field to point at.
-          if (isEpochCurrent(qc, epoch)) toast.error(err instanceof Error ? err.message : "Couldn’t save.");
+          if (isEpochCurrent(qc, epoch))
+            toast.error(err instanceof Error ? err.message : "Couldn’t save.");
         },
       },
     );
@@ -289,340 +380,337 @@ function MePage() {
 
   const statCards = [
     {
-      icon: Crown,
-      tint: "bg-[#f0ebfd] text-[#975ee2]",
+      icon: SortedActivityIcon,
+      tone: "sorted",
       value: sortedCount === null ? "—" : String(sortedCount),
       label: "Things sorted",
       hint: "Currently sorted Things assigned to you",
       action: "solved" as const,
     },
     {
-      icon: BarChart3,
-      tint: "bg-[#e6fcf0] text-[#12a15f]",
-      value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.caught),
+      icon: CaughtActivityIcon,
+      tone: "caught",
+      value:
+        trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.caught),
       label: "Things caught",
       hint: "Every catch counts, even on the same Thing twice",
     },
     {
       icon: Flame,
-      tint: "bg-[#fef0e4] text-[#fd983f]",
+      tone: "streak",
       value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : stats.streak,
       label: "Day streak",
       hint: "Consecutive days with at least one Thing sorted",
     },
     {
       icon: Calendar,
-      tint: "bg-[#eef1ff] text-[#2874f4]",
-      value: trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.weekly),
+      tone: "weekly",
+      value:
+        trophyReadState === "error" || trophyReadState === "loading" ? "—" : String(stats.weekly),
       label: "Last 7 days",
       hint: "Rolling 7-day window, not a calendar week",
     },
   ] as const;
 
-  const avatarNode = <PersonAvatar name={name} initials={initials} src={avatarUrl} size={92} />;
+  const avatarNode = <PersonAvatar name={name} initials={initials} src={avatarUrl} size={112} />;
 
   return (
     <AppShell noPadding>
-      <div className="mx-auto w-full max-w-[1440px] px-4 py-3 md:px-8 lg:h-[calc(100dvh-3.5rem)] lg:overflow-hidden">
-        <div className="flex h-full flex-col gap-3">
-          {/* Cover banner: illustrated Katalist cover + overlaid identity */}
-          <div
-            className="relative shrink-0 overflow-hidden rounded-2xl"
-            style={{ height: "clamp(138px, 18vh, 184px)", boxShadow: CARD_SHADOW }}
-          >
-            {coverIsPhoto ? (
-              <img src={coverImage} alt="" className="absolute inset-0 h-full w-full object-cover object-right" />
-            ) : (
-              <div className={cn("absolute inset-0", coverClass)} />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-r from-white/85 via-white/45 to-transparent" />
+      <div className="profile-page">
+        <aside className="profile-rail" aria-label="Profile and settings">
+          <a className="profile-rail-current" href="#profile-details" aria-current="page">
+            <UserRound aria-hidden="true" />
+            Profile
+          </a>
+          {[
+            { title: "Workspace", rows: settingsRows.slice(0, 3) },
+            { title: "Preferences", rows: settingsRows.slice(3) },
+          ].map((group) => (
+            <section className="profile-rail-group" key={group.title}>
+              <h2>{group.title}</h2>
+              {group.rows.map((setting) => (
+                <button
+                  key={setting.id}
+                  type="button"
+                  onClick={() => setPanel(setting.id)}
+                  aria-haspopup="dialog"
+                  className="profile-rail-row"
+                >
+                  <setting.icon aria-hidden="true" />
+                  <span>{setting.title}</span>
+                </button>
+              ))}
+            </section>
+          ))}
+          <div className="profile-rail-utilities">
+            <button
+              type="button"
+              className="profile-rail-row"
+              onClick={() => setPanel("shredded")}
+              aria-haspopup="dialog"
+            >
+              <Trash2 aria-hidden="true" />
+              <span>
+                Recently Shredded
+                {(trophyReadState === "ready" || trophyReadState === "stale") &&
+                stats.shredded.length
+                  ? ` (${stats.shredded.length})`
+                  : ""}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="profile-rail-row profile-sign-out"
+              onClick={handleSignOut}
+            >
+              <LogOut aria-hidden="true" />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </aside>
 
-            {!demoSession ? (
-              <Popover open={coverOpen} onOpenChange={setCoverOpen}>
-                <PopoverTrigger asChild>
+        <div className="profile-content" id="profile-details">
+          <header className="profile-intro">
+            <p>Your profile</p>
+            <span>Manage your details and make Katalist yours.</span>
+          </header>
+          <section className="profile-identity" aria-labelledby="profile-name">
+            <div className="profile-avatar">
+              {avatarNode}
+              {!demoSession ? (
+                <>
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    aria-label="Choose profile photo"
+                    className="sr-only"
+                    tabIndex={-1}
+                    onChange={(e) => {
+                      onAvatarFile(e.target.files?.[0]);
+                      e.target.value = "";
+                    }}
+                  />
                   <button
                     type="button"
-                    className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-[#975ee2] px-3.5 py-1.5 text-[12px] font-medium text-white hover:bg-[#8a4fdc]"
+                    className="profile-photo-button"
+                    aria-label="Change profile photo"
+                    disabled={avatarAttempt?.status === "uploading"}
+                    onClick={() => avatarInputRef.current?.click()}
                   >
-                    <ImagePlus className="h-3.5 w-3.5" />
-                    Change cover
+                    <Camera aria-hidden="true" />
                   </button>
-                </PopoverTrigger>
-                <PopoverContent align="end" className="w-64 rounded-2xl border border-border/80 bg-white p-3">
-                  <p className="mb-2 text-[12px] font-semibold text-[#000533]">Choose a wallpaper</p>
-                  <div className="grid grid-cols-4 gap-2">
-                    <button
-                      type="button"
-                      title="Katalist"
-                      onClick={() => saveCover("photo")}
+                </>
+              ) : null}
+              {avatarAttempt?.status === "uploading" ? (
+                <span role="status" aria-label="Uploading photo" className="profile-photo-status">
+                  <Loader2 aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
+                </span>
+              ) : null}
+              {avatarAttempt?.status === "failed" ? (
+                <button
+                  type="button"
+                  className="profile-photo-button profile-photo-retry"
+                  onClick={retryAvatarUpload}
+                  aria-label="Upload failed — retry"
+                >
+                  <RotateCcw aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+            <div className="profile-identity-copy">
+              <h1 id="profile-name">{name}</h1>
+              <p className="profile-role">{role}</p>
+              <div className="profile-metadata">
+                <span className="profile-context">
+                  {context === "home" ? (
+                    <Home aria-hidden="true" />
+                  ) : (
+                    <Briefcase aria-hidden="true" />
+                  )}
+                  {context} Mode
+                </span>
+                {timezone ? (
+                  <span>
+                    <MapPin aria-hidden="true" />
+                    {timezone}
+                  </span>
+                ) : null}
+                {memberSince ? (
+                  <span>
+                    <Calendar aria-hidden="true" />
+                    Since {memberSince}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+            {!demoSession ? (
+              <div className="profile-identity-actions">
+                <button type="button" className="profile-edit-button" onClick={openEdit}>
+                  <Pencil aria-hidden="true" />
+                  Edit profile
+                </button>
+                <Popover open={coverOpen} onOpenChange={setCoverOpen}>
+                  <PopoverTrigger asChild>
+                    <button type="button" className="profile-cover-button">
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      Change cover
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    className="w-64 rounded-2xl border border-border/80 bg-white p-3"
+                  >
+                    <div
                       className={cn(
-                        "relative h-10 w-full overflow-hidden rounded-lg ring-2 transition-transform hover:scale-105",
-                        coverIsPhoto ? "ring-[#975ee2]" : "ring-transparent",
+                        "mb-3 h-16 overflow-hidden rounded-lg",
+                        !coverIsPhoto && coverClass,
                       )}
                     >
-                      <img src={coverImage} alt="" className="h-full w-full object-cover object-right" />
-                      {coverIsPhoto ? <Check className="absolute inset-0 m-auto h-4 w-4 text-white drop-shadow" /> : null}
-                    </button>
-                    {COVER_THEMES.filter((c) => c.key !== "violet").map((c) => {
-                      const active = coverTheme === c.key;
-                      return (
-                        <button
-                          key={c.key}
-                          type="button"
-                          title={c.label}
-                          onClick={() => saveCover(c.key)}
-                          className={cn(
-                            "relative h-10 w-full rounded-lg ring-2 transition-transform hover:scale-105",
-                            c.className,
-                            active ? "ring-[#975ee2]" : "ring-transparent",
-                          )}
-                        >
-                          {active ? <Check className="absolute inset-0 m-auto h-4 w-4 text-white drop-shadow" /> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            ) : null}
-
-            {/* Identity block, overlaid bottom-left */}
-            <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 p-5">
-              {demoSession ? (
-                <span className="inline-block rounded-full ring-4 ring-white">{avatarNode}</span>
-              ) : (
-                <div className="relative inline-block rounded-full ring-4 ring-white">
-                  <label className="group/av relative inline-block cursor-pointer rounded-full" title="Change photo">
-                    {avatarNode}
-                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-opacity group-hover/av:bg-black/35 group-hover/av:opacity-100">
-                      <Camera className="h-5 w-5" />
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="sr-only"
-                      onChange={(e) => onAvatarFile(e.target.files?.[0])}
-                    />
-                  </label>
-                  {avatarAttempt?.status === "uploading" ? (
-                    <span
-                      role="status"
-                      aria-label="Uploading photo"
-                      className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 text-white"
-                    >
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                    </span>
-                  ) : avatarAttempt?.status === "failed" ? (
-                    <button
-                      type="button"
-                      onClick={retryAvatarUpload}
-                      title="Upload failed — click to retry"
-                      className="absolute -bottom-1 -right-1 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      <span className="sr-only">Upload failed — retry</span>
-                    </button>
-                  ) : null}
-                </div>
-              )}
-
-              <div className="min-w-0 pb-1">
-                <h1 className="truncate text-[clamp(20px,2.4vw,30px)] font-semibold leading-tight text-black">{name}</h1>
-                <p className="mt-0.5 truncate text-[15px] font-medium text-[#4a5578]">{role}</p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-medium text-[#4a5578]">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ede9ff]/90 px-2.5 py-1 capitalize text-[#7a45cf]">
-                    {context === "home" ? <Home className="h-3.5 w-3.5" /> : <Briefcase className="h-3.5 w-3.5" />}
-                    {context} Mode
-                  </span>
-                  {timezone ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5" />
-                      {timezone}
-                    </span>
-                  ) : null}
-                  {memberSince ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5" />
-                      Since {memberSince}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Trophy stats */}
-          {trophyReadState === "error" || trophyReadState === "stale" ? (
-            <div role="alert" className="flex shrink-0 items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-[12px] text-amber-950">
-              <span>{trophyReadState === "stale" ? "Trophy stats may be out of date." : "Trophy stats are unavailable. Your activity has not been erased."}</span>
-              <button type="button" onClick={retryTrophy} className="shrink-0 font-semibold underline">Retry</button>
-            </div>
-          ) : null}
-          <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-4">
-            {statCards.map((s) => {
-              const body = (
-                <>
-                  <span className={cn("flex h-11 w-11 shrink-0 items-center justify-center rounded-full", s.tint)}>
-                    <s.icon className="h-5 w-5" />
-                  </span>
-                  <div className="min-w-0">
-                    <div className="text-[22px] font-semibold leading-none text-black">{s.value}</div>
-                    <div className="mt-1 text-[12px] font-medium text-[#1b2955]">{s.label}</div>
-                    <div className="mt-0.5 hidden text-[10px] leading-tight text-[#9aa3bd] xl:block">{s.hint}</div>
-                  </div>
-                </>
-              );
-              return "action" in s ? (
-                <button
-                  key={s.label}
-                  ref={sortedCardRef}
-                  type="button"
-                  aria-label="View sorted Things"
-                  aria-haspopup="dialog"
-                  onClick={() => setSolvedOpen(true)}
-                  className="flex cursor-pointer items-center gap-3 rounded-[14px] bg-white p-3.5 text-left outline-none transition-colors hover:bg-[#faf8ff] focus-visible:ring-2 focus-visible:ring-ring"
-                  style={{ boxShadow: CARD_SHADOW }}
-                >
-                  {body}
-                </button>
-              ) : (
-                <div key={s.label} className="flex items-center gap-3 rounded-[14px] bg-white p-3.5" style={{ boxShadow: CARD_SHADOW }}>
-                  {body}
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Two columns fill remaining height */}
-          <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[1.32fr_1fr]">
-            {/* Left: About with tabs */}
-            <section className="flex min-h-0 flex-col rounded-[14px] bg-white" style={{ boxShadow: CARD_SHADOW }}>
-              <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
-                <div className="shrink-0 border-b border-[#eef0f6] px-5 pt-3">
-                  <TabsList className="h-auto gap-1 bg-transparent p-0">
-                    {[
-                      { v: "overview", label: "Overview" },
-                      { v: "goals", label: "Goals" },
-                      { v: "activity", label: "Activity" },
-                    ].map((t) => (
-                      <TabsTrigger
-                        key={t.v}
-                        value={t.v}
-                        className="rounded-none border-b-2 border-transparent bg-transparent px-3 pb-2.5 text-[13px] font-medium text-[#565f8c] shadow-none data-[state=active]:border-[#5a19ed] data-[state=active]:bg-transparent data-[state=active]:text-[#5a19ed] data-[state=active]:shadow-none"
-                      >
-                        {t.label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
-
-                <TabsContent value="overview" className="mt-0 flex min-h-0 flex-1 flex-col px-5 pb-4 pt-3">
-                  <div className="flex shrink-0 items-center justify-between">
-                    <h2 className="text-[17px] font-semibold text-[#000110]">About</h2>
-                    {!demoSession ? (
+                      {coverIsPhoto ? (
+                        <img
+                          src={coverImage}
+                          alt="Selected cover preview"
+                          className="h-full w-full object-cover"
+                        />
+                      ) : null}
+                    </div>
+                    <p className="mb-2 text-[12px] font-semibold text-[#000533]">
+                      Choose a wallpaper
+                    </p>
+                    <div className="grid grid-cols-4 gap-2">
                       <button
                         type="button"
-                        onClick={openEdit}
-                        className="inline-flex items-center gap-1.5 rounded-[9px] bg-[#f4eefd] px-3 py-2 text-[12px] font-medium text-[#5e07f4] hover:bg-[#ecdffb]"
+                        title="Katalist"
+                        onClick={() => saveCover("photo")}
+                        className={cn(
+                          "relative h-10 w-full overflow-hidden rounded-lg ring-2 transition-transform hover:scale-105",
+                          coverIsPhoto ? "ring-[#975ee2]" : "ring-transparent",
+                        )}
                       >
-                        <Pencil className="h-3.5 w-3.5" />
-                        Edit Profile
+                        <img
+                          src={coverImage}
+                          alt=""
+                          className="h-full w-full object-cover object-right"
+                        />
+                        {coverIsPhoto ? (
+                          <Check className="absolute inset-0 m-auto h-4 w-4 text-white drop-shadow" />
+                        ) : null}
                       </button>
-                    ) : null}
-                  </div>
-                  {aboutRows.length === 0 ? (
-                    <p className="py-4 text-[13px] text-[#6a769c]">No contact details on your profile yet.</p>
-                  ) : (
-                    <div className="mt-1 min-h-0 flex-1 divide-y divide-[#eef0f6] overflow-y-auto">
-                      {aboutRows.map((r) => (
-                        <div key={r.label} className="flex items-center gap-3 py-3">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-                            <r.icon className="h-4 w-4" />
-                          </span>
-                          <span className="w-28 shrink-0 text-[13px] text-[#565f8c]">{r.label}</span>
-                          <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[#2d355b]">{r.value}</span>
-                        </div>
-                      ))}
+                      {COVER_THEMES.filter((c) => c.key !== "violet").map((c) => {
+                        const active = coverTheme === c.key;
+                        return (
+                          <button
+                            key={c.key}
+                            type="button"
+                            title={c.label}
+                            onClick={() => saveCover(c.key)}
+                            className={cn(
+                              "relative h-10 w-full rounded-lg ring-2 transition-transform hover:scale-105",
+                              c.className,
+                              active ? "ring-[#975ee2]" : "ring-transparent",
+                            )}
+                          >
+                            {active ? (
+                              <Check className="absolute inset-0 m-auto h-4 w-4 text-white drop-shadow" />
+                            ) : null}
+                          </button>
+                        );
+                      })}
                     </div>
-                  )}
-                </TabsContent>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            ) : null}
+          </section>
 
-                <TabsContent value="goals" className="mt-0 flex min-h-0 flex-1 flex-col items-center justify-center px-5 pb-6 text-center">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f0ebfd] text-[#975ee2]">
-                    <Target className="h-6 w-6" />
-                  </span>
-                  <p className="mt-3 text-[14px] font-medium text-[#2d355b]">No goals yet</p>
-                  <p className="mt-1 max-w-xs text-[12px] text-[#6a769c]">
-                    Set weekly targets for sorting and catching Things to keep momentum. Goals are coming soon.
-                  </p>
-                </TabsContent>
-
-                <TabsContent value="activity" className="mt-0 flex min-h-0 flex-1 flex-col px-5 pb-4 pt-3">
-                  {stats.achievement ? (
-                    <div className="flex items-center gap-2 rounded-[12px] bg-[#f7f4ff] px-4 py-3">
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0ebfd] text-[#975ee2]">
-                        <Sparkles className="h-4 w-4" />
-                      </span>
-                      <span className="text-[12px] text-[#6a769c]">Recent achievement</span>
-                      <span className="text-[13px] font-semibold text-black">{stats.achievement}</span>
-                    </div>
-                  ) : null}
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    {statCards.map((s) => (
-                      <div key={s.label} className="rounded-[12px] border border-[#eef0f6] px-4 py-3">
-                        <div className="text-[18px] font-semibold leading-none text-black">{s.value}</div>
-                        <div className="mt-1 text-[12px] text-[#6a769c]">{s.label}</div>
-                      </div>
-                    ))}
+          <section className="profile-personal" aria-labelledby="profile-personal-heading">
+            <h2 id="profile-personal-heading">Personal details</h2>
+            {aboutRows.length ? (
+              <dl className="profile-details-list">
+                {aboutRows.map((row) => (
+                  <div key={row.label} className="profile-detail-row">
+                    <dt>
+                      <row.icon aria-hidden="true" />
+                      <span>{row.label}</span>
+                    </dt>
+                    <dd>{row.value}</dd>
                   </div>
-                  {!stats.achievement ? (
-                    <p className="mt-3 text-[12px] text-[#6a769c]">Keep sorting and catching Things to unlock achievements.</p>
-                  ) : null}
-                </TabsContent>
-              </Tabs>
-            </section>
-
-            {/* Right: Settings & Preferences */}
-            <section className="flex min-h-0 flex-col rounded-[14px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
-              <h2 className="shrink-0 text-[17px] font-semibold text-[#000110]">Settings &amp; Preferences</h2>
-              <div className="mt-2 min-h-0 flex-1 divide-y divide-[#eef0f6] overflow-y-auto">
-                {settingsRows.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setPanel(s.id)}
-                    className="flex w-full items-center gap-3 py-2.5 text-left"
-                  >
-                    <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px]", s.tint)}>
-                      <s.icon className="h-[18px] w-[18px]" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[13.5px] font-semibold text-[#1b2955]">{s.title}</span>
-                      <span className="block text-[12px] text-[#5f689e]">{s.body}</span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-[#9aa3bd]" />
-                  </button>
                 ))}
-              </div>
-              <div className="mt-3 flex shrink-0 flex-wrap gap-2 border-t border-[#eef0f6] pt-3">
-                <button
-                  type="button"
-                  onClick={() => setPanel("shredded")}
-                  className="rounded-lg border border-[#e4e6ef] bg-[#f7f7fa] px-3 py-2 text-[12px] text-[#1d1d1d] hover:bg-muted"
-                >
-                  Recently Shredded{trophyReadState === "ready" || trophyReadState === "stale" ? stats.shredded.length ? ` (${stats.shredded.length})` : "" : ""}
+              </dl>
+            ) : (
+              <p className="profile-empty">No contact details on your profile yet.</p>
+            )}
+          </section>
+
+          <section className="profile-activity" aria-labelledby="profile-activity-heading">
+            <h2 id="profile-activity-heading">Your activity</h2>
+            <p className="profile-activity-caption">Personal movement only.</p>
+            {trophyReadState === "error" || trophyReadState === "stale" ? (
+              <div role="alert" className="profile-activity-alert">
+                <span>
+                  {trophyReadState === "stale"
+                    ? "Trophy stats may be out of date."
+                    : "Trophy stats are unavailable. Your activity has not been erased."}
+                </span>
+                <button type="button" onClick={retryTrophy}>
+                  Retry
                 </button>
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-[#fccad5] bg-[#fef9fa] px-3 py-2 text-[12px] text-[#ff1c3f] hover:bg-[#fdeef1]"
-                >
-                  <LogOut className="h-4 w-4" />
-                  Sign Out
-                </button>
               </div>
-            </section>
-          </div>
+            ) : null}
+            <div className="profile-activity-grid">
+              {statCards.map((stat) => {
+                const body = (
+                  <>
+                    <stat.icon className="profile-activity-icon" aria-hidden="true" />
+                    <div className="profile-activity-copy">
+                      <h3>{stat.label}</h3>
+                      <p className="profile-activity-value">
+                        {stat.tone === "streak" && stat.value === "1d" ? "1 day" : stat.value}
+                      </p>
+                      <p className="profile-activity-hint">{stat.hint}</p>
+                    </div>
+                    {"action" in stat ? (
+                      <span className="profile-activity-link">
+                        View Things <ArrowRight aria-hidden="true" />
+                      </span>
+                    ) : null}
+                  </>
+                );
+                return "action" in stat ? (
+                  <button
+                    key={stat.label}
+                    type="button"
+                    ref={sortedCardRef}
+                    aria-label="View sorted Things"
+                    aria-haspopup="dialog"
+                    onClick={() => setSolvedOpen(true)}
+                    className={`profile-activity-tile profile-activity-${stat.tone}`}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div
+                    key={stat.label}
+                    className={`profile-activity-tile profile-activity-${stat.tone}`}
+                  >
+                    {body}
+                  </div>
+                );
+              })}
+            </div>
+            {stats.achievement &&
+            stats.achievement !== "—" &&
+            trophyReadState !== "error" &&
+            trophyReadState !== "loading" ? (
+              <p className="profile-achievement">
+                <Sparkles aria-hidden="true" />
+                <span>
+                  Recent achievement: <strong>{stats.achievement}</strong>
+                </span>
+              </p>
+            ) : null}
+          </section>
         </div>
       </div>
 
@@ -636,7 +724,10 @@ function MePage() {
             </DialogDescription>
           </DialogHeader>
           <div className="mt-3 flex items-center gap-4">
-            <label className="group/av relative inline-block cursor-pointer rounded-full" title="Change photo">
+            <label
+              className="group/av relative inline-block cursor-pointer rounded-full"
+              title="Change photo"
+            >
               <PersonAvatar name={name} initials={initials} src={avatarUrl} size={64} />
               <span className="absolute inset-0 flex items-center justify-center rounded-full bg-black/0 text-white opacity-0 transition-opacity group-hover/av:bg-black/35 group-hover/av:opacity-100">
                 <Camera className="h-4 w-4" />
@@ -648,7 +739,9 @@ function MePage() {
                 onChange={(e) => onAvatarFile(e.target.files?.[0])}
               />
             </label>
-            <span className="text-[12px] text-muted-foreground">Tap the photo to upload a new one.</span>
+            <span className="text-[12px] text-muted-foreground">
+              Tap the photo to upload a new one.
+            </span>
           </div>
           <label className="mt-4 block text-[12px] font-medium text-[#3d3f74]">
             Name
@@ -661,10 +754,14 @@ function MePage() {
               aria-invalid={Boolean(editNameError)}
               className={cn(
                 "mt-1 h-10 w-full rounded-xl border px-3 text-[13px] font-normal outline-none focus:ring-2 focus:ring-ring",
-                editNameError ? "border-destructive focus:border-destructive" : "border-border focus:border-primary",
+                editNameError
+                  ? "border-destructive focus:border-destructive"
+                  : "border-border focus:border-primary",
               )}
             />
-            {editNameError ? <p className="mt-1 text-[12px] font-normal text-destructive">{editNameError}</p> : null}
+            {editNameError ? (
+              <p className="mt-1 text-[12px] font-normal text-destructive">{editNameError}</p>
+            ) : null}
           </label>
           <label className="mt-3 block text-[12px] font-medium text-[#3d3f74]">
             Role / occupation
@@ -701,7 +798,12 @@ function MePage() {
           the same accessible Dialog primitive "Edit profile" above already
           uses; content/controls are unchanged, this is only the wrapper. */}
       <Dialog open={panel !== null} onOpenChange={(open) => setPanel(open ? panel : null)}>
-        <DialogContent className={cn("rounded-2xl bg-white p-5", panel === "devices" ? "sm:max-w-lg" : "sm:max-w-md")}>
+        <DialogContent
+          className={cn(
+            "rounded-2xl bg-white p-5",
+            panel === "devices" ? "sm:max-w-lg" : "sm:max-w-md",
+          )}
+        >
           <div>
             {panel === "shredded" ? (
               <>
@@ -712,20 +814,29 @@ function MePage() {
                   </DialogDescription>
                 </DialogHeader>
                 {trophyReadState === "error" || trophyReadState === "loading" ? (
-                  <p className="mt-4 text-[13px] text-muted-foreground">{trophyReadState === "loading" ? "Loading Shred history…" : "Shred history unavailable. Retry from the Trophy section."}</p>
+                  <p className="mt-4 text-[13px] text-muted-foreground">
+                    {trophyReadState === "loading"
+                      ? "Loading Shred history…"
+                      : "Shred history unavailable. Retry from the Trophy section."}
+                  </p>
                 ) : stats.shredded.length === 0 ? (
                   <p className="mt-4 text-[13px] text-muted-foreground">Nothing shredded yet.</p>
                 ) : (
                   <ul className="mt-4 space-y-2">
                     {stats.shredded.map((s) => (
-                      <li key={`${s.kind}:${s.id}`} className="flex items-center justify-between text-[12px]">
+                      <li
+                        key={`${s.kind}:${s.id}`}
+                        className="flex items-center justify-between text-[12px]"
+                      >
                         <span>{s.title}</span>
                         <button
                           type="button"
                           className="text-primary"
                           onClick={() =>
                             void Promise.resolve(restore(s.id, s.kind)).catch((err) =>
-                              toast.error(err instanceof Error ? err.message : "Couldn’t restore that."),
+                              toast.error(
+                                err instanceof Error ? err.message : "Couldn’t restore that.",
+                              ),
                             )
                           }
                         >
@@ -755,15 +866,21 @@ function MePage() {
                 ) : panel === "appearance" ? (
                   <div className="mt-4 space-y-5">
                     <fieldset>
-                      <legend className="text-[13px] font-semibold text-foreground">App font</legend>
-                      <p className="mt-1 text-[12px] text-muted-foreground">Choose the text style for this device.</p>
+                      <legend className="text-[13px] font-semibold text-foreground">
+                        App font
+                      </legend>
+                      <p className="mt-1 text-[12px] text-muted-foreground">
+                        Choose the text style for this device.
+                      </p>
                       <div className="mt-3 grid max-h-[min(50vh,420px)] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
                         {FONT_OPTIONS.map((option) => (
                           <label
                             key={option.id}
                             className={cn(
                               "flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-ring",
-                              selectedFont === option.id ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+                              selectedFont === option.id
+                                ? "border-primary bg-primary/5"
+                                : "border-border hover:bg-muted/50",
                             )}
                           >
                             <input
@@ -775,10 +892,15 @@ function MePage() {
                               className="mt-1 accent-primary"
                             />
                             <span className="min-w-0">
-                              <span className="block text-[16px] font-semibold leading-tight" style={{ fontFamily: option.stack }}>
+                              <span
+                                className="block text-[16px] font-semibold leading-tight"
+                                style={{ fontFamily: option.stack }}
+                              >
                                 {option.label}
                               </span>
-                              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">{option.detail}</span>
+                              <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">
+                                {option.detail}
+                              </span>
                             </span>
                           </label>
                         ))}
@@ -806,7 +928,10 @@ function MePage() {
                       checked={doorman}
                       onChange={(e) => {
                         setDoorman(e.target.checked);
-                        localStorage.setItem("katalist.doorman_enabled", e.target.checked ? "1" : "0");
+                        localStorage.setItem(
+                          "katalist.doorman_enabled",
+                          e.target.checked ? "1" : "0",
+                        );
                         void qc.invalidateQueries({ queryKey: ["doorman"] });
                       }}
                     />
@@ -814,12 +939,14 @@ function MePage() {
                 ) : panel === "notifications" ? (
                   <div className="mt-4 space-y-3">
                     <p className="text-[13px] text-muted-foreground">
-                      You're notified in-app when a Thing is assigned to you, caught, reassigned, nudged, commented
-                      on, sorted, or cancelled.
+                      You're notified in-app when a Thing is assigned to you, caught, reassigned,
+                      nudged, commented on, sorted, or cancelled.
                     </p>
                     <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 p-3">
                       <div>
-                        <p className="text-[13px] font-medium text-foreground">Push notifications</p>
+                        <p className="text-[13px] font-medium text-foreground">
+                          Push notifications
+                        </p>
                         <p className="mt-0.5 text-[12px] text-muted-foreground">
                           {pushPermission === "granted"
                             ? "Enabled on this device."
@@ -853,24 +980,32 @@ function MePage() {
                   </div>
                 ) : panel === "integrations" ? (
                   <p className="mt-4 text-[13px] text-muted-foreground">
-                    No integrations are available yet. Connections to your favourite tools will appear here as they
-                    become available.
+                    No integrations are available yet. Connections to your favourite tools will
+                    appear here as they become available.
                   </p>
                 ) : (
                   <p className="mt-4 text-[13px] text-muted-foreground">
-                    Your name, email, and avatar are visible to other Katalist accounts. Your phone number is never
-                    shown to anyone else. Private Buckets are visible only to you.
+                    Your name, email, and avatar are visible to other Katalist accounts. Your phone
+                    number is never shown to anyone else. Private Buckets are visible only to you.
                   </p>
                 )}
               </>
             )}
-            <button type="button" className="mt-5 text-[13px] text-primary" onClick={() => setPanel(null)}>
+            <button
+              type="button"
+              className="mt-5 text-[13px] text-primary"
+              onClick={() => setPanel(null)}
+            >
               Close
             </button>
           </div>
         </DialogContent>
       </Dialog>
-      <SolvedThingsDialog open={solvedOpen} onOpenChange={setSolvedOpen} returnFocusRef={sortedCardRef} />
+      <SolvedThingsDialog
+        open={solvedOpen}
+        onOpenChange={setSolvedOpen}
+        returnFocusRef={sortedCardRef}
+      />
     </AppShell>
   );
 }

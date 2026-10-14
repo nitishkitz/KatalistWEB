@@ -1,3 +1,4 @@
+import { ThingTitle } from "@/features/things/components/ThingTitle";
 import { PersonAvatar } from "@/components/katalist/PersonAvatar";
 import type { Thing } from "@/domain/thing";
 import { matchProfile, useProfileDirectory } from "@/features/people/directory";
@@ -45,7 +46,7 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
           const selected = selectedThingId === thing.id;
           const due = formatCourtDue(thing);
           const avatarUrl =
-            thing.assignee.avatarUrl || matchProfile(directory, thing.assignee.name)?.avatar_url;
+            thing.owner.avatarUrl || matchProfile(directory, thing.owner.name)?.avatar_url;
           const isProgress = thing.workStatus === "under_progress";
           return (
             <button
@@ -62,12 +63,12 @@ export function ThingNavigator({ lane, things, selectedThingId, onSelect }: Thin
               )}
             >
               <span className="block line-clamp-2 text-[12px] font-bold leading-snug text-foreground">
-                {thing.title}
+                <ThingTitle thing={thing} />
               </span>
               <span className="mt-2 flex items-center gap-1.5 text-[12px]">
                 <PersonAvatar
-                  name={thing.assignee.name}
-                  initials={thing.assignee.initials}
+                  name={thing.owner.name}
+                  initials={thing.owner.initials}
                   src={avatarUrl}
                   size={18}
                 />

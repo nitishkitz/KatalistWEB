@@ -8,10 +8,31 @@
   border: 0;
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
 }
-/* Hero: sunrise landscape with greeting and summary tiles (Figma 108:1030). */
+/* Hero: sunrise landscape with greeting and summary tiles. */
 .morning-brief .brief-header { position: relative; overflow: hidden; flex-shrink: 0; }
-@media (min-width: 1024px) { .morning-brief .brief-header { height: 234.389px; } }
-.morning-brief > button:last-child { right: 16.4px; top: 18.6px; width: 32.75px; height: 32.75px; opacity: 1; background: #fff; color: var(--brief-ink); border-radius: 50%; z-index: 20; }
+@media (min-width: 1024px) { .morning-brief .brief-header { height: 108px; } }
+.morning-brief > button:last-child {
+  right: 20px;
+  top: 20px;
+  width: 34px;
+  height: 34px;
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--brief-ink);
+  border: 1px solid rgba(230, 227, 237, 0.9);
+  border-radius: 50%;
+  z-index: 20;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+.morning-brief > button:last-child:hover {
+  background: #f7f3fc;
+  transform: scale(1.06);
+}
+.morning-brief > button:last-child:active {
+  transform: scale(0.95);
+}
 .morning-brief .brief-queue-label { padding: 0; }
 .brief-avatar { position: relative; flex-shrink: 0; }
 .brief-avatar-check { position: absolute; bottom: -2px; right: -3px; width: 16px; height: 16px; padding: 2px; background: #e0efde; color: #387149; border-radius: 50%; }
@@ -33,9 +54,9 @@
 .morning-brief .brief-thing-content h1 { color: var(--brief-ink); font-size: 21.8px; line-height: 1.35; font-weight: 600; }
 .morning-brief .brief-detail { overscroll-behavior: contain; scrollbar-width: thin; }
 @media (min-width: 1024px) {
-  .morning-brief { width: calc(100vw - 80px); max-width: 1180px; height: min(725px, 90dvh); max-height: 90dvh; border-radius: 16.7px; padding: 0; gap: 0; box-shadow: 0 10.3px 51.4px rgba(56,39,72,.15); }
-  .morning-brief .brief-body { overflow: hidden; }
-  .morning-brief .brief-detail { padding-right: 4px; }
+  .morning-brief { width: calc(100vw - 64px); max-width: 1180px; height: min(840px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); border-radius: 18px; padding: 0; gap: 0; box-shadow: 0 16px 50px rgba(48,16,77,.2); }
+  .morning-brief .brief-body { overflow: hidden; height: calc(100% - 108px); }
+  .morning-brief .brief-detail { padding-right: 6px; }
 }
 @media (max-width: 1023px) {
   .morning-brief .brief-queue { max-height: 240px; }

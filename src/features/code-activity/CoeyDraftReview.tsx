@@ -1,3 +1,4 @@
+import { DateTimeField } from "@/components/ui/date-time-field";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -476,7 +477,7 @@ export function CoeyDraftReview({
                 <label htmlFor="draft-due" className="text-[12.5px] font-semibold text-[#000533]">
                   Due date <span className="font-normal text-[#6a769c]">optional</span>
                 </label>
-                <input
+                <DateTimeField
                   id="draft-due"
                   type="date"
                   value={fields.dueDate ?? ""}

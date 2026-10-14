@@ -1,3 +1,4 @@
+import { ThingTitle } from "@/features/things/components/ThingTitle";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -186,23 +187,26 @@ export function CourtWithOthersSidebar({
                     }
                   }}
                   className={cn(
-                    "flex items-start gap-3 p-3.5 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    "p-3.5 cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                     thing.id === theirSelectedId ? "bg-muted/50" : "hover:bg-muted/20",
                   )}
                 >
-                  <PersonAvatar
+                  <div className="flex items-center gap-2.5">
+                    <PersonAvatar
                     name={thing.assignee.name}
                     initials={thing.assignee.initials}
                     src={assigneeAvatar}
                     size={32}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-normal text-slate-900 leading-snug line-clamp-3 break-words">
-                      {thing.title}
+                    />
+                    <p className="min-w-0 truncate text-[13px] font-semibold leading-5 text-slate-700">
+                      {thing.assignee.name}
+                    </p>
+                  </div>
+                  <div className="mt-2 min-w-0">
+                    <p className="text-[13px] font-medium text-slate-900 leading-snug line-clamp-3 break-words">
+                      <ThingTitle thing={thing} />
                     </p>
                     <div className="mt-0.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-                      <span className="font-medium text-slate-700">{thing.assignee.name.split(" ")[0]}</span>
-                      <span>·</span>
                       {dueInfo ? (
                         <span className={cn("font-medium", dueInfo.urgent ? "text-red-600" : "text-slate-500")}>
                           Due {dueInfo.label}

@@ -98,3 +98,16 @@ test("status changes are rejected up front for uncaught Things and non-assignees
   assert.equal(notMine.token, null);
   assert.match(notMine.targets[0].message, /current assignee/);
 });
+
+
+test("personal lane preview and confirmation use only the private placement RPC", async () => {
+  const client = fake({things:[row(A,{acknowledgement:"waiting_for_catch"})]});
+  const preview = await previewAssistantAction(client,"u1",req("set_court_lane",[A],{lane:"later"}));
+  assert.equal(preview.targets[0].state,"ready");
+  const done=await confirmAssistantAction(client,"u1",{token:preview.token,idempotencyKey:"private-lane-confirm"});
+  assert.equal(done.results[0].state,"applied");
+  assert.deepEqual(client.calls,[["set_my_court_lane",{p_thing_id:A,p_lane:"later"}]]);
+  const denied=await previewAssistantAction(fake({things:[row(A,{current_assignee_actor_id:B})]}),"u1",req("set_court_lane",[A],{lane:"now"}));
+  assert.equal(denied.targets[0].state,"rejected");
+  assert.throws(()=>req("set_court_lane",[A],{lane:"urgent"}),/Unsupported Court lane/);
+});

@@ -1,0 +1,337 @@
+/**
+ * Coey Capsule Motion Graphics System
+ *
+ * Built upon Emil Kowalski's design engineering principles & Apple Dynamic Island physics:
+ * - Asymmetric Enter/Exit Timing:
+ *   Enter: 340ms fluid deceleration (Apple-style spring curve: cubic-bezier(0.16, 1, 0.3, 1))
+ *   Exit:  220ms crisp snap-back (cubic-bezier(0.25, 1, 0.5, 1))
+ *
+ * - Coordinated Dissolve & Blur:
+ *   Details content evaporates in 110ms with zero delay on collapse,
+ *   preventing bottom edge clipping / guillotine effect.
+ *   On enter, content smoothly reveals at 60ms delay with 2px blur clearing.
+ *
+ * - Micro-staggered Moments:
+ *   Moment cards cascade smoothly with 35ms stagger.
+ *
+ * - Tactile feedback:
+ *   Active press state scale(0.97) on interactive elements.
+ */
+
+:root {
+  --capsule-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --capsule-ease-exit: cubic-bezier(0.25, 1, 0.5, 1);
+  --capsule-dur-enter: 340ms;
+  --capsule-dur-exit: 220ms;
+}
+
+/* Nav capsule anchor & morphing shell */
+.capsule-nav-shell {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  z-index: 50;
+  transform: translateX(-50%) translateZ(0);
+  will-change: width, height, border-radius, box-shadow;
+  overflow: hidden;
+  border-width: 1px;
+  border-style: solid;
+  contain: paint layout;
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Collapsed state */
+.capsule-nav-shell[data-expanded="false"] {
+  width: 100%;
+  border-radius: 9999px;
+  border-color: rgba(228, 232, 241, 0.95);
+  background: linear-gradient(110deg, #fcfaff 0%, #f6f0fe 52%, #fffaf5 100%);
+  box-shadow:
+    0 2px 8px -1px rgba(35, 31, 75, 0.07),
+    0 1px 3px rgba(35, 31, 75, 0.04);
+  transition:
+    width var(--capsule-dur-exit) var(--capsule-ease-exit),
+    height var(--capsule-dur-exit) var(--capsule-ease-exit),
+    border-radius var(--capsule-dur-exit) var(--capsule-ease-exit),
+    box-shadow var(--capsule-dur-exit) var(--capsule-ease-exit),
+    border-color var(--capsule-dur-exit) ease-out,
+    background-color var(--capsule-dur-exit) ease-out;
+}
+
+/* Expanded state */
+.capsule-nav-shell[data-expanded="true"] {
+  width: min(440px, calc(100vw - 32px));
+  border-radius: 24px;
+  border-color: #c9b4f4;
+  background-color: #ffffff;
+  box-shadow:
+    0 24px 48px -10px rgba(58, 28, 114, 0.22),
+    0 10px 24px -6px rgba(58, 28, 114, 0.1),
+    0 0 0 1px rgba(186, 154, 245, 0.22);
+  transition:
+    width var(--capsule-dur-enter) var(--capsule-ease-enter),
+    height var(--capsule-dur-enter) var(--capsule-ease-enter),
+    border-radius var(--capsule-dur-enter) var(--capsule-ease-enter),
+    box-shadow var(--capsule-dur-enter) var(--capsule-ease-enter),
+    border-color var(--capsule-dur-enter) ease-out,
+    background-color var(--capsule-dur-enter) ease-out;
+}
+
+/* Header trigger button inside nav capsule */
+.capsule-trigger-btn {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  text-align: left;
+  outline: none;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 200ms ease,
+    transform 140ms ease-out;
+}
+
+.capsule-trigger-btn:active {
+  transform: scale(0.985);
+}
+
+/* Rotating chevron with smooth spring feel */
+.capsule-chevron-icon {
+  flex-shrink: 0;
+  color: #6941c6;
+  transition: transform 280ms var(--capsule-ease-enter);
+}
+
+.capsule-nav-shell[data-expanded="true"] .capsule-chevron-icon {
+  transform: rotate(180deg);
+}
+
+/* Reveal container for expanded details */
+.capsule-details-reveal {
+  width: min(440px, calc(100vw - 32px));
+  transform-origin: top center;
+  will-change: opacity, transform, filter;
+}
+
+/* Closed details state: instant evaporation with blur to prevent bottom-edge clipping */
+.capsule-nav-shell[data-expanded="false"] .capsule-details-reveal {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  filter: blur(1.5px);
+  pointer-events: none;
+  transition:
+    opacity 110ms ease-out 0ms,
+    transform 120ms ease-out 0ms,
+    filter 100ms ease-out 0ms;
+}
+
+/* Opened details state: smooth glide-in with un-blur */
+.capsule-nav-shell[data-expanded="true"] .capsule-details-reveal {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  filter: blur(0px);
+  pointer-events: auto;
+  transition:
+    opacity 240ms ease-out 60ms,
+    transform 280ms var(--capsule-ease-enter) 60ms,
+    filter 200ms ease-out 60ms;
+}
+
+/* Staggered animation for moment items */
+.capsule-moment-item {
+  transform-origin: center top;
+  will-change: opacity, transform;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 140ms ease-out,
+    opacity 220ms ease-out;
+}
+
+.capsule-nav-shell[data-expanded="true"] .capsule-moment-item:nth-child(1) {
+  animation: capsuleItemFadeIn 260ms var(--capsule-ease-enter) 70ms both;
+}
+
+.capsule-nav-shell[data-expanded="true"] .capsule-moment-item:nth-child(2) {
+  animation: capsuleItemFadeIn 260ms var(--capsule-ease-enter) 115ms both;
+}
+
+.capsule-nav-shell[data-expanded="true"] .capsule-moment-item:nth-child(3) {
+  animation: capsuleItemFadeIn 260ms var(--capsule-ease-enter) 160ms both;
+}
+
+.capsule-nav-shell[data-expanded="true"] .capsule-moment-item:nth-child(n+4) {
+  animation: capsuleItemFadeIn 260ms var(--capsule-ease-enter) 205ms both;
+}
+
+@keyframes capsuleItemFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Moment card hover & press */
+.capsule-moment-item:active {
+  transform: scale(0.985);
+}
+
+/* Open Thing action button inside moment */
+.capsule-action-btn {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 8px;
+  background-color: #ebdffc;
+  padding: 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #6139a6;
+  outline: none;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    transform 120ms ease-out;
+}
+
+.capsule-action-btn:hover {
+  background-color: #e2cffb;
+  color: #502796;
+}
+
+.capsule-action-btn:active {
+  transform: scale(0.96);
+}
+
+/* Pin / Morning brief quick button */
+.capsule-pin-btn {
+  display: inline-flex;
+  height: 30px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 9999px;
+  border: 1px solid #e7d8f0;
+  background-color: #fbf5ee;
+  padding: 0 10px;
+  color: #3a1259;
+  outline: none;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 120ms ease-out;
+}
+
+.capsule-pin-btn:hover {
+  background-color: #f2e7f5;
+  border-color: #dac2e6;
+}
+
+.capsule-pin-btn:active {
+  transform: scale(0.95);
+}
+
+.capsule-pin-btn[data-pinned="true"] {
+  background-color: #efe2fa;
+  border-color: #c9a7e6;
+  color: #551e7a;
+}
+
+/* Typography tokens for capsule elements */
+.capsule-eyebrow {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6941c6;
+  line-height: 1;
+}
+
+.capsule-count-badge {
+  display: inline-flex;
+  height: 16px;
+  min-width: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background-color: #eee5ff;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: normal;
+  color: #6941c6;
+}
+
+.capsule-headline-text {
+  margin-top: 2px;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #2f234c;
+}
+
+.capsule-severity-pill {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.85);
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.capsule-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: #6941c6;
+  line-height: 1;
+}
+
+.capsule-moment-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6941c6;
+}
+
+.capsule-moment-title {
+  margin-top: 2px;
+  word-break: break-word;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #2f234c;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .capsule-nav-shell,
+  .capsule-chevron-icon,
+  .capsule-trigger-btn,
+  .capsule-moment-item,
+  .capsule-action-btn,
+  .capsule-pin-btn {
+    transition-duration: 0.01ms !important;
+    animation: none !important;
+  }
+  .capsule-details-reveal {
+    transition: opacity 120ms ease-out !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}

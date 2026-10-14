@@ -18,6 +18,7 @@ import { Route as NudgesRouteImport } from './routes/nudges'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as TeamRouteImport } from './routes/team'
 import { Route as WelcomeRouteImport } from './routes/welcome'
+import { Route as ApiLinkPreviewRouteImport } from './routes/api/link-preview'
 import { Route as ApiVersionRouteImport } from './routes/api/version'
 import { Route as BridgeTokenRouteImport } from './routes/bridge.$token'
 import { Route as BucketsIndexRouteImport } from './routes/buckets.index'
@@ -115,6 +116,11 @@ const TeamRoute = TeamRouteImport.update({
 const WelcomeRoute = WelcomeRouteImport.update({
   id: '/welcome',
   path: '/welcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLinkPreviewRoute = ApiLinkPreviewRouteImport.update({
+  id: '/api/link-preview',
+  path: '/api/link-preview',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiVersionRoute = ApiVersionRouteImport.update({
@@ -412,6 +418,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/team': typeof TeamRouteWithChildren
   '/welcome': typeof WelcomeRoute
+  '/api/link-preview': typeof ApiLinkPreviewRoute
   '/api/version': typeof ApiVersionRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
@@ -473,6 +480,7 @@ export interface FileRoutesByTo {
   '/nudges': typeof NudgesRoute
   '/onboarding': typeof OnboardingRoute
   '/welcome': typeof WelcomeRoute
+  '/api/link-preview': typeof ApiLinkPreviewRoute
   '/api/version': typeof ApiVersionRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
@@ -538,6 +546,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/team': typeof TeamRouteWithChildren
   '/welcome': typeof WelcomeRoute
+  '/api/link-preview': typeof ApiLinkPreviewRoute
   '/api/version': typeof ApiVersionRoute
   '/bridge/$token': typeof BridgeTokenRoute
   '/buckets/$bucketId': typeof BucketsBucketIdRoute
@@ -604,6 +613,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/team'
     | '/welcome'
+    | '/api/link-preview'
     | '/api/version'
     | '/bridge/$token'
     | '/buckets/$bucketId'
@@ -665,6 +675,7 @@ export interface FileRouteTypes {
     | '/nudges'
     | '/onboarding'
     | '/welcome'
+    | '/api/link-preview'
     | '/api/version'
     | '/bridge/$token'
     | '/buckets/$bucketId'
@@ -729,6 +740,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/team'
     | '/welcome'
+    | '/api/link-preview'
     | '/api/version'
     | '/bridge/$token'
     | '/buckets/$bucketId'
@@ -794,6 +806,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   TeamRoute: typeof TeamRouteWithChildren
   WelcomeRoute: typeof WelcomeRoute
+  ApiLinkPreviewRoute: typeof ApiLinkPreviewRoute
   ApiVersionRoute: typeof ApiVersionRoute
   BridgeTokenRoute: typeof BridgeTokenRoute
   ConnectHandleRoute: typeof ConnectHandleRoute
@@ -906,6 +919,13 @@ declare module '@tanstack/react-router' {
       path: '/welcome'
       fullPath: '/welcome'
       preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/link-preview': {
+      id: '/api/link-preview'
+      path: '/api/link-preview'
+      fullPath: '/api/link-preview'
+      preLoaderRoute: typeof ApiLinkPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/version': {
@@ -1329,6 +1349,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   TeamRoute: TeamRouteWithChildren,
   WelcomeRoute: WelcomeRoute,
+  ApiLinkPreviewRoute: ApiLinkPreviewRoute,
   ApiVersionRoute: ApiVersionRoute,
   BridgeTokenRoute: BridgeTokenRoute,
   ConnectHandleRoute: ConnectHandleRoute,

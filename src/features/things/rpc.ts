@@ -29,6 +29,7 @@ import {
   setDueLocal,
   setImportanceLocal,
   setPaceLocal,
+  setCourtLaneLocal,
   setStatusLocal,
   reopenLocalThing,
   restoreLocal,
@@ -1019,4 +1020,11 @@ export async function rpcRemoveListMember(listId: string, profileOrActorId: stri
       return null as never;
     },
   });
+}
+
+/** Changes only the authenticated holder's private Court placement. Null restores Coey. */
+export async function rpcSetMyCourtLane(thingId: string, lane: Pace | null): Promise<void> {
+  if (isPreviewMode()) { setCourtLaneLocal(thingId, lane); return; }
+  const { error } = await callUngeneratedRpc("set_my_court_lane", { p_thing_id: thingId, p_lane: lane });
+  if (error) throw error;
 }

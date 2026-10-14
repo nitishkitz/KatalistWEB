@@ -1,3 +1,5 @@
+import {thingReference} from "@/features/things/thing-reference";
+import { ThingTitle } from "@/features/things/components/ThingTitle";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import {
@@ -68,6 +70,8 @@ export function CourtFocusView({
       null
     );
   }, [activeLane, lanes, theirs, selection.lane, selection.thingId]);
+
+  const selectedRowPerson = selectedThing ? (activeLane === "theirs" ? selectedThing.assignee : selectedThing.owner) : null;
 
   // People you already collaborate with, so @mentions like @Sudheer resolve in the composer.
   const focusCollaborators = useMemo(() => {
@@ -176,7 +180,7 @@ export function CourtFocusView({
   const currentLaneThings = useMemo(() => {
     const list = activeLane === "theirs" ? (theirs ?? []) : (lanes[activeLane] ?? []);
     const q = searchQuery.toLowerCase();
-    const filtered = q.trim() ? list.filter((t) => t.title.toLowerCase().includes(q)) : list;
+    const filtered = q.trim() ? list.filter((t) => `${thingReference(t)} ${t.title}`.toLowerCase().includes(q)) : list;
     const time = (value: string | null | undefined, fallback: number) => { const parsed = value ? Date.parse(value) : NaN; return Number.isFinite(parsed) ? parsed : fallback; };
     return [...filtered].sort((a, b) => {
       if (laneSort === "title") return a.title.localeCompare(b.title);
@@ -305,6 +309,7 @@ export function CourtFocusView({
           <div className="flex-1 overflow-auto min-h-0 p-2">
             {currentLaneThings.map((thing) => {
               const isSelected = thing.id === selectedThing?.id;
+              const rowPerson = activeLane === "theirs" ? thing.assignee : thing.owner;
               const due = formatCourtDue(thing);
               const isWaiting = thing.acknowledgement === "waiting_for_catch";
               const isProgress =
@@ -341,9 +346,9 @@ export function CourtFocusView({
                 >
                   <div className="flex items-start gap-2.5 min-w-0 flex-1">
                     <PersonAvatar
-                      name={thing.assignee.name}
-                      initials={thing.assignee.initials}
-                      src={thing.assignee.avatarUrl}
+                      name={rowPerson.name}
+                      initials={rowPerson.initials}
+                      src={rowPerson.avatarUrl}
                       size={24}
                     />
                     <div className="min-w-0 flex-1">
@@ -353,7 +358,7 @@ export function CourtFocusView({
                           isSelected ? "font-medium" : "font-medium",
                         )}
                       >
-                        {thing.title}
+                        <ThingTitle thing={thing} />
                       </p>
                       <div className="mt-1 flex flex-col gap-0.5 text-[12px]">
                         {due.label && due.label !== "No due date" ? (
@@ -497,14 +502,14 @@ export function CourtFocusView({
               )}
             />
             <PersonAvatar
-              name={selectedThing.assignee.name}
-              initials={selectedThing.assignee.initials}
-              src={selectedThing.assignee.avatarUrl}
+              name={selectedRowPerson!.name}
+              initials={selectedRowPerson!.initials}
+              src={selectedRowPerson!.avatarUrl}
               size={24}
             />
             <div className="min-w-0 flex-1">
               <p className="text-[12.5px] font-bold leading-snug text-foreground line-clamp-2">
-                {selectedThing.title}
+                <ThingTitle thing={selectedThing} />
               </p>
               <div className="mt-1 flex items-center justify-between gap-1.5 text-[12px]">
                 <span className="font-medium text-muted-foreground">

@@ -484,12 +484,6 @@
   animation-duration: 0.01ms !important;
   scroll-behavior: auto !important;
 }
-/* The app's chat head collects Sonner feedback while it is mounted. Keep the
-   Sonner host alive so all existing toast calls still reach useSonner. */
-body:has([data-chat-heads-dock]) [data-sonner-toaster] {
-  visibility: hidden;
-  pointer-events: none;
-}
 
 /* Personal context stays recognizably Katalist, with a quieter, warmer surface.
    Only opacity is animated: no page scale, slide, or layout-changing entrance. */

@@ -228,3 +228,13 @@ test("a long first sentence becomes a short heading without losing the text", as
   assert.equal(out.description, long);
   assert.deepEqual(splitAnswer("Nothing overdue. You are clear.", null), { heading: "Nothing overdue", description: "You are clear." });
 });
+
+
+test("a received Thing can be proposed for personal Later without a promise or changing urgency", async () => {
+  const tools = new AgentTools(workspace(), "work");
+  const moved = await run(tools, "propose_action", {type:"move_lane",thing_id:"from-avani-1",args:{lane:"later"}});
+  assert.equal(moved.result.proposed,true);
+  assert.equal(moved.action.type,"set_court_lane");
+  assert.deepEqual(moved.action.params,{lane:"later"});
+  assert.equal((await run(tools,"propose_action",{type:"move_lane",thing_id:"to-avani",args:{lane:"later"}})).result.proposed,false);
+});

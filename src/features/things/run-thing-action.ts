@@ -1,7 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import type { Pace } from "@/domain/thing";
 import type { NudgeReason } from "./rpc";
-import { rpcCatchAndStart, rpcCatchThing, rpcNudgeThing, rpcSetPersonalPace, rpcSnoozeThing, rpcSortThing } from "./rpc";
+import { rpcCatchAndStart, rpcCatchThing, rpcNudgeThing, rpcSetPersonalPace, rpcSetMyCourtLane, rpcSnoozeThing, rpcSortThing } from "./rpc";
 import { snoozeUntilFor, type SnoozeOption } from "./personal-snooze";
 import {
   cancelThingReads,
@@ -51,6 +51,7 @@ export type ThingActionRequest =
   | { kind: "acknowledge"; thingId: string }
   | { kind: "sort"; thingId: string }
   | { kind: "set_pace"; thingId: string; pace: Pace }
+  | { kind: "set_court_lane"; thingId: string; lane: Pace | null }
   | { kind: "move_now"; thingId: string }
   | { kind: "snooze"; thingId: string; option: SnoozeOption }
   | { kind: "nudge"; thingId: string; reason?: NudgeReason }
@@ -85,6 +86,8 @@ function patchFor(request: ThingActionRequest): ThingPatch | undefined {
       return { workStatus: "sorted" };
     case "set_pace":
       return { personalPace: request.pace };
+    case "set_court_lane":
+      return { personalCourtLane: request.lane };
     case "move_now":
       return { personalPace: "now" };
     default:
@@ -102,6 +105,9 @@ async function dispatch(request: ThingActionRequest, deps: RunThingActionDeps): 
       return;
     case "sort":
       await rpcSortThing(request.thingId);
+      return;
+    case "set_court_lane":
+      await rpcSetMyCourtLane(request.thingId, request.lane);
       return;
     case "set_pace":
       await rpcSetPersonalPace(request.thingId, request.pace);
@@ -146,6 +152,9 @@ export async function runThingAction(
   if (request.kind === "set_pace" && !SUPPORTED_PACES.includes(request.pace)) {
     return { status: "failed", error: new Error(`Unsupported pace: ${String(request.pace)}`) };
   }
+  if (request.kind === "set_court_lane" && request.lane !== null && !SUPPORTED_PACES.includes(request.lane)) {
+    return { status: "failed", error: new Error(`Unsupported Court lane: ${String(request.lane)}`) };
+  }
   if (request.kind === "snooze" && !SUPPORTED_SNOOZE_OPTIONS.includes(request.option)) {
     return { status: "failed", error: new Error(`Unsupported snooze option: ${String(request.option)}`) };
   }
@@ -174,7 +183,7 @@ export async function runThingAction(
     const rollback = patch ? patchThingInCaches(qc, request.thingId, patch, epoch) : null;
     try {
       await dispatch(request, deps);
-      return { status: "performed" };
+      return isEpochCurrent(qc, epoch) ? { status: "performed" } : { status: "retired" };
     } catch (error) {
       rollback?.();
       return { status: "failed", error };

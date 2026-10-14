@@ -12,6 +12,8 @@ import { advanceIdentityEpoch, getIdentityEpoch } from "@/features/realtime/iden
  * real, matching this repo's existing query-updates-rollback.test.mjs style.
  */
 
+let courtLaneCalls = [];
+let laneReject = null;
 let catchCalls = [];
 let setPaceCalls = [];
 let snoozeCalls = [];
@@ -38,6 +40,7 @@ mock.module("@/features/things/rpc", {
     rpcSortThing: async (thingId) => {
       sortCalls.push(thingId);
     },
+    rpcSetMyCourtLane: async (thingId, lane) => { courtLaneCalls.push({thingId,lane}); if (laneReject) throw laneReject; },
     rpcSetPersonalPace: async (thingId, pace) => {
       setPaceCalls.push({ thingId, pace });
     },
@@ -71,6 +74,8 @@ function newClient() {
 }
 
 function resetShared() {
+  courtLaneCalls = [];
+  laneReject = null;
   catchCalls = [];
   setPaceCalls = [];
   snoozeCalls = [];
@@ -335,4 +340,24 @@ test("dismiss_ghost failure is reported as a failed outcome, not silently swallo
   const outcome = await runThingAction(qc, { kind: "dismiss_ghost", thingId: "a" }, deps);
   assert.equal(outcome.status, "failed");
   assert.equal(outcome.error.message, "dismiss failed");
+});
+
+
+test("personal organization writes only its private override and rolls back on denied/failed writes", async () => {
+  resetShared(); const qc = newClient(); const key=["court", "p1", "work"];
+  const original=makeThing("private", {dueAt:"2026-10-16",ownerImportance:"now",personalCourtLane:null});
+  qc.setQueryData(key,{things:[original],myActorId:"p1"});
+  assert.equal((await runThingAction(qc,{kind:"set_court_lane",thingId:"private",lane:"later"},noopDeps)).status,"performed");
+  assert.deepEqual(qc.getQueryData(key).things[0],{...original,personalCourtLane:"later"});
+  assert.deepEqual(courtLaneCalls,[{thingId:"private",lane:"later"}]);
+  assert.deepEqual(catchCalls,[]); assert.deepEqual(setPaceCalls,[]);
+  laneReject=new Error("denied");
+  assert.equal((await runThingAction(qc,{kind:"set_court_lane",thingId:"private",lane:"now"},noopDeps)).status,"failed");
+  assert.equal(qc.getQueryData(key).things[0].personalCourtLane,"later");
+  laneReject=null;
+  await runThingAction(qc,{kind:"set_court_lane",thingId:"private",lane:null},noopDeps);
+  assert.equal(qc.getQueryData(key).things[0].personalCourtLane,null);
+  const before=courtLaneCalls.length;
+  assert.equal((await runThingAction(qc,{kind:"set_court_lane",thingId:"private",lane:"urgent"},noopDeps)).status,"failed");
+  assert.equal(courtLaneCalls.length,before);
 });

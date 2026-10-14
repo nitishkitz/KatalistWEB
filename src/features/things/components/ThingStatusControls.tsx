@@ -61,11 +61,13 @@ function statusLabel(s: WorkStatus) {
  */
 export type ThingStatusControlsProps = {
   variant: "default" | "court";
+  descriptionSection?: React.ReactNode;
   thing: Thing;
   caps: Caps;
   busy: boolean;
   activePace: Pace;
   onSetPace: (pace: Pace) => void;
+  onResetCourtLane?: () => void;
   onSetRequestedPace: (pace: Pace) => void;
   currentBuckets: BucketCard[];
   buckets: BucketCard[];
@@ -94,10 +96,13 @@ export type ThingStatusControlsProps = {
 
 export function ThingStatusControls({
   variant,
+  descriptionSection,
   thing,
   caps,
   busy,
+  activePace,
   onSetPace,
+  onResetCourtLane,
   onSetRequestedPace,
   currentBuckets,
   buckets,
@@ -130,12 +135,17 @@ export function ThingStatusControls({
   const paceControl = (label: string, value: Pace | null, editable: boolean, onChange: (pace: Pace) => void) => editable ? (
     <PaceSegmentedControl label={label} value={value} disabled={busy} onChange={onChange} />
   ) : <PaceValue pace={value} />;
-  const personalPaceControl = paceControl(personalPaceLabel, thing.personalPace, Boolean(caps?.canSetPace), onSetPace);
-  const requestedPaceControl = paceControl("Assigned pace", thing.ownerImportance, Boolean(caps?.canSetImportance), onSetRequestedPace);
+  const personalPaceControl = <div>
+    {paceControl(personalPaceLabel, activePace, Boolean(caps?.canSetCourtLane) && !viewOnly, onSetPace)}
+    {caps?.canSetCourtLane && !viewOnly && thing.personalCourtLane && onResetCourtLane ? <button type="button" disabled={busy} onClick={onResetCourtLane} className="mt-1 text-[11px] text-[#64429a] underline disabled:opacity-50">{thing.coey ? "Follow Coey placement" : "Follow assigned pace"}</button> : null}
+  </div>;
+  const requestedPaceControl = thing.coey ? (
+    <span className="inline-flex min-h-7 items-center text-[12px] font-medium text-[#3a4675]">
+      {thing.coey.schedule.pace === "urgent" ? "Urgent" : thing.coey.schedule.pace === "chill" ? "No rush" : "Normal"}
+    </span>
+  ) : paceControl("Sender’s pace", thing.ownerImportance, Boolean(caps?.canSetImportance), onSetRequestedPace);
 
-  const selfPaceControl = thing.acknowledgement === "caught"
-    ? paceControl("Pace", thing.personalPace, Boolean(caps?.canSetPace), onSetPace)
-    : paceControl("Pace", thing.ownerImportance, Boolean(caps?.canSetImportance), onSetRequestedPace);
+  const selfPaceControl = personalPaceControl;
 
   const reassignControl = !viewOnly ? (
     <DropdownMenu>
@@ -234,6 +244,8 @@ export function ThingStatusControls({
           </div>
         </div>
 
+        {descriptionSection}
+
         {/* Due and both pace values share one compact metadata row. */}
         <div className="flex flex-wrap items-start gap-x-6 gap-y-3 rounded-[8px] border border-[#f0f1f7] bg-white px-4 py-3">
           <div className="min-w-[100px] flex-1 space-y-1">
@@ -249,13 +261,13 @@ export function ThingStatusControls({
           </div>
           {selfAssigned ? (
             <div className="min-w-[156px] flex-1 space-y-1">
-              <div className="text-[12px] text-[#3a4675]">Pace</div>
+              <div className="text-[12px] text-[#3a4675]">Your pace</div>
               {selfPaceControl}
             </div>
           ) : (
             <>
           <div className="min-w-[156px] flex-1 space-y-1">
-            <div className="text-[12px] text-[#3a4675]">Assigned pace</div>
+            <div className="text-[12px] text-[#3a4675]">Sender’s pace</div>
             {requestedPaceControl}
           </div>
           <div className="min-w-[156px] flex-1 space-y-1">
@@ -364,6 +376,8 @@ export function ThingStatusControls({
         <div className="pt-1">{reassignControl}</div>
       </section>
 
+      {descriptionSection}
+
       {viewOnly ? (
         currentBuckets.length ? (
           <section className="space-y-1.5 xl:col-span-2">
@@ -421,13 +435,13 @@ export function ThingStatusControls({
         <div className="flex flex-wrap gap-x-8 gap-y-3 rounded-[8px] border border-[#f0f1f7] px-3 py-2.5">
           {selfAssigned ? (
             <div className="min-w-[156px] flex-1 space-y-1">
-              <div className="text-[12px] text-[#3a4675]">Pace</div>
+              <div className="text-[12px] text-[#3a4675]">Your pace</div>
               {selfPaceControl}
             </div>
           ) : (
             <>
           <div className="min-w-[156px] flex-1 space-y-1">
-            <div className="text-[12px] text-[#3a4675]">Assigned pace</div>
+            <div className="text-[12px] text-[#3a4675]">Sender’s pace</div>
             {requestedPaceControl}
           </div>
           <div className="min-w-[156px] flex-1 space-y-1">

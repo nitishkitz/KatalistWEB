@@ -650,14 +650,10 @@ export default defineConfig(({ command, isPreview, mode }) => {
   // Vite exposes only VITE_* to the browser, but private .env.local values
   // also need to reach API handlers in the local server process.
   const privateEnv = loadEnv(mode, process.cwd(), "");
-  for (const key of [
-    "SARVAM_API_KEY", "SARVAM_MODEL",
-    "CODE_ACTIVITY_SARVAM_API_KEY", "CODE_ACTIVITY_SARVAM_MODEL",
-    "COEY_VOICE_ENABLED", "ASSISTANT_ACTION_SECRET",
-    "KATALIST_MAINTENANCE", "KATALIST_BACKGROUND_JOBS_ENABLED", "KATALIST_OUTBOUND_DELIVERY_ENABLED",
-  ]) {
-    if (process.env[key] === undefined && privateEnv[key] !== undefined)
-      process.env[key] = privateEnv[key];
+  for (const [key, value] of Object.entries(privateEnv)) {
+    if (process.env[key] === undefined && value !== undefined) {
+      process.env[key] = value;
+    }
   }
   return ({
   server: {

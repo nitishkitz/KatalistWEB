@@ -13,7 +13,7 @@ function visibleRect(element: Element | null): BriefRect | null {
   return r.width > 0 && r.height > 0 ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
 }
 
-function snapshotPanel(panel: HTMLElement): Snapshot | null {
+function snapshotPanel(panel: HTMLElement, isOpening = false): Snapshot | null {
   const rect = visibleRect(panel);
   if (!rect) return null;
   const element = panel.cloneNode(true) as HTMLElement;
@@ -30,33 +30,41 @@ function snapshotPanel(panel: HTMLElement): Snapshot | null {
     translate: "none", scale: "none", opacity: "1", margin: "0", pointerEvents: "none", background: "#fff",
   });
   document.body.append(element);
-  // Rasterization otherwise loses the visible position of nested scroll areas.
-  const originals = [panel, ...panel.querySelectorAll<HTMLElement>("*")];
-  const copies = [element, ...element.querySelectorAll<HTMLElement>("*")];
-  originals.forEach((node, i) => {
-    if (!node.scrollTop && !node.scrollLeft) return;
-    const copy = copies[i];
-    copy.style.overflow = "hidden";
-    Array.from(copy.children).forEach(child => {
-      if (child instanceof HTMLElement)
-        child.style.transform = `translate(${-node.scrollLeft}px, ${-node.scrollTop}px)`;
+  if (isOpening) {
+    // Prune heavy interactive subtrees from opening clone so 64 bands do not duplicate thousands of DOM nodes
+    const detailContent = element.querySelector(".brief-thing-content");
+    if (detailContent) detailContent.innerHTML = "";
+    element.querySelectorAll("form, input, textarea").forEach(node => node.remove());
+  } else {
+    // Rasterization otherwise loses the visible position of nested scroll areas.
+    const originals = [panel, ...panel.querySelectorAll<HTMLElement>("*")];
+    const copies = [element, ...element.querySelectorAll<HTMLElement>("*")];
+    originals.forEach((node, i) => {
+      if (!node.scrollTop && !node.scrollLeft) return;
+      const copy = copies[i];
+      copy.style.overflow = "hidden";
+      Array.from(copy.children).forEach(child => {
+        if (child instanceof HTMLElement)
+          child.style.transform = `translate(${-node.scrollLeft}px, ${-node.scrollTop}px)`;
+      });
     });
-  });
-  // Reuse already-decoded local images. Avoid fetching every avatar again
-  // on the critical path between the user's click and the first bend.
-  const images = panel.querySelectorAll<HTMLImageElement>("img");
-  const imageCopies = element.querySelectorAll<HTMLImageElement>("img");
-  images.forEach((image, i) => {
-    if (!image.complete || !image.naturalWidth) return;
-    try {
-      const buffer = document.createElement("canvas");
-      buffer.width = Math.min(image.naturalWidth, Math.max(64, image.clientWidth * 2));
-      buffer.height = Math.round(buffer.width * image.naturalHeight / image.naturalWidth);
-      buffer.getContext("2d")?.drawImage(image, 0, 0, buffer.width, buffer.height);
-      imageCopies[i].src = buffer.toDataURL();
-      imageCopies[i].removeAttribute("srcset");
-    } catch { /* Cross-origin files use html-to-image's normal embedding. */ }
-  });
+    // Reuse already-decoded local images. Avoid fetching every avatar again
+    // on the critical path between the user's click and the first bend.
+    const images = panel.querySelectorAll<HTMLImageElement>("img");
+    const imageCopies = element.querySelectorAll<HTMLImageElement>("img");
+    images.forEach((image, i) => {
+      if (!image.complete || !image.naturalWidth) return;
+      if (image.clientWidth > 80 || image.naturalWidth > 160) return;
+      try {
+        const buffer = document.createElement("canvas");
+        buffer.width = Math.min(image.naturalWidth, Math.max(64, image.clientWidth * 2));
+        buffer.height = Math.round(buffer.width * image.naturalHeight / image.naturalWidth);
+        buffer.getContext("2d")?.drawImage(image, 0, 0, buffer.width, buffer.height);
+        imageCopies[i].src = buffer.toDataURL();
+        imageCopies[i].removeAttribute("srcset");
+      } catch { /* Cross-origin files use html-to-image's normal embedding. */ }
+    });
+  }
   const texture = () => toCanvas(element, {
     pixelRatio: Math.min(window.devicePixelRatio || 1, 2), skipFonts: true,
     cacheBust: false,
@@ -97,8 +105,10 @@ export function useBriefGenie(open: boolean) {
     let snapshot: Snapshot | null = null;
     const animations: Animation[] = [];
     const panel = () => panelRef.current;
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
     const cleanup = () => {
       disposed = true;
+      if (safetyTimer) clearTimeout(safetyTimer);
       cancelAnimationFrame(raf);
       animations.forEach(a => a.cancel());
       snapshot?.element.remove();
@@ -124,9 +134,13 @@ export function useBriefGenie(open: boolean) {
       const anchor = anchorRef.current;
       const fadeOnly = reduceMotion || window.innerWidth < 1024 || !anchor;
       if (open && fadeOnly && element) { animateFade(element, false); return; }
-      snapshot = open && element ? snapshotPanel(element) : snapshotRef.current;
+      snapshot = open && element ? snapshotPanel(element, true) : snapshotRef.current;
       snapshotRef.current = null;
-      if (!snapshot) { cleanup(); return; }
+      if (!snapshot) {
+        if (!open && element) animateFade(element, true);
+        else cleanup();
+        return;
+      }
       ghost = document.createElement("div");
       ghost.className = fadeOnly ? "brief-fade-ghost" : "brief-genie-ghost";
       ghost.setAttribute("aria-hidden", "true");
@@ -141,8 +155,11 @@ export function useBriefGenie(open: boolean) {
         Object.assign(snapshot.element.style, { left: `${snapshot.rect.x}px`, top: `${snapshot.rect.y}px` });
         ghost.append(snapshot.element);
       }
-      document.body.append(ghost);
-      if (fadeOnly) { animateFade(ghost, true); return; }
+      if (fadeOnly) {
+        document.body.append(ghost);
+        animateFade(ghost, true);
+        return;
+      }
       const canvas = document.createElement("canvas");
       canvas.className = "brief-genie-canvas";
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -172,9 +189,11 @@ export function useBriefGenie(open: boolean) {
       const drawBands = (p: number) => bands.forEach((band, i) => {
         const row = briefGenieRow(rect, anchor!, i / bands.length, p);
         const next = briefGenieRow(rect, anchor!, (i + 1) / bands.length, p);
-        band.style.transform = `translate(${row.left}px, ${row.y}px) scale(${row.width / rect.width}, ${Math.max(0, next.y - row.y) / (rect.height / bands.length)})`;
+        band.style.transform = `translate3d(${row.left}px, ${row.y}px, 0) scale3d(${row.width / rect.width}, ${Math.max(0, next.y - row.y) / (rect.height / bands.length)}, 1)`;
       });
       drawBands(open ? 1 : 0);
+      // Append ghost to body in a single DOM transaction with all bands positioned offscreen
+      document.body.append(ghost);
       // Keep the offscreen source for computed styles, but remove the static
       // closing clone now that its first band frame is already visible.
       Object.assign(snapshot.element.style, {left: "-100000px", top: "0px"});
@@ -187,6 +206,9 @@ export function useBriefGenie(open: boolean) {
       let texture: HTMLCanvasElement | null = null;
       let start: number | null = null;
       let preparing = false;
+      safetyTimer = setTimeout(() => {
+        cleanup();
+      }, DURATION * 3);
       const frame = (time: number) => {
         if (disposed) return;
         if (start === null) start = time;
@@ -197,7 +219,7 @@ export function useBriefGenie(open: boolean) {
             ghost!.append(canvas);
             bands.forEach(band => band.remove());
           }
-          renderBriefGenie(ctx, texture, rect, anchor!, progress, window.innerWidth, window.innerHeight);
+          renderBriefGenie(ctx, texture, rect, anchor!, progress, window.innerWidth, window.innerHeight, 64);
         } else drawBands(progress);
         // Allow the first bend to paint before doing snapshot work.
         if (!open && t > 0 && !preparing) {

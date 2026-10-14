@@ -76,6 +76,7 @@ const deletedBucketIdsByActor = new Map<string, Set<string>>();
 const recentlyNudged = new Set<string>();
 const nudgeCooldownUntil = new Map<string, number>();
 // actorId -> (thingId -> snoozed_until epoch ms)
+const courtLanesByActor = new Map<string, Map<string, Pace>>();
 const snoozedByActor = new Map<string, Map<string, number>>();
 let extraNotifications: LocalNotification[] = [];
 /** Persona-scoped Ghost dismissals: actorId → set of thing ids. */
@@ -107,6 +108,14 @@ function requireCap(id: string, key: keyof ReturnType<typeof getThingCapabilitie
 export function catchLocal(id: string, pace: Pace = "next") {
   requireCap(id, "canCatch");
   patchThing(id, { acknowledgement: "caught", personalPace: pace, caughtAt: new Date().toISOString() }, "caught");
+}
+export function setCourtLaneLocal(id: string, lane: Pace | null) {
+  requireCap(id, "canSetCourtLane");
+  const actor = currentDemoActorId();
+  const lanes = courtLanesByActor.get(actor) ?? new Map<string, Pace>();
+  if (lane === null) lanes.delete(id); else lanes.set(id, lane);
+  courtLanesByActor.set(actor, lanes);
+  bump();
 }
 export function setPaceLocal(id: string, pace: Pace) {
   requireCap(id, "canSetPace");
@@ -150,7 +159,8 @@ export function getMergedThings(forActorId?: string): Thing[] {
     const current = byId.get(id);
     if (current) byId.set(id, { ...current, ...patch });
   }
-  return [...byId.values()].filter((t) => !shredded.has(`thing:${t.id}`));
+  return [...byId.values()].filter((t) => !shredded.has(`thing:${t.id}`))
+    .map(t => ({ ...t, personalCourtLane: t.assignee.id === actorId ? courtLanesByActor.get(actorId)?.get(t.id) ?? null : null }));
 }
 
 export function directoryPeople(): Person[] {
@@ -268,6 +278,7 @@ export function setDueLocal(id: string, dueAt: string | null, dueHasTime: boolea
 }
 export function reassignLocal(id: string, assigneeId: string) {
   requireCap(id, "canReassign");
+  for (const lanes of courtLanesByActor.values()) lanes.delete(id);
   const thing = getThing(id);
   patchThing(
     id,

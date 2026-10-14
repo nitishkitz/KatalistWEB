@@ -38,3 +38,11 @@ test("dangerous image schemes are dropped and long text is truncated", () => {
   assert.equal(preview.image, null);
   assert.equal(sanitizeText("a".repeat(500), 50)?.length, 50);
 });
+
+test('metadata images refuse internal targets and fall back to a favicon', () => {
+  const base=new URL('https://example.com/');
+  assert.equal(parseLinkPreview('<meta property="og:image" content="http://169.254.169.254/latest">',base).image,null);
+  assert.equal(parseLinkPreview('<link rel="icon" href="/favicon.png">',base).image,'https://example.com/favicon.png');
+  assert.equal(isPrivateAddress('::127.0.0.1'),true);
+  assert.equal(isPrivateAddress('2002:7f00:1::'),true);
+});

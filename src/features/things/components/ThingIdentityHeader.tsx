@@ -2,6 +2,7 @@ import { Linkified } from "@/components/katalist/Linkified";
 import type * as React from "react";
 import { format } from "date-fns";
 import { ThingViewOnlyBanner } from "./ThingViewOnlyBanner";
+import { thingReference } from "../thing-reference";
 
 /**
  * T09 item 5: title + subtitle + view-only/load-error banners, pulled out of
@@ -20,6 +21,7 @@ import { ThingViewOnlyBanner } from "./ThingViewOnlyBanner";
 export type ThingIdentityHeaderProps = {
   variant: "default" | "court";
   title: string;
+  referenceNumber?: number;
   headerAction?: React.ReactNode;
   viewOnly: boolean;
   onRetry: () => void;
@@ -37,6 +39,7 @@ export type ThingIdentityHeaderProps = {
 export function ThingIdentityHeader({
   variant,
   title,
+  referenceNumber,
   headerAction,
   viewOnly,
   onRetry,
@@ -48,6 +51,10 @@ export function ThingIdentityHeader({
   listName,
   showCombinedError,
 }: ThingIdentityHeaderProps): React.ReactNode {
+  const reference = thingReference({ referenceNumber });
+  const referenceLabel = reference ? (
+    <><span className="whitespace-nowrap font-mono text-[13px] font-normal tracking-normal text-slate-500">{reference}</span>{"\u00a0\u00a0"}</>
+  ) : null;
   if (variant === "court") {
     return (
       <>
@@ -56,6 +63,7 @@ export function ThingIdentityHeader({
         {/* Title */}
         <div className="flex items-start justify-between gap-3 pr-9">
           <h1 className="text-[25px] font-medium leading-tight tracking-tight text-[#000533] break-words flex-1">
+            {referenceLabel}
             <Linkified text={title} />
           </h1>
         </div>
@@ -86,7 +94,7 @@ export function ThingIdentityHeader({
   return (
     <header className="border-b border-border/70 px-5 py-4 text-left">
       <div className="flex items-start justify-between gap-3">
-        <h2 className="text-[18px] font-semibold leading-snug text-foreground break-words"><Linkified text={title} /></h2>
+        <h2 className="text-[18px] font-semibold leading-snug text-foreground break-words">{referenceLabel}<Linkified text={title} /></h2>
         {headerAction}
       </div>
       <p className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">

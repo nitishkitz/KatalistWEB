@@ -126,7 +126,7 @@ export class Workspace {
     };
     const rows = (things.data ?? []) as Row[];
     const thingIds = rows.map((r) => r.id);
-    const [schedules, bucketItems, attachments, myNudges] = await Promise.all([this.schedules(thingIds), this.bucketItems(thingIds), this.attachments(thingIds), this.myNudges(thingIds)]);
+    const [schedules, bucketItems, attachments, myNudges, placements] = await Promise.all([this.schedules(thingIds), this.bucketItems(thingIds), this.attachments(thingIds), this.myNudges(thingIds), this.courtPlacements(thingIds)]);
     const me = this.myActorId;
     this.things = rows.map((r) => {
       const s = schedules.get(r.id);
@@ -137,6 +137,10 @@ export class Workspace {
       if (inMyCourt) {
         const decided = s ? computeHolderLane({ ...s.schedule, snoozeUntil: null }, s.cal, this.now).lane : null;
         lane = decided ?? ((r.assignee_personal_pace ?? r.owner_importance ?? "next") as WsThing["lane"]);
+        const placement = placements.get(r.id);
+        if (placement?.assignee_actor_id === r.current_assignee_actor_id && lane !== "none" && lane !== "hidden"
+          && (!s || (s.schedule.holderProfileId === this.userId && !s.schedule.privateWait
+            && !["blocked", "with_sender", "sorted"].includes(s.schedule.state)))) lane = placement.lane;
         if (snoozed.has(r.id)) lane = "hidden";
       }
       // Older Things keep inline files in notes as JSON; that is not note text.
@@ -166,6 +170,16 @@ export class Workspace {
         my_last_nudge_at: myNudges.get(r.id) ?? null,
       };
     });
+  }
+
+  private async courtPlacements(ids: string[]) {
+    const out = new Map<string, { lane: "now" | "next" | "later"; assignee_actor_id: string }>();
+    for (let i = 0; i < ids.length; i += 200) {
+      const { data, error } = await this.client.from("thing_court_placement").select("thing_id,lane,assignee_actor_id").in("thing_id", ids.slice(i, i + 200));
+      if (error) throw error;
+      for (const row of (data ?? []) as Array<{ thing_id: string; lane: "now" | "next" | "later"; assignee_actor_id: string }>) out.set(row.thing_id, row);
+    }
+    return out;
   }
 
   private async schedules(ids: string[]) {

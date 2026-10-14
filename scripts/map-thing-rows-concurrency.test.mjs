@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test, mock } from "node:test";
 
 /**
- * Batch C1: mapDbThingRows makes four independent lookups per call
+ * Batch C1: mapDbThingRows makes five independent lookups per call
  * (actor/people resolution, list-name resolution, comment counts, real
  * attachments) — none of their results depend on each other, only the
  * final per-row assembly does. This proves they run concurrently by
@@ -38,7 +38,7 @@ function makeTracker() {
   };
 }
 
-test("mapDbThingRows starts its four independent lookups before any of them resolves", async () => {
+test("mapDbThingRows starts its five independent lookups before any of them resolves", async () => {
   const { events, track } = makeTracker();
 
   const peopleMock = mock.module("@/features/people/resolve-actors", {
@@ -85,7 +85,7 @@ test("mapDbThingRows starts its four independent lookups before any of them reso
     namedExports: {
       supabase: {
         from: (table) =>
-          table === "thing_comments"
+          table === "thing_court_placement" ? chainable("placement", {data:[],error:null}) : table === "thing_comments"
             ? chainable("comments", { data: [], error: null })
             : chainable("lists-table-fallback", { data: [], error: null }),
       },
@@ -118,7 +118,7 @@ test("mapDbThingRows starts its four independent lookups before any of them reso
 
     const [thing] = await mapDbThingRows([row], "a1");
 
-    // Deterministic concurrency proof: the four independent top-level
+    // Deterministic concurrency proof: the five independent top-level
     // legs must all have *started* before any of them *finished* — i.e.
     // they were genuinely in flight together, not queued behind each
     // other. This holds regardless of how long each mock's delay is.
@@ -126,8 +126,8 @@ test("mapDbThingRows starts its four independent lookups before any of them reso
     const startedBeforeAnyEnd = new Set(events.slice(0, firstEndIndex).filter((e) => e.endsWith(":start")));
     assert.deepEqual(
       startedBeforeAnyEnd,
-      new Set(["people:start", "attachments:start", "comments:start", "resolve-list-names-rpc:start"]),
-      `expected all four independent lookups to start before any resolved; event order was: ${events.join(", ")}`,
+      new Set(["people:start", "attachments:start", "comments:start", "resolve-list-names-rpc:start", "placement:start"]),
+      `expected all five independent lookups to start before any resolved; event order was: ${events.join(", ")}`,
     );
 
     // authedFetch is skipped outside a browser (no `window`) — list-name

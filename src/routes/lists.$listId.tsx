@@ -1,3 +1,4 @@
+import { LIST_SECONDARY_SECTIONS_ENABLED } from "@/features/lists/secondary-section-gate";
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
@@ -190,8 +191,9 @@ function ListDetailPage() {
   const assignablePeople = useAssignablePeople();
 
   const [tab, setTab] = useState<TabType>("things");
-  const codeActivityEnabled = useCodeActivityEnabled();
-  const qaEnabled = useQaEnabled();
+  const codeActivityEnabled = useCodeActivityEnabled() && LIST_SECONDARY_SECTIONS_ENABLED;
+  const designsEnabled = LIST_SECONDARY_SECTIONS_ENABLED;
+  const qaEnabled = useQaEnabled() && LIST_SECONDARY_SECTIONS_ENABLED;
   // Where QA was when a member opened a defect Thing, so "Back to QA" restores that run and result.
   const [qaContext, setQaContext] = useState<QaReturnContext | null>(null);
   const [qaReturn, setQaReturn] = useState<QaReturnContext | null>(null);
@@ -208,11 +210,11 @@ function ListDetailPage() {
   useEffect(() => {
     const params = new URLSearchParams(searchStr);
     if (params.get("tab") !== "designs") return;
-    setTab("designs");
+    setTab(designsEnabled ? "designs" : "things");
     const design = params.get("design");
     setDesignDeepLink(design && /^[0-9a-f-]{36}$/i.test(design) ? design : null);
     void navigate({ to: "/lists/$listId", params: { listId }, search: {} as never, replace: true });
-  }, [listId, searchStr, navigate]);
+  }, [listId, searchStr, navigate, designsEnabled]);
   // A deep link is consumed once: leaving the Designs tab forgets it, so reopening the tab starts clean.
   useEffect(() => {
     if (tab !== "designs") setDesignDeepLink(null);
@@ -716,7 +718,7 @@ function ListDetailPage() {
               [
                 ["things", "Things"],
                 ["chat", "Chat"],
-                ["designs", "Designs"],
+                ...(designsEnabled ? ([["designs", "Designs"]] as const) : []),
                 ...(codeActivityEnabled ? ([["code", "Code Activity"]] as const) : []),
                 ...(qaEnabled ? ([["qa", "QA"]] as const) : []),
                 ["members", "Members & Permissions"],
@@ -1028,7 +1030,7 @@ function ListDetailPage() {
         )}
 
         {/* Designs: Katalist-authored library of Figma links (no Figma API). */}
-        {tab === "designs" && (
+        {tab === "designs" && designsEnabled && (
           <div className="pb-8 pt-1">
             <DesignsBoundary resetKey={listId}>
               <Suspense

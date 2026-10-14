@@ -38,6 +38,9 @@ export function isPrivateAddress(address: string): boolean {
     if ((first & 0xfe00) === 0xfc00) return true; // unique local fc00::/7
     if ((first & 0xffc0) === 0xfe80) return true; // link-local fe80::/10
     if ((first & 0xff00) === 0xff00) return true; // multicast
+    // Only global unicast is eligible; refuse transition/tunnel ranges as well.
+    if (first < 0x2000 || first > 0x3fff || first === 0x2002) return true;
+    if (lower.startsWith('2001:0:') || lower.startsWith('2001:db8:')) return true;
     return false;
   }
   return true; // not an IP literal we understand: refuse
@@ -119,10 +122,20 @@ function safeImageUrl(candidate: string | null, base: URL): string | null {
     const resolved = new URL(decodeEntities(candidate), base);
     if (resolved.protocol !== "https:" && resolved.protocol !== "http:") return null;
     if (resolved.username || resolved.password) return null;
-    return resolved.toString();
+    return parsePreviewTarget(resolved.toString())?.toString() ?? null;
   } catch {
     return null;
   }
+}
+
+function faviconUrl(html: string): string | null {
+  for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+    const rel = tag.match(/\brel\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+    if (!/(?:^|\s)(?:icon|apple-touch-icon)(?:\s|$)/i.test(rel?.[1] ?? rel?.[2] ?? '')) continue;
+    const href = tag.match(/\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')/i);
+    if (href) return href[1] ?? href[2] ?? null;
+  }
+  return null;
 }
 
 /** Extract sanitized preview metadata from the head of an HTML document. */
@@ -137,7 +150,7 @@ export function parseLinkPreview(html: string, finalUrl: URL): LinkPreview {
       metaContent(head, ["og:description", "twitter:description", "description"]),
       280,
     ),
-    image: safeImageUrl(metaContent(head, ["og:image", "og:image:url", "twitter:image"]), finalUrl),
+    image: safeImageUrl(metaContent(head, ["og:image", "og:image:url", "twitter:image"]) ?? faviconUrl(head), finalUrl),
     siteName: sanitizeText(metaContent(head, ["og:site_name"]), 80),
   };
 }

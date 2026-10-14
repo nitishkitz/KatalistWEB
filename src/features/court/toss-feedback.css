@@ -1,0 +1,121 @@
+/* Court Toss Feedback Lifecycle Styles */
+
+/* Match the actual card radius and lane; draw above the entire card so the
+ * focused content button cannot introduce a square border above its actions. */
+.court-card-emphasis-ring[data-feedback-lane="now"] { --court-feedback-color: #ff454b; }
+.court-card-emphasis-ring[data-feedback-lane="next"] { --court-feedback-color: #0064ff; }
+.court-card-emphasis-ring[data-feedback-lane="later"] { --court-feedback-color: #8038ff; }
+.court-card-emphasis-ring {
+  --court-feedback-color: #8038ff;
+  box-shadow: 0 4px 18px -2px color-mix(in srgb, var(--court-feedback-color) 22%, transparent) !important;
+  transition: box-shadow 300ms ease-out;
+}
+.court-card-emphasis-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 2px solid var(--court-feedback-color);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 31;
+}
+.court-card-emphasis-ring > article > button:focus-visible {
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .court-card-emphasis-ring {
+    box-shadow: none !important;
+    transition: none;
+  }
+}
+
+/* Concrete card Just added / Here it is badge */
+.court-card-feedback-badge {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  animation: feedback-badge-fade-in 180ms ease-out;
+}
+
+@keyframes feedback-badge-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .court-card-feedback-badge {
+    animation: none;
+  }
+}
+
+.court-card-feedback-badge.just-added {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.court-card-feedback-badge.here-it-is {
+  background-color: #f5f3ff;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
+/* Quiet lane header +1 added badge */
+.court-lane-added-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #dbeafe;
+}
+
+/* Toss confirmation receipt floating directly above MagicBox */
+.toss-receipt-container {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.toss-receipt-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.12), 0 2px 6px -1px rgba(15, 23, 42, 0.06);
+  transition: all 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toss-receipt-card {
+    transition: none;
+  }
+}

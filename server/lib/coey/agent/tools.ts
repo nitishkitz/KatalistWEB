@@ -17,7 +17,7 @@ const fold = (s: string) => s.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerC
 const nullable = (schema: Json) => ({ anyOf: [schema, { type: "null" }] });
 const STATES = ["any", "open", "waiting_for_catch", "in_progress", "sorted", "overdue", "past_follow_up", "promised", "snoozed"] as const;
 
-export const ACTION_TYPES = ["catch", "sort", "snooze", "nudge", "promise", "set_pace", "comment", "reassign", "open"] as const;
+export const ACTION_TYPES = ["catch", "sort", "snooze", "nudge", "promise", "set_pace", "move_lane", "comment", "reassign", "open"] as const;
 /** The same shape the answer's action cards use; confirmed through /api/assistant/action. */
 export type ProposedAction = { id: string; type: AssistantActionType; label: string; requires_confirmation: boolean; target_ids: string[]; params: ActionParams };
 
@@ -124,7 +124,7 @@ export const TOOL_DEFINITIONS = [
     function: {
       name: "propose_action",
       description:
-        "Offer the user an action on one Thing. It is NOT performed: the user sees a button and confirms. Types: catch; sort (mark sorted); snooze (args.option 1h|6h|next_day); nudge (only Things the user sent to someone); promise (args.at local YYYY-MM-DDTHH:MM; for Things someone else sent the user — this is how the user moves such a Thing between lanes: within a working day = Now, 2-5 working days = Next, more = Later); set_pace (args.pace urgent|normal|chill; only Things the user sent, including their own: urgent = Now, normal = Next, chill = Later); comment (args.body); reassign (args.person); open.",
+        "Offer the user an action on one Thing. It is NOT performed: the user sees a button and confirms. Types: catch; sort (mark sorted); snooze (args.option 1h|6h|next_day); nudge (only Things the user sent to someone); promise (args.at local YYYY-MM-DDTHH:MM; a real completion commitment, never required for personal lane organization); set_pace (args.pace urgent|normal|chill; only Things the user sent, including their own; changes shared urgency, not personal placement); move_lane (args.lane now|next|later; only Things currently assigned to the user; changes personal Court placement without changing urgency, due date or promising a date); comment (args.body); reassign (args.person); open.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -564,8 +564,15 @@ export class AgentTools {
         action = { type: "promise_date", label: `Promise “${t.title}” by ${p.date} ${m[2]}:${m[3]}`, params: { until: new Date(at).toISOString() } };
         break;
       }
+      case "move_lane": {
+        if (!mine) return refuse("only Things currently in your Court can be organized");
+        const lane = String(args.lane);
+        if (lane !== "now" && lane !== "next" && lane !== "later") return refuse("lane must be now, next or later");
+        action = { type: "set_court_lane", label: `Move “${t.title}” to ${lane} in your Court`, params: { lane } };
+        break;
+      }
       case "set_pace": {
-        if (!sent) return refuse("only the sender sets the pace; for a Thing someone else sent, propose a promise date");
+        if (!sent) return refuse("only the sender sets shared urgency; use move_lane for the holder’s personal Court placement");
         const pace = String(args.pace);
         if (pace !== "urgent" && pace !== "normal" && pace !== "chill") return refuse("pace must be urgent, normal or chill");
         action = { type: "set_pace", label: `Set “${t.title}” to ${pace === "chill" ? "no rush" : pace}`, params: { pace } };
@@ -628,7 +635,7 @@ export function filterLabels(a: Json, person: string | undefined, mode: "work" |
 function batchLabel(x: ProposedAction) {
   const n = x.target_ids.length;
   const verb: Record<string, string> = {
-    catch_thing: "Catch", sort_thing: "Mark sorted:", snooze_thing: "Snooze", prepare_nudge: "Nudge about", promise_date: "Promise", set_pace: "Set pace on",
+    catch_thing: "Catch", sort_thing: "Mark sorted:", snooze_thing: "Snooze", prepare_nudge: "Nudge about", promise_date: "Promise", set_court_lane: "Move in your Court:", set_pace: "Set pace on",
     add_comment: "Comment on", assign_person: "Reassign", open_thing: "Open",
   };
   return `${verb[x.type] ?? "Apply to"} ${n} Things`;

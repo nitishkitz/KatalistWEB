@@ -31,6 +31,11 @@ export function getThingCapabilities(thing: Thing, myActorId: string | null) {
   return {
     canCatch: Boolean(isAssignee && waiting && !terminal),
     canSetPace: Boolean(isAssignee && caught && !terminal),
+    canSetCourtLane: Boolean(isAssignee && !terminal && (!thing.coey || (
+      thing.coey.schedule.holderProfileId === thing.coey.viewerProfileId
+      && !thing.coey.schedule.privateWait
+      && !["blocked", "with_sender", "sorted"].includes(thing.coey.schedule.state)
+    ))),
     canSetImportance: Boolean(isOwner && !terminal),
     canSetDue: Boolean(isOwner && !terminal),
     canSetStatus: Boolean(isAssignee && caught && !terminal),

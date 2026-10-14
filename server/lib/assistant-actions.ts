@@ -21,6 +21,7 @@ export type AssistantActionType =
   | "snooze_thing"
   | "promise_date"
   | "set_pace"
+  | "set_court_lane"
   | "add_comment";
 
 export type AssistantAction = {
@@ -44,6 +45,7 @@ export type ActionParams = {
   /** snooze_thing: when the snooze ends. promise_date: the promised time. */
   until?: string;
   pace?: "urgent" | "normal" | "chill";
+  lane?: "now" | "next" | "later";
   comment?: string;
 };
 
@@ -77,6 +79,7 @@ const TYPES: AssistantActionType[] = [
   "snooze_thing",
   "promise_date",
   "set_pace",
+  "set_court_lane",
   "add_comment",
 ];
 const MAX_TARGETS = 20;
@@ -177,6 +180,10 @@ export function parseActionRequest(body: unknown): {
     if (new Date(raw.until).getTime() < Date.now() - 60_000) throw new ActionError("That time has already passed.", 400);
     params.until = new Date(raw.until).toISOString();
   }
+  if (raw.lane !== undefined) {
+    if (!["now", "next", "later"].includes(String(raw.lane))) throw new ActionError("Unsupported Court lane.", 400);
+    params.lane = raw.lane as ActionParams["lane"];
+  }
   if (raw.pace !== undefined) {
     if (raw.pace !== "urgent" && raw.pace !== "normal" && raw.pace !== "chill") throw new ActionError("Unsupported pace.", 400);
     params.pace = raw.pace;
@@ -194,6 +201,7 @@ function requireParams(type: AssistantActionType, params: ActionParams) {
     (type === "add_to_bucket" && params.bucketId) ||
     ((type === "snooze_thing" || type === "promise_date") && params.until) ||
     (type === "set_pace" && params.pace) ||
+    (type === "set_court_lane" && params.lane) ||
     (type === "add_comment" && params.comment) ||
     type === "catch_thing" ||
     type === "sort_thing" ||
@@ -268,7 +276,7 @@ async function evaluate(
         nudgeable.set(row.to_actor_id, (nudgeable.get(row.to_actor_id) ?? new Set()).add(row.thing_id));
   }
   let myActorId: string | null = null;
-  if (type === "set_status" || type === "catch_thing" || type === "sort_thing" || type === "snooze_thing" || type === "promise_date" || type === "add_comment") {
+  if (type === "set_status" || type === "catch_thing" || type === "sort_thing" || type === "snooze_thing" || type === "promise_date" || type === "set_court_lane" || type === "add_comment") {
     // set_work_status is limited to the current assignee, so resolve the viewer's actor.
     const { data } = await client.from("actors").select("id").eq("profile_id", viewerId).maybeSingle();
     myActorId = (data?.id as string | undefined) ?? null;
@@ -334,6 +342,7 @@ async function evaluate(
         if (!myActorId || row.current_assignee_actor_id !== myActorId) return [id, title, "rejected", "Only the person holding it can mark it sorted."];
         break;
       case "snooze_thing":
+      case "set_court_lane":
       case "promise_date":
         if (closed) return [id, title, "rejected", "Already closed."];
         if (!myActorId || row.current_assignee_actor_id !== myActorId) return [id, title, "rejected", "Only Things in your court."];
@@ -368,6 +377,7 @@ async function evaluate(
     sort_thing: `Mark ${things_} sorted`,
     snooze_thing: `Snooze ${things_}`,
     promise_date: `Promise a date on ${things_}`,
+    set_court_lane: `Move ${things_} to ${params.lane} in your Court; sender’s pace and due date stay unchanged`,
     set_pace: `Set the pace on ${things_} to ${params.pace === "chill" ? "no rush" : params.pace}`,
     add_comment: `Comment on ${things_}`,
   }[type as "open_thing"];
@@ -467,6 +477,8 @@ async function run(client: SupabaseClient, payload: TokenPayload): Promise<Confi
             }
             return client.rpc("coey_promise" as never, { p_thing_id: target.id, p_promise_at: params.until } as never);
           })();
+        case "set_court_lane":
+          return client.rpc("set_my_court_lane" as never, { p_thing_id: target.id, p_lane: params.lane } as never);
         case "set_pace":
           return client.rpc("coey_set_pace" as never, { p_thing_id: target.id, p_pace: params.pace } as never);
         case "add_comment":

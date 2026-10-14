@@ -83,9 +83,9 @@ function buildRequest(
     case "catch":
       return { kind: "catch", thingId };
     case "set_pace":
-      return { kind: "set_pace", thingId, pace: (arg ?? "next") as Pace };
+      return { kind: "set_court_lane", thingId, lane: (arg ?? "next") as Pace };
     case "move_now":
-      return { kind: "move_now", thingId };
+      return { kind: "set_court_lane", thingId, lane: "now" };
     case "snooze":
       return { kind: "snooze", thingId, option: (arg ?? "1h") as SnoozeOption };
     case "nudge":

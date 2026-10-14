@@ -21,6 +21,7 @@ export type Person = {
 export type Thing = {
   id: string;
   title: string;
+  referenceNumber?: number;
   creator: Person;
   owner: Person;
   assignee: Person;
@@ -28,6 +29,8 @@ export type Thing = {
   workStatus: WorkStatus;
   ownerImportance: Importance;
   personalPace: Pace | null;
+  /** Intentional placement in this viewer’s Court; never a shared schedule input. */
+  personalCourtLane?: Pace | null;
   dueAt: string | null;
   dueHasTime: boolean;
   context: ContextKind;
@@ -40,6 +43,10 @@ export type Thing = {
   updatedAt: string;
   createdAt?: string;
   description?: string | null;
+  descriptionDocument?: import("@tiptap/react").JSONContent | null;
+  descriptionRevision?: number;
+  descriptionUpdatedAt?: string | null;
+  descriptionUpdatedBy?: string | null;
   commentCount?: number;
   unreadCommentCount?: number;
   attachmentCount?: number;
@@ -81,7 +88,14 @@ export function coeyLane(thing: Thing, now = Date.now()) {
   const view = thing.coey;
   if (!view) return null;
   // The personal snooze lens hides snoozed Things separately; here the lane is the waking lane.
-  return computeHolderLane({ ...view.schedule, snoozeUntil: null }, view.holderCal, now);
+  const decision = computeHolderLane({ ...view.schedule, snoozeUntil: null }, view.holderCal, now);
+  if (thing.personalCourtLane && view.schedule.holderProfileId === view.viewerProfileId
+    && !view.schedule.privateWait && !["blocked", "with_sender", "sorted"].includes(view.schedule.state)
+    && thing.workStatus !== "sorted" && thing.workStatus !== "cancelled" && !thing.cancelledAt
+    && decision.lane !== "none" && decision.lane !== "hidden") {
+    return { lane: thing.personalCourtLane, rule: "PERSONAL" };
+  }
+  return decision;
 }
 
 export function laneOf(thing: Thing): CourtLane {
@@ -90,7 +104,7 @@ export function laneOf(thing: Thing): CourtLane {
   // Caught Things follow the assignee's personal pace. Uncaught (waiting for
   // catch) Things surface in the lane matching the owner's stated importance,
   // so a Thing tossed as "later" stays in Later — not forced into Now.
-  return thing.personalPace ?? thing.ownerImportance ?? "next";
+  return (!thing.coey ? thing.personalCourtLane : null) ?? thing.personalPace ?? thing.ownerImportance ?? "next";
 }
 
 export function theirStateFor(thing: Thing): TheirState {

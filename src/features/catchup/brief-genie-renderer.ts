@@ -27,9 +27,10 @@ export function briefGenieRow(panel: BriefRect, anchor: BriefRect, row: number, 
 }
 
 export function renderBriefGenie(ctx: CanvasRenderingContext2D, texture: HTMLCanvasElement,
-  panel: BriefRect, anchor: BriefRect, progress: number, viewportWidth: number, viewportHeight: number) {
+  panel: BriefRect, anchor: BriefRect, progress: number, viewportWidth: number, viewportHeight: number,
+  rowCount?: number) {
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
-  const rows = Math.ceil(panel.height);
+  const rows = rowCount ?? Math.ceil(panel.height);
   const sourceHeight = texture.height / rows;
   for (let i = 0; i < rows; i++) {
     const row = briefGenieRow(panel, anchor, i / rows, progress);

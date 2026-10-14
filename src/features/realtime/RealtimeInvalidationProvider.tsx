@@ -10,6 +10,7 @@ import { createInvalidationBatcher } from "@/features/realtime/invalidation-batc
 
 const WATCHED_TABLES: RealtimeTable[] = [
   "things",
+  "thing_court_placement",
   "thing_attachments",
   "thing_comments",
   "thing_activity",
