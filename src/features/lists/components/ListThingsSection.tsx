@@ -9,6 +9,7 @@ import { formatCourtDue } from "@/features/court/court-view-model";
 import type { Thing } from "@/domain/thing";
 import type { ListRow } from "@/features/lists/fixtures";
 import type { ListThingFilter } from "@/features/lists/use-list-things-filter";
+import { Shimmer } from "@/components/katalist/ScreenSkeletons";
 import { cn } from "@/lib/utils";
 
 export type ListLaneId = "now" | "next" | "later";
@@ -41,6 +42,8 @@ interface ListThingsSectionProps {
   onClearFilters: () => void;
   selectedFile: ThingFile | null;
   onFileSelect: (file: ThingFile | null) => void;
+  /** True until the Things query first responds; shows shimmer instead of empty states. */
+  loading?: boolean;
 }
 
 /**
@@ -75,6 +78,7 @@ export function ListThingsSection({
   onClearFilters,
   selectedFile,
   onFileSelect,
+  loading = false,
 }: ListThingsSectionProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -182,7 +186,17 @@ export function ListThingsSection({
           </div>
 
           <div className="flex-1 overflow-auto min-h-0 p-2 pb-32">
-            {laneThings.map((thing) => {
+            {loading &&
+              Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-start gap-2.5 rounded-[10px] p-3" aria-hidden="true">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Shimmer className="h-4 w-3/4" />
+                    <Shimmer className="h-3 w-1/3" />
+                  </div>
+                  <Shimmer className="h-6 w-6 rounded-full" />
+                </div>
+              ))}
+            {!loading && laneThings.map((thing) => {
               const isSelected = thing.id === activeThing?.id;
               const due = formatCourtDue(thing);
               const isSorted = thing.workStatus === "sorted";
@@ -283,7 +297,7 @@ export function ListThingsSection({
                 </div>
               );
             })}
-            {laneThings.length === 0 && (
+            {!loading && laneThings.length === 0 && (
               <div className="py-8 text-center text-[12px] text-muted-foreground">
                 No Things in this lane.
               </div>
@@ -320,6 +334,13 @@ export function ListThingsSection({
                     <button type="button" onClick={onCloseSelected} className="mt-4 rounded-lg border px-3 py-2 text-[12px] font-semibold">
                       Close
                     </button>
+                  </div>
+                ) : loading ? (
+                  <div role="status" aria-label="Loading Things" className="space-y-4 p-6">
+                    <Shimmer className="h-6 w-2/3" />
+                    <Shimmer className="h-4 w-1/3" />
+                    <Shimmer className="h-32 w-full" />
+                    <Shimmer className="h-4 w-1/2" />
                   </div>
                 ) : activeThing ? (
                   <ThingDetailContent

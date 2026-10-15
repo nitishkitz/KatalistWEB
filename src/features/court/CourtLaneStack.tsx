@@ -824,11 +824,12 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
     return (
       <section
         ref={sectionRef}
+        data-court-lane={lane}
         className={cn(
           "relative flex min-w-0 flex-col overflow-hidden rounded-[14px] border transition-colors",
           content.borderTone,
         )}
-        style={{ background: content.gradient }}
+        style={{ background: `var(--court-lane-background, ${content.gradient})` }}
         aria-labelledby={`court-${lane}-title`}
         onDragOver={(e) => {
           if (e.dataTransfer.types.includes("application/katalist-thing")) {
@@ -918,12 +919,12 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
         )}
 
         {/* Sticky lane header */}
-        <div className="sticky top-0 z-20 flex items-start justify-between px-4 pt-4 pb-2.5 bg-inherit shrink-0">
+        <div className="court-lane-header sticky top-0 z-20 flex items-start justify-between px-4 pt-4 pb-2.5 bg-inherit shrink-0">
           <div className="flex items-center gap-2.5">
             <span
               aria-hidden="true"
               className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-white"
-              style={{ backgroundColor: content.iconBoxBg }}
+              style={{ backgroundColor: `var(--court-lane-accent, ${content.iconBoxBg})` }}
             >
               <KatalistIcon name={content.icon} className="h-4 w-4" />
             </span>
@@ -934,13 +935,13 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
                   id={`court-${lane}-title`}
                   tabIndex={-1}
                   className="min-w-0 truncate text-[20px] font-medium uppercase leading-none tracking-tight outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  style={{ color: content.accent }}
+                  style={{ color: `var(--court-lane-accent, ${content.accent})` }}
                 >
                   {content.label}
                 </h2>
                 <span
                   className="shrink-0 text-[13px] font-medium leading-none"
-                  style={{ color: content.accent }}
+                  style={{ color: `var(--court-lane-accent, ${content.accent})` }}
                 >
                   {things.length}
                 </span>
@@ -1190,8 +1191,15 @@ export const CourtLaneStack = forwardRef<CourtLaneStackHandle, CourtLaneStackPro
             )}
           </div>
         ) : (
-          <div className="flex min-h-[160px] flex-1 items-center justify-center px-3 text-center text-[12px] text-muted-foreground">
-            No Things match this view.
+          <div className="court-lane-empty flex min-h-[160px] flex-1 items-center justify-center px-3 text-center text-[12px] text-muted-foreground">
+            <span className="court-lane-empty-default">No Things match this view.</span>
+            <div className="court-lane-empty-home hidden max-w-[190px]">
+              <KatalistIcon name="later-lob" className="mx-auto mb-3 h-6 w-6 text-[#78828a]" aria-hidden="true" />
+              <p>No Things match this view.</p>
+              <p className="mt-1 leading-relaxed">
+                {lane === "next" ? "When something’s up next, it will show here." : lane === "later" ? "Park ideas, someday items, or lower priority tasks here." : "A little room for whatever comes next."}
+              </p>
+            </div>
           </div>
         )}
 

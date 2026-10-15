@@ -57,6 +57,11 @@
 .thing-description-editor {
   animation: description-enter 160ms ease-out;
 }
+.thing-description-format[aria-pressed="true"] {
+  color: #6534c4;
+  background: #eee7fc;
+  box-shadow: inset 0 0 0 1px #cbb6ed;
+}
 @keyframes description-enter {
   from {
     opacity: 0;
@@ -73,8 +78,11 @@
   }
 }
 @media (pointer: coarse) {
-  .thing-description [role="toolbar"] button {
+  .thing-description [role="toolbar"] .thing-description-format {
     width: 44px;
     height: 44px;
+  }
+  .thing-description-improve {
+    min-height: 44px;
   }
 }

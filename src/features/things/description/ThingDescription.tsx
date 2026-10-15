@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import { closeHistory } from "@tiptap/pm/history";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Bold,
@@ -10,8 +11,10 @@ import {
   Link2,
   List,
   ListOrdered,
+  Loader2,
   Pencil,
   Redo2,
+  Sparkles,
   Undo2,
 } from "lucide-react";
 import type { Thing } from "@/domain/thing";
@@ -30,6 +33,7 @@ import {
 } from "./document";
 import { DescriptionReadView } from "./DescriptionReadView";
 import { guardDescriptionDraft } from "./draft-guard";
+import { improveDescriptionDraft } from "./improve-description-client";
 import "./thing-description.css";
 
 type DescriptionDraft = {
@@ -65,6 +69,14 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [linkInput, setLinkInput] = useState<string | null>(null);
+  const [improving, setImproving] = useState(false);
+  const [improveError, setImproveError] = useState("");
+  const [suggestion, setSuggestion] = useState<{
+    document: DescriptionDocument;
+    source: string;
+    selected: boolean;
+  } | null>(null);
+  const improveRequest = useRef<AbortController | null>(null);
   const actionRef = useRef<HTMLButtonElement>(null);
   const mounted = useRef(true);
   const epoch = getIdentityEpoch(qc).epoch;
@@ -73,9 +85,39 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
     editing &&
     ((thing.descriptionRevision ?? 0) !== draft.revision || thing.owner.id !== draft.ownerId);
   const initialContent = useRef(draft.document);
-  const extensions = useMemo(() => [StarterKit.configure({ heading: false, blockquote: false, code: false, codeBlock: false, horizontalRule: false, strike: false, underline: false,
-    link: { openOnClick: false, autolink: true, linkOnPaste: true, protocols: ['http', 'https'], HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer nofollow' } } }), Placeholder.configure({ placeholder: 'Add a description…' })], []);
-  const editorProps = useMemo(() => ({ attributes: { role: 'textbox', 'aria-multiline': 'true', 'aria-labelledby': label, class: 'thing-description-prose thing-description-input' } }), [label]);
+  const extensions = useMemo(
+    () => [
+      StarterKit.configure({
+        heading: false,
+        blockquote: false,
+        code: false,
+        codeBlock: false,
+        horizontalRule: false,
+        strike: false,
+        underline: false,
+        link: {
+          openOnClick: false,
+          autolink: true,
+          linkOnPaste: true,
+          protocols: ["http", "https"],
+          HTMLAttributes: { target: "_blank", rel: "noopener noreferrer nofollow" },
+        },
+      }),
+      Placeholder.configure({ placeholder: "Add a description…" }),
+    ],
+    [],
+  );
+  const editorProps = useMemo(
+    () => ({
+      attributes: {
+        role: "textbox",
+        "aria-multiline": "true",
+        "aria-labelledby": label,
+        class: "thing-description-prose thing-description-input",
+      },
+    }),
+    [label],
+  );
   const editor = useEditor({
     immediatelyRender: false,
     shouldRerenderOnTransaction: false,
@@ -114,6 +156,7 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
     mounted.current = true;
     return () => {
       mounted.current = false;
+      improveRequest.current?.abort();
     };
   }, []);
   useBlockWhile(dirty || saving, "thing-description-draft");
@@ -130,8 +173,106 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
     return () => clearTimeout(timeout);
   }, [immediateLinks, editing]);
 
+  function stopImproving() {
+    improveRequest.current?.abort();
+    improveRequest.current = null;
+    setImproving(false);
+  }
+  function clearSuggestion() {
+    stopImproving();
+    setSuggestion(null);
+    setImproveError("");
+  }
+  async function improve() {
+    if (
+      !editor ||
+      !canEdit ||
+      saving ||
+      conflict ||
+      improveRequest.current ||
+      !isEpochCurrent(qc, epoch)
+    )
+      return;
+    const controller = new AbortController();
+    improveRequest.current = controller;
+    setImproving(true);
+    setImproveError("");
+    setSuggestion(null);
+    try {
+      const document = sanitizeDescription(editor.getJSON());
+      const source = JSON.stringify(document);
+      const { from, to, empty } = editor.state.selection;
+      const next = await improveDescriptionDraft(
+        {
+          thingId: thing.id,
+          document,
+          ...(!empty ? { selection: { from, to } } : {}),
+        },
+        controller.signal,
+      );
+      if (
+        !mounted.current ||
+        controller.signal.aborted ||
+        improveRequest.current !== controller ||
+        !isEpochCurrent(qc, epoch)
+      )
+        return;
+      if (JSON.stringify(sanitizeDescription(editor.getJSON())) !== source) {
+        setImproveError(
+          "Your description changed while Sarvam was working. Improve again to use your latest draft.",
+        );
+        return;
+      }
+      if (JSON.stringify(next) === source) {
+        setImproveError("No wording changes were suggested. Your draft is unchanged.");
+        return;
+      }
+      setSuggestion({ document: next, source, selected: !empty });
+    } catch (cause) {
+      if (
+        mounted.current &&
+        !controller.signal.aborted &&
+        improveRequest.current === controller &&
+        isEpochCurrent(qc, epoch)
+      )
+        setImproveError(
+          cause instanceof Error && cause.name !== "TimeoutError"
+            ? cause.message
+            : "Sarvam took too long. Your draft is unchanged; try again.",
+        );
+    } finally {
+      if (improveRequest.current === controller) {
+        improveRequest.current = null;
+        if (mounted.current) setImproving(false);
+      }
+    }
+  }
+  function applySuggestion() {
+    if (!suggestion || !editor || !canEdit || saving || conflict || !isEpochCurrent(qc, epoch))
+      return;
+    if (JSON.stringify(sanitizeDescription(editor.getJSON())) !== suggestion.source) {
+      setSuggestion(null);
+      setImproveError("Your description changed. Improve again to use your latest draft.");
+      return;
+    }
+    // Keep accepting a suggestion separate from edits on either side of it.
+    editor
+      .chain()
+      .focus()
+      .command(({ tr }) => {
+        closeHistory(tr);
+        return true;
+      })
+      .setContent(suggestion.document)
+      .run();
+    editor.view.dispatch(closeHistory(editor.state.tr));
+    setSuggestion(null);
+    setImproveError("");
+  }
+
   function begin() {
     if (!canEdit) return;
+    clearSuggestion();
     const next = {
       document: saved,
       base: saved,
@@ -146,6 +287,7 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
   }
   function cancel() {
     if (saving) return;
+    clearSuggestion();
     clearDraft(qc, "thing-description", thing.id);
     guardDescriptionDraft(qc, thing.id, false);
     setCurrentDraft({
@@ -161,6 +303,7 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
   }
   async function save() {
     if (!canEdit || !dirty || saving || conflict || !editor) return;
+    clearSuggestion();
     setSaving(true);
     setError("");
     try {
@@ -193,7 +336,16 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
       if (mounted.current) setSaving(false);
     }
   }
-  const activeFormats = useEditorState({ editor, selector: ({ editor: current }) => ({ bold: current?.isActive('bold') ?? false, italic: current?.isActive('italic') ?? false, bulletList: current?.isActive('bulletList') ?? false, orderedList: current?.isActive('orderedList') ?? false, link: current?.isActive('link') ?? false }) });
+  const activeFormats = useEditorState({
+    editor,
+    selector: ({ editor: current }) => ({
+      bold: current?.isActive("bold") ?? false,
+      italic: current?.isActive("italic") ?? false,
+      bulletList: current?.isActive("bulletList") ?? false,
+      orderedList: current?.isActive("orderedList") ?? false,
+      link: current?.isActive("link") ?? false,
+    }),
+  });
   const toolbar = [
     {
       label: "Bold",
@@ -228,6 +380,8 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
     { label: "Undo", icon: Undo2, run: () => editor?.chain().focus().undo().run() },
     { label: "Redo", icon: Redo2, run: () => editor?.chain().focus().redo().run() },
   ];
+  if (!editing && !canEdit && !descriptionText(saved)) return null;
+
   return (
     <section
       className="thing-description rounded-lg border border-[#eef0f6] bg-white p-3 xl:col-span-2"
@@ -283,15 +437,42 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
                 key={item.label}
                 type="button"
                 aria-label={item.label}
-                aria-pressed={item.active ?? false}
+                aria-pressed={item.active}
                 disabled={!canEdit || saving}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={item.run}
-                className="flex h-9 w-9 items-center justify-center rounded text-[#3a4675] hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-accent disabled:opacity-50"
+                className="thing-description-format flex h-9 w-9 items-center justify-center rounded text-[#3a4675] hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               >
                 <item.icon className="h-4 w-4" />
               </button>
             ))}
+            <button
+              type="button"
+              aria-label="Improve with Sarvam"
+              disabled={
+                !canEdit || saving || conflict || improving || !descriptionText(draft.document)
+              }
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void improve()}
+              title="Improve selected text, or the whole description. Review before applying."
+              className="thing-description-improve ml-auto inline-flex min-h-9 items-center gap-1.5 rounded-md border border-primary/15 bg-primary/[0.04] px-2.5 text-[12px] font-medium text-primary hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            >
+              {improving ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {improving ? "Improving…" : "Improve"}
+            </button>
+            {improving ? (
+              <button
+                type="button"
+                onClick={stopImproving}
+                className="min-h-9 rounded px-2 text-[12px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Stop
+              </button>
+            ) : null}
           </div>
           {linkInput !== null ? (
             <form
@@ -345,6 +526,62 @@ export function ThingDescription({ thing, canEdit }: { thing: Thing; canEdit: bo
             </form>
           ) : null}
           <EditorContent editor={editor} />
+          {improving ? (
+            <p role="status" className="mt-2 text-[12px] text-muted-foreground">
+              Sarvam is improving the wording. You can keep editing.
+            </p>
+          ) : null}
+          {suggestion ? (
+            <section
+              role="region"
+              aria-label="Sarvam suggestion"
+              className="mt-3 rounded-lg border border-primary/20 bg-primary/[0.03] p-3"
+            >
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <h4 className="flex items-center gap-1.5 text-[12px] font-medium text-primary">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Sarvam suggestion
+                </h4>
+                <span className="text-[12px] text-muted-foreground">
+                  {suggestion.selected ? "Selected text improved" : "Description improved"}
+                </span>
+              </div>
+              <div className="max-h-60 overflow-y-auto">
+                <DescriptionReadView document={suggestion.document} />
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <Button type="button" size="sm" variant="ghost" onClick={() => setSuggestion(null)}>
+                  Keep original
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={
+                    !canEdit ||
+                    saving ||
+                    conflict ||
+                    suggestion.source !== JSON.stringify(draft.document)
+                  }
+                  onClick={applySuggestion}
+                >
+                  Use suggestion
+                </Button>
+              </div>
+              {suggestion.source !== JSON.stringify(draft.document) ? (
+                <p className="mt-2 text-[12px] text-muted-foreground">
+                  Your draft changed. Improve again for a fresh suggestion.
+                </p>
+              ) : null}
+              <p className="mt-2 text-[12px] text-muted-foreground">
+                Review for accuracy. Changes are saved only when you choose Save.
+              </p>
+            </section>
+          ) : null}
+          {improveError ? (
+            <p role="alert" className="mt-2 text-[12px] text-destructive">
+              {improveError}
+            </p>
+          ) : null}
           {!canEdit || conflict ? (
             <p role="alert" className="mt-2 text-xs text-destructive">
               {!canEdit

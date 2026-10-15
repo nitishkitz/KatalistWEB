@@ -155,7 +155,7 @@ function ListTable({ rows, onEdit }: { rows: ListRow[]; onEdit?: (list: ListRow)
           </article>
         ))}
       </div>
-      <div className="hidden overflow-hidden rounded-2xl border border-[#ebedf1] bg-white md:block" style={{ boxShadow: "0 1px 2px rgba(11,12,41,0.04)" }}>
+      <div className="home-lists-table hidden overflow-hidden rounded-2xl border border-[#ebedf1] bg-white md:block" style={{ boxShadow: "0 1px 2px rgba(11,12,41,0.04)" }}>
       <div className="overflow-x-auto">
         <table className="w-full table-fixed text-left">
           <thead>
@@ -332,7 +332,7 @@ function GroupSection({
 }) {
   if (rows.length === 0) return null;
   return (
-    <section className="space-y-3">
+    <section className="home-list-group space-y-3">
       <div className="flex items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-2">
           <h2 className="text-[17px] font-semibold text-[#000533]">{title}</h2>
@@ -519,8 +519,12 @@ function ListsPage() {
   };
 
   return (
-    <AppShell>
-      <div className="space-y-4">
+    <AppShell homeSurface="lists">
+      <div className="home-lists-page space-y-4">
+        <header className="home-page-heading hidden">
+          <h1>Lists</h1>
+          <p>A place for plans you share.</p>
+        </header>
         {/* Toolbar: search, filters, role pills, sort, New List — single row */}
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex h-9 w-full items-center gap-2 rounded-xl border border-border/80 bg-white px-3  focus-within:border-primary focus-within:ring-2 focus-within:ring-ring sm:w-56">

@@ -28,7 +28,6 @@ import { useMorningBrief } from "@/features/catchup/use-morning-brief";
 import { CatchUpOverlay } from "@/features/catchup/CatchUpOverlay";
 import { consumeCatchupOpen, CATCHUP_OPEN_EVENT } from "@/features/catchup/catchup-entry";
 import { CatchUpBanner } from "@/features/catchup/CatchUpBanner";
-import { HomeArrival } from "@/features/court/HomeArrival";
 import { useAppContext } from "@/features/context/use-app-context";
 
 const DESKTOP_BREAKPOINT_QUERY = "(min-width: 1024px)";
@@ -327,7 +326,7 @@ function CourtPage() {
 
   if (isLoading) {
     return (
-      <AppShell noPadding>
+      <AppShell noPadding courtSurface>
         <div className="px-5 py-5">
           <CourtSkeleton />
         </div>
@@ -336,12 +335,7 @@ function CourtPage() {
   }
 
   return (
-    <AppShell noPadding>
-      {context === "home" && (
-        <div className="px-4 pt-4 lg:px-6">
-          <HomeArrival now={now.length} next={next.length} later={later.length} />
-        </div>
-      )}
+    <AppShell noPadding courtSurface>
       <CourtDesktop
         now={now}
         next={next}

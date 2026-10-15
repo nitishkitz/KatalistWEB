@@ -141,7 +141,7 @@ export function ThingStatusControls({
   </div>;
   const requestedPaceControl = thing.coey ? (
     <span className="inline-flex min-h-7 items-center text-[12px] font-medium text-[#3a4675]">
-      {thing.coey.schedule.pace === "urgent" ? "Urgent" : thing.coey.schedule.pace === "chill" ? "No rush" : "Normal"}
+      {thing.coey.schedule.pace === "urgent" ? "Now" : thing.coey.schedule.pace === "chill" ? "Later" : "Next"}
     </span>
   ) : paceControl("Sender’s pace", thing.ownerImportance, Boolean(caps?.canSetImportance), onSetRequestedPace);
 

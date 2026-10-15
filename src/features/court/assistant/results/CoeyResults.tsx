@@ -63,6 +63,8 @@ export function CoeyResults({ presentation, onOpenThing }: { presentation: CoeyP
           <ThingDetail key={i} block={block} actions={actions} onOpenThing={onOpenThing} />
         ) : block.type === "timeline" || block.type === "comments" ? (
           <Entries key={i} title={block.title} entries={block.entries} quote={block.type === "comments"} onOpenThing={onOpenThing} />
+        ) : block.type === "calculation" ? (
+          <CalculationCard key={i} block={block} />
         ) : block.type === "text" ? (
           <CoeyMarkdown key={i} text={block.markdown} />
         ) : block.type === "notice" ? (
@@ -81,6 +83,49 @@ export function CoeyResults({ presentation, onOpenThing }: { presentation: CoeyP
 }
 
 type Actions = ReturnType<typeof useRecordActions>;
+
+function CalculationCard({ block }: { block: Extract<ResultBlock, { type: "calculation" }> }) {
+  const { split } = block;
+  const total = split ? split.principal + split.interest : 0;
+  const principalShare = split && total > 0 ? Math.max(2, Math.min(98, Math.round((split.principal / total) * 100))) : 0;
+  return (
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white" aria-label={block.title}>
+      <div className="bg-gradient-to-br from-violet-50 to-white px-4 py-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-violet-700">{block.headline.label}</p>
+        <p className="mt-0.5 text-[32px] font-bold leading-tight tracking-[-0.02em] text-slate-900">{block.headline.value}</p>
+        {split ? (
+          <div className="mt-3">
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-amber-200" role="img" aria-label={`Principal ${split.principal_label}, interest ${split.interest_label}`}>
+              <div className="h-full bg-violet-600" style={{ width: `${principalShare}%` }} />
+            </div>
+            <div className="mt-1.5 flex justify-between text-xs text-slate-600">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-violet-600" aria-hidden="true" />Principal <b className="font-semibold text-slate-800">{split.principal_label}</b></span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-300" aria-hidden="true" />Interest <b className="font-semibold text-slate-800">{split.interest_label}</b></span>
+            </div>
+          </div>
+        ) : null}
+      </div>
+      {block.stats.length ? (
+        <dl className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-3">
+          {block.stats.map((st) => (
+            <div key={st.label} className="bg-white px-4 py-2.5">
+              <dt className="text-xs text-slate-500">{st.label}</dt>
+              <dd className="mt-0.5 text-sm font-semibold text-slate-900">{st.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      <details className="group border-t border-slate-100 px-4 py-2.5 text-xs text-slate-600">
+        <summary className="flex cursor-pointer list-none items-center gap-1 font-medium text-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-violet-300">
+          <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden="true" /> How it is calculated
+        </summary>
+        <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 font-serif text-[13px] text-slate-800">{block.formula}</p>
+        {block.steps.length ? <ol className="mt-2 list-decimal space-y-0.5 pl-5">{block.steps.map((st) => <li key={st}>{st}</li>)}</ol> : null}
+      </details>
+      {block.note ? <p className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500">{block.note}</p> : null}
+    </section>
+  );
+}
 
 const stamp = (iso: string) => format(new Date(iso), isToday(new Date(iso)) ? "'Today,' h:mm a" : "EEE d MMM, h:mm a");
 

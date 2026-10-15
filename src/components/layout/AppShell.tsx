@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "@/features/context/home-surfaces.css";
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { AppSidebar } from "./Sidebar";
@@ -25,9 +26,23 @@ interface AppShellProps {
   hideTopNav?: boolean;
   /** Hide the mobile bottom navigation for focused detail screens. */
   hideBottomNav?: boolean;
+  /** Opt in to the photographic personal Court surface. */
+  courtSurface?: boolean;
+  /** Approved photographic Home surfaces; never affects Work mode. */
+  homeSurface?: "lists" | "buckets" | "nudges" | "me" | "team";
 }
 
-export function AppShell({ title, subtitle, actions, children, noPadding, hideTopNav, hideBottomNav }: AppShellProps) {
+export function AppShell({
+  title,
+  subtitle,
+  actions,
+  children,
+  noPadding,
+  hideTopNav,
+  hideBottomNav,
+  courtSurface,
+  homeSurface,
+}: AppShellProps) {
   const { session, loading } = useSession();
   const { context } = useAppContext();
   const navigate = useNavigate();
@@ -66,13 +81,21 @@ export function AppShell({ title, subtitle, actions, children, noPadding, hideTo
   }
 
   return (
-    <div data-app-context={context} className="katalist-app-shell flex min-h-screen w-full flex-col bg-background">
+    <div
+      data-app-context={context}
+      data-court-theme={(courtSurface || homeSurface) && context === "home" ? "home" : undefined}
+      data-home-surface={context === "home" ? homeSurface : undefined}
+      className="katalist-app-shell flex min-h-screen w-full flex-col bg-background"
+    >
       <GlobalThingContextMenu />
       {!hideTopNav && <TopNav />}
       {!hideTopNav && <MobileContextSwitch />}
-      <AppSidebar hideBottomNav={hideBottomNav} />{/* mobile bottom tab bar only */}
+      <AppSidebar hideBottomNav={hideBottomNav} />
+      {/* mobile bottom tab bar only */}
       <main className={`flex-1 min-w-0 ${hideBottomNav ? "" : "pb-16 md:pb-0"}`}>
-        {noPadding ? children : (
+        {noPadding ? (
+          children
+        ) : (
           <div className="mx-auto w-full min-w-0 max-w-[1440px] flex-1 px-4 pb-10 pt-4 md:px-8 md:pt-6">
             {title && <PageHeader title={title} subtitle={subtitle} actions={actions} />}
             {children}

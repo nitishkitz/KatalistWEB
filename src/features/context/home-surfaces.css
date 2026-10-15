@@ -1,0 +1,109 @@
+/* Approved Home extensions. All selectors are opt-in and Work is unchanged. */
+[data-home-surface] {
+  --home-panel: rgba(253,250,244,.78);
+  --home-line: rgba(126,111,88,.16);
+}
+[data-home-surface] .home-page-heading { display: block; margin-bottom: 22px; }
+[data-home-surface] .home-page-heading :is(h1,h2) {
+  color: #101639;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(1.65rem, 2.3vw, 2.15rem);
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+[data-home-surface] .home-page-heading p { margin-top: 7px; font-size: 13px; color: #536187; }
+[data-home-surface="lists"] .home-lists-page { padding: 0 0 32px; }
+[data-home-surface="lists"] .home-list-group {
+  background: var(--home-panel);
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 14px;
+  padding: 14px;
+}
+[data-home-surface="lists"] .home-lists-table { background: rgba(255,255,255,.89); border-color: var(--home-line); box-shadow: none; }
+[data-home-surface="lists"] .home-lists-table thead tr { background: #f7f4ef; }
+[data-home-surface="lists"] .home-lists-table tbody tr:hover { background: #f6f1fc; }
+[data-home-surface="buckets"] .buckets-workspace {
+  max-width: 1600px;
+  min-height: auto;
+  align-items: start;
+  gap: 16px;
+  padding: 0 0 64px;
+  --bucket-line: var(--home-line);
+}
+[data-home-surface="buckets"] .buckets-rail,
+[data-home-surface="buckets"] .buckets-main {
+  background: var(--home-panel);
+  border: 1px solid rgba(255,255,255,.5);
+  border-radius: 14px;
+  padding: 22px 16px;
+}
+[data-home-surface="buckets"] .buckets-rail .home-page-heading { margin-bottom: 18px; }
+[data-home-surface="buckets"] .buckets-rail h1 { margin: 0; font-family: inherit; font-size: 21px; }
+[data-home-surface="buckets"] .buckets-heading { min-height: 92px; gap: 16px; }
+[data-home-surface="buckets"] .buckets-heading > img { width: 64px; height: 64px; }
+[data-home-surface="buckets"] .buckets-table { background: rgba(255,255,255,.9); border-radius: 10px; }
+[data-home-surface="buckets"] .buckets-search { background: #fff; }
+[data-home-surface="nudges"] .home-nudges-panel {
+  background: var(--home-panel);
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 14px;
+  box-shadow: none !important;
+}
+[data-home-surface="nudges"] .home-nudges-panel table { background: rgba(255,255,255,.94); }
+[data-home-surface="nudges"] .home-nudges-panel ul { background: rgba(255,255,255,.94); border-radius: 10px; padding: 16px; }
+[data-home-surface="me"] .profile-page {
+  padding: 0;
+  gap: 24px;
+  align-items: start;
+  min-height: auto;
+  --profile-line: var(--home-line);
+}
+[data-home-surface="me"] .profile-rail { background: var(--home-panel); border: 1px solid rgba(255,255,255,.5); border-radius: 14px; }
+[data-home-surface="me"] .profile-content { background: transparent; padding: 24px 24px 40px 0; }
+[data-home-surface="me"] .profile-cover-banner { display: none; }
+[data-home-surface="me"] .profile-identity { margin-top: 0; padding-top: 0; }
+[data-home-surface="me"] .profile-content > .space-y-6 > section:not(.profile-identity) {
+  background: rgba(255,255,255,.92);
+  border-color: var(--home-line);
+  box-shadow: none;
+}
+[data-home-surface="me"] .profile-content .home-page-heading > p { margin: 0 0 10px; font-size: 11px; letter-spacing: .08em; }
+@media (max-width: 767px) {
+  [data-home-surface="buckets"] .buckets-workspace { padding: 16px 12px 80px; gap: 14px; }
+  [data-home-surface="me"] .profile-page { padding: 16px 12px 80px; gap: 16px; }
+  [data-home-surface="me"] .profile-content { padding-top: 0; }
+  [data-home-surface="lists"] .home-list-group { padding: 10px; }
+  [data-home-surface] .home-page-heading { margin-bottom: 16px; }
+}
+@media (max-width: 800px) {
+  [data-home-surface="me"] .profile-content,
+  [data-home-surface="me"] .profile-rail { width: 100%; }
+}
+@media (max-width: 700px) {
+  [data-home-surface="buckets"] .buckets-rail { margin-bottom: 14px; }
+}
+/* One continuous Lists surface, with quiet group dividers. */
+[data-home-surface="lists"] .home-lists-page > .space-y-6 {
+  background: var(--home-panel);
+  border: 1px solid rgba(255,255,255,.55);
+  border-radius: 14px;
+  padding: 14px;
+}
+[data-home-surface="lists"] .home-list-group {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* Team shares the Home atmosphere without moving the existing rail or chat. */
+[data-home-surface="team"] .home-team-layout > div:first-child > aside {
+  background: var(--home-panel);
+  border-right-color: var(--home-line);
+}
+[data-home-surface="team"] .home-team-main > div:not([role="alert"]) {
+  background-color: rgba(253,250,244,.65);
+}
+@media (max-width: 800px) {
+  [data-home-surface="me"] .profile-content { padding: 20px 16px; }
+}

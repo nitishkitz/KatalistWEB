@@ -12,6 +12,8 @@ import { useLocalVersion } from "@/features/things/use-local-version";
 import { isPersonallyShreddedList, usePersonalShred } from "@/features/things/personal-shred";
 import { getIdentityEpoch, isEpochCurrent } from "@/features/realtime/identity-cache-policy";
 import { withReadDeadline } from "@/lib/read-request";
+import { useEffect, useState } from "react";
+import { isUpcomingMeeting } from "./meeting-lifecycle";
 
 export type ListMeeting = {
   id: string;
@@ -46,6 +48,17 @@ async function fetchMeetings(listId: string, querySignal?: AbortSignal): Promise
 /** Upcoming meetings for a List (also covers Team-Hub DM/group conversations,
  *  which are themselves rows in `lists`). Ordered soonest-first. */
 export function useListMeetings(listId: string) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    // Expire cards while the List stays open, including cached/preview data.
+    const tick = () => setNow(Date.now());
+    const timer = window.setInterval(tick, 30_000);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", tick);
+    };
+  }, []);
   const { session, user } = useSession();
   const preview = isPreviewSession(session);
   const qc = useQueryClient();
@@ -116,7 +129,7 @@ export function useListMeetings(listId: string) {
       : query.data ?? [];
 
   return {
-    meetings,
+    meetings: meetings.filter((meeting) => isUpcomingMeeting(meeting, now)),
     isLoading: !preview && !hidden && query.isLoading,
     // B-03/C-04: previously not exposed -- a failed fetch silently fell
     // back to `meetings: []`, indistinguishable from "no meetings

@@ -485,17 +485,108 @@
   scroll-behavior: auto !important;
 }
 
-/* Personal context stays recognizably Katalist, with a quieter, warmer surface.
-   Only opacity is animated: no page scale, slide, or layout-changing entrance. */
-.katalist-app-shell[data-app-context="home"] {
-  background-color: #fcfafc;
-}
+/* Home Court: photographic atmosphere around opaque, functional task surfaces.
+   Opt-in on Court only; other routes and Work retain their existing surfaces. */
+.katalist-app-shell[data-app-context="home"] { background-color: #fcfafc; }
 .katalist-app-shell[data-app-context="home"] > nav {
   background-color: #faf6fd;
   border-bottom-color: #ede5f2;
 }
+.katalist-app-shell[data-court-theme="home"] {
+  background-color: #f5f0e7;
+  position: relative;
+  isolation: isolate;
+}
+.katalist-app-shell[data-court-theme="home"] > nav {
+  background-color: rgba(250,247,240,.45);
+  border-bottom-color: rgba(255,255,255,.24);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.katalist-app-shell[data-court-theme="home"] > main {
+  position: relative;
+  isolation: isolate;
+}
+.katalist-app-shell[data-court-theme="home"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: #f5f0e7;
+  background-image: url('/images/home/home-approved-room-desktop.webp');
+  background-size: cover;
+  background-position: center bottom;
+  background-repeat: no-repeat;
+}
 .home-arrival { animation: home-arrive 180ms ease-out both; }
+.home-arrival-title {
+  color: #353b32;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: clamp(1.5rem, 2.2vw, 2rem);
+  line-height: 1.2;
+  letter-spacing: -.025em;
+}
+[data-court-theme="home"] [data-court-lane] {
+  --court-lane-background: transparent;
+  border-color: transparent;
+  border-right-color: rgba(134,121,102,.2);
+  border-radius: 0;
+}
+[data-court-theme="home"] [data-court-lane="now"] { --court-lane-accent: #fe1016; }
+[data-court-theme="home"] [data-court-lane="next"] { --court-lane-accent: #0b62f8; }
+[data-court-theme="home"] [data-court-lane="later"] { --court-lane-accent: #641dfb; }
+[data-court-theme="home"] .court-lane-header {
+  background: transparent;
+  border-bottom: 0;
+}
+[data-court-theme="home"] .court-lane-empty {
+  flex: 1 1 auto;
+  min-height: 140px;
+  color: #595d54;
+  margin: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  background: transparent;
+}
+[data-court-theme="home"] .court-lane-empty-default { display: none; }
+[data-court-theme="home"] .court-lane-empty-home,
+[data-court-theme="home"] .court-others-home-empty { display: block; }
+[data-court-theme="home"] .court-others-home-empty {
+  background: rgba(250,247,240,.4);
+  border-radius: 0 0 12px 12px;
+}
+[data-court-theme="home"] #court-with-others {
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  top: 4rem;
+  height: calc(100dvh - 15rem);
+  min-height: 240px;
+}
+[data-court-theme="home"] #court-with-others > header {
+  background: rgba(250,247,240,.58);
+  border-radius: 12px 12px 0 0;
+}
+[data-court-theme="home"] #court-with-others > div { background: transparent; }
+[data-court-theme="home"] #court-with-others [data-thing-id],
+[data-court-theme="home"] #court-with-others [role="status"] { background: #fff; }
+[data-court-theme="home"] .court-lanes-region {
+  height: calc(100dvh - 15rem);
+  min-height: 320px;
+}
 @keyframes home-arrive { from { opacity: 0; } to { opacity: 1; } }
+@media (min-width: 1921px), (min-width: 1280px) and (min-resolution: 1.5dppx) {
+  .katalist-app-shell[data-court-theme="home"]::before {
+    background-image: url('/images/home/home-approved-room-4k.webp');
+  }
+}
+@media (max-width: 767px) {
+  .katalist-app-shell[data-court-theme="home"]::before {
+    background-image: linear-gradient(rgba(250,247,240,.16), rgba(250,247,240,.08)), url('/images/home/home-approved-room-mobile.webp');
+    background-position: 72% bottom;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .home-arrival { animation: none; }
 }

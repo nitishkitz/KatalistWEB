@@ -40,6 +40,9 @@ export function isNetworkError(err: unknown): boolean {
 export function domainErrorMessage(err: unknown): string {
   const raw = extractErrorMessage(err) ?? "";
   const lower = raw.toLowerCase();
+  if (lower.includes("buckets_owner_profile_id_name_key")) {
+    return "You already have a bucket with this name in Work or Home. Choose a different name.";
+  }
   if (lower.includes("permission") || lower.includes("row-level") || lower.includes("42501") || lower.includes("not allowed")) {
     return "You don’t have permission to do that.";
   }

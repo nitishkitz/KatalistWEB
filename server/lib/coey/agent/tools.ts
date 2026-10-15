@@ -4,6 +4,8 @@ import type { ActionParams, AssistantActionType } from "../../assistant-actions"
 import { FESTIVAL_DATES } from "../../../../src/domain/coey/time";
 const WEEKDAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 import type { Workspace, WsThing } from "./workspace";
+import type { CalculationBlock } from "../../../../src/domain/coey/presentation";
+import { calculate, loanEmi } from "./calc";
 
 /**
  * The Ask agent's tools. Read tools filter the viewer's Workspace (already
@@ -57,6 +59,28 @@ export const TOOL_DEFINITIONS = [
       name: "date_info",
       description: "Exact calendar facts: today's date, the weekday of a date, days from today, and known dates of festivals and of the user's own holidays.",
       parameters: { type: "object", additionalProperties: false, properties: { date: nullable({ type: "string", description: "YYYY-MM-DD" }), occasion: nullable({ type: "string", description: "A festival or occasion name" }) } },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "calculate",
+      description:
+        "Exact maths. ALWAYS use this for any loan EMI or arithmetic instead of working it out yourself. kind=loan_emi needs principal (full number, e.g. 5000000 for 50 lakhs), annual_rate_percent and years or months. kind=expression needs expression, using numbers with + - × ÷ ^ % and brackets. Quote the returned figures exactly.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          kind: { type: "string", enum: ["loan_emi", "expression"] },
+          principal: nullable({ type: "number" }),
+          annual_rate_percent: nullable({ type: "number" }),
+          years: nullable({ type: "number" }),
+          months: nullable({ type: "integer" }),
+          currency: nullable({ type: "string", description: "Currency symbol, default ₹" }),
+          expression: nullable({ type: "string" }),
+        },
+        required: ["kind"],
+      },
     },
   },
   {
@@ -166,6 +190,8 @@ export class AgentTools {
   readonly timelines = new Map<string, Entry[]>();
   /** Whether the answer used the person's Katalist data (decides which checks apply). */
   usedKatalist = false;
+  /** Exact calculations from the calculate tool, shown as cards. */
+  readonly calculations: CalculationBlock[] = [];
   readonly commentSets = new Map<string, Entry[]>();
   hasRef(ref: string) { return this.results.has(ref) || this.details.has(ref) || this.timelines.has(ref) || this.commentSets.has(ref); }
   /** Set when the model calls show_answer. */
@@ -183,6 +209,12 @@ export class AgentTools {
     if (["find_things", "get_thing", "search_comments", "activity", "people_lists_buckets", "propose_action"].includes(name)) this.usedKatalist = true;
     switch (name) {
       case "date_info": return this.dateInfo(args);
+      case "calculate": {
+        const out = args.kind === "loan_emi" ? loanEmi(args as Parameters<typeof loanEmi>[0]) : calculate(str(args.expression) ?? "");
+        if ("error" in out) return { result: { error: out.error }, thingIds: [], status: "Calculating" };
+        this.calculations.push(out.block);
+        return { result: out.facts, thingIds: [], status: "Calculating" };
+      }
       case "find_things": return this.findThings(args);
       case "get_thing": return this.getThing(args);
       case "search_comments": return this.searchComments(args);

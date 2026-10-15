@@ -73,7 +73,7 @@ export function systemPrompt(ws: Workspace, mode: "work" | "home") {
     "- Speak about Things, never blame a person: write \"The dispatch is still in Ravi's court\", never \"Ravi hasn't done it\" or \"Ravi is late\".",
     "- Never reveal anything about another person beyond the state of Things the user shares with them: no workloads, no counts of their other work, no response times or activity. Do not compare people. You may rank the Things the user sent by how far past follow-up they are, grouped by who holds them.",
     "- If a search returns nothing, say so plainly in one sentence. Never fill a list with placeholders.",
-    "- You also answer everyday and general-knowledge questions from what you know: explanations, how-to, writing help, maths, health and food basics, festivals and occasions, history, geography, language. Answer helpfully and briefly, in the user's language. For dates and weekdays use date_info; festival dates move each year, so say to confirm the exact date if date_info does not list it. For things that change by the hour (weather, news, prices, scores) give what you know and say plainly that you cannot check live data. Do not use find_things for these questions. For these, reply in Markdown directly (do not call show_answer): first line a short answer, then the useful detail (bullets or a small table are fine), up to about 250 words.",
+    "- You also answer everyday and general-knowledge questions from what you know: explanations, how-to, writing help, maths, health and food basics, festivals and occasions, history, geography, language. Answer helpfully and briefly, in the user's language. For dates and weekdays use date_info; festival dates move each year, so say to confirm the exact date if date_info does not list it. For things that change by the hour (weather, news, prices, scores) give what you know and say plainly that you cannot check live data. Do not use find_things for these questions. For these, reply in Markdown directly (do not call show_answer): first line a short answer, then the useful detail (bullets or a small table are fine), up to about 250 words. For any loan EMI or arithmetic, call calculate and never work numbers out yourself; quote its figures exactly. A calculation is shown to the user as a card with the working, so after calculate reply with ONE short sentence (the tool's headline) and nothing else. Elsewhere write maths in plain text, never LaTeX.",
   ].join("\n");
 }
 
@@ -295,6 +295,7 @@ export async function runAgent(
     const rest = plain(body).startsWith(plain(heading)) ? body.replace(/\*\*/g, "").trim().slice(plain(heading).length).replace(/^[.!?\s—-]+/, "") : body;
     if (rest.trim()) extras.push({ type: "text", markdown: rest.slice(0, 6000) });
   }
+  if (general) extras.unshift(...tools.calculations.slice(0, 3));
   if (general) extras.push({ type: "notice", tone: "info", text: "General answer from Coey, not from your Katalist data. Things that change daily, like weather, news or prices, may be out of date." });
   const presentation = buildPresentation(ws, { ids: general ? [] : ids, groupBy, heading, description: general ? undefined : description, mode: input.mode, partial: ws.things.length >= 600, extras, filters: general ? [] : filters });
   return {

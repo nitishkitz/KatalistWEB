@@ -57,6 +57,7 @@ import { Route as ApiJobsDailyMaintenanceRouteImport } from './routes/api/jobs/d
 import { Route as ApiJobsEscalateNudgesRouteImport } from './routes/api/jobs/escalate-nudges'
 import { Route as ApiNudgesNotifyRouteImport } from './routes/api/nudges/notify'
 import { Route as ApiPushTestRouteImport } from './routes/api/push/test'
+import { Route as ApiThingsImproveDescriptionRouteImport } from './routes/api/things/improve-description'
 import { Route as ApiThingsNotifyMentionRouteImport } from './routes/api/things/notify-mention'
 import { Route as ApiAssistantActionConfirmRouteImport } from './routes/api/assistant/action/confirm'
 import { Route as ApiAssistantActionPreviewRouteImport } from './routes/api/assistant/action/preview'
@@ -322,6 +323,12 @@ const ApiPushTestRoute = ApiPushTestRouteImport.update({
   path: '/api/push/test',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiThingsImproveDescriptionRoute =
+  ApiThingsImproveDescriptionRouteImport.update({
+    id: '/api/things/improve-description',
+    path: '/api/things/improve-description',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiThingsNotifyMentionRoute = ApiThingsNotifyMentionRouteImport.update({
   id: '/api/things/notify-mention',
   path: '/api/things/notify-mention',
@@ -457,6 +464,7 @@ export interface FileRoutesByFullPath {
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/push/test': typeof ApiPushTestRoute
+  '/api/things/improve-description': typeof ApiThingsImproveDescriptionRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
   '/api/assistant/action/confirm': typeof ApiAssistantActionConfirmRoute
   '/api/assistant/action/preview': typeof ApiAssistantActionPreviewRoute
@@ -519,6 +527,7 @@ export interface FileRoutesByTo {
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/push/test': typeof ApiPushTestRoute
+  '/api/things/improve-description': typeof ApiThingsImproveDescriptionRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
   '/api/assistant/action/confirm': typeof ApiAssistantActionConfirmRoute
   '/api/assistant/action/preview': typeof ApiAssistantActionPreviewRoute
@@ -585,6 +594,7 @@ export interface FileRoutesById {
   '/api/jobs/escalate-nudges': typeof ApiJobsEscalateNudgesRoute
   '/api/nudges/notify': typeof ApiNudgesNotifyRoute
   '/api/push/test': typeof ApiPushTestRoute
+  '/api/things/improve-description': typeof ApiThingsImproveDescriptionRoute
   '/api/things/notify-mention': typeof ApiThingsNotifyMentionRoute
   '/api/assistant/action/confirm': typeof ApiAssistantActionConfirmRoute
   '/api/assistant/action/preview': typeof ApiAssistantActionPreviewRoute
@@ -652,6 +662,7 @@ export interface FileRouteTypes {
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
     | '/api/push/test'
+    | '/api/things/improve-description'
     | '/api/things/notify-mention'
     | '/api/assistant/action/confirm'
     | '/api/assistant/action/preview'
@@ -714,6 +725,7 @@ export interface FileRouteTypes {
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
     | '/api/push/test'
+    | '/api/things/improve-description'
     | '/api/things/notify-mention'
     | '/api/assistant/action/confirm'
     | '/api/assistant/action/preview'
@@ -779,6 +791,7 @@ export interface FileRouteTypes {
     | '/api/jobs/escalate-nudges'
     | '/api/nudges/notify'
     | '/api/push/test'
+    | '/api/things/improve-description'
     | '/api/things/notify-mention'
     | '/api/assistant/action/confirm'
     | '/api/assistant/action/preview'
@@ -839,6 +852,7 @@ export interface RootRouteChildren {
   ApiJobsEscalateNudgesRoute: typeof ApiJobsEscalateNudgesRoute
   ApiNudgesNotifyRoute: typeof ApiNudgesNotifyRoute
   ApiPushTestRoute: typeof ApiPushTestRoute
+  ApiThingsImproveDescriptionRoute: typeof ApiThingsImproveDescriptionRoute
   ApiThingsNotifyMentionRoute: typeof ApiThingsNotifyMentionRoute
   ApiAssistantActionConfirmRoute: typeof ApiAssistantActionConfirmRoute
   ApiAssistantActionPreviewRoute: typeof ApiAssistantActionPreviewRoute
@@ -1194,6 +1208,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPushTestRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/things/improve-description': {
+      id: '/api/things/improve-description'
+      path: '/api/things/improve-description'
+      fullPath: '/api/things/improve-description'
+      preLoaderRoute: typeof ApiThingsImproveDescriptionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/things/notify-mention': {
       id: '/api/things/notify-mention'
       path: '/api/things/notify-mention'
@@ -1383,6 +1404,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiJobsEscalateNudgesRoute: ApiJobsEscalateNudgesRoute,
   ApiNudgesNotifyRoute: ApiNudgesNotifyRoute,
   ApiPushTestRoute: ApiPushTestRoute,
+  ApiThingsImproveDescriptionRoute: ApiThingsImproveDescriptionRoute,
   ApiThingsNotifyMentionRoute: ApiThingsNotifyMentionRoute,
   ApiAssistantActionConfirmRoute: ApiAssistantActionConfirmRoute,
   ApiAssistantActionPreviewRoute: ApiAssistantActionPreviewRoute,

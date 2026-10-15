@@ -29,6 +29,7 @@ import { useTossFeedback } from "./use-toss-feedback";
 import { TossReceipt } from "./TossReceipt";
 import { CourtBucketsSidePanel } from "./CourtBucketsSidePanel";
 import { CourtWithOthersSidebar } from "./CourtWithOthersSidebar";
+import { CourtSidebarPane } from "./CourtSidebarPane";
 import { CourtDetailModal } from "./CourtDetailModal";
 import type { CourtFocusSelection } from "./court-stack-model";
 import type { FocusViewTabId } from "./court-stack-model";
@@ -575,6 +576,7 @@ export function CourtDesktop({
   // that range instead. At >=1280px (xl) it's back to always visible,
   // regardless of this state, via the xl:block override on its wrapper.
   const [withOthersOpenNarrow, setWithOthersOpenNarrow] = useState(false);
+  const [withOthersOccupiedWidth, setWithOthersOccupiedWidth] = useState(0);
 
   useEffect(() => {
     const handleDragStart = (e: DragEvent) => {
@@ -660,7 +662,7 @@ export function CourtDesktop({
   }
 
   return (
-    <div className="relative hidden lg:block min-h-[calc(100vh-7rem)] w-full min-w-0 px-6 py-3">
+    <div className="court-desktop relative hidden lg:block min-h-[calc(100vh-7rem)] w-full min-w-0 px-6 py-3">
       {isLoading ? (
         <p className="mb-2 text-[12px] text-muted-foreground" aria-live="polite">
           Loading your Court…
@@ -923,7 +925,7 @@ export function CourtDesktop({
 
       <div className="flex w-full min-w-0 items-start gap-4">
         {/* Lanes */}
-        <div className="min-h-0 min-w-0 flex-1 flex flex-col h-[calc(100vh-8rem)]">
+        <div className="court-lanes-region min-h-0 min-w-0 flex-1 flex flex-col h-[calc(100vh-8rem)]">
           <CourtWorkspace
             selection={focusSelection}
             lanes={{ now: view.now, next: view.next, later: view.later }}
@@ -956,21 +958,22 @@ export function CourtDesktop({
             this sidebar leaves each lane too narrow to be readable there.
             Section groups: "Needs Attention", "Waiting for Catch", "Moving"
             Selected detail renders InlineThingDetailWorkspace with theirSelectedId / setTheirSelectedId(selectedThing.id) */}
-        {!showBucketsPanel && (
-          <div className={cn(withOthersOpenNarrow ? "block" : "hidden", "xl:block")}>
-            <CourtWithOthersSidebar
-              theirGroups={theirGroups}
-              theirFocus={theirFocus}
-              setTheirFocus={setTheirFocus}
-              theirs={view.theirs}
-              onOpenThing={(thing, origin) => handleOpen("theirs", thing, origin)}
-              onViewAllTheirs={() => handleViewAll("theirs")}
-              theirSelectedId={theirSelectedId}
-              setTheirSelectedId={setTheirSelectedId}
-              directory={directory}
-            />
-          </div>
-        )}
+        <CourtSidebarPane
+          className={cn(withOthersOpenNarrow ? "block" : "hidden", "xl:block", showBucketsPanel && "!hidden")}
+          onOccupiedWidthChange={setWithOthersOccupiedWidth}
+        >
+          <CourtWithOthersSidebar
+            theirGroups={theirGroups}
+            theirFocus={theirFocus}
+            setTheirFocus={setTheirFocus}
+            theirs={view.theirs}
+            onOpenThing={(thing, origin) => handleOpen("theirs", thing, origin)}
+            onViewAllTheirs={() => handleViewAll("theirs")}
+            theirSelectedId={theirSelectedId}
+            setTheirSelectedId={setTheirSelectedId}
+            directory={directory}
+          />
+        </CourtSidebarPane>
       </div>
 
       <div aria-live="polite" className="sr-only">
@@ -978,7 +981,12 @@ export function CourtDesktop({
       </div>
 
       {!focusSelection && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-6">
+        <div
+          className="pointer-events-none fixed inset-x-0 bottom-5 z-40 flex justify-center px-6"
+          // Keep the original centered position until the sidebar reaches it.
+          // 720px = the 672px composer plus its two 24px page gutters.
+          style={{ right: showBucketsPanel ? 0 : `max(0px, calc(${withOthersOccupiedWidth * 2 + 720}px - 100vw))` }}
+        >
           <div className="pointer-events-auto w-full max-w-2xl">
             <TossReceipt
               items={tossFeedback.items}

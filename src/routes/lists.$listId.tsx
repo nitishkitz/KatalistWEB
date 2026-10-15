@@ -21,7 +21,7 @@ import { useListMeetings } from "@/features/lists/use-list-meetings";
 import { ScheduleMeetingDialog } from "@/features/lists/ScheduleMeetingDialog";
 import { StartCallDialog, type CallPerson } from "@/features/calls/StartCallDialog";
 import { consumeAutojoin, onAutojoin } from "@/features/calls/autojoin-signal";
-import { ListDetailSkeleton } from "@/components/katalist/ScreenSkeletons";
+import { ListDetailSkeleton, Shimmer } from "@/components/katalist/ScreenSkeletons";
 import { useSession } from "@/hooks/useSession";
 import { isPreviewSession } from "@/lib/session-mode";
 import { type ThingFile } from "@/features/things/PDFViewer";
@@ -84,7 +84,7 @@ function ListDetailPage() {
   useLocalVersion();
   const { list, isLoading, error, refetch: refetchList } = useList(listId);
   const chat = useListMessages(listId);
-  const { things: listThings, myActorId } = useListThings(listId);
+  const { things: listThings, myActorId, isLoading: thingsLoading } = useListThings(listId);
   const { user, session } = useSession();
   const preview = isPreviewSession(session);
   // Unique per-device call identity. Using only user.id collides when the same
@@ -783,6 +783,7 @@ function ListDetailPage() {
             onClearFilters={clearThingFilters}
             selectedFile={selectedFile}
             onFileSelect={setSelectedFile}
+            loading={thingsLoading}
           />
         )}
 
@@ -808,7 +809,7 @@ function ListDetailPage() {
                   <div className="mt-1 text-[11.5px] text-[#6a769c]">Members</div>
                 </div>
                 <div className="rounded-[8px] bg-[#f7f8fd] px-3 py-2.5">
-                  <div className="text-[20px] font-semibold leading-none text-[#000533]">{listThings.length}</div>
+                  <div className="text-[20px] font-semibold leading-none text-[#000533]">{thingsLoading ? <Shimmer className="h-5 w-8" /> : listThings.length}</div>
                   <div className="mt-1 text-[11.5px] text-[#6a769c]">Things</div>
                 </div>
               </div>
@@ -899,6 +900,11 @@ function ListDetailPage() {
                     <button type="button" onClick={() => void meetingsHook.refetch()} className="font-semibold underline">
                       Retry
                     </button>
+                  </div>
+                ) : meetingsHook.isLoading ? (
+                  <div className="mt-2 space-y-1.5" role="status" aria-label="Loading meetings">
+                    <Shimmer className="h-12 w-full rounded-[8px]" />
+                    <Shimmer className="h-12 w-full rounded-[8px]" />
                   </div>
                 ) : meetingsHook.meetings.length === 0 ? (
                   <p className="mt-1.5 text-[11.5px] text-[#8487a7]">No meetings scheduled.</p>
@@ -1021,7 +1027,13 @@ function ListDetailPage() {
                     </button>
                   );
                 })}
-                {listThings.length === 0 && (
+                {thingsLoading && (
+                  <>
+                    <Shimmer className="h-12 w-full rounded-[8px]" />
+                    <Shimmer className="h-12 w-full rounded-[8px]" />
+                  </>
+                )}
+                {!thingsLoading && listThings.length === 0 && (
                   <p className="text-[11.5px] text-[#6a769c]">No Things yet.</p>
                 )}
               </div>

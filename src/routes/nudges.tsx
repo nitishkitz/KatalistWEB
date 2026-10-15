@@ -21,8 +21,9 @@ import { useLists } from "@/features/lists/use-lists";
 import { cn } from "@/lib/utils";
 import { rpcNudgeThing, type NudgeReason } from "@/features/things/rpc";
 import { toast } from "sonner";
+import { useAppContext } from "@/features/context/use-app-context";
 import { useLocalVersion } from "@/features/things/use-local-version";
-import { InlineThingDetailWorkspace } from "@/features/things/InlineThingDetailWorkspace";
+import { CourtDetailModal } from "@/features/court/CourtDetailModal";
 import { useThing } from "@/features/things/use-thing";
 import { useQueryClient } from "@tanstack/react-query";
 import { domainErrorMessage } from "@/lib/domain-error";
@@ -97,6 +98,7 @@ function statusPill(groupId: NudgeGroup, thing?: Thing): { label: string; cls: s
 }
 
 function NudgesPage() {
+  const { context } = useAppContext();
   useLocalVersion();
   const qc = useQueryClient();
   const [active, setActive] = useState<NudgeGroup>("needs_a_tap");
@@ -121,10 +123,9 @@ function NudgesPage() {
   } = useNudges();
   const court = useCourt();
   const { lists } = useLists();
-  const live = useThing(selectedId);
-  const selected = live.thing;
-
   const thingById = useMemo(() => new Map(court.all.map((t) => [t.id, t])), [court.all]);
+  const live = useThing(selectedId);
+  const selectedThing = live.thing ?? (selectedId ? thingById.get(selectedId) ?? null : null);
   const listCoversById = useMemo(
     () => new Map(lists.map((list) => [list.id, list.coverUrl ?? null] as const)),
     [lists],
@@ -174,37 +175,26 @@ function NudgesPage() {
   };
 
   return (
-    <AppShell>
+    <AppShell homeSurface="nudges">
       <AsyncState
         isLoading={isLoading}
         data={allRows}
         error={nudgesError}
         onRetry={retryNudges}
-        isEmpty={allRows.length === 0}
+        isEmpty={context !== "home" && allRows.length === 0}
         hasFetchedOnce={rowsHasFetchedOnce}
         emptyTitle="You're all caught up"
         emptyDescription="No nudges need your attention right now."
         loadingContent={<NudgesSkeleton />}
       >
         {() => (
-      <InlineThingDetailWorkspace
-        thing={selected}
-        onClose={() => setSelectedId(null)}
-        flatPanel
-        filePreview
-        className={selected ? "lg:h-[calc(100dvh-3.5rem)] lg:items-stretch lg:overflow-hidden" : undefined}
-        sourceClassName={selected ? "lg:h-full lg:overflow-y-auto lg:overscroll-contain" : undefined}
-      >
-        <div className="space-y-5">
+        <div className="home-nudges-page space-y-5">
+          <header className="home-page-heading hidden">
+            <h1>Nudges</h1>
+            <p>Gentle follow-ups for life outside work.</p>
+          </header>
           {/* Header */}
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-[20px] font-semibold text-black">Nudges</h1>
-              <p className="mt-0.5 text-[12px] font-medium text-[#6a769c]">
-                Gentle follow-ups to keep Things moving.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
               <label className="flex h-9 items-center gap-2 rounded-[10px] border border-[#ebecf7] bg-white px-3 focus-within:border-[#975ee2] focus-within:ring-2 focus-within:ring-ring">
                 <Search className="h-4 w-4 text-[#8487a7]" />
                 <input
@@ -243,7 +233,6 @@ function NudgesPage() {
                 How nudges work
               </button>
             </div>
-          </div>
 
           {eligibilityError ? (
             // Rows loaded fine (from Court) — only the eligibility check
@@ -271,7 +260,7 @@ function NudgesPage() {
           {/* Body */}
           <div className="grid gap-5 xl:grid-cols-[1fr_372px]">
             {/* Main */}
-            <div className="rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
+            <div className="home-nudges-panel rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
               {/* Group tabs (switch like Court / Lists / Buckets) */}
               <div className="mb-4 flex items-center gap-6 overflow-x-auto border-b border-[#eef0f6] no-scrollbar">
                 {GROUPS.map((g) => (
@@ -454,7 +443,7 @@ function NudgesPage() {
             {/* Right sidebar */}
             <div className="space-y-5">
               {/* Recent nudge activity */}
-              <section className="rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
+              <section className="home-nudges-panel rounded-[6px] bg-white p-5" style={{ boxShadow: CARD_SHADOW }}>
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-[16px] font-semibold text-black">Recent nudge activity</h2>
                   {/* G12: "See all"/"Show less" toggles the already-loaded
@@ -506,9 +495,14 @@ function NudgesPage() {
             </div>
           </div>
         </div>
-      </InlineThingDetailWorkspace>
         )}
       </AsyncState>
+
+      <CourtDetailModal
+        thing={selectedThing}
+        isOpen={Boolean(selectedId && selectedThing)}
+        onClose={() => setSelectedId(null)}
+      />
 
       {/* G05: replaces the old inert "Nudge settings" button -- there is
           no per-user editable nudge configuration to open here; this

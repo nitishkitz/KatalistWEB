@@ -57,10 +57,12 @@ const READINGS = {
   "visit doicter": [thing({ action: "visit doctor" })],
 };
 let failNext = false;
+let failuresRemaining = 0;
 mock.module("@/lib/authed-fetch", {
   namedExports: {
     authedFetch: async (_url, init) => {
       const body = JSON.parse(init.body);
+      if (failuresRemaining > 0) { failuresRemaining--; throw new TypeError("Temporary network failure"); }
       if (failNext) return new Response(JSON.stringify({ ok: false, schema_version: body.schema_version, request_id: body.request_id, draft_revision: body.draft_revision, reason: "timeout", latency_ms: 1200 }), { status: 200 });
       const things = READINGS[body.text];
       return new Response(JSON.stringify({ ok: true, schema_version: body.schema_version, request_id: body.request_id, draft_revision: body.draft_revision, latency_ms: 300, interpretation: { forwarded: false, gibberish: false, things } }), { status: 200 });
@@ -157,7 +159,8 @@ test("when Coey can't read the line, the draft stays; Keep it to myself saves a 
   failNext = true;
   try {
     await type(ui, "Call Ravi about GST");
-    await settle();
+    // The bounded recovery attempt finishes before the fallback is shown.
+    await act(async () => { await new Promise((r) => setTimeout(r, 800)); });
     assert.ok(ui.getByRole("status").textContent.includes("Your text is safe"));
     await act(async () => fireEvent.click(ui.getByRole("button", { name: "Toss Thing" })));
     await settle();
@@ -227,4 +230,21 @@ test("production regression: an obvious misspelling is fixed in the title; what 
     assert.equal(created()[0].args.p_items[0].title, "Visit doctor");
     assert.equal(created()[0].args.p_items[0].text_raw, "visit doicter");
   } finally { cleanup(); qc.clear(); }
+});
+
+
+test("one Toss recovers from a transient interpretation failure and creates exactly one Thing", async () => {
+  const { ui, qc } = mount();
+  rpcCalls.length = 0;
+  failuresRemaining = 1;
+  try {
+    await type(ui, "Call Ravi about GST");
+    await act(async () => fireEvent.click(ui.getByRole("button", { name: "Toss Thing" })));
+    await settle();
+    assert.equal(failuresRemaining, 0);
+    assert.equal(created().length, 1);
+    assert.equal(created()[0].args.p_items[0].text_raw, "Call Ravi about GST");
+    assert.equal(ui.getByLabelText("Magic Box").value, "");
+    assert.equal(ui.queryByRole("button", { name: "Try again" }), null);
+  } finally { failuresRemaining = 0; cleanup(); qc.clear(); }
 });

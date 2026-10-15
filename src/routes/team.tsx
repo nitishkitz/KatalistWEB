@@ -57,14 +57,14 @@ function TeamHubLayout() {
 
   return (
     <HubContext.Provider value={{ openContacts: () => setContactsOpen(true) }}>
-      <AppShell noPadding>
-        <div className="flex h-[calc(100dvh-4rem)] w-full min-w-0 md:h-[calc(100dvh-3.5rem)]">
+      <AppShell noPadding homeSurface="team">
+        <div className="home-team-layout flex h-[calc(100dvh-4rem)] w-full min-w-0 md:h-[calc(100dvh-3.5rem)]">
           {/* Left rail — hidden on mobile while a conversation is open (drawer behavior). */}
           <div className={cn("min-h-0 md:flex", inConversation ? "hidden" : "flex w-full md:w-auto")}>
             <HubSidebar />
           </div>
           {/* Main pane */}
-          <div className={cn("min-h-0 min-w-0 flex-1 overflow-y-auto md:flex md:flex-col", inConversation ? "flex flex-col" : "hidden md:flex")}>
+          <div className={cn("home-team-main min-h-0 min-w-0 flex-1 overflow-y-auto md:flex md:flex-col", inConversation ? "flex flex-col" : "hidden md:flex")}>
             <Outlet />
           </div>
         </div>

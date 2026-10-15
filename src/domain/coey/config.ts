@@ -56,7 +56,8 @@ export const COEY_CONFIG: Readonly<CoeyConfig> = Object.freeze<CoeyConfig>({
   F8_LATER_WAKE_WORKING_DAYS: 5,
   F9_SPRING_CLEAN_DAYS: 30,
   F10_STAGE2_DEBOUNCE_MS: 400,
-  F10_STAGE2_TIMEOUT_MS: 1200,
+  // Network + structured generation can take several seconds, especially cold.
+  F10_STAGE2_TIMEOUT_MS: 12_000,
   F11_DISMISS_MUTE_COUNT: 3,
   F12_UPWARD_FREQUENCY_FACTOR: 0.5,
   F12_UPWARD_MAX: 2,

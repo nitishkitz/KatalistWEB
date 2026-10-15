@@ -1,0 +1,43 @@
+/* Unified header controls stay within the resizable sidebar, including 280px. */
+#court-with-others .with-others-counts button { overflow-wrap: anywhere; }
+#court-with-others .with-others-item-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  align-items: center;
+}
+#court-with-others .with-others-item-body > p { grid-column: 1 / -1; font-size: 14px; }
+#court-with-others .with-others-meta { grid-column: 1; }
+#court-with-others .with-others-nudge { grid-column: 2; grid-row: 2; }
+@container (max-width: 300px) {
+  #court-with-others .with-others-item-body { column-gap: 6px; }
+  #court-with-others .with-others-meta { flex-direction: column; align-items: flex-start; }
+}
+
+/* Pace follows the Court lanes; collaboration status has its own meaning. */
+#court-with-others .with-others-counts [data-filter="now"] {
+  --filter-ink: #c92130; --filter-tint: #fff0f1; --filter-accent: #ff4053;
+}
+#court-with-others .with-others-counts [data-filter="next"] {
+  --filter-ink: #0056d6; --filter-tint: #edf5ff; --filter-accent: #0066ff;
+}
+#court-with-others .with-others-counts [data-filter="later"] {
+  --filter-ink: #7130d9; --filter-tint: #f3edff; --filter-accent: #8033ff;
+}
+#court-with-others .with-others-counts [data-filter="waiting_for_catch"] {
+  --filter-ink: #946000; --filter-tint: #fff7e6; --filter-accent: #bd810c;
+}
+#court-with-others .with-others-counts [data-filter="moving"] {
+  --filter-ink: #08776b; --filter-tint: #eaf8f4; --filter-accent: #149681;
+}
+#court-with-others .with-others-counts [data-filter="needs_attention"] {
+  --filter-ink: #b54708; --filter-tint: #fff1e8; --filter-accent: #e56c27;
+}
+#court-with-others .with-others-counts [data-filter] { color: var(--filter-ink); }
+#court-with-others .with-others-counts [data-filter]:hover,
+#court-with-others .with-others-counts [data-filter][aria-pressed="true"] {
+  background-color: var(--filter-tint);
+}
+#court-with-others .with-others-counts [data-filter] > [aria-hidden="true"] {
+  background-color: var(--filter-accent);
+}

@@ -9,8 +9,11 @@ export type InterpretationState =
   | { status: "ready"; revision: number; text: string; interpretation: Interpretation }
   | { status: "failed"; revision: number; text: string; reason: Extract<InterpretResponse, { ok: false }>["reason"] | "network" };
 
-/** Client deadline: the server's provider deadline plus network allowance. */
-const CLIENT_DEADLINE_MS = COEY_CONFIG.F10_STAGE2_TIMEOUT_MS + 2500;
+/** Overall deadline covers two provider attempts plus auth/network allowance. */
+const CLIENT_DEADLINE_MS = 2 * COEY_CONFIG.F10_STAGE2_TIMEOUT_MS + 5000;
+const RECOVERY_DELAY_MS = 250;
+const isTransient = (result: InterpretationState) => result.status === "failed" &&
+  (result.reason === "network" || result.reason === "timeout" || result.reason === "unavailable");
 
 /**
  * Interprets the current draft after a pause (F10). Each draft text has a
@@ -22,7 +25,7 @@ export function useCoeyInterpretation(text: string, mode: "work" | "home", enabl
   const [state, setState] = useState<InterpretationState>({ status: "idle" });
   const revision = useRef(0);
   const inflight = useRef<AbortController | null>(null);
-  const latest = useRef<{ revision: number; text: string; promise: Promise<InterpretationState> } | null>(null);
+  const latest = useRef<{ revision: number; text: string; promise: Promise<InterpretationState>; result?: InterpretationState } | null>(null);
   const timerRef = useRef<number | null>(null);
   const textRef = useRef(text);
   textRef.current = text;
@@ -33,27 +36,52 @@ export function useCoeyInterpretation(text: string, mode: "work" | "home", enabl
     inflight.current = controller;
     setState({ status: "pending", revision: rev });
     const requestId = `${rev}-${Math.random().toString(36).slice(2, 10)}`;
-    const promise = (async (): Promise<InterpretationState> => {
+    const deadline = AbortSignal.timeout(CLIENT_DEADLINE_MS);
+    const signal = AbortSignal.any([controller.signal, deadline]);
+    const failed = (reason: Extract<InterpretationState, { status: "failed" }>["reason"]): InterpretationState =>
+      ({ status: "failed", revision: rev, text: value, reason });
+    const attempt = async (): Promise<{ result: InterpretationState; recover: boolean }> => {
       try {
         const res = await authedFetch("/api/coey/interpret", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ schema_version: INTERPRETATION_SCHEMA_VERSION, text: value, mode, request_id: requestId, draft_revision: rev }),
-          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(CLIENT_DEADLINE_MS)]),
+          signal,
         });
         const body = (await res.json().catch(() => null)) as InterpretResponse | null;
-        if (!res.ok || !body) return { status: "failed", revision: rev, text: value, reason: res.status === 429 ? "rate_limited" : "unavailable" };
-        if (body.request_id !== requestId || body.draft_revision !== rev) return { status: "failed", revision: rev, text: value, reason: "invalid_output" };
-        return body.ok
+        // Never retry auth, schema conflicts, validation or rate-limit responses.
+        if (!res.ok || !body) return {
+          result: failed(res.status === 429 ? "rate_limited" : "unavailable"),
+          recover: [408, 500, 502, 503, 504].includes(res.status),
+        };
+        if (body.request_id !== requestId || body.draft_revision !== rev)
+          return { result: failed("invalid_output"), recover: false };
+        const result: InterpretationState = body.ok
           ? { status: "ready", revision: rev, text: value, interpretation: body.interpretation }
-          : { status: "failed", revision: rev, text: value, reason: body.reason };
+          : failed(body.reason);
+        return { result, recover: isTransient(result) };
       } catch {
-        return { status: "failed", revision: rev, text: value, reason: controller.signal.aborted ? "timeout" : "network" };
+        return { result: failed(signal.aborted ? "timeout" : "network"), recover: !signal.aborted };
       }
+    };
+    const promise = (async (): Promise<InterpretationState> => {
+      const first = await attempt();
+      if (!first.recover || signal.aborted || rev !== revision.current) return first.result;
+      // Interpretation is read-only: one bounded retry cannot create duplicate Things.
+      // Keep the composer pending throughout recovery rather than flashing an error.
+      await new Promise<void>((resolve) => {
+        const finish = () => { clearTimeout(timer); signal.removeEventListener("abort", finish); resolve(); };
+        const timer = setTimeout(finish, RECOVERY_DELAY_MS);
+        signal.addEventListener("abort", finish, { once: true });
+        if (signal.aborted) finish();
+      });
+      if (signal.aborted || rev !== revision.current) return first.result;
+      return (await attempt()).result;
     })();
     latest.current = { revision: rev, text: value, promise };
     void promise.then((result) => {
-      if (rev === revision.current && !controller.signal.aborted) setState(result);
+      if (latest.current?.promise === promise) latest.current.result = result;
+      if (rev === revision.current && !controller.signal.aborted && inflight.current === controller) setState(result);
     });
     return promise;
   }, [mode]);
@@ -61,6 +89,10 @@ export function useCoeyInterpretation(text: string, mode: "work" | "home", enabl
   useEffect(() => {
     revision.current += 1;
     const rev = revision.current;
+    // Cancel immediately on edits/context changes, including recovery during the debounce.
+    inflight.current?.abort();
+    latest.current = null;
+    setState({ status: "idle" });
     if (!enabled || !text.trim()) {
       inflight.current?.abort();
       latest.current = null;
@@ -90,7 +122,8 @@ export function useCoeyInterpretation(text: string, mode: "work" | "home", enabl
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    if (latest.current && latest.current.revision === rev && latest.current.text === value) return latest.current.promise;
+    if (latest.current && latest.current.revision === rev && latest.current.text === value &&
+      !(latest.current.result && isTransient(latest.current.result))) return latest.current.promise;
     return run(value, rev);
   }, [run]);
 

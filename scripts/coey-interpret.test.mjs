@@ -75,3 +75,11 @@ test("unknown day grammar is dropped to null rather than trusted", () => {
   const parsed = parseInterpretation(odd);
   assert.equal(parsed.things[0].action_time.day, null);
 });
+
+test("a normal 1.5-second provider response survives the production deadline", async () => {
+  const r = await interpretLine("Water the plants", { ...base, fetchImpl: (_u, init) => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(reply(JSON.stringify(valid))), 1500);
+    init.signal.addEventListener("abort", () => { clearTimeout(timer); reject(init.signal.reason); }, { once: true });
+  }) });
+  assert.equal(r.ok, true, `normal provider latency must not fail as ${r.reason}`);
+});

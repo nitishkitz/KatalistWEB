@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { keys } from "@/domain/query-keys";
 import { supabase } from "@/integrations/supabase/client";
@@ -33,8 +33,24 @@ export function useBuckets() {
     return query.data ?? [];
   }, [preview, query.data, version, context]);
 
+  // React's pending flag updates on the next render. Coalesce writes even
+  // when two submits arrive in the same event turn or from separate callers.
+  const createsInFlight = useRef(new Map<string, Promise<Awaited<ReturnType<typeof rpcCreateBucket>>>>());
   const create = useMutation({
-    mutationFn: (name: string) => rpcCreateBucket(name, context),
+    retry: false,
+    mutationFn: (name: string) => {
+      const trimmed = name.trim();
+      const key = JSON.stringify([user?.id, preview, getIdentityEpoch(qc).epoch, context, trimmed]);
+      const existing = createsInFlight.current.get(key);
+      if (existing) return existing;
+      const request = Promise.resolve().then(() => rpcCreateBucket(trimmed, context));
+      createsInFlight.current.set(key, request);
+      const release = () => {
+        if (createsInFlight.current.get(key) === request) createsInFlight.current.delete(key);
+      };
+      void request.then(release, release);
+      return request;
+    },
     // onMutate captures the epoch before mutationFn's own RPC dispatch --
     // no earlier point exists for a one-line mutationFn like this one --
     // and passes it to onSuccess via mutationContext.

@@ -61,6 +61,14 @@ function mount(
     h(QueryClientProvider, { client: qc }, h(InteractionBlockerProvider, null, children));
   return { ...render(h(ThingDescription, { thing: t, canEdit }), { wrapper }), qc, wrapper };
 }
+test("empty descriptions hide the whole section for non-editors", () => {
+  const ui = mount(thing, false);
+  assert.equal(ui.container.querySelector(".thing-description"), null);
+  assert.equal(ui.queryByText("No description yet."), null);
+  cleanup();
+  ui.qc.clear();
+});
+
 function paste(ui, text) {
   const clipboardData = {
     getData: (format) => (format === "text/plain" ? text : ""),

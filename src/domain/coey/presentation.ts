@@ -40,7 +40,21 @@ export type RecordGroup = { key: string; title: string; total: number; records: 
 /** A history line or a comment. `text` from people is plain text, never markup. */
 export type ResultEntry = { at: string; by: string; text: string; thing_id: string; thing_title: string };
 
+/** An exact calculation (e.g. a loan EMI) shown as a card; figures come from server code, never the model. */
+export type CalculationBlock = {
+  type: "calculation";
+  title: string;
+  headline: { label: string; value: string };
+  /** Principal versus interest, drawn as a split bar. */
+  split?: { principal: number; interest: number; principal_label: string; interest_label: string };
+  stats: Array<{ label: string; value: string }>;
+  formula: string;
+  steps: string[];
+  note?: string;
+};
+
 export type ResultBlock =
+  | CalculationBlock
   | { type: "counts"; items: Array<{ label: string; count: number }> }
   | { type: "thing_list"; groups: RecordGroup[] }
   | { type: "thing_detail"; record: CoeyRecord; notes: string | null; files: string[]; history: ResultEntry[]; comments: ResultEntry[]; nudged_at: string[] }
@@ -88,6 +102,8 @@ export function validPresentation(p: unknown): p is CoeyPresentation {
       if (!Array.isArray(b.entries) || !b.entries.every((e) => isStr(e.at) && isStr(e.text) && isStr(e.thing_id))) return false;
     } else if (b.type === "text") {
       if (!isStr(b.markdown)) return false;
+    } else if (b.type === "calculation") {
+      if (!b.headline || !isStr(b.headline.value) || !Array.isArray(b.stats) || !Array.isArray(b.steps)) return false;
     } else if (b.type !== "notice") return false;
   }
   return true;

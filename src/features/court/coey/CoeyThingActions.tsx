@@ -86,7 +86,7 @@ export function CoeyThingActions({ thing }: { thing: Thing }) {
           <span className="text-slate-500">Pace you asked for:</span>
           {(["urgent", "normal", "chill"] as const).map((pace) => (
             <button key={pace} type="button" disabled={busy || s.pace === pace} aria-pressed={s.pace === pace || (pace === "normal" && !s.pace)} onClick={() => void run("coey_set_pace", { p_thing_id: thing.id, p_pace: pace }, "Pace updated")} className="rounded-full border border-slate-200 px-2.5 py-1 font-medium hover:bg-slate-50 aria-pressed:border-violet-300 aria-pressed:bg-violet-50 aria-pressed:text-violet-700">
-              {pace === "urgent" ? "Urgent" : pace === "normal" ? "Normal" : "No rush"}
+              {pace === "urgent" ? "Now" : pace === "normal" ? "Next" : "Later"}
             </button>
           ))}
         </div>

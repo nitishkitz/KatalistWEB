@@ -13,3 +13,12 @@ test("domain failures beginning with Failed to keep their actual message", () =>
   assert.equal(isNetworkError(error), false);
   assert.equal(domainErrorMessage(error), error.message);
 });
+
+test("duplicate bucket names explain the account-wide name conflict without database details", () => {
+  for (const error of [
+    { code: "23505", message: 'duplicate key value violates unique constraint "buckets_owner_profile_id_name_key"' },
+    new Error('duplicate key value violates unique constraint "buckets_owner_profile_id_name_key"'),
+  ]) {
+    assert.equal(domainErrorMessage(error), "You already have a bucket with this name in Work or Home. Choose a different name.");
+  }
+});
